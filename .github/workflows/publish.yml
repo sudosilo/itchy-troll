@@ -1,0 +1,71 @@
+name: publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      game_repo:
+        description: "Name of the game repo under sudosilo"
+        required: true
+      title:
+        description: "Title shown on the itch.io page"
+        required: true
+      width:
+        description: "Embed width in pixels"
+        required: false
+        default: "1280"
+      height:
+        description: "Embed height in pixels"
+        required: false
+        default: "720"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Get agent code
+        uses: actions/checkout@v4
+
+      - name: Get game code
+        uses: actions/checkout@v4
+        with:
+          repository: sudosilo/${{ inputs.game_repo }}
+          path: game-src
+
+      - name: Build upload folder
+        run: |
+          mkdir -p game-dist
+          rsync -a --exclude .git --exclude .github --exclude .vercel --exclude node_modules game-src/ game-dist/
+          ls -la game-dist
+          test -f game-dist/index.html
+
+      - name: Install butler
+        run: |
+          curl -L -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -o butler.zip -d butler-bin
+          chmod +x butler-bin/butler
+          echo "$GITHUB_WORKSPACE/butler-bin" >> $GITHUB_PATH
+
+      - name: Install browser
+        run: |
+          npm install --no-save playwright@1
+          npx playwright install --with-deps chromium
+
+      - name: Run agent
+        env:
+          ITCH_USERNAME: ${{ secrets.ITCH_USERNAME }}
+          ITCH_PASSWORD: ${{ secrets.ITCH_PASSWORD }}
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          GAME_SLUG: ${{ inputs.game_repo }}
+          GAME_TITLE: ${{ inputs.title }}
+          EMBED_WIDTH: ${{ inputs.width }}
+          EMBED_HEIGHT: ${{ inputs.height }}
+          GAME_DIR: game-dist
+        run: node troll.js
+
+      - name: Save screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: shots
+          path: shots
