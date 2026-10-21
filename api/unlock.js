@@ -2,6 +2,7 @@
 // GET /api/unlock?page=user/slug&key=xxxx   (download key from the buyer's download link)
 // GET /api/unlock?page=user/slug&email=xxxx (email the buyer paid with)
 // GET /api/unlock?page=user/slug            (price and buy link only)
+// GET /api/unlock?status                     (setup check)
 
 const API_KEY = process.env.ITCH_API_KEY || '';
 let gamesCache = { at: 0, games: [] };
@@ -10,6 +11,7 @@ async function myGames() {
   if (Date.now() - gamesCache.at < 10 * 60 * 1000 && gamesCache.games.length) return gamesCache.games;
   const r = await fetch(`https://itch.io/api/1/${API_KEY}/my-games`);
   const j = await r.json();
+  if (j.errors) throw new Error('itch.io said: ' + [].concat(j.errors).join(', '));
   gamesCache = { at: Date.now(), games: j.games || [] };
   return gamesCache.games;
 }
@@ -24,6 +26,15 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'OPTIONS') return res.status(204).end();
+  if (req.query.status !== undefined) {
+    if (!API_KEY) return res.status(200).json({ ready: false, error: 'ITCH_API_KEY is not set' });
+    try {
+      const games = await myGames();
+      return res.status(200).json({ ready: true, games: games.length });
+    } catch (err) {
+      return res.status(200).json({ ready: false, error: String(err.message || err) });
+    }
+  }
   if (!API_KEY) return res.status(500).json({ ok: false, error: 'ITCH_API_KEY is not set' });
 
   const page = String(req.query.page || '').trim().toLowerCase();
