@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Itchy Troll</title>
+<style>
+  :root { --bg: #faf9f5; --card: #ffffff; --ink: #1d1d1b; --soft: #6b675c; --line: #e2dfd5; --hot: #e8590c; --good: #2f7d32; --bad: #b3261e; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  p.sub { color: var(--soft); margin: 0 0 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+  .name { font-weight: 700; font-size: 17px; }
+  .meta { color: var(--soft); font-size: 14px; margin-top: 4px; word-break: break-word; }
+  .live { color: var(--good); font-weight: 700; }
+  .failed { color: var(--bad); font-weight: 700; }
+  .count { font-size: 15px; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Itchy Troll</h1>
+  <p class="sub">One app shipped to itch.io per day.</p>
+  <div class="count" id="count">Loading the ledger...</div>
+  <div id="list"></div>
+</main>
+<script>
+  fetch('itch-ledger.json?ts=' + Date.now())
+    .then(function (r) { return r.ok ? r.json() : {}; })
+    .catch(function () { return {}; })
+    .then(function (ledger) {
+      var rows = Object.keys(ledger).map(function (k) { return Object.assign({ repo: k }, ledger[k]); });
+      rows.sort(function (a, b) { return String(b.shipped || b.updated || '').localeCompare(String(a.shipped || a.updated || '')); });
+      var live = rows.filter(function (r) { return r.state === 'live'; }).length;
+      document.getElementById('count').textContent = live + ' shipped, ' + (rows.length - live) + ' in trouble';
+      var list = document.getElementById('list');
+      rows.forEach(function (r) {
+        var d = document.createElement('div');
+        d.className = 'card';
+        var when = String(r.shipped || r.updated || '').slice(0, 10);
+        d.innerHTML = '<div class="name"></div><div class="meta"></div>';
+        d.querySelector('.name').textContent = r.title || r.repo;
+        var meta = d.querySelector('.meta');
+        var state = document.createElement('span');
+        state.className = r.state === 'live' ? 'live' : 'failed';
+        state.textContent = r.state || 'unknown';
+        meta.appendChild(state);
+        meta.appendChild(document.createTextNode(' ' + when + (r.price ? ' $' + r.price : '') + (r.page ? ' ' + r.page : '') + (r.error ? ' ' + r.error : '')));
+        list.appendChild(d);
+      });
+      if (!rows.length) document.getElementById('count').textContent = 'Nothing shipped yet.';
+    });
+</script>
+</body>
+</html>

@@ -5,33 +5,26 @@ const fs = require('fs');
 const USER = (process.env.ITCH_USERNAME || '').trim();
 const PASS = process.env.ITCH_PASSWORD || '';
 const OWNER = process.env.GH_OWNER || 'sudosilo';
-const TOKEN = process.env.GITHUB_TOKEN || '';
-const ONLY_REPO = (process.env.ONLY_REPO || '').trim();
-const NEW_PER_RUN = 5;
+const REPO = (process.env.GAME_REPO || '').trim();
+const PRICE = (process.env.GAME_PRICE || '0.99').trim();
+const TITLE_IN = (process.env.GAME_TITLE || '').trim();
+const SLUG = REPO.toLowerCase();
 const WIDTH = '1280';
 const HEIGHT = '720';
 const SITE = 'https://itch.io';
 const LEDGER_FILE = 'itch-ledger.json';
-const SKIP_NAME = /(^|-)(api|backend|server|poller)$/i;
+const PAGE_URL = `https://${USER.toLowerCase()}.itch.io/${SLUG}`;
 
 fs.mkdirSync('shots', { recursive: true });
 fs.mkdirSync('work', { recursive: true });
 
 let step = 0;
-let tag = 'run';
 let browser = null;
 let page = null;
 
 function log(msg) {
   console.log(`[itchy-troll] ${msg}`);
-}
-
-function summary(msg) {
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, msg + '\n\n');
-}
-
-function pageUrl(slug) {
-  return `https://${USER.toLowerCase()}.itch.io/${slug}`;
 }
 
 function plain(url) {
@@ -53,8 +46,7 @@ function saveLedger(ledger) {
 async function shot(name) {
   if (!page) return;
   step += 1;
-  const file = `shots/${String(step).padStart(3, '0')}-${tag}-${name}.png`;
-  await page.screenshot({ path: file, fullPage: true }).catch(() => {});
+  await page.screenshot({ path: `shots/${String(step).padStart(2, '0')}-${name}.png`, fullPage: true }).catch(() => {});
 }
 
 async function dumpFields() {
@@ -67,7 +59,7 @@ async function dumpFields() {
       })
     )
     .catch(() => []);
-  fs.writeFileSync(`shots/fields-${tag}-${step}.txt`, `${page.url()}\n${fields.join('\n')}`);
+  fs.writeFileSync(`shots/fields-${step}.txt`, `${page.url()}\n${fields.join('\n')}`);
 }
 
 async function firstVisible(locators) {
@@ -78,85 +70,46 @@ async function firstVisible(locators) {
   return null;
 }
 
-/* Finding games */
-
-async function ghJson(url) {
-  const res = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${TOKEN}`,
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'itchy-troll',
-    },
-  });
-  if (!res.ok) throw new Error(`GitHub API ${res.status} on ${url}`);
-  return res.json();
-}
-
-async function listRepos() {
-  const all = [];
-  for (let p = 1; p < 20; p += 1) {
-    const batch = await ghJson(`https://api.github.com/users/${OWNER}/repos?per_page=100&page=${p}&type=owner`);
-    all.push(...batch);
-    if (batch.length < 100) break;
-  }
-  return all.filter((r) => !r.fork && !r.private && !r.archived && r.name !== 'itchy-troll');
-}
-
-async function readIndex(repo) {
-  const res = await fetch(`https://raw.githubusercontent.com/${OWNER}/${repo.name}/${repo.default_branch}/index.html`);
-  return res.ok ? res.text() : null;
-}
-
-function looksLikeGame(html) {
-  const strong = [/game\s*over/i, /\bscore\b/i, /high\s*score/i, /\byou\s+(win|lose|died)\b/i];
-  const weak = [/<canvas/i, /requestAnimationFrame/, /keydown|touchstart|pointerdown/, /\blives?\b/i, /\blevel\b/i, /\bplayer\b/i, /\benem(y|ies)\b/i];
-  const strongHits = strong.filter((r) => r.test(html)).length;
-  const weakHits = weak.filter((r) => r.test(html)).length;
-  return strongHits >= 1 && strongHits * 2 + weakHits >= 6;
-}
-
-function titleFrom(html, name) {
+function titleFrom(html) {
   const m = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-  let t = m ? m[1] : '';
-  t = t
+  let t = (m ? m[1] : '')
     .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
     .replace(/&#39;|&apos;/g, "'")
     .replace(/&quot;/g, '"')
     .replace(/\s+/g, ' ')
     .trim();
-  if (!t) t = name.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  if (!t) t = REPO.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   return t.slice(0, 80);
 }
 
-/* Getting game files */
+/* Build */
 
-function prepareBuild(name) {
-  const src = `work/src-${name}`;
-  const dist = `work/dist-${name}`;
+function prepareBuild() {
+  const src = `work/src`;
+  const dist = `work/dist`;
   execSync(`rm -rf "${src}" "${dist}"`);
-  execSync(`git clone --depth 1 https://github.com/${OWNER}/${name} "${src}"`, { stdio: 'inherit' });
+  execSync(`git clone --depth 1 https://github.com/${OWNER}/${REPO} "${src}"`, { stdio: 'inherit' });
   fs.mkdirSync(dist, { recursive: true });
   execSync(`rsync -a --exclude .git --exclude .github --exclude .vercel --exclude node_modules "${src}/" "${dist}/"`);
   if (!fs.existsSync(`${dist}/index.html`)) throw new Error('No index.html at the top of the repo');
+  log(`Build ready: ${fs.readdirSync(dist).length} files from ${OWNER}/${REPO}`);
   return dist;
 }
 
-function butlerPush(dir, slug) {
-  log(`uploading ${slug} with butler`);
-  execSync(`butler push "${dir}" ${USER}/${slug}:html5 --if-changed`, { stdio: 'inherit' });
+function butlerPush(dir) {
+  for (const channel of ['html5', 'offline']) {
+    log(`Uploading channel ${channel} with butler`);
+    execSync(`butler push "${dir}" ${USER}/${SLUG}:${channel} --if-changed`, { stdio: 'inherit' });
+  }
 }
 
-/* Browser work */
+/* Browser */
 
-async function ensureBrowser() {
-  if (page) return;
+async function startBrowser() {
   browser = await chromium.launch();
   page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-  log('logging in');
+  log('Logging into itch.io');
   await page.goto(`${SITE}/login`, { waitUntil: 'domcontentloaded' });
-  await shot('login-page');
   await page.locator('input[name="username"]').fill(USER);
   await page.locator('input[name="password"]').fill(PASS);
   await Promise.all([
@@ -165,17 +118,17 @@ async function ensureBrowser() {
   ]);
   await page.waitForTimeout(3000);
   await shot('after-login');
-  if (page.url().includes('/login')) throw new Error('Login did not go through. Check the after-login screenshot.');
-  log('logged in');
+  if (page.url().includes('/login')) throw new Error('Login did not go through. See the after-login screenshot.');
+  log('Logged in');
 }
 
-async function pageExists(slug) {
-  const res = await page.goto(pageUrl(slug), { waitUntil: 'domcontentloaded' });
+async function pageExists() {
+  const res = await page.goto(PAGE_URL, { waitUntil: 'domcontentloaded' });
   return res && res.status() === 200;
 }
 
-async function createProject(slug, title) {
-  log(`creating page for ${slug}`);
+async function createProject(title) {
+  log(`Creating the itch.io page "${title}"`);
   await page.goto(`${SITE}/game/new`, { waitUntil: 'domcontentloaded' });
   await shot('new-form');
 
@@ -185,7 +138,7 @@ async function createProject(slug, title) {
 
   const slugBox = await firstVisible([page.locator('input[name="game[slug]"]'), page.getByLabel(/project url/i)]);
   if (!slugBox) throw new Error('Project URL field not found');
-  await slugBox.fill(slug);
+  await slugBox.fill(SLUG);
 
   const pickedHtml = await page.evaluate(() => {
     for (const s of document.querySelectorAll('select')) {
@@ -206,12 +159,12 @@ async function createProject(slug, title) {
   await Promise.all([page.waitForLoadState('domcontentloaded'), save.click()]);
   await page.waitForTimeout(3000);
   await shot('after-create');
-  log(`created, now at ${page.url()}`);
+  log('Page created as a draft');
 }
 
-async function findEditUrl(slug) {
+async function findEditUrl() {
   if (/\/game\/edit\/\d+/.test(page.url())) return page.url().split('?')[0];
-  await page.goto(pageUrl(slug), { waitUntil: 'domcontentloaded' });
+  await page.goto(PAGE_URL, { waitUntil: 'domcontentloaded' });
   let href = await page.locator('a[href*="/game/edit/"]').first().getAttribute('href').catch(() => null);
   if (!href) {
     await page.goto(`${SITE}/dashboard`, { waitUntil: 'domcontentloaded' });
@@ -221,23 +174,50 @@ async function findEditUrl(slug) {
         if (row && row.innerHTML.includes(`/${s}`)) return a.getAttribute('href');
       }
       return null;
-    }, slug);
+    }, SLUG);
   }
   if (!href) throw new Error('Could not find the edit page for this project');
-  return new URL(href, SITE).toString();
+  return new URL(href, SITE).toString().split('?')[0];
+}
+
+async function markBrowserUpload() {
+  return page.evaluate(() => {
+    const boxes = [...document.querySelectorAll('input[type="checkbox"]')].filter((b) => {
+      const label = b.closest('label') || document.querySelector(`label[for="${b.id}"]`);
+      return label && /played in the browser/i.test(label.textContent);
+    });
+    for (const b of boxes) {
+      let el = b.parentElement;
+      for (let i = 0; i < 8 && el; i += 1, el = el.parentElement) {
+        const text = el.textContent || '';
+        const hasHtml = /html5/i.test(text);
+        const hasOffline = /offline/i.test(text);
+        if (hasHtml && !hasOffline) {
+          b.setAttribute('data-itchy', 'browser');
+          return boxes.length;
+        }
+        if (hasOffline) break;
+      }
+    }
+    if (boxes.length) boxes[0].setAttribute('data-itchy', 'browser');
+    return boxes.length;
+  });
 }
 
 async function finishSetup(editUrl) {
-  log('waiting for the upload to show on the edit page');
-  let checkbox = null;
-  for (let i = 0; i < 24 && !checkbox; i += 1) {
+  log('Waiting for both uploads to show on the edit page');
+  let count = 0;
+  for (let i = 0; i < 30 && count < 2; i += 1) {
     await page.goto(editUrl, { waitUntil: 'domcontentloaded' });
-    checkbox = await firstVisible([page.getByLabel(/played in the browser/i)]);
-    if (!checkbox) await page.waitForTimeout(10000);
+    count = await markBrowserUpload();
+    if (count < 2) await page.waitForTimeout(10000);
   }
   await shot('edit-page');
-  if (!checkbox) throw new Error('Upload never showed up on the edit page');
-  if (!(await checkbox.isChecked())) await checkbox.check();
+  if (count < 1) throw new Error('Uploads never showed up on the edit page');
+
+  const box = page.locator('input[data-itchy="browser"]');
+  if (!(await box.isChecked())) await box.check();
+  log('Browser play turned on for the html5 upload');
 
   const width = await firstVisible([page.locator('input[name*="width"]')]);
   const height = await firstVisible([page.locator('input[name*="height"]')]);
@@ -245,14 +225,26 @@ async function finishSetup(editUrl) {
   if (height) await height.fill(HEIGHT);
 
   for (const pattern of [/mobile friendly/i, /fullscreen button/i]) {
-    const box = await firstVisible([page.getByLabel(pattern)]);
-    if (box && !(await box.isChecked().catch(() => true))) await box.check().catch(() => {});
+    const opt = await firstVisible([page.getByLabel(pattern)]);
+    if (opt && !(await opt.isChecked().catch(() => true))) await opt.check().catch(() => {});
   }
 
-  const pub = await firstVisible([
-    page.locator('label').filter({ hasText: /^\s*Public\b/ }),
-    page.getByLabel(/^\s*public/i),
-  ]);
+  const paid = await firstVisible([page.locator('label').filter({ hasText: /^\s*Paid\b/ }), page.getByLabel(/^\s*paid/i)]);
+  if (paid) {
+    await paid.click();
+    await page.waitForTimeout(500);
+    const priceBox = await firstVisible([page.locator('input[name*="price"]')]);
+    if (priceBox) {
+      await priceBox.fill(PRICE);
+      log(`Price set to $${PRICE}`);
+    } else {
+      log('Price box not found after choosing Paid');
+    }
+  } else {
+    log('Paid option not found, pricing left unchanged');
+  }
+
+  const pub = await firstVisible([page.locator('label').filter({ hasText: /^\s*Public\b/ }), page.getByLabel(/^\s*public/i)]);
   if (pub) await pub.click();
   else log('Public option not found, page stays as draft');
 
@@ -262,95 +254,57 @@ async function finishSetup(editUrl) {
   await Promise.all([page.waitForLoadState('domcontentloaded'), save.click()]);
   await page.waitForTimeout(3000);
   await shot('after-save');
+  const err = await page.locator('.form_errors, .errors').first().innerText().catch(() => '');
+  if (err) throw new Error(`itch.io refused the save: ${err.replace(/\s+/g, ' ').slice(0, 200)}`);
+  log('Edit page saved');
 }
 
 /* Main */
 
 (async () => {
-  if (!USER || !PASS || !process.env.BUTLER_API_KEY) {
-    console.error('Missing ITCH_USERNAME, ITCH_PASSWORD or BUTLER_API_KEY secret');
-    process.exit(1);
+  if (!USER || !PASS || !process.env.BUTLER_API_KEY || !REPO) {
+    throw new Error('Missing ITCH_USERNAME, ITCH_PASSWORD or BUTLER_API_KEY secret, or the repo input');
   }
-
   const ledger = loadLedger();
-  let failures = 0;
+  const dist = prepareBuild();
+  const title = TITLE_IN || (ledger[REPO] && ledger[REPO].title) || titleFrom(fs.readFileSync(`${dist}/index.html`, 'utf8'));
+  log(`Publishing ${REPO} as "${title}" at $${PRICE}`);
 
-  let repos = await listRepos();
-  if (ONLY_REPO) repos = repos.filter((r) => r.name === ONLY_REPO);
-  log(`checking ${repos.length} repos`);
-
-  const updates = [];
-  const fresh = [];
-  for (const repo of repos) {
-    const name = repo.name;
-    const entry = ledger[name];
-    if (entry && entry.state === 'skip') continue;
-    if (!ONLY_REPO && SKIP_NAME.test(name)) continue;
-    const html = await readIndex(repo);
-    if (!html) continue;
-    const title = (entry && entry.title) || titleFrom(html, name);
-    if (entry && entry.state === 'live') updates.push({ name, title });
-    else if (ONLY_REPO || looksLikeGame(html)) fresh.push({ name, title });
+  if (ledger[REPO] && ledger[REPO].state === 'live') {
+    log('Page already live, uploading the new build only');
+    butlerPush(dist);
+    ledger[REPO].updated = new Date().toISOString();
+  } else {
+    await startBrowser();
+    if (await pageExists()) log('Page already exists on itch.io, finishing its setup');
+    else await createProject(title);
+    const editUrl = await findEditUrl();
+    const gameId = (editUrl.match(/\/game\/edit\/(\d+)/) || [])[1] || '';
+    log(`Edit page found, game id ${gameId}`);
+    butlerPush(dist);
+    await finishSetup(editUrl);
+    ledger[REPO] = {
+      title,
+      state: 'live',
+      price: PRICE,
+      game_id: gameId,
+      page: plain(PAGE_URL),
+      shipped: new Date().toISOString(),
+      updated: new Date().toISOString(),
+    };
   }
-
-  log(`updates: ${updates.map((g) => g.name).join(', ') || 'none'}`);
-  log(`new games: ${fresh.map((g) => g.name).join(', ') || 'none'}`);
-
-  for (const game of updates) {
-    tag = game.name;
-    try {
-      const dir = prepareBuild(game.name);
-      butlerPush(dir, game.name.toLowerCase());
-      ledger[game.name].updated = new Date().toISOString();
-      summary(`Updated ${game.title}: ${plain(pageUrl(game.name.toLowerCase()))}`);
-    } catch (err) {
-      failures += 1;
-      console.error(`[itchy-troll] update failed for ${game.name}: ${err.message}`);
-      summary(`Update failed for ${game.name}: ${err.message}`);
-    }
-    saveLedger(ledger);
-  }
-
-  for (const game of fresh.slice(0, NEW_PER_RUN)) {
-    tag = game.name;
-    const slug = game.name.toLowerCase();
-    try {
-      await ensureBrowser();
-      const dir = prepareBuild(game.name);
-      if (!(await pageExists(slug))) await createProject(slug, game.title);
-      const editUrl = await findEditUrl(slug);
-      log(`edit page ${editUrl}`);
-      butlerPush(dir, slug);
-      await finishSetup(editUrl);
-      ledger[game.name] = {
-        title: game.title,
-        state: 'live',
-        page: plain(pageUrl(slug)),
-        updated: new Date().toISOString(),
-      };
-      summary(`New page for ${game.title}: ${plain(pageUrl(slug))}`);
-      log(`done: ${plain(pageUrl(slug))}`);
-    } catch (err) {
-      failures += 1;
-      console.error(`[itchy-troll] FAILED on ${game.name}: ${err.message}`);
-      await shot('failure');
-      await dumpFields();
-      ledger[game.name] = { title: game.title, state: 'failed', error: err.message, updated: new Date().toISOString() };
-      summary(`Failed on ${game.name}: ${err.message}`);
-    }
-    saveLedger(ledger);
-  }
-
-  if (fresh.length > NEW_PER_RUN) {
-    summary(`${fresh.length - NEW_PER_RUN} more new games wait for the next run.`);
-  }
-
-  if (browser) await browser.close();
-  process.exitCode = failures ? 1 : 0;
-})().catch(async (err) => {
-  console.error(`[itchy-troll] FAILED: ${err.message}`);
-  await shot('failure');
-  await dumpFields();
-  if (browser) await browser.close();
-  process.exit(1);
-});
+  saveLedger(ledger);
+  log(`Done: ${plain(PAGE_URL)}`);
+})()
+  .catch(async (err) => {
+    log(`FAILED: ${err.message}`);
+    await shot('failure');
+    await dumpFields();
+    const ledger = loadLedger();
+    ledger[REPO] = { ...(ledger[REPO] || {}), state: ledger[REPO] && ledger[REPO].state === 'live' ? 'live' : 'failed', error: err.message, updated: new Date().toISOString() };
+    if (REPO) saveLedger(ledger);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    if (browser) await browser.close();
+  });
