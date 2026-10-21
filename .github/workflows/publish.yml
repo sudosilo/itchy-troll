@@ -3,41 +3,27 @@ name: publish
 on:
   workflow_dispatch:
     inputs:
-      game_repo:
-        description: "Name of the game repo under sudosilo"
-        required: true
-      title:
-        description: "Title shown on the itch.io page"
-        required: true
-      width:
-        description: "Embed width in pixels"
+      only_repo:
+        description: "Optional. Leave empty and the agent picks the games itself"
         required: false
-        default: "1280"
-      height:
-        description: "Embed height in pixels"
-        required: false
-        default: "720"
+        default: ""
+  schedule:
+    - cron: "17 10 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: itchy-troll
+  cancel-in-progress: false
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
     steps:
       - name: Get agent code
         uses: actions/checkout@v4
-
-      - name: Get game code
-        uses: actions/checkout@v4
-        with:
-          repository: sudosilo/${{ inputs.game_repo }}
-          path: game-src
-
-      - name: Build upload folder
-        run: |
-          mkdir -p game-dist
-          rsync -a --exclude .git --exclude .github --exclude .vercel --exclude node_modules game-src/ game-dist/
-          ls -la game-dist
-          test -f game-dist/index.html
 
       - name: Install butler
         run: |
@@ -56,12 +42,21 @@ jobs:
           ITCH_USERNAME: ${{ secrets.ITCH_USERNAME }}
           ITCH_PASSWORD: ${{ secrets.ITCH_PASSWORD }}
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
-          GAME_SLUG: ${{ inputs.game_repo }}
-          GAME_TITLE: ${{ inputs.title }}
-          EMBED_WIDTH: ${{ inputs.width }}
-          EMBED_HEIGHT: ${{ inputs.height }}
-          GAME_DIR: game-dist
+          GH_OWNER: sudosilo
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ONLY_REPO: ${{ inputs.only_repo }}
         run: node troll.js
+
+      - name: Save ledger
+        if: always()
+        run: |
+          if [ -n "$(git status --porcelain itch-ledger.json)" ]; then
+            git config user.name "itchy-troll"
+            git config user.email "itchy-troll@users.noreply.github.com"
+            git add itch-ledger.json
+            git commit -m "Update itch ledger"
+            git push
+          fi
 
       - name: Save screenshots
         if: always()
@@ -69,3 +64,4 @@ jobs:
         with:
           name: shots
           path: shots
+          if-no-files-found: ignore
