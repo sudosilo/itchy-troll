@@ -2,12 +2,17 @@ const { chromium } = require('playwright');
 const { execSync } = require('child_process');
 const fs = require('fs');
 
+let SHIP = {};
+try {
+  SHIP = JSON.parse(fs.readFileSync('ship.json', 'utf8'));
+} catch {}
+
 const USER = (process.env.ITCH_USERNAME || '').trim();
 const PASS = process.env.ITCH_PASSWORD || '';
 const OWNER = process.env.GH_OWNER || 'sudosilo';
-const REPO = (process.env.GAME_REPO || '').trim();
-const PRICE = (process.env.GAME_PRICE || '0.99').trim();
-const TITLE_IN = (process.env.GAME_TITLE || '').trim();
+const REPO = (process.env.GAME_REPO || SHIP.repo || '').trim();
+const PRICE = String(process.env.GAME_PRICE || SHIP.price || '0.99').trim();
+const TITLE_IN = (process.env.GAME_TITLE || SHIP.title || '').trim();
 const SLUG = REPO.toLowerCase();
 const WIDTH = '1280';
 const HEIGHT = '720';
