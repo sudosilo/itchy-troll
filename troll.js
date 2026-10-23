@@ -281,7 +281,24 @@ async function finishSetup(editUrl) {
   const title = TITLE_IN || (ledger[REPO] && ledger[REPO].title) || titleFrom(fs.readFileSync(`${dist}/index.html`, 'utf8'));
   log(`Publishing ${REPO} as "${title}" at $${PRICE}`);
 
-  if (ledger[REPO] && ledger[REPO].state === 'live') {
+  if (process.env.PUBLISH_MODE !== 'browser') {
+    // itch.io puts a human check on its login page, so the robot never logs in.
+    // The owner makes the page by hand once. After that butler uploads every build.
+    log('Uploading with butler only. The itch.io page must already exist.');
+    try {
+      butlerPush(dist);
+    } catch (e) {
+      throw new Error(`butler could not upload to ${USER}/${SLUG}. If the page does not exist yet, create it at itch.io/game/new with the URL ${SLUG}`);
+    }
+    ledger[REPO] = {
+      ...(ledger[REPO] || {}),
+      title,
+      state: 'uploaded',
+      price: PRICE,
+      page: plain(PAGE_URL),
+      updated: new Date().toISOString(),
+    };
+  } else if (ledger[REPO] && ledger[REPO].state === 'live') {
     log('Page already live, uploading the new build only');
     butlerPush(dist);
     ledger[REPO].updated = new Date().toISOString();
