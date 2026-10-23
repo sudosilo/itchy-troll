@@ -309,6 +309,10 @@ async function finishSetup(editUrl) {
 })()
   .catch(async (err) => {
     log(`FAILED: ${err.message}`);
+    if (page) {
+      const where = await page.evaluate(() => ({ url: location.href, title: document.title, text: (document.body ? document.body.innerText : '').replace(/\s+/g, ' ').slice(0, 600) })).catch(() => null);
+      if (where) log(`Page at failure: ${where.url} | title: ${where.title} | text: ${where.text}`);
+    }
     await shot('failure');
     await dumpFields();
     const ledger = loadLedger();
