@@ -33,6 +33,22 @@ jobs:
       - name: Get agent code
         uses: actions/checkout@v4
 
+      - name: Check secrets
+        env:
+          ITCH_USERNAME: ${{ secrets.ITCH_USERNAME }}
+          ITCH_PASSWORD: ${{ secrets.ITCH_PASSWORD }}
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+        run: |
+          missing=""
+          [ -z "$ITCH_USERNAME" ] && missing="$missing ITCH_USERNAME"
+          [ -z "$ITCH_PASSWORD" ] && missing="$missing ITCH_PASSWORD"
+          [ -z "$BUTLER_API_KEY" ] && missing="$missing BUTLER_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "Missing secrets:$missing" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "All three secrets are set"
+
       - name: Install butler
         run: |
           curl -L -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
@@ -41,6 +57,7 @@ jobs:
           echo "$GITHUB_WORKSPACE/butler-bin" >> $GITHUB_PATH
 
       - name: Install browser
+        timeout-minutes: 8
         run: |
           npm install --no-save playwright@1
           npx playwright install --with-deps chromium
