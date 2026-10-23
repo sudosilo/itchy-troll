@@ -1,0 +1,1284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#f5f3ee">
+<title>Territory Control</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{
+  --bg:#f5f3ee; --panel:#ffffff; --ink:#1f2937; --muted:#6b7280; --line:#ddd8cc;
+  --blue:#2563eb; --red:#dc2626; --green:#15803d; --amber:#b45309; --amber-soft:#fef3c7;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px}
+#map{position:fixed;inset:0;background:#ebe7de}
+.grid-canvas{position:absolute;left:0;top:0;z-index:450;pointer-events:none;transition:opacity .12s}
+button{font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:10px 12px;cursor:pointer;touch-action:manipulation}
+button:disabled{opacity:.38;cursor:default}
+button.primary{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:600}
+button.on{background:var(--amber-soft);border-color:#f59e0b}
+.hidden{display:none!important}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+
+#top{position:fixed;left:0;right:0;top:0;z-index:1000;display:flex;align-items:center;gap:10px;
+  padding:calc(6px + env(safe-area-inset-top)) 10px 7px;background:rgba(255,255,255,.95);border-bottom:1px solid var(--line)}
+.side{flex:1;min-width:0}
+.side .row{display:flex;justify-content:space-between;align-items:baseline;font-weight:600;font-size:13px}
+.side .num{font-size:19px;font-variant-numeric:tabular-nums}
+.bar{height:5px;background:#ece8df;border-radius:3px;overflow:hidden;margin-top:3px}
+.bar i{display:block;height:100%;width:0;transition:width .3s}
+#mid{text-align:center;font-size:11px;color:var(--muted);line-height:1.35;min-width:62px}
+#mid b{color:var(--ink);font-size:13px}
+#menuBtn{padding:7px 10px;border-radius:8px;font-size:16px;line-height:1}
+
+#bottom{position:fixed;left:0;right:0;bottom:0;z-index:1000;background:rgba(255,255,255,.97);
+  border-top:1px solid var(--line);padding:8px 10px calc(8px + env(safe-area-inset-bottom))}
+#hint{font-weight:600;font-size:14px;min-height:20px;line-height:1.3}
+#info{font-size:12px;color:var(--muted);min-height:16px;margin:3px 0 8px;line-height:1.35}
+#info.warn{color:var(--red);font-weight:600}
+.btns{display:flex;gap:6px}
+.btns button{flex:1;padding:9px 3px;font-size:13px;line-height:1.2}
+.btns button small{display:block;font-size:10px;color:var(--muted);margin-top:2px}
+#endBtn{flex:1.5}
+#endBtn.ready{box-shadow:0 0 0 3px rgba(21,128,61,.25)}
+.credit{font-size:10px;color:var(--muted);text-align:right;margin-top:6px}
+
+#setup{position:fixed;left:0;right:0;bottom:0;z-index:1100;background:#fff;border-top:1px solid var(--line);
+  border-radius:16px 16px 0 0;padding:14px 14px calc(12px + env(safe-area-inset-bottom));box-shadow:0 -6px 24px rgba(0,0,0,.08)}
+#setup h2{font-size:17px;margin-bottom:4px}
+#setup p{font-size:13px;line-height:1.4;margin-bottom:10px}
+.seg{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.seg span{font-size:13px;color:var(--muted);margin-right:4px}
+.seg button{padding:7px 12px;font-size:13px}
+.seg button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+#areaInfo{min-height:16px;margin-bottom:10px}
+#resumeBtn{width:100%;margin-bottom:8px}
+
+.overlay{position:fixed;inset:0;z-index:2000;background:rgba(31,41,55,.35);display:flex;align-items:flex-end;justify-content:center}
+.overlay.center{align-items:center}
+.sheet{background:#fff;width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));
+  max-height:82vh;overflow:auto;box-shadow:0 -8px 30px rgba(0,0,0,.12)}
+.overlay.center .sheet{border-radius:16px;margin:16px;width:calc(100% - 32px)}
+.sheet h2{font-size:18px;margin-bottom:8px}
+.sheet p{font-size:13.5px;line-height:1.5;margin-bottom:10px}
+.sheet .stack{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.sheet .stack button{text-align:left}
+.progress{height:6px;background:#ece8df;border-radius:3px;overflow:hidden;margin:12px 0 8px}
+.progress i{display:block;height:100%;width:0;background:var(--green);transition:width .2s}
+.scoreline{display:flex;justify-content:center;gap:28px;margin:12px 0 16px;text-align:center}
+.scoreline div{font-size:12px;color:var(--muted)}
+.scoreline b{display:block;font-size:28px}
+#logList{font-size:12.5px;line-height:1.5}
+#logList div{padding:3px 0;border-bottom:1px solid #f0ede6}
+#toast{position:fixed;left:50%;top:calc(70px + env(safe-area-inset-top));transform:translateX(-50%);z-index:3000;
+  background:var(--ink);color:#fff;font-size:13px;padding:8px 14px;border-radius:10px;max-width:90vw;text-align:center}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="top" class="hidden">
+  <div class="side">
+    <div class="row"><span style="color:var(--blue)">You</span><span class="num" id="pScore">0</span></div>
+    <div class="bar"><i id="pBar" style="background:var(--blue)"></i></div>
+  </div>
+  <div id="mid"><b id="roundTxt">Round 1</b><br><span id="supplyTxt">Supply 0</span></div>
+  <div class="side">
+    <div class="row"><span class="num" id="eScore">0</span><span style="color:var(--red)">Enemy</span></div>
+    <div class="bar"><i id="eBar" style="background:var(--red);margin-left:auto"></i></div>
+  </div>
+  <button id="menuBtn" aria-label="Menu">&#9776;</button>
+</div>
+
+<div id="bottom" class="hidden">
+  <div id="hint"></div>
+  <div id="info"></div>
+  <div class="btns">
+    <button id="solBtn">Soldier<small>1 supply</small></button>
+    <button id="artBtn">Artillery<small>2 supply</small></button>
+    <button id="undoBtn">Undo<small>this turn</small></button>
+    <button id="ctrBtn">Center<small>on you</small></button>
+    <button id="endBtn" class="primary">End turn</button>
+  </div>
+  <div class="credit">Map data &copy; OpenStreetMap contributors</div>
+</div>
+
+<div id="setup">
+  <h2>Choose your battlefield</h2>
+  <p class="muted">Pan and zoom until the square covers the ground you want to fight over. Real elevation inside the square becomes the high ground.</p>
+  <div class="seg" id="sizeSeg"><span>Grid</span>
+    <button data-n="32">32</button><button data-n="64">64</button><button data-n="128">128</button>
+  </div>
+  <div id="areaInfo" class="muted small"></div>
+  <button id="resumeBtn" class="hidden"></button>
+  <div class="btns">
+    <button id="locBtn">Find me</button>
+    <button id="startBtn" class="primary">Start battle</button>
+  </div>
+  <div class="credit">Map data &copy; OpenStreetMap contributors</div>
+</div>
+
+<div id="loading" class="overlay center hidden">
+  <div class="sheet">
+    <h2>Reading the terrain</h2>
+    <p class="muted" id="loadTxt">Downloading elevation for every cell.</p>
+    <div class="progress"><i id="loadBar"></i></div>
+  </div>
+</div>
+
+<div id="menu" class="overlay hidden">
+  <div class="sheet">
+    <h2>Menu</h2>
+    <div class="stack">
+      <button id="mHelp">How to play</button>
+      <button id="mLog">Battle log</button>
+      <button id="mTerrain">Terrain shading: normal</button>
+      <button id="mNew">New battle</button>
+      <button id="mClose" class="primary">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="help" class="overlay hidden">
+  <div class="sheet">
+    <h2>How to play</h2>
+    <p>You command the blue side. The enemy commands red. Each turn you gain 1 supply, your commander can step one cell in any direction, every soldier can step once, and every ready artillery piece can fire once. Do these in any order, then press End turn.</p>
+    <p>Every cell you step on becomes your territory. You only score by attacking: capturing an enemy cell is worth its tier (1 in valleys up to 5 on peaks), destroying a soldier is 5, destroying artillery is 8, taking the enemy HQ is 20 once, and sealing off enemy cells inside a closed loop of your territory is 10 and flips everything inside.</p>
+    <p>Soldiers cost 1 supply and artillery costs 2. Both are placed on your own territory and act from the next turn. Artillery never moves. Its range is 2 plus the tier of the cell it sits on, so a peak gives range 7 and a valley gives range 3. Artillery can hit enemy cells and enemy units but cannot hurt a commander.</p>
+    <p>Moving your commander or a soldier onto the enemy commander wins instantly, and the enemy can do the same to you. Cells shown in orange during a move are within reach of an enemy piece next turn. First to 150 points wins, otherwise the higher score after 40 rounds.</p>
+    <p>Tap any cell to read its terrain. Pinch to zoom. Undo takes back moves made this turn.</p>
+    <div class="stack"><button class="primary" data-close="help">Got it</button></div>
+  </div>
+</div>
+
+<div id="logSheet" class="overlay hidden">
+  <div class="sheet">
+    <h2>Battle log</h2>
+    <div id="logList"></div>
+    <div class="stack"><button class="primary" data-close="logSheet">Close</button></div>
+  </div>
+</div>
+
+<div id="over" class="overlay center hidden">
+  <div class="sheet" style="text-align:center">
+    <h2 id="overTitle" style="font-size:26px">Victory</h2>
+    <p id="overReason" class="muted"></p>
+    <div class="scoreline">
+      <div>You<b id="overP" style="color:var(--blue)">0</b></div>
+      <div>Enemy<b id="overE" style="color:var(--red)">0</b></div>
+    </div>
+    <div class="stack">
+      <button class="primary" id="overNew">New battle</button>
+      <button data-close="over">Look at the map</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="hidden"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/*ENGINE-START*/
+const Engine = (() => {
+  const WIN = 150, MAX_ROUNDS = 40;
+  const CAP = { soldier: 4, arty: 2 };
+  const COST = { soldier: 1, arty: 2 };
+  const KILL = { soldier: 5, arty: 8 };
+  const HQ_PTS = 20, ENCIRCLE_PTS = 10;
+  const TIER_CUTS = [0.20, 0.45, 0.70, 0.90];
+
+  function rng(G) {
+    let t = (G.seed = (G.seed + 0x6D2B79F5) | 0);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  const foe = s => 3 - s;
+  const rcOf = (G, i) => [(i / G.size) | 0, i % G.size];
+  function nb8(G, i) {
+    const n = G.size, r = (i / n) | 0, c = i - r * n, out = [];
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if (!dr && !dc) continue;
+      const rr = r + dr, cc = c + dc;
+      if (rr >= 0 && rr < n && cc >= 0 && cc < n) out.push(rr * n + cc);
+    }
+    return out;
+  }
+  function cheb(G, a, b) {
+    const n = G.size;
+    return Math.max(Math.abs(((a / n) | 0) - ((b / n) | 0)), Math.abs((a % n) - (b % n)));
+  }
+  const artyRange = (G, i) => 2 + G.tier[i];
+  const unitAt = (G, i) => { for (const u of G.units) if (u.idx === i) return u; return null; };
+  const count = (G, side, type) => G.units.reduce((k, u) => k + (u.side === side && u.type === type ? 1 : 0), 0);
+  const artyReady = (G, u) => u.type === 'arty' && u.placed < G.round && !u.fired;
+
+  function log(G, side, text) {
+    G.log.push({ r: G.round, s: side, t: text });
+    if (G.log.length > 150) G.log.splice(0, G.log.length - 150);
+  }
+  function finish(G, winner, reason) { if (!G.over) G.over = { winner, reason }; }
+  function award(G, side, pts, text) {
+    G.score[side] += pts;
+    log(G, side, text + ' +' + pts);
+    if (!G.over && G.score[side] >= WIN) finish(G, side, 'Reached ' + WIN + ' points');
+  }
+
+  function capture(G, side, i) {
+    const f = foe(side);
+    if (G.owner[i] === f) {
+      award(G, side, G.tier[i], 'Captured a tier ' + G.tier[i] + ' cell');
+      if (i === G.hq[f] && !G.hqTaken[f]) {
+        G.hqTaken[f] = true;
+        award(G, side, HQ_PTS, 'Took the enemy HQ');
+      }
+    }
+    G.owner[i] = side;
+  }
+  function killUnit(G, side, u) {
+    G.units.splice(G.units.indexOf(u), 1);
+    award(G, side, KILL[u.type], 'Destroyed ' + (u.type === 'arty' ? 'artillery' : 'a soldier'));
+  }
+
+  // 4-connected flood from the border through every cell not owned by side.
+  // Anything not reached is sealed inside side's territory and flips to side.
+  function encircle(G, side) {
+    const n = G.size, N = n * n, own = G.owner, seen = new Uint8Array(N), q = new Int32Array(N);
+    let h = 0, t = 0;
+    const push = i => { if (!seen[i] && own[i] !== side) { seen[i] = 1; q[t++] = i; } };
+    for (let k = 0; k < n; k++) { push(k); push((n - 1) * n + k); push(k * n); push(k * n + n - 1); }
+    while (h < t) {
+      const i = q[h++], r = (i / n) | 0, c = i - r * n;
+      if (r > 0) push(i - n);
+      if (r < n - 1) push(i + n);
+      if (c > 0) push(i - 1);
+      if (c < n - 1) push(i + 1);
+    }
+    const f = foe(side);
+    let enemy = 0, neutral = 0;
+    for (let i = 0; i < N; i++) {
+      if (!seen[i] && own[i] !== side) {
+        if (own[i] === f) enemy++; else neutral++;
+        own[i] = side;
+      }
+    }
+    if (enemy > 0) award(G, side, ENCIRCLE_PTS, 'Encircled ' + enemy + ' enemy cells');
+    else if (neutral > 0) log(G, side, 'Sealed off ' + neutral + ' open cells');
+    return enemy + neutral;
+  }
+
+  function commanderMoves(G, side) {
+    if (G.over || G.cmdMoved[side]) return [];
+    return nb8(G, G.cmd[side]).filter(i => { const u = unitAt(G, i); return !(u && u.side === side); });
+  }
+  function moveCommander(G, side, to) {
+    if (!commanderMoves(G, side).includes(to)) return false;
+    const f = foe(side);
+    G.cmdMoved[side] = true;
+    G.cmd[side] = to;
+    const u = unitAt(G, to);
+    if (u && u.side === f) killUnit(G, side, u);
+    capture(G, side, to);
+    if (G.cmd[f] === to) {
+      log(G, side, 'Commander took out the enemy commander');
+      finish(G, side, side === 1 ? 'You took out the enemy commander' : 'The enemy took out your commander');
+      return true;
+    }
+    encircle(G, side);
+    return true;
+  }
+
+  function soldierMoves(G, u) {
+    if (G.over || u.type !== 'soldier' || u.moved) return [];
+    return nb8(G, u.idx).filter(i => {
+      const v = unitAt(G, i);
+      if (v && v.side === u.side) return false;
+      return G.cmd[u.side] !== i;
+    });
+  }
+  function moveSoldier(G, u, to) {
+    if (!soldierMoves(G, u).includes(to)) return false;
+    const f = foe(u.side);
+    const v = unitAt(G, to);
+    if (v) killUnit(G, u.side, v);
+    u.idx = to;
+    u.moved = true;
+    capture(G, u.side, to);
+    if (G.cmd[f] === to) {
+      log(G, u.side, 'Soldier took out the enemy commander');
+      finish(G, u.side, u.side === 1 ? 'Your soldier took out the enemy commander' : 'An enemy soldier took out your commander');
+      return true;
+    }
+    encircle(G, u.side);
+    return true;
+  }
+
+  function artyTargets(G, u) {
+    if (G.over || !artyReady(G, u)) return [];
+    const R = artyRange(G, u.idx), n = G.size, [r, c] = rcOf(G, u.idx), f = foe(u.side), out = [];
+    for (let rr = Math.max(0, r - R); rr <= Math.min(n - 1, r + R); rr++)
+      for (let cc = Math.max(0, c - R); cc <= Math.min(n - 1, c + R); cc++) {
+        const i = rr * n + cc, v = unitAt(G, i);
+        if (G.owner[i] === f || (v && v.side === f)) out.push(i);
+      }
+    return out;
+  }
+  function fireArty(G, u, to) {
+    if (!artyTargets(G, u).includes(to)) return false;
+    u.fired = true;
+    const v = unitAt(G, to);
+    if (v && v.side !== u.side) killUnit(G, u.side, v);
+    if (G.owner[to] !== foe(u.side)) log(G, u.side, 'Artillery shelled a cell');
+    capture(G, u.side, to);
+    encircle(G, u.side);
+    return true;
+  }
+
+  function deployCheck(G, side, type, i) {
+    if (G.over) return 'The battle is over';
+    if (count(G, side, type) >= CAP[type]) return 'Limit of ' + CAP[type] + (type === 'arty' ? ' artillery' : ' soldiers') + ' reached';
+    if (G.supply[side] < COST[type]) return 'Needs ' + COST[type] + ' supply';
+    if (i == null) return null;
+    if (G.owner[i] !== side) return 'Place units on your own territory';
+    if (unitAt(G, i) || G.cmd[1] === i || G.cmd[2] === i) return 'That cell is occupied';
+    return null;
+  }
+  function deployCells(G, side) {
+    const out = [];
+    for (let i = 0; i < G.owner.length; i++)
+      if (G.owner[i] === side && G.cmd[1] !== i && G.cmd[2] !== i && !unitAt(G, i)) out.push(i);
+    return out;
+  }
+  function deploy(G, side, type, i) {
+    if (deployCheck(G, side, type, i)) return false;
+    G.supply[side] -= COST[type];
+    G.units.push({ id: G.nextId++, side, type, idx: i, placed: G.round, moved: true, fired: false });
+    log(G, side, (type === 'arty' ? 'Placed artillery' : 'Placed a soldier') + ' on tier ' + G.tier[i]);
+    return true;
+  }
+
+  function beginTurn(G, side) {
+    G.supply[side] += 1;
+    G.cmdMoved[side] = false;
+    for (const u of G.units) if (u.side === side) { u.moved = false; u.fired = false; }
+  }
+
+  // Cells the given side could step onto next turn, split by who threatens them.
+  function reach(G, side) {
+    const N = G.size * G.size, byCmd = new Uint8Array(N), bySol = new Uint8Array(N);
+    for (const i of nb8(G, G.cmd[side])) byCmd[i] = 1;
+    for (const u of G.units) if (u.side === side && u.type === 'soldier') for (const i of nb8(G, u.idx)) bySol[i] = 1;
+    return { byCmd, bySol };
+  }
+
+  function pickCell(G, cells, scoreFn) {
+    let best = null, bs = -Infinity;
+    for (const i of cells) { const s = scoreFn(i); if (s > bs) { bs = s; best = i; } }
+    return best;
+  }
+
+  function aiTurn(G, me) {
+    const f = foe(me), touched = [];
+    if (G.over) return touched;
+    const tgt = () => G.cmd[f];
+
+    // Artillery first, so threats are cleared before anything moves.
+    for (const u of G.units.filter(u => u.side === me && u.type === 'arty')) {
+      const t = artyTargets(G, u);
+      if (!t.length) continue;
+      const best = pickCell(G, t, i => {
+        const v = unitAt(G, i);
+        const base = v && v.side === f ? 100 + KILL[v.type] : G.tier[i] * 10;
+        return base - cheb(G, i, tgt()) * 0.2 + rng(G) * 0.1;
+      });
+      fireArty(G, u, best); touched.push(best);
+      if (G.over) return touched;
+    }
+
+    // Soldiers push toward the enemy commander, grabbing what they can on the way.
+    {
+      const { byCmd } = reach(G, f);
+      for (const u of G.units.filter(u => u.side === me && u.type === 'soldier')) {
+        if (!G.units.includes(u)) continue;
+        const opts = soldierMoves(G, u);
+        if (!opts.length) continue;
+        if (opts.includes(tgt())) { moveSoldier(G, u, tgt()); touched.push(u.idx); return touched; }
+        const stay = -cheb(G, u.idx, tgt()) * 1.6 - 0.5 - (byCmd[u.idx] ? 4 : 0);
+        let best = null, bs = stay;
+        for (const i of opts) {
+          let s = 0;
+          const v = unitAt(G, i);
+          if (v && v.side === f) s += v.type === 'arty' ? 45 : 32;
+          if (G.owner[i] === f) s += G.tier[i] * 3; else if (G.owner[i] === 0) s += 1;
+          s -= cheb(G, i, tgt()) * 1.6;
+          if (byCmd[i]) s -= 4;
+          s += rng(G) * 0.3;
+          if (s > bs) { bs = s; best = i; }
+        }
+        if (best != null) { moveSoldier(G, u, best); touched.push(best); if (G.over) return touched; }
+      }
+    }
+
+    // Commander: never step where the enemy can reach next turn, hover about 3 cells out.
+    {
+      const { byCmd, bySol } = reach(G, f);
+      const cur = G.cmd[me];
+      const score = (i, moving) => {
+        if (i === tgt()) return 1e9;
+        let s = 0;
+        if (moving) {
+          const v = unitAt(G, i);
+          if (v && v.side === f) s += v.type === 'arty' ? 40 : 30;
+          if (G.owner[i] === f) { s += G.tier[i] * 4; if (i === G.hq[f] && !G.hqTaken[f]) s += 40; }
+          else if (G.owner[i] === 0) s += 1.5;
+        }
+        if (byCmd[i]) s -= 5000;
+        if (bySol[i]) s -= 3000;
+        s += G.tier[i];
+        s -= Math.abs(cheb(G, i, tgt()) - 3) * 2.5;
+        return s + rng(G) * 0.5;
+      };
+      let best = null, bs = score(cur, false);
+      for (const i of commanderMoves(G, me)) { const s = score(i, true); if (s > bs) { bs = s; best = i; } }
+      if (best != null) { moveCommander(G, me, best); touched.push(best); if (G.over) return touched; }
+    }
+
+    // Spend supply: two soldiers first, then save up for artillery on high ground.
+    for (let k = 0; k < 3; k++) {
+      const sol = count(G, me, 'soldier'), art = count(G, me, 'arty');
+      const cells = deployCells(G, me);
+      if (!cells.length) break;
+      const { byCmd, bySol } = reach(G, f);
+      const wantArty = art < CAP.arty && sol >= 2;
+      let type = null;
+      if (wantArty) { if (G.supply[me] >= COST.arty) type = 'arty'; else break; }
+      else if (sol < CAP.soldier && G.supply[me] >= COST.soldier) type = 'soldier';
+      else if (art < CAP.arty && G.supply[me] >= COST.arty) type = 'arty';
+      if (!type) break;
+      const at = type === 'arty'
+        ? pickCell(G, cells, i => G.tier[i] * 3 - Math.abs(cheb(G, i, tgt()) - (1 + G.tier[i])) * 1.5 - (byCmd[i] || bySol[i] ? 20 : 0))
+        : pickCell(G, cells, i => -cheb(G, i, tgt()) - (byCmd[i] ? 4 : 0) + rng(G) * 0.2);
+      if (at == null || !deploy(G, me, type, at)) break;
+      touched.push(at);
+    }
+    return touched;
+  }
+
+  function nextRound(G) {
+    if (G.over) return;
+    G.round += 1;
+    if (G.round > MAX_ROUNDS) {
+      G.round = MAX_ROUNDS;
+      const a = G.score[1], b = G.score[2];
+      finish(G, a > b ? 1 : b > a ? 2 : 0, 'Scores after ' + MAX_ROUNDS + ' rounds');
+      return;
+    }
+    beginTurn(G, 1);
+  }
+  function playerEnd(G) {
+    if (G.over) return [];
+    beginTurn(G, 2);
+    const touched = aiTurn(G, 2);
+    nextRound(G);
+    return touched;
+  }
+
+  function computeTiers(elev) {
+    const sorted = Float32Array.from(elev).sort();
+    const cuts = TIER_CUTS.map(p => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))]);
+    const spread = sorted[sorted.length - 1] - sorted[0];
+    const tier = new Uint8Array(elev.length);
+    for (let i = 0; i < elev.length; i++) {
+      if (spread < 1) { tier[i] = 1; continue; }
+      let t = 5;
+      for (let k = 0; k < cuts.length; k++) if (elev[i] <= cuts[k]) { t = k + 1; break; }
+      tier[i] = t;
+    }
+    return tier;
+  }
+
+  // Smooth fallback terrain when no elevation source answers.
+  function noiseTerrain(size, seed) {
+    const S = { seed: seed | 0 || 7 };
+    const lat = [];
+    const g = 9;
+    for (let i = 0; i < g * g; i++) lat.push(rng(S));
+    const at = (x, y) => {
+      const x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
+      const v = (a, b) => lat[((b % g + g) % g) * g + ((a % g + g) % g)];
+      const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+      const top = v(x0, y0) * (1 - sx) + v(x0 + 1, y0) * sx;
+      const bot = v(x0, y0 + 1) * (1 - sx) + v(x0 + 1, y0 + 1) * sx;
+      return top * (1 - sy) + bot * sy;
+    };
+    const out = new Float32Array(size * size);
+    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {
+      let e = 0, amp = 1, freq = 3 / size;
+      for (let o = 0; o < 4; o++) { e += at(c * freq + o * 1.7, r * freq + o * 3.1) * amp; amp *= 0.5; freq *= 2; }
+      out[r * size + c] = e * 400;
+    }
+    return out;
+  }
+
+  function create(o) {
+    const n = o.size, N = n * n;
+    const G = {
+      v: 2, size: n, cell: o.cell, x0: o.x0, y0: o.y0, elev: o.elev, tier: o.tier,
+      owner: new Uint8Array(N), units: [], cmd: { 1: 0, 2: 0 }, hq: { 1: 0, 2: 0 },
+      hqTaken: { 1: false, 2: false }, score: { 1: 0, 2: 0 }, supply: { 1: 0, 2: 0 },
+      cmdMoved: { 1: false, 2: false }, round: 1, nextId: 1, seed: (o.seed >>> 0) || 1,
+      over: null, log: [], source: o.source || ''
+    };
+    const m = 2;
+    let p = o.playerIdx == null ? (n >> 1) * n + (n >> 1) : o.playerIdx;
+    let [pr, pc] = rcOf(G, p);
+    pr = Math.min(n - 1 - m, Math.max(m, pr)); pc = Math.min(n - 1 - m, Math.max(m, pc));
+    p = pr * n + pc;
+    const D = Math.max(7, Math.min(16, Math.round(n * 0.12)));
+    let e = -1, bs = -Infinity;
+    for (let r = m; r < n - m; r++) for (let c = m; c < n - m; c++) {
+      const i = r * n + c, d = cheb(G, i, p);
+      if (d < D - 2 || d > D + 2) continue;
+      const s = G.tier[i] * 2 - Math.abs(d - D) + rng(G);
+      if (s > bs) { bs = s; e = i; }
+    }
+    if (e < 0) e = (n - 1 - m) * n + (n - 1 - m);
+    G.cmd[1] = G.hq[1] = p;
+    G.cmd[2] = G.hq[2] = e;
+    for (const s of [1, 2]) {
+      G.owner[G.hq[s]] = s;
+      for (const i of nb8(G, G.hq[s])) if (G.owner[i] === 0) G.owner[i] = s;
+    }
+    log(G, 0, 'Battle started');
+    beginTurn(G, 1);
+    return G;
+  }
+
+  function clone(G) {
+    return {
+      ...G, owner: G.owner.slice(), units: G.units.map(u => ({ ...u })),
+      cmd: { ...G.cmd }, hq: { ...G.hq }, hqTaken: { ...G.hqTaken }, score: { ...G.score },
+      supply: { ...G.supply }, cmdMoved: { ...G.cmdMoved }, log: G.log.slice(), over: G.over ? { ...G.over } : null
+    };
+  }
+  function serialize(G) {
+    return JSON.stringify({
+      ...G, elev: Array.from(G.elev, v => Math.round(v * 10) / 10),
+      tier: Array.from(G.tier), owner: Array.from(G.owner)
+    });
+  }
+  function deserialize(s) {
+    const o = JSON.parse(s);
+    if (!o || o.v !== 2) return null;
+    o.elev = Float32Array.from(o.elev);
+    o.tier = Uint8Array.from(o.tier);
+    o.owner = Uint8Array.from(o.owner);
+    return o;
+  }
+
+  return {
+    WIN, MAX_ROUNDS, CAP, COST, rcOf, nb8, cheb, artyRange, unitAt, count, artyReady, reach,
+    commanderMoves, moveCommander, soldierMoves, moveSoldier, artyTargets, fireArty,
+    deployCheck, deployCells, deploy, aiTurn, beginTurn, nextRound, playerEnd,
+    computeTiers, noiseTerrain, create, clone, serialize, deserialize
+  };
+})();
+/*ENGINE-END*/
+
+// ===================== Browser side =====================
+const TIER_NAMES = ['Valley', 'Plains', 'Hills', 'Ridge', 'Peak'];
+const WORLD = 40075016.68557849, HALF = WORLD / 2;
+const SAVE_KEY = 'tc_save_v2';
+const FALLBACK_VIEW = [36.06, -112.14];
+const $ = id => document.getElementById(id);
+const crs = L.CRS.EPSG3857;
+
+let G = null;
+const ui = {
+  phase: 'setup', mode: 'idle', sel: null, deployType: null, info: '', warn: false,
+  busy: false, terrain: 1, touched: [], undo: [], size: 128, userLL: null
+};
+
+// ---------- map ----------
+const map = L.map('map', {
+  zoomControl: false, attributionControl: false, zoomSnap: 0, zoomDelta: 0.5,
+  doubleClickZoom: false, maxZoom: 20, minZoom: 3, tapTolerance: 12
+}).setView(FALLBACK_VIEW, 13);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 20, maxNativeZoom: 19 }).addTo(map);
+
+const canvas = document.createElement('canvas');
+canvas.className = 'grid-canvas';
+map.getContainer().appendChild(canvas);
+const ctx = canvas.getContext('2d');
+map.on('move zoom resize viewreset', () => draw());
+map.on('zoomanim', () => { canvas.style.opacity = '0'; });
+map.on('zoomend moveend', () => { canvas.style.opacity = '1'; draw(); if (ui.phase === 'setup') updateAreaInfo(); });
+window.addEventListener('resize', () => { map.invalidateSize(); draw(); });
+
+// ---------- offscreen layers ----------
+let terrCv = null, ownCv = null, ownCtx = null, ownImg = null;
+function buildTerrainCanvas() {
+  const n = G.size;
+  terrCv = document.createElement('canvas');
+  terrCv.width = terrCv.height = n;
+  const tctx = terrCv.getContext('2d'), img = tctx.createImageData(n, n), d = img.data;
+  const midLat = crs.unproject(L.point(G.x0 + G.cell * n / 2, G.y0 - G.cell * n / 2)).lat;
+  const ground = G.cell * Math.cos(midLat * Math.PI / 180);
+  const pal = [[46, 125, 50, .10], [124, 179, 66, .17], [214, 168, 62, .27], [176, 108, 52, .37], [112, 78, 64, .50]];
+  const e = G.elev, lx = -0.5, ly = 0.5, lz = 0.707, ll = Math.hypot(lx, ly, lz);
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    const i = r * n + c;
+    const gx = (e[r * n + Math.min(n - 1, c + 1)] - e[r * n + Math.max(0, c - 1)]) / (2 * ground);
+    const gy = (e[Math.max(0, r - 1) * n + c] - e[Math.min(n - 1, r + 1) * n + c]) / (2 * ground);
+    const nx = -gx * 3, ny = -gy * 3, len = Math.hypot(nx, ny, 1);
+    const h = Math.max(0, (nx * lx + ny * ly + lz) / (len * ll));
+    const p = pal[G.tier[i] - 1], shade = 0.7 + 0.3 * h;
+    d[i * 4] = p[0] * shade; d[i * 4 + 1] = p[1] * shade; d[i * 4 + 2] = p[2] * shade;
+    d[i * 4 + 3] = Math.min(255, (p[3] + (1 - h) * 0.18) * 255);
+  }
+  tctx.putImageData(img, 0, 0);
+  ownCv = document.createElement('canvas');
+  ownCv.width = ownCv.height = n;
+  ownCtx = ownCv.getContext('2d');
+  ownImg = ownCtx.createImageData(n, n);
+}
+function paintTerritory() {
+  if (!G || !ownImg) return;
+  const d = ownImg.data;
+  for (let i = 0; i < G.owner.length; i++) {
+    const o = G.owner[i], k = i * 4;
+    if (o === 1) { d[k] = 37; d[k + 1] = 99; d[k + 2] = 235; d[k + 3] = 112; }
+    else if (o === 2) { d[k] = 220; d[k + 1] = 38; d[k + 2] = 38; d[k + 3] = 112; }
+    else d[k + 3] = 0;
+  }
+  ownCtx.putImageData(ownImg, 0, 0);
+}
+
+// ---------- geometry ----------
+function gridGeom() {
+  const p0 = map.latLngToContainerPoint(crs.unproject(L.point(G.x0, G.y0)));
+  const p1 = map.latLngToContainerPoint(crs.unproject(L.point(G.x0 + G.cell * G.size, G.y0)));
+  return { ox: p0.x, oy: p0.y, s: (p1.x - p0.x) / G.size };
+}
+function cellLatLng(i) {
+  const [r, c] = Engine.rcOf(G, i);
+  return crs.unproject(L.point(G.x0 + (c + 0.5) * G.cell, G.y0 - (r + 0.5) * G.cell));
+}
+function barHeights() {
+  const t = $('top').classList.contains('hidden') ? 0 : $('top').getBoundingClientRect().height;
+  const b = $('bottom').classList.contains('hidden') ? 0 : $('bottom').getBoundingClientRect().height;
+  return { t, b };
+}
+function setupFrame() {
+  const W = innerWidth, cardTop = $('setup').getBoundingClientRect().top;
+  const top = 14, bottom = Math.max(top + 80, cardTop - 14);
+  const side = Math.max(80, Math.min(W - 28, bottom - top));
+  return { x: (W - side) / 2, y: top + (bottom - top - side) / 2, side };
+}
+
+// ---------- drawing ----------
+function draw() {
+  const dpr = Math.min(2, window.devicePixelRatio || 1), W = innerWidth, H = innerHeight;
+  if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  if (ui.phase === 'setup') return drawSetup(W, H);
+  if (!G || !terrCv) return;
+
+  const { ox, oy, s } = gridGeom(), n = G.size;
+  const c0 = Math.max(0, Math.floor(-ox / s)), c1 = Math.min(n, Math.ceil((W - ox) / s));
+  const r0 = Math.max(0, Math.floor(-oy / s)), r1 = Math.min(n, Math.ceil((H - oy) / s));
+  const rect = (i, pad = 0) => { const [r, c] = Engine.rcOf(G, i); return [ox + c * s + pad, oy + r * s + pad, s - 2 * pad, s - 2 * pad]; };
+  const visible = i => { const [r, c] = Engine.rcOf(G, i); return r >= r0 && r < r1 && c >= c0 && c < c1; };
+
+  if (c1 > c0 && r1 > r0) {
+    ctx.imageSmoothingEnabled = false;
+    const sw = c1 - c0, sh = r1 - r0, dx = ox + c0 * s, dy = oy + r0 * s;
+    for (let k = 0; k < ui.terrain; k++) ctx.drawImage(terrCv, c0, r0, sw, sh, dx, dy, sw * s, sh * s);
+    ctx.drawImage(ownCv, c0, r0, sw, sh, dx, dy, sw * s, sh * s);
+
+    if (s >= 9) {
+      ctx.strokeStyle = 'rgba(31,41,55,0.10)'; ctx.lineWidth = 1; ctx.beginPath();
+      for (let c = c0; c <= c1; c++) { const x = Math.round(ox + c * s) + 0.5; ctx.moveTo(x, dy); ctx.lineTo(x, dy + sh * s); }
+      for (let r = r0; r <= r1; r++) { const y = Math.round(oy + r * s) + 0.5; ctx.moveTo(dx, y); ctx.lineTo(dx + sw * s, y); }
+      ctx.stroke();
+    }
+    if (s >= 16) {
+      ctx.fillStyle = 'rgba(80,55,40,0.55)';
+      for (let r = r0; r < r1; r++) for (let c = c0; c < c1; c++) {
+        if (G.tier[r * n + c] !== 5) continue;
+        const x = ox + c * s + s * 0.78, y = oy + r * s + s * 0.2, k = s * 0.1;
+        ctx.beginPath(); ctx.moveTo(x, y - k); ctx.lineTo(x + k, y + k); ctx.lineTo(x - k, y + k); ctx.fill();
+      }
+    }
+  }
+  ctx.strokeStyle = 'rgba(31,41,55,0.75)'; ctx.lineWidth = 2;
+  ctx.strokeRect(ox, oy, n * s, n * s);
+
+  const fillCells = (cells, fill, stroke, lw = 2) => {
+    for (const i of cells) {
+      if (!visible(i)) continue;
+      const [x, y, w, h] = rect(i, 1);
+      if (fill) { ctx.fillStyle = fill; ctx.fillRect(x, y, w, h); }
+      if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.strokeRect(x, y, w, h); }
+    }
+  };
+  // Outline plus a center dot, so the territory color underneath stays readable.
+  const markCells = (cells, color, dashed) => {
+    ctx.lineWidth = 2.5; ctx.strokeStyle = color; ctx.fillStyle = color;
+    if (dashed) ctx.setLineDash([5, 3]);
+    for (const i of cells) {
+      if (!visible(i)) continue;
+      const [x, y, w, h] = rect(i, 2);
+      ctx.strokeRect(x, y, w, h);
+      ctx.beginPath(); ctx.arc(x + w / 2, y + h / 2, Math.max(2.5, s * 0.11), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.setLineDash([]);
+  };
+
+  // Recent enemy actions.
+  if (ui.touched.length) {
+    ctx.setLineDash([4, 3]);
+    fillCells(ui.touched, null, 'rgba(124,58,237,0.9)', 2);
+    ctx.setLineDash([]);
+  }
+
+  if (!G.over && !ui.busy) {
+    const danger = dangerSet();
+    if (ui.mode === 'idle' && !G.cmdMoved[1]) {
+      const moves = Engine.commanderMoves(G, 1);
+      const risky = moves.filter(i => danger.has(i) && i !== G.cmd[2]);
+      const safe = moves.filter(i => !danger.has(i) || i === G.cmd[2]);
+      markCells(safe, '#15803d');
+      markCells(risky, '#ea580c');
+    }
+    if (ui.mode === 'soldier') {
+      const u = unitById(ui.sel);
+      if (u) {
+        const moves = Engine.soldierMoves(G, u);
+        markCells(moves.filter(i => !danger.has(i)), '#0f766e');
+        markCells(moves.filter(i => danger.has(i)), '#ea580c');
+      }
+    }
+    if (ui.mode === 'deploy') {
+      markCells(Engine.deployCells(G, 1), '#b45309', true);
+    }
+    if (ui.mode === 'arty') {
+      const u = unitById(ui.sel);
+      if (u) {
+        const R = Engine.artyRange(G, u.idx), [r, c] = Engine.rcOf(G, u.idx);
+        const a0 = Math.max(0, r - R), a1 = Math.min(n - 1, r + R), b0 = Math.max(0, c - R), b1 = Math.min(n - 1, c + R);
+        ctx.fillStyle = 'rgba(245,158,11,0.10)';
+        ctx.fillRect(ox + b0 * s, oy + a0 * s, (b1 - b0 + 1) * s, (a1 - a0 + 1) * s);
+        ctx.setLineDash([6, 4]); ctx.strokeStyle = '#b45309'; ctx.lineWidth = 2;
+        ctx.strokeRect(ox + b0 * s, oy + a0 * s, (b1 - b0 + 1) * s, (a1 - a0 + 1) * s);
+        ctx.setLineDash([]);
+        fillCells(Engine.artyTargets(G, u), 'rgba(234,88,12,0.38)', '#c2410c');
+      }
+    }
+  }
+
+  // HQ flags.
+  if (s >= 14) for (const side of [1, 2]) {
+    const i = G.hq[side];
+    if (!visible(i)) continue;
+    const [x, y] = rect(i);
+    ctx.fillStyle = side === 1 ? '#1d4ed8' : '#b91c1c';
+    ctx.font = `700 ${Math.max(9, s * 0.26)}px system-ui,sans-serif`;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('HQ', x + 2, y + 2);
+  }
+
+  // Units and commanders.
+  const R = Math.max(5, s * 0.34);
+  for (const u of G.units) {
+    if (!visible(u.idx)) continue;
+    const [x, y] = rect(u.idx), cx = x + s / 2, cy = y + s / 2;
+    const col = u.side === 1 ? '#2563eb' : '#dc2626';
+    const spent = u.side === 1 && (u.type === 'soldier' ? u.moved : !Engine.artyReady(G, u));
+    ctx.globalAlpha = spent && !G.over ? 0.6 : 1;
+    ctx.lineWidth = 2; ctx.strokeStyle = '#fff';
+    if (u.type === 'soldier') {
+      const k = R * 0.9;
+      ctx.beginPath(); ctx.moveTo(cx, cy - k); ctx.lineTo(cx + k, cy + k * 0.8); ctx.lineTo(cx - k, cy + k * 0.8); ctx.closePath();
+      ctx.fillStyle = col; ctx.fill(); ctx.stroke();
+    } else {
+      const k = R * 0.8, setting = u.placed >= G.round;
+      ctx.fillStyle = setting ? '#fff' : (u.fired ? '#9ca3af' : col);
+      ctx.fillRect(cx - k, cy - k, 2 * k, 2 * k);
+      ctx.strokeStyle = setting ? col : '#fff';
+      if (setting) ctx.setLineDash([3, 2]);
+      ctx.strokeRect(cx - k, cy - k, 2 * k, 2 * k);
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(cx, cy, k * 0.35, 0, Math.PI * 2);
+      ctx.fillStyle = setting ? col : '#fff'; ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (ui.sel === u.id && (ui.mode === 'soldier' || ui.mode === 'arty')) {
+      ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx, cy, R * 1.35, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+  for (const side of [1, 2]) {
+    const i = G.cmd[side];
+    if (!visible(i)) continue;
+    const [x, y] = rect(i), cx = x + s / 2, cy = y + s / 2, rr = Math.max(7, s * 0.42);
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+    ctx.fillStyle = side === 1 ? '#2563eb' : '#dc2626'; ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = '#fff'; ctx.stroke();
+    star(cx, cy, rr * 0.62, rr * 0.26);
+    if (side === 1 && !G.cmdMoved[1] && !G.over && !ui.busy) {
+      ctx.strokeStyle = '#15803d'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(cx, cy, rr + 3, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+}
+function star(cx, cy, ro, ri) {
+  ctx.beginPath();
+  for (let k = 0; k < 10; k++) {
+    const a = -Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? ri : ro;
+    ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+  }
+  ctx.closePath(); ctx.fillStyle = '#fff'; ctx.fill();
+}
+function drawSetup(W, H) {
+  const f = setupFrame();
+  ctx.fillStyle = 'rgba(31,41,55,0.18)';
+  ctx.fillRect(0, 0, W, f.y); ctx.fillRect(0, f.y + f.side, W, H - f.y - f.side);
+  ctx.fillRect(0, f.y, f.x, f.side); ctx.fillRect(f.x + f.side, f.y, W - f.x - f.side, f.side);
+  ctx.strokeStyle = '#1f2937'; ctx.lineWidth = 2; ctx.setLineDash([8, 5]);
+  ctx.strokeRect(f.x, f.y, f.side, f.side); ctx.setLineDash([]);
+  if (ui.userLL) {
+    const p = map.latLngToContainerPoint(ui.userLL);
+    ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+    ctx.fillStyle = '#2563eb'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.stroke();
+  }
+}
+
+// ---------- helpers ----------
+function unitById(id) { return G ? G.units.find(u => u.id === id) || null : null; }
+function dangerSet() {
+  const { byCmd, bySol } = Engine.reach(G, 2), set = new Set();
+  for (let i = 0; i < byCmd.length; i++) if (byCmd[i] || bySol[i]) set.add(i);
+  return set;
+}
+function clearSel() { ui.mode = 'idle'; ui.sel = null; ui.deployType = null; }
+function toast(msg, ms = 2600) {
+  const t = $('toast'); t.textContent = msg; t.classList.remove('hidden');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.add('hidden'), ms);
+}
+function fmtFt(m) { return Math.round(m * 3.28084).toLocaleString() + ' ft'; }
+function describe(i) {
+  const t = G.tier[i], o = G.owner[i];
+  const who = o === 1 ? 'your territory' : o === 2 ? 'enemy territory' : 'unclaimed';
+  let s = TIER_NAMES[t - 1] + ' (tier ' + t + '), ' + fmtFt(G.elev[i]) + ', ' + who + '.';
+  if (o === 2) s += ' Worth ' + t + ' to capture.';
+  s += ' Artillery here reaches ' + (2 + t) + '.';
+  if (i === G.cmd[2]) s = 'Enemy commander. ' + s;
+  else if (i === G.cmd[1]) s = 'Your commander. ' + s;
+  const u = Engine.unitAt(G, i);
+  if (u && u.side === 2) s = 'Enemy ' + (u.type === 'arty' ? 'artillery' : 'soldier') + '. ' + s;
+  return s;
+}
+
+// ---------- input ----------
+map.on('click', e => {
+  if (ui.phase !== 'play' || !G || ui.busy) return;
+  const { ox, oy, s } = gridGeom();
+  const c = Math.floor((e.containerPoint.x - ox) / s), r = Math.floor((e.containerPoint.y - oy) / s);
+  if (r < 0 || c < 0 || r >= G.size || c >= G.size) { clearSel(); ui.info = 'That is outside the battlefield.'; ui.warn = false; return render(); }
+  onTap(r * G.size + c);
+});
+
+function act(fn) {
+  ui.undo.push(Engine.clone(G));
+  if (ui.undo.length > 40) ui.undo.shift();
+  fn();
+  paintTerritory();
+  persist();
+  if (G.over) setTimeout(showOver, 350);
+}
+
+function onTap(i) {
+  ui.warn = false;
+  if (G.over) { ui.info = describe(i); return render(); }
+  const u = Engine.unitAt(G, i);
+
+  if (ui.mode === 'deploy') {
+    const why = Engine.deployCheck(G, 1, ui.deployType, i);
+    if (!why) {
+      const type = ui.deployType;
+      act(() => Engine.deploy(G, 1, type, i));
+      clearSel();
+      ui.info = type === 'arty' ? 'Artillery is setting up. It can fire next turn.' : 'Soldier placed. It can move next turn.';
+    } else ui.info = why + '.';
+    return render();
+  }
+  if (ui.mode === 'soldier') {
+    const s = unitById(ui.sel);
+    if (s && Engine.soldierMoves(G, s).includes(i)) { act(() => Engine.moveSoldier(G, s, i)); clearSel(); ui.info = ''; return render(); }
+    clearSel();
+  }
+  if (ui.mode === 'arty') {
+    const a = unitById(ui.sel);
+    if (a && Engine.artyTargets(G, a).includes(i)) { act(() => Engine.fireArty(G, a, i)); clearSel(); ui.info = ''; return render(); }
+    clearSel();
+  }
+
+  if (u && u.side === 1) {
+    if (u.type === 'soldier') {
+      if (u.moved) ui.info = u.placed === G.round ? 'New soldier. It can move next turn.' : 'This soldier already moved this turn.';
+      else { ui.mode = 'soldier'; ui.sel = u.id; ui.info = 'Moving onto an enemy piece destroys it.'; }
+    } else {
+      if (u.placed >= G.round) ui.info = 'Artillery is setting up. It can fire next turn.';
+      else if (u.fired) ui.info = 'This artillery already fired this turn.';
+      else {
+        ui.mode = 'arty'; ui.sel = u.id;
+        ui.info = 'Range ' + Engine.artyRange(G, u.idx) + ' cells from ' + TIER_NAMES[G.tier[u.idx] - 1].toLowerCase() + '.';
+        if (!Engine.artyTargets(G, u).length) ui.info += ' No enemy cells in range yet.';
+      }
+    }
+    return render();
+  }
+  if (Engine.commanderMoves(G, 1).includes(i)) {
+    act(() => Engine.moveCommander(G, 1, i));
+    ui.info = '';
+    return render();
+  }
+  ui.info = describe(i);
+  render();
+}
+
+function toggleDeploy(type) {
+  if (!G || ui.busy || G.over) return;
+  if (ui.mode === 'deploy' && ui.deployType === type) { clearSel(); ui.info = ''; return render(); }
+  const why = Engine.deployCheck(G, 1, type, null);
+  if (why) { ui.info = why + '.'; return render(); }
+  clearSel(); ui.mode = 'deploy'; ui.deployType = type;
+  ui.info = type === 'arty' ? 'Higher ground gives longer range. Tap a cell to read its tier first if unsure.' : '';
+  render();
+}
+$('solBtn').onclick = () => toggleDeploy('soldier');
+$('artBtn').onclick = () => toggleDeploy('arty');
+$('undoBtn').onclick = () => {
+  if (!ui.undo.length || ui.busy) return;
+  G = ui.undo.pop(); clearSel(); ui.info = 'Undone.'; paintTerritory(); persist(); render();
+};
+$('ctrBtn').onclick = () => focusCommander();
+$('endBtn').onclick = () => endTurn();
+
+function endTurn() {
+  if (!G || ui.busy || G.over) return;
+  clearSel(); ui.busy = true; ui.undo = []; ui.touched = []; ui.info = ''; render();
+  setTimeout(() => {
+    ui.touched = Engine.playerEnd(G);
+    ui.busy = false;
+    paintTerritory(); persist(); render();
+    if (G.over) setTimeout(showOver, 350);
+  }, 420);
+}
+
+// ---------- HUD ----------
+function hintText() {
+  if (ui.busy) return 'Enemy is moving...';
+  if (G.over) return 'The battle is over.';
+  if (ui.mode === 'deploy') return ui.deployType === 'arty' ? 'Tap a highlighted cell to place artillery.' : 'Tap a highlighted cell to place a soldier.';
+  if (ui.mode === 'soldier') return 'Tap a teal cell to move this soldier.';
+  if (ui.mode === 'arty') return 'Tap an orange cell to fire.';
+  if (!G.cmdMoved[1]) return 'Tap a green cell to move your commander.';
+  const mine = G.units.filter(u => u.side === 1);
+  const left = mine.some(u => u.type === 'soldier' && !u.moved) || mine.some(u => Engine.artyReady(G, u) && Engine.artyTargets(G, u).length);
+  return left ? 'Move soldiers or fire artillery, then End turn.' : 'All set. Press End turn.';
+}
+function render() {
+  if (!G) return draw();
+  $('pScore').textContent = G.score[1];
+  $('eScore').textContent = G.score[2];
+  $('pBar').style.width = Math.min(100, G.score[1] / Engine.WIN * 100) + '%';
+  $('eBar').style.width = Math.min(100, G.score[2] / Engine.WIN * 100) + '%';
+  $('roundTxt').textContent = 'Round ' + G.round + '/' + Engine.MAX_ROUNDS;
+  $('supplyTxt').textContent = 'Supply ' + G.supply[1];
+  $('hint').textContent = hintText();
+
+  let info = ui.info, warn = ui.warn;
+  if (!G.over && !ui.busy && G.cmdMoved[1] && dangerSet().has(G.cmd[1]) && !info) {
+    info = 'Warning: your commander can be reached by an enemy piece next turn.'; warn = true;
+  }
+  if (!info && G.round === 1 && !G.cmdMoved[1]) info = 'The enemy HQ is ' + Engine.cheb(G, G.cmd[1], G.cmd[2]) + ' cells away. Pinch out to scout it. Tap any cell to read its terrain.';
+  $('info').textContent = info;
+  $('info').classList.toggle('warn', !!warn);
+
+  const idle = !ui.busy && !G.over;
+  const sol = $('solBtn'), art = $('artBtn');
+  sol.disabled = !idle || !!Engine.deployCheck(G, 1, 'soldier', null);
+  art.disabled = !idle || !!Engine.deployCheck(G, 1, 'arty', null);
+  sol.classList.toggle('on', ui.mode === 'deploy' && ui.deployType === 'soldier');
+  art.classList.toggle('on', ui.mode === 'deploy' && ui.deployType === 'arty');
+  sol.firstChild.textContent = 'Soldier ' + Engine.count(G, 1, 'soldier') + '/' + Engine.CAP.soldier;
+  art.firstChild.textContent = 'Artillery ' + Engine.count(G, 1, 'arty') + '/' + Engine.CAP.arty;
+  $('undoBtn').disabled = !idle || !ui.undo.length;
+  $('endBtn').disabled = !idle;
+  $('endBtn').textContent = ui.busy ? 'Enemy turn' : 'End turn';
+  $('endBtn').classList.toggle('ready', idle && hintText().startsWith('All set'));
+  draw();
+}
+
+// ---------- terrain loading ----------
+function loadTile(z, x, y) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    const timer = setTimeout(() => reject(new Error('tile timeout')), 15000);
+    img.onload = () => {
+      clearTimeout(timer);
+      try {
+        const c = document.createElement('canvas'); c.width = c.height = 256;
+        const k = c.getContext('2d'); k.drawImage(img, 0, 0);
+        resolve(k.getImageData(0, 0, 256, 256).data);
+      } catch (err) { reject(err); }
+    };
+    img.onerror = () => { clearTimeout(timer); reject(new Error('tile failed')); };
+    img.src = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/' + z + '/' + x + '/' + y + '.png';
+  });
+}
+async function fromTerrainTiles(B, onP) {
+  const n = B.size, span = B.cell * n;
+  const range = z => {
+    const scale = 256 * 2 ** z / WORLD;
+    return {
+      scale,
+      tx0: Math.floor((B.x0 + HALF) * scale / 256), tx1: Math.floor(((B.x0 + span + HALF) * scale - 1e-6) / 256),
+      ty0: Math.floor((HALF - B.y0) * scale / 256), ty1: Math.floor(((HALF - B.y0 + span) * scale - 1e-6) / 256)
+    };
+  };
+  let z = Math.max(1, Math.min(14, Math.ceil(Math.log2(WORLD / (256 * B.cell / 2)))));
+  let tr = range(z);
+  while ((tr.tx1 - tr.tx0 + 1) * (tr.ty1 - tr.ty0 + 1) > 24 && z > 1) tr = range(--z);
+  const max = 2 ** z, tiles = new Map(), jobs = [];
+  const total = (tr.tx1 - tr.tx0 + 1) * (tr.ty1 - tr.ty0 + 1);
+  let done = 0;
+  for (let ty = tr.ty0; ty <= tr.ty1; ty++) for (let tx = tr.tx0; tx <= tr.tx1; tx++) {
+    if (ty < 0 || ty >= max) continue;
+    const wx = ((tx % max) + max) % max;
+    jobs.push(loadTile(z, wx, ty).then(d => { tiles.set(tx + ',' + ty, d); onP(++done / total); }));
+  }
+  await Promise.all(jobs);
+  const sample = (px, py) => {
+    const tx = Math.floor(px / 256), ty = Math.floor(py / 256), d = tiles.get(tx + ',' + ty);
+    if (!d) return 0;
+    const x = Math.min(255, Math.max(0, Math.floor(px - tx * 256))), y = Math.min(255, Math.max(0, Math.floor(py - ty * 256)));
+    const k = (y * 256 + x) * 4;
+    return d[k] * 256 + d[k + 1] + d[k + 2] / 256 - 32768;
+  };
+  const elev = new Float32Array(n * n), q = B.cell / 4 * tr.scale;
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    const cx = (B.x0 + (c + 0.5) * B.cell + HALF) * tr.scale;
+    const cy = (HALF - (B.y0 - (r + 0.5) * B.cell)) * tr.scale;
+    elev[r * n + c] = (sample(cx - q, cy - q) + sample(cx + q, cy - q) + sample(cx - q, cy + q) + sample(cx + q, cy + q)) / 4;
+  }
+  return elev;
+}
+async function fromElevationApi(B, onP) {
+  const n = B.size, m = Math.min(n, 24), pts = [];
+  for (let r = 0; r < m; r++) for (let c = 0; c < m; c++) {
+    const ll = crs.unproject(L.point(B.x0 + (c + 0.5) / m * B.cell * n, B.y0 - (r + 0.5) / m * B.cell * n));
+    pts.push({ latitude: +ll.lat.toFixed(6), longitude: +ll.lng.toFixed(6) });
+  }
+  const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), 20000);
+  const res = await fetch('https://api.open-elevation.com/api/v1/lookup', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ locations: pts }), signal: ctrl.signal
+  });
+  clearTimeout(timer);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const coarse = (await res.json()).results.map(p => p.elevation);
+  onP(1);
+  const elev = new Float32Array(n * n), at = (r, c) => coarse[Math.min(m - 1, Math.max(0, r)) * m + Math.min(m - 1, Math.max(0, c))];
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    const fr = (r + 0.5) / n * m - 0.5, fc = (c + 0.5) / n * m - 0.5, r0 = Math.floor(fr), c0 = Math.floor(fc), a = fr - r0, b = fc - c0;
+    elev[r * n + c] = (at(r0, c0) * (1 - b) + at(r0, c0 + 1) * b) * (1 - a) + (at(r0 + 1, c0) * (1 - b) + at(r0 + 1, c0 + 1) * b) * a;
+  }
+  return elev;
+}
+async function loadElevation(B, onP) {
+  try { return { elev: await fromTerrainTiles(B, onP), source: 'elevation tiles' }; } catch (e) { console.warn(e); }
+  $('loadTxt').textContent = 'Trying a second elevation source.';
+  try { return { elev: await fromElevationApi(B, onP), source: 'elevation service' }; } catch (e) { console.warn(e); }
+  return { elev: Engine.noiseTerrain(B.size, Math.abs((B.x0 * 7 + B.y0 * 13) | 0)), source: 'generated' };
+}
+
+// ---------- flow ----------
+function setPhase(p) {
+  ui.phase = p;
+  $('setup').classList.toggle('hidden', p !== 'setup');
+  $('loading').classList.toggle('hidden', p !== 'loading');
+  $('top').classList.toggle('hidden', p !== 'play');
+  $('bottom').classList.toggle('hidden', p !== 'play');
+  if (p === 'setup') { refreshResume(); setTimeout(() => { draw(); updateAreaInfo(); }, 0); }
+}
+function updateAreaInfo() {
+  const f = setupFrame(), y = f.y + f.side / 2;
+  const meters = map.distance(map.containerPointToLatLng([f.x, y]), map.containerPointToLatLng([f.x + f.side, y]));
+  const cellM = meters / ui.size;
+  const km = meters >= 1000 ? (meters / 1000).toFixed(1) + ' km' : Math.round(meters) + ' m';
+  $('areaInfo').textContent = 'Area about ' + km + ' across, each cell about ' + Math.round(cellM) + ' m (' + fmtFt(cellM) + ').' +
+    (cellM < 3 ? ' Zoom out a little, cells are too small.' : '');
+  $('startBtn').disabled = cellM < 3;
+}
+document.querySelectorAll('#sizeSeg button').forEach(b => {
+  b.classList.toggle('on', +b.dataset.n === ui.size);
+  b.onclick = () => {
+    ui.size = +b.dataset.n;
+    document.querySelectorAll('#sizeSeg button').forEach(x => x.classList.toggle('on', x === b));
+    updateAreaInfo();
+  };
+});
+
+function locate(fly) {
+  if (!navigator.geolocation) { toast('Location is not available in this browser.'); return; }
+  navigator.geolocation.getCurrentPosition(
+    p => { ui.userLL = L.latLng(p.coords.latitude, p.coords.longitude); if (fly && ui.phase === 'setup') map.setView(ui.userLL, 15); draw(); },
+    () => { if (fly) toast('Could not get your location. Pan the map to pick a place.'); },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
+  );
+}
+$('locBtn').onclick = () => locate(true);
+
+$('startBtn').onclick = async () => {
+  const f = setupFrame();
+  const nw = crs.project(map.containerPointToLatLng([f.x, f.y]));
+  const ne = crs.project(map.containerPointToLatLng([f.x + f.side, f.y]));
+  const size = ui.size, cell = (ne.x - nw.x) / size, x0 = nw.x, y0 = nw.y;
+  setPhase('loading');
+  $('loadTxt').textContent = 'Downloading elevation for every cell.';
+  $('loadBar').style.width = '5%';
+  const { elev, source } = await loadElevation({ size, cell, x0, y0 }, p => { $('loadBar').style.width = Math.round(5 + p * 90) + '%'; });
+  $('loadBar').style.width = '100%';
+  let playerIdx = null;
+  if (ui.userLL) {
+    const up = crs.project(ui.userLL), c = Math.floor((up.x - x0) / cell), r = Math.floor((y0 - up.y) / cell);
+    if (r >= 0 && c >= 0 && r < size && c < size) playerIdx = r * size + c;
+  }
+  G = Engine.create({ size, cell, x0, y0, elev, tier: Engine.computeTiers(elev), seed: (Math.random() * 4294967296) >>> 0, playerIdx, source });
+  ui.undo = []; ui.touched = []; clearSel(); ui.info = '';
+  buildTerrainCanvas(); paintTerritory();
+  setPhase('play');
+  persist();
+  if (source === 'generated') toast('Elevation sources did not answer, so this map uses generated hills.', 4200);
+  else if (Engine.computeTiers(elev).every(t => t === 1)) toast('This ground is almost flat. Try an area with hills for more tactics.', 4200);
+  requestAnimationFrame(() => { fitBattle(); render(); });
+};
+
+function zoomForCellPx(px) {
+  return Math.max(3, Math.min(20, Math.log2(px * WORLD / (G.cell * 256))));
+}
+function viewCenterOffset(latlng, zoom) {
+  const { t, b } = barHeights();
+  map.setView(latlng, zoom, { animate: false });
+  map.panBy([0, (b - t) / 2], { animate: false });
+}
+function fitBattle() {
+  const [pr, pc] = Engine.rcOf(G, G.cmd[1]), [er, ec] = Engine.rcOf(G, G.cmd[2]);
+  const { t, b } = barHeights(), avail = Math.min(innerWidth, innerHeight - t - b);
+  const span = Math.max(Math.abs(pr - er), Math.abs(pc - ec)) + 4;
+  let px = avail / span, target;
+  if (px < 26) { px = 32; target = cellLatLng(G.cmd[1]); }
+  else {
+    const a = cellLatLng(G.cmd[1]), e = cellLatLng(G.cmd[2]);
+    target = L.latLng((a.lat + e.lat) / 2, (a.lng + e.lng) / 2);
+  }
+  viewCenterOffset(target, zoomForCellPx(px));
+}
+function focusCommander() {
+  if (!G) return;
+  const s = gridGeom().s;
+  viewCenterOffset(cellLatLng(G.cmd[1]), s < 26 ? zoomForCellPx(32) : map.getZoom());
+}
+
+function persist() {
+  if (!G) return;
+  try { localStorage.setItem(SAVE_KEY, Engine.serialize(G)); } catch (e) { /* storage full or blocked */ }
+}
+function readSave() {
+  try { const s = localStorage.getItem(SAVE_KEY); return s ? Engine.deserialize(s) : null; } catch (e) { return null; }
+}
+function refreshResume() {
+  const s = readSave(), b = $('resumeBtn');
+  if (s && !s.over) { b.textContent = 'Continue saved battle (round ' + s.round + ')'; b.classList.remove('hidden'); }
+  else b.classList.add('hidden');
+}
+$('resumeBtn').onclick = () => {
+  const s = readSave();
+  if (!s) return refreshResume();
+  G = s; ui.undo = []; ui.touched = []; clearSel(); ui.info = '';
+  buildTerrainCanvas(); paintTerritory();
+  setPhase('play');
+  requestAnimationFrame(() => { fitBattle(); render(); });
+};
+
+function showOver() {
+  if (!G || !G.over) return;
+  const w = G.over.winner;
+  $('overTitle').textContent = w === 1 ? 'Victory' : w === 2 ? 'Defeat' : 'Draw';
+  $('overTitle').style.color = w === 1 ? 'var(--blue)' : w === 2 ? 'var(--red)' : 'var(--ink)';
+  $('overReason').textContent = G.over.reason + '. Round ' + G.round + '.';
+  $('overP').textContent = G.score[1];
+  $('overE').textContent = G.score[2];
+  $('over').classList.remove('hidden');
+}
+function newBattle() {
+  if (G && !G.over && !confirm('Leave this battle and start a new one?')) return;
+  ['menu', 'over'].forEach(id => $(id).classList.add('hidden'));
+  if (G) {
+    const mid = crs.unproject(L.point(G.x0 + G.cell * G.size / 2, G.y0 - G.cell * G.size / 2));
+    map.setView(mid, map.getZoom(), { animate: false });
+  }
+  G = null; terrCv = null; clearSel();
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ }
+  setPhase('setup');
+}
+$('overNew').onclick = newBattle;
+
+// ---------- menu ----------
+const open = id => $(id).classList.remove('hidden');
+const close = id => $(id).classList.add('hidden');
+document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => close(b.dataset.close));
+document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', e => { if (e.target === o && o.id !== 'loading') close(o.id); }));
+$('menuBtn').onclick = () => open('menu');
+$('mClose').onclick = () => close('menu');
+$('mHelp').onclick = () => { close('menu'); open('help'); };
+$('mNew').onclick = () => { close('menu'); newBattle(); };
+$('mLog').onclick = () => {
+  close('menu');
+  const list = $('logList');
+  list.innerHTML = '';
+  for (const e of G.log.slice().reverse()) {
+    const d = document.createElement('div');
+    d.style.color = e.s === 1 ? 'var(--blue)' : e.s === 2 ? 'var(--red)' : 'var(--muted)';
+    d.textContent = 'R' + e.r + '  ' + (e.s === 1 ? 'You: ' : e.s === 2 ? 'Enemy: ' : '') + e.t;
+    list.appendChild(d);
+  }
+  open('logSheet');
+};
+const TERRAIN_LABELS = ['off', 'normal', 'strong'];
+$('mTerrain').onclick = () => {
+  ui.terrain = (ui.terrain + 1) % 3;
+  $('mTerrain').textContent = 'Terrain shading: ' + TERRAIN_LABELS[ui.terrain];
+  draw();
+};
+
+// ---------- start ----------
+setPhase('setup');
+locate(true);
+try { if (!localStorage.getItem('tc_seen_help')) { open('help'); localStorage.setItem('tc_seen_help', '1'); } } catch (e) { /* ignore */ }
+</script>
+</body>
+</html>

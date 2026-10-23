@@ -1,0 +1,2315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>BIRDIXEL</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: #1a2e1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100dvh;
+    overflow: hidden;
+    touch-action: none;
+    font-family: 'Press Start 2P', monospace;
+  }
+
+  #hud {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #1a3a1a;
+    border-bottom: 1px solid #2a8a2a;
+    padding: 6px 8px;
+    flex-shrink: 0;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .hud-item { font-size: 6px; color: #44aa44; letter-spacing: 1px; white-space: nowrap; }
+  .hud-item span { color: #00ff66; }
+
+  #menuBtn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 5px;
+    background: #1a4a1a;
+    color: #44aa44;
+    border: 1px solid #2a6a2a;
+    padding: 4px 6px;
+    cursor: pointer;
+    letter-spacing: 1px;
+  }
+  #menuBtn:active { background: #1a4a1a; color: #00ff66; }
+
+  #gameWrapper {
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+    flex: 1;
+    overflow: hidden;
+    background: #1a2e1a;
+  }
+
+  canvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    position: absolute;
+    top: 0; left: 0;
+  }
+
+  #progressBar {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: #1a3a1a;
+    z-index: 10;
+    pointer-events: none;
+  }
+  #progressFill { height:100%; background:#00ff44; width:0%; }
+  #progressMark {
+    position: absolute; top:0;
+    width:1px; height:3px;
+    background:#fff; left:80%;
+  }
+
+  #dpad {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: grid;
+    grid-template-columns: 40px 40px 40px;
+    grid-template-rows: 40px 40px 40px;
+    gap: 3px;
+    opacity: 0.85;
+    z-index: 20;
+  }
+  .db {
+    background: #1a4a1a;
+    border: 1px solid #2a6a2a;
+    color: #44aa44;
+    font-size: 14px;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .db:active, .db.on { background:#1a4a1a; color:#00ff66; border-color:#00ff66; }
+  .db-blank { background:transparent; border-color:transparent; }
+
+  .screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse at 50% 38%, #143514 0%, #0a1f0a 55%, #030d03 100%);
+    color: #00ff66;
+    text-align: center;
+    padding: 24px 20px;
+    gap: 18px;
+    z-index: 30;
+    overflow: hidden;
+  }
+  /* Scanline shimmer */
+  .screen::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 3px,
+      rgba(0,255,80,0.08) 3px, rgba(0,255,80,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 1;
+  }
+  .screen > * { position: relative; z-index: 2; }
+
+  .screen h1 {
+    font-size: 34px;
+    color: #aaffcc;
+    letter-spacing: 6px;
+    text-shadow: 0 0 10px #00ff88, 0 0 30px #00ff66, 0 0 70px #00dd44, 0 0 120px #00aa33;
+    animation: shimmer 2.5s ease-in-out infinite, flicker 5s infinite;
+  }
+  @keyframes shimmer {
+    0%,100% { text-shadow: 0 0 10px #00ff88, 0 0 30px #00ff66, 0 0 70px #00dd44, 0 0 120px #00aa33; color: #aaffcc; }
+    50%      { text-shadow: 0 0 20px #ffffff, 0 0 50px #88ffaa, 0 0 100px #00ff66, 0 0 180px #00cc44; color: #ffffff; }
+  }
+  @keyframes flicker {
+    0%,93%,100%{opacity:1} 94%{opacity:0.7} 96%{opacity:1} 97%{opacity:0.4} 99%{opacity:1}
+  }
+  .screen .sub {
+    font-size: 9px;
+    color: #88ffaa;
+    line-height: 2.5;
+    text-shadow: 0 0 10px #00cc55;
+  }
+  .screen .stat { font-size: 9px; color: #88ffaa; line-height: 2.5; text-shadow: 0 0 8px #00cc55; }
+  .scr-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    background: transparent;
+    color: #00ff66;
+    border: 2px solid #00ff66;
+    padding: 14px 28px;
+    cursor: pointer;
+    letter-spacing: 3px;
+    text-shadow: 0 0 8px #00ff66;
+    box-shadow: 0 0 14px #00ff6655, inset 0 0 14px #00ff6611;
+    animation: btnpulse 1.8s ease-in-out infinite;
+  }
+  @keyframes btnpulse {
+    0%,100% { box-shadow: 0 0 14px #00ff6655, inset 0 0 14px #00ff6611; }
+    50%      { box-shadow: 0 0 30px #00ff6699, inset 0 0 24px #00ff6622; }
+  }
+  .scr-btn:active { background:#00ff6622; }
+  .scr-btn-alt {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    background: transparent;
+    color: #44ee66;
+    border: 1px solid #44ee66;
+    padding: 12px 24px;
+    cursor: pointer;
+    letter-spacing: 2px;
+    text-shadow: 0 0 6px #44ee66;
+    box-shadow: 0 0 10px #44ee6633;
+  }
+  .scr-btn-alt:active { background:#44ee6622; }
+  .scr-btn-sm {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 7px;
+    background: transparent;
+    color: #44aa44;
+    border: 1px solid #2a6a2a;
+    padding: 9px 16px;
+    cursor: pointer;
+    letter-spacing: 1px;
+  }
+  .scr-btn-sm:active { color:#00ff66; border-color:#00ff66; }
+
+  #bannerScreen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,8,0,0.88);
+    color: #00ff66;
+    gap: 14px;
+    z-index: 30;
+    pointer-events: none;
+  }
+  #bannerScreen h2 { font-size: 24px; text-shadow: 0 0 20px #00ff66, 0 0 50px #00cc44; }
+  #bannerScreen p  { font-size: 9px; color: #44dd66; text-shadow: 0 0 6px #00aa44; }
+
+  #cityHud {
+    width: 100%;
+    max-width: 480px;
+    display: none;
+    justify-content: space-between;
+    align-items: center;
+    background: #000a12;
+    border-bottom: 1px solid #00ffff44;
+    padding: 5px 8px;
+    flex-shrink: 0;
+    gap: 6px;
+  }
+  #cityHud.active { display: flex; }
+
+  /* Free Paint HUD */
+  #paintHud {
+    width: 100%;
+    max-width: 480px;
+    display: none;
+    justify-content: space-between;
+    align-items: center;
+    background: #1a3a1a;
+    border-bottom: 1px solid #2a8a2a;
+    padding: 5px 8px;
+    flex-shrink: 0;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  #paintHud.active { display: flex; }
+
+  #glassHud {
+    width: 100%;
+    max-width: 480px;
+    display: none;
+    justify-content: space-between;
+    align-items: center;
+    background: #1a1a2e;
+    border-bottom: 2px solid #d7bde2;
+    padding: 5px 8px;
+    flex-shrink: 0;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  #glassHud.active { display: flex; }
+  .ghud-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 5px;
+    background: #2a2a4a;
+    color: #ffffff;
+    border: 1px solid #aaaacc;
+    padding: 4px 5px;
+    cursor: pointer;
+    letter-spacing: 0px;
+    white-space: nowrap;
+  }
+  .ghud-btn:active { color:#ffffff; border-color:#ffffff; background:#3a3a6a; }
+  .auto-btn.auto-on { color:#00ff66; border-color:#00ff66; background:#0a2a0a; box-shadow: 0 0 6px #00ff6666; }
+  .glass-label { font-size: 5px; color: #ffffff; letter-spacing: 1px; display:flex; align-items:center; gap:5px; cursor:pointer; }
+  .glass-preview {
+    width: 28px; height: 18px;
+    border: 2px solid #aaaacc;
+    border-radius: 2px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .glass-preview.active-picker { border-color: #ffffff; box-shadow: 0 0 6px #d7bde2; }
+
+  .color-picker-panel {
+    display: none;
+    width: 100%;
+    max-width: 480px;
+    max-height: 160px;
+    overflow-y: auto;
+    background: #1a3a1a;
+    border-bottom: 2px solid #00ff66;
+    padding: 5px 6px;
+    flex-wrap: wrap;
+    gap: 4px;
+    z-index: 50;
+    flex-shrink: 0;
+  }
+  .color-picker-panel.open { display: flex; }
+  .swatch {
+    width: 26px; height: 26px;
+    border-radius: 2px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    flex-shrink: 0;
+  }
+  .swatch:active { transform: scale(1.2); }
+  .swatch.active-sel { border-color: #ffffff; box-shadow: 0 0 4px #fff; }
+  .paint-label { font-size: 5px; color: #44aa44; letter-spacing: 1px; display:flex; align-items:center; gap:5px; cursor:pointer; }
+  .color-preview {
+    width: 28px; height: 18px;
+    border: 2px solid #2a6a2a;
+    border-radius: 2px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .color-preview.active-picker { border-color: #00ff66; box-shadow: 0 0 6px #00ff66; }
+  .phud-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 5px;
+    background: #1a4a1a;
+    color: #44aa44;
+    border: 1px solid #2a6a2a;
+    padding: 4px 5px;
+    cursor: pointer;
+    letter-spacing: 0px;
+    white-space: nowrap;
+  }
+  .phud-btn:active { color:#00ff66; border-color:#00ff66; }
+
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div class="hud-item">LVL <span id="hudLevel">1</span></div>
+  <div class="hud-item">CLAIMED <span id="hudPct">0</span>%</div>
+  <div class="hud-item">LIVES <span id="hudLives">3</span></div>
+  <div class="hud-item">SCORE <span id="hudScore">0</span></div>
+  <button id="menuBtn">MENU</button>
+</div>
+
+<div id="paintHud">
+  <div class="paint-label" id="trailLabel">TRAIL<div class="color-preview" id="trailPreview" style="background:#ff7700"></div></div>
+  <div class="paint-label" id="fillLabel">FILL<div class="color-preview" id="fillPreview" style="background:#2a8a2a"></div></div>
+  <button class="phud-btn" id="clearBtn">CLR</button>
+  <button class="phud-btn" id="exportBtn">EXP</button>
+  <button class="phud-btn" id="paintMenuBtn">MENU</button>
+</div>
+
+<!-- Inline color pickers — appear directly below paintHud -->
+<div class="color-picker-panel" id="trailPicker"></div>
+<div class="color-picker-panel" id="fillPicker"></div>
+
+<!-- Legacy swatchDrawer removed -->
+
+<div id="glassHud">
+  <div style="font-size:5px;color:#ffffff;letter-spacing:1px;">◈ STAINED GLASS</div>
+  <div class="glass-label" id="glassTrailLabel">LEAD<div class="glass-preview" id="glassTrailPreview" style="background:#111111"></div></div>
+  <button class="ghud-btn auto-btn" id="autoWanderBtn">WANDER</button>
+  <button class="ghud-btn auto-btn" id="autoHunterBtn">HUNTER</button>
+  <button class="ghud-btn auto-btn" id="autoBounceBtn">BOUNCE</button>
+  <button class="ghud-btn auto-btn" id="autoTracerBtn">TRACER</button>
+  <button class="ghud-btn" id="glassClearBtn">CLR</button>
+  <button class="ghud-btn" id="glassExportBtn">EXP</button>
+  <button class="ghud-btn" id="glassMenuBtn">MENU</button>
+</div>
+<div class="color-picker-panel" id="glassPicker" style="border-color:#d7bde2;background:#1a1a2e;"></div>
+
+<div id="photoHud" style="
+  width:100%;max-width:480px;
+  display:none;
+  justify-content:space-between;align-items:center;
+  background:#1a1a2e;border-bottom:2px solid #00d2d3;
+  padding:5px 8px;flex-shrink:0;gap:6px;flex-wrap:wrap;
+">
+  <div style="font-size:5px;color:#ffffff;letter-spacing:1px;">📷 PHOTO GLASS</div>
+  <button class="ghud-btn" id="photoUploadBtn">UPLOAD</button>
+  <button class="ghud-btn" id="photoExportBtn">EXP</button>
+  <button class="ghud-btn" id="photoMenuBtn">MENU</button>
+</div>
+<input type="file" id="photoFileInput" accept="image/*" style="display:none">
+<div id="glassStats" style="
+  display:none;
+  width:100%;max-width:480px;
+  background:#0d0d1a;
+  color:#aaaacc;
+  font-family:'Press Start 2P',monospace;
+  font-size:4px;
+  padding:4px 8px;
+  letter-spacing:0.5px;
+  flex-shrink:0;
+  border-bottom:1px solid #2a2a4a;
+  white-space:nowrap;
+  overflow:hidden;
+"></div>
+
+<div id="cityHud">
+  <div class="paint-label" style="color:#00ffff;font-size:6px;letter-spacing:1px;">⬛ CITYSCAPE</div>
+  <button class="phud-btn" id="cityRegenBtn" style="color:#00ffff;border-color:#00ffff;">REGEN</button>
+  <button class="phud-btn" id="cityExportBtn" style="color:#ff44ff;border-color:#ff44ff;">EXPORT</button>
+  <button class="phud-btn" id="cityMenuBtn">MENU</button>
+</div>
+
+<div id="gameWrapper">
+  <canvas id="c"></canvas>
+  <div id="progressBar"><div id="progressFill"></div><div id="progressMark"></div></div>
+
+  <div id="dpad">
+    <div class="db db-blank"></div>
+    <div class="db" id="btnU">▲</div>
+    <div class="db db-blank"></div>
+    <div class="db" id="btnL">◀</div>
+    <div class="db db-blank"></div>
+    <div class="db" id="btnR">▶</div>
+    <div class="db db-blank"></div>
+    <div class="db" id="btnD">▼</div>
+    <div class="db db-blank"></div>
+  </div>
+
+  <div class="screen" id="menuScreen">
+    <h1>BIRDIXEL</h1>
+    <div class="sub">
+      ── CLASSIC ──<br>
+      CLAIM 80% · DODGE ENEMY BIRDS<br>
+      <br>
+      ── FREE PAINT ──<br>
+      FLY FREE · COLOR · EXPORT ART<br>
+      <br>
+      ── STAINED GLASS ──<br>
+      DRAW LEAD · AUTO JEWEL FILL<br>
+      <br>
+      ── CITYSCAPE ──<br>
+      NEON CITY BUILDS ITSELF LIVE
+    </div>
+    <button class="scr-btn" id="startBtn">► CLASSIC</button>
+    <button class="scr-btn-alt" id="paintBtn">◈ FREE PAINT</button>
+    <button class="scr-btn-alt" id="glassBtn" style="color:#ffffff;border-color:#d7bde2;box-shadow:0 0 10px #d7bde255;">◈ STAINED GLASS</button>
+    <button class="scr-btn-alt" id="photoBtn" style="color:#ffffff;border-color:#00d2d3;box-shadow:0 0 10px #00d2d355;">📷 PHOTO GLASS</button>
+    <button class="scr-btn-alt" id="cityBtn" style="color:#00ffff;border-color:#00ffff;box-shadow:0 0 10px #00ffff33;">⬛ CITYSCAPE</button>
+  </div>
+
+  <div class="screen hidden" id="gameOverScreen">
+    <h1>GAME<br>OVER</h1>
+    <div class="stat" id="goStats"></div>
+    <button class="scr-btn" id="retryBtn">► RETRY</button>
+    <button class="scr-btn-sm" id="goMenuBtn">MAIN MENU</button>
+  </div>
+
+  <div id="bannerScreen" class="hidden">
+    <h2 id="bannerTitle">LEVEL 1</h2>
+    <p id="bannerSub">GET READY!</p>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════
+const TILE         = 4;
+const COLS         = 160;
+const ROWS         = 200;
+const W            = COLS * TILE;   // 640px world
+const H            = ROWS * TILE;   // 800px world
+const CLAIM_TARGET = 0.80;
+
+const OPEN=0, BORDER=1, CLAIMED=2, DRAWING=3;
+
+const C = {
+  bg:        '#2a4a2a',
+  dot:       '#4a8a4a',
+  border:    '#00ff44',
+  borderHi:  '#ccffcc',
+  claimed:   '#2a6a2a',
+  claimedFg: '#44aa44',
+  drawing:   '#ff9900',
+  drawHi:    '#ffee00',
+  player:    '#00ffaa',
+  playerGlow:'rgba(0,255,170,0.6)',
+  enemy:     ['#ff4444','#4499ff','#ffdd22','#ff44ff'],
+};
+
+// ═══════════════════════════════════════════════════
+// CANVAS
+// ═══════════════════════════════════════════════════
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+let viewW, viewH;
+
+function resize() {
+  const wrap = document.getElementById('gameWrapper');
+  viewW = wrap.clientWidth;
+  viewH = wrap.clientHeight;
+  canvas.width  = viewW;
+  canvas.height = viewH;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+const S = { MENU:0, PLAYING:1, BANNER:2, GAMEOVER:3, PAINT:4, CITY:5, GLASS:6, PHOTO:7 };
+let gameState = S.MENU;
+
+let grid, player, enemies, drawPath;
+
+// ── AUTO BIRD ─────────────────────────────────────
+let autoMode = null; // null | 'wander' | 'hunter' | 'bounce' | 'tracer'
+let autoState = {};  // per-mode scratch state
+let glassFillCooldown = 0; // ticks remaining before completeShape can fire again
+
+let glassStats = { startTime:0, deaths:0, leftTurns:0, rightTurns:0, selfHits:0, shapes:0 };
+let glassTimerInterval = null;
+
+// ── PHOTO GLASS ───────────────────────────────────
+const PHOTO_LEAD = '#16161d';
+let photoQueue = [];      // [{type:'lead'|'fill'|'jump', r, c, color}]
+let photoIdx = 0;
+let photoReady = false;
+
+function processPhotoImage(img) {
+  // Draw image cover-fit onto a COLS x ROWS sampling canvas
+  const sc2 = document.createElement('canvas');
+  sc2.width = COLS; sc2.height = ROWS;
+  const sctx = sc2.getContext('2d');
+
+  const imgRatio = img.width / img.height;
+  const gridRatio = COLS / ROWS;
+  let dw, dh, dx, dy;
+  if (imgRatio > gridRatio) {
+    dh = ROWS; dw = ROWS * imgRatio; dx = (COLS - dw) / 2; dy = 0;
+  } else {
+    dw = COLS; dh = COLS / imgRatio; dx = 0; dy = (ROWS - dh) / 2;
+  }
+  sctx.drawImage(img, dx, dy, dw, dh);
+  const data = sctx.getImageData(0, 0, COLS, ROWS).data;
+
+  // Quantize: posterize each channel to 4 levels
+  const LEVELS = 4;
+  const step = 255 / (LEVELS - 1);
+  const quant = new Array(COLS * ROWS);
+  for (let i = 0; i < COLS * ROWS; i++) {
+    const r = Math.round(data[i*4]   / step) * step;
+    const g = Math.round(data[i*4+1] / step) * step;
+    const b = Math.round(data[i*4+2] / step) * step;
+    quant[i] = (r<<16)|(g<<8)|b;
+  }
+
+  // Connected regions of same quantized color
+  const regionId = new Int32Array(COLS * ROWS).fill(-1);
+  const regions = []; // {color, cells:[]}
+  for (let i = 0; i < COLS * ROWS; i++) {
+    if (regionId[i] !== -1) continue;
+    const color = quant[i];
+    const cells = [];
+    const q = [i]; regionId[i] = regions.length;
+    let h = 0;
+    while (h < q.length) {
+      const idx = q[h++];
+      cells.push(idx);
+      const r2 = Math.floor(idx/COLS), c2 = idx%COLS;
+      for (const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+        const nr=r2+dr, nc=c2+dc;
+        if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS) {
+          const ni = nr*COLS+nc;
+          if (regionId[ni]===-1 && quant[ni]===color) { regionId[ni]=regions.length; q.push(ni); }
+        }
+      }
+    }
+    regions.push({ color, cells });
+  }
+
+  // Merge tiny regions (<16 cells) into the dominant neighboring region
+  const MIN_REGION = 16;
+  for (const reg of regions) {
+    if (reg.cells.length >= MIN_REGION || reg.cells.length === 0) continue;
+    // count neighbor region frequencies
+    const counts = {};
+    for (const idx of reg.cells) {
+      const r2 = Math.floor(idx/COLS), c2 = idx%COLS;
+      for (const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+        const nr=r2+dr, nc=c2+dc;
+        if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS) {
+          const nid = regionId[nr*COLS+nc];
+          if (nid !== -1 && regions[nid] !== reg && regions[nid].cells.length >= MIN_REGION) {
+            counts[nid] = (counts[nid]||0) + 1;
+          }
+        }
+      }
+    }
+    let bestId = -1, bestCount = 0;
+    for (const k in counts) if (counts[k] > bestCount) { bestCount = counts[k]; bestId = +k; }
+    if (bestId !== -1) {
+      for (const idx of reg.cells) { regionId[idx] = bestId; regions[bestId].cells.push(idx); }
+      reg.cells = [];
+    }
+  }
+
+  // Build work queue: regions large -> small
+  const live = regions.filter(r => r.cells.length > 0).sort((a,b)=>b.cells.length-a.cells.length);
+  photoQueue = [];
+
+  for (const reg of live) {
+    const hex = '#' + reg.color.toString(16).padStart(6,'0');
+    const inRegion = new Set(reg.cells);
+
+    // Boundary cells: region cells adjacent to non-region or grid edge
+    const boundary = [];
+    const interior = [];
+    for (const idx of reg.cells) {
+      const r2 = Math.floor(idx/COLS), c2 = idx%COLS;
+      let isB = (r2===0||r2===ROWS-1||c2===0||c2===COLS-1);
+      if (!isB) {
+        for (const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+          if (!inRegion.has((r2+dr)*COLS + (c2+dc))) { isB = true; break; }
+        }
+      }
+      (isB ? boundary : interior).push(idx);
+    }
+
+    // Order boundary by greedy nearest-neighbor walk
+    if (boundary.length > 0) {
+      const ordered = [boundary[0]];
+      const remaining = new Set(boundary.slice(1));
+      let cur = boundary[0];
+      while (remaining.size > 0) {
+        const cr = Math.floor(cur/COLS), cc = cur%COLS;
+        let best = -1, bestD = Infinity;
+        for (const idx of remaining) {
+          const r2 = Math.floor(idx/COLS), c2 = idx%COLS;
+          const d = Math.abs(r2-cr)+Math.abs(c2-cc);
+          if (d < bestD) { bestD = d; best = idx; }
+          if (d === 1) break;
+        }
+        ordered.push(best); remaining.delete(best); cur = best;
+      }
+      // jump to region start without painting
+      const fr = Math.floor(ordered[0]/COLS), fc = ordered[0]%COLS;
+      photoQueue.push({type:'jump', r:fr, c:fc});
+      for (const idx of ordered) {
+        photoQueue.push({type:'lead', r:Math.floor(idx/COLS), c:idx%COLS});
+      }
+    }
+    for (const idx of interior) {
+      photoQueue.push({type:'fill', r:Math.floor(idx/COLS), c:idx%COLS, color:hex});
+    }
+  }
+
+  photoIdx = 0;
+  photoReady = true;
+}
+
+function updatePhoto() {
+  if (!photoReady || photoIdx >= photoQueue.length) return;
+
+  // Lead steps are visible bird movement; fills are fast batch
+  let leadSteps = 8, fillSteps = 60;
+
+  while (photoIdx < photoQueue.length && (leadSteps > 0 || fillSteps > 0)) {
+    const step = photoQueue[photoIdx];
+    if (step.type === 'jump') {
+      player.row = step.r; player.col = step.c;
+      photoIdx++;
+    } else if (step.type === 'lead') {
+      if (leadSteps <= 0) break;
+      sc(step.r, step.c, CLAIMED);
+      cellColors[step.r+','+step.c] = PHOTO_LEAD;
+      player.row = step.r; player.col = step.c;
+      photoIdx++; leadSteps--;
+    } else { // fill
+      if (fillSteps <= 0) break;
+      sc(step.r, step.c, CLAIMED);
+      cellColors[step.r+','+step.c] = step.color;
+      photoIdx++; fillSteps--;
+    }
+  }
+}
+
+function resetGlassStats() {
+  glassStats = { startTime: Date.now(), deaths:0, leftTurns:0, rightTurns:0, selfHits:0, shapes:0 };
+  if (glassTimerInterval) clearInterval(glassTimerInterval);
+  glassTimerInterval = setInterval(updateGlassStatsDisplay, 1000);
+}
+
+function updateGlassStatsDisplay() {
+  if (gameState !== S.GLASS) return;
+  const el = document.getElementById('glassStats');
+  if (!el) return;
+  const elapsed = Math.floor((Date.now() - glassStats.startTime) / 1000);
+  const mm = String(Math.floor(elapsed/60)).padStart(2,'0');
+  const ss = String(elapsed%60).padStart(2,'0');
+  el.innerHTML =
+    `${mm}:${ss} &nbsp;|&nbsp; ` +
+    `↺L:${glassStats.leftTurns} &nbsp;` +
+    `↻R:${glassStats.rightTurns} &nbsp;` +
+    `✝:${glassStats.deaths} &nbsp;` +
+    `💥:${glassStats.selfHits} &nbsp;` +
+    `◈:${glassStats.shapes}`;
+}
+let lives, score, level, claimedCount, totalOpen, levelBannerTimer;
+let keys = {};
+let camX=0, camY=0;
+
+// Free Paint state
+let paintTrailColor = '#ff7700';
+let glassStrokeColor = '#111111'; // per-stroke color in GLASS mode
+let paintFillColor  = '#2a8a2a';
+let cellColors = {};
+
+// City state
+let cityBuildings = [];    // array of building descriptors
+let cityBuildIdx  = 0;     // which building is currently animating
+let cityRowProgress = 0;   // current row being drawn in active building
+let cityWindows   = [];    // window flicker targets {r,c,color,on,timer}
+let cityDone      = false;
+let cityAnimTimer = 0;
+const CITY_SPEED  = 1;     // rows per frame per building
+
+// ═══════════════════════════════════════════════════
+// GRID
+// ═══════════════════════════════════════════════════
+function initGrid() {
+  grid = new Uint8Array(COLS * ROWS);
+  for (let r=0; r<ROWS; r++)
+    for (let c=0; c<COLS; c++)
+      grid[r*COLS+c] = (r===0||r===ROWS-1||c===0||c===COLS-1) ? BORDER : OPEN;
+  totalOpen    = (COLS-2)*(ROWS-2);
+  claimedCount = 0;
+}
+
+const gc = (r,c) => (r<0||r>=ROWS||c<0||c>=COLS) ? -1 : grid[r*COLS+c];
+const sc = (r,c,v) => { if(r>=0&&r<ROWS&&c>=0&&c<COLS) grid[r*COLS+c]=v; };
+
+// ═══════════════════════════════════════════════════
+// PLAYER
+// ═══════════════════════════════════════════════════
+function glassSpawnPos() {
+  // Find all OPEN cells adjacent to at least one BORDER or CLAIMED cell
+  const candidates = [];
+  for (let r=0; r<ROWS; r++) {
+    for (let c=0; c<COLS; c++) {
+      if (gc(r,c) !== OPEN) continue;
+      const neighbors = [[-1,0],[1,0],[0,-1],[0,1]];
+      for (const [dr,dc] of neighbors) {
+        const nr=r+dr, nc=c+dc;
+        if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS) {
+          const t=gc(nr,nc);
+          if (t===BORDER||t===CLAIMED) { candidates.push([r,c]); break; }
+        }
+      }
+    }
+  }
+  if (candidates.length === 0) {
+    // Fallback: random position on world border
+    const edge = Math.floor(Math.random()*4);
+    if (edge===0) return [0, Math.floor(Math.random()*COLS)];           // top
+    if (edge===1) return [ROWS-1, Math.floor(Math.random()*COLS)];      // bottom
+    if (edge===2) return [Math.floor(Math.random()*ROWS), 0];           // left
+    return [Math.floor(Math.random()*ROWS), COLS-1];                    // right
+  }
+  return candidates[Math.floor(Math.random()*candidates.length)];
+}
+
+function initPlayer() {
+  let col = Math.floor(COLS/2), row = 0;
+  if (gameState === S.GLASS) {
+    const pos = glassSpawnPos();
+    row = pos[0]; col = pos[1];
+  }
+  player = { col, row, alive:true, drawing:false, moveTimer:0, moveDelay:4 };
+  drawPath = [];
+}
+
+function killPlayer() {
+  if (!player.alive) return;
+  player.alive = false;
+  for (const [r,c] of drawPath) if (gc(r,c)===DRAWING) sc(r,c,OPEN);
+  drawPath = [];
+  if (gameState===S.GLASS || gameState===S.PAINT) {
+    // No lives in creative modes — just respawn
+    if (gameState===S.GLASS) {
+      glassStats.deaths++;
+      if (autoMode) glassStats.selfHits++;
+      glassStrokeColor = randomJewel();
+      glassFillCooldown = 0;
+      updateGlassStatsDisplay();
+    }
+    autoState = {};
+    setTimeout(() => { initPlayer(); if (autoMode) player.moveDelay=2; }, 300);
+    return;
+  }
+  lives--;
+  updateHUD();
+  setTimeout(() => lives<=0 ? showGameOver() : initPlayer(), 800);
+}
+
+function updatePlayer() {
+  if (!player.alive) return;
+  if (++player.moveTimer < player.moveDelay) return;
+  player.moveTimer = 0;
+  if (glassFillCooldown > 0) glassFillCooldown--;
+
+  let dc=0, dr=0;
+
+  if (autoMode && (gameState===S.GLASS||gameState===S.PAINT)) {
+    [dr, dc] = computeAutoDir();
+  } else {
+    if (keys.ArrowUp||keys.w)    dr=-1;
+    if (keys.ArrowDown||keys.s)  dr=1;
+    if (keys.ArrowLeft||keys.a)  dc=-1;
+    if (keys.ArrowRight||keys.d) dc=1;
+  }
+  if (!dc&&!dr) return;
+
+  const nr=player.row+dr, nc=player.col+dc;
+  if (nr<0||nr>=ROWS||nc<0||nc>=COLS) {
+    // auto-bird hit world edge — nudge state
+    if (autoMode) { autoState.bounceDir = autoState.bounceDir ? [-autoState.bounceDir[0],-autoState.bounceDir[1]] : [1,1]; autoState.dir=null; }
+    return;
+  }
+
+  const t=gc(nr,nc);
+  if (t===BORDER||t===CLAIMED) {
+    if (gameState===S.GLASS && t===CLAIMED) {
+      // Paint over claimed cell — reassign its color and keep drawing
+      for (const [pr,pc] of drawPath) if (pr===nr&&pc===nc) { killPlayer(); return; }
+      if (!player.drawing) glassStrokeColor = randomJewel(); // new stroke starting
+      player.drawing=true;
+      sc(nr,nc,DRAWING);
+      drawPath.push([nr,nc]);
+      cellColors[nr+','+nc] = gameState===S.GLASS ? glassStrokeColor : paintTrailColor;
+      player.col=nc; player.row=nr;
+      if (autoMode) autoState.onBorder = false;
+    } else {
+      if (player.drawing && drawPath.length>1 && (gameState!==S.GLASS || glassFillCooldown===0)) {
+        const pathCopy = drawPath.slice();
+        player.drawing=false; drawPath=[];
+        completeShape(pathCopy);
+      } else {
+        player.drawing=false; drawPath=[];
+      }
+      player.col=nc; player.row=nr;
+      if (autoMode) autoState.onBorder = true;
+    }
+  } else if (t===OPEN) {
+    for (const [pr,pc] of drawPath) if (pr===nr&&pc===nc) { killPlayer(); return; }
+    if (!player.drawing) glassStrokeColor = randomJewel(); // new stroke starting
+    player.drawing=true;
+    sc(nr,nc,DRAWING);
+    drawPath.push([nr,nc]);
+    if (gameState===S.GLASS) cellColors[nr+','+nc] = glassStrokeColor;
+    else if (gameState===S.PAINT) cellColors[nr+','+nc] = paintTrailColor;
+    player.col=nc; player.row=nr;
+    if (autoMode) autoState.onBorder = false;
+  } else if (t===DRAWING) {
+    // auto-bird crossed own trail — reset direction
+    if (autoMode) { autoState.dir=null; autoState.onBorder=false; killPlayer(); }
+    else killPlayer();
+  }
+}
+
+// ── AUTO DIRECTION ENGINES ────────────────────────
+function computeAutoDir() {
+  const r = player.row, c = player.col;
+  const onBorder = autoState.onBorder;
+  const prevDir = autoState.lastDir ? [...autoState.lastDir] : null;
+
+  let dir;
+  if (autoMode === 'wander') dir = autoWander(r, c);
+  else if (autoMode === 'hunter') dir = autoHunter(r, c);
+  else if (autoMode === 'bounce') dir = autoBounce(r, c);
+  else if (autoMode === 'tracer') dir = autoTracer(r, c, onBorder);
+  else dir = [0,0];
+
+  // Track turns: cross product of prev vs new dir
+  if (prevDir && dir) {
+    const [pr,pc] = prevDir;
+    const [nr,nc] = dir;
+    const cross = pr*nc - pc*nr; // +1 = right turn, -1 = left turn
+    if (cross > 0) glassStats.rightTurns++;
+    else if (cross < 0) glassStats.leftTurns++;
+  }
+  autoState.lastDir = dir;
+  return dir;
+}
+
+// WANDER: random walk, biased away from walls, changes direction randomly
+function autoWander(r, c) {
+  const dirs = [[-1,0],[1,0],[0,-1],[0,1]];
+
+  // Classify each direction
+  const safe = [];    // OPEN, BORDER, or CLAIMED — never DRAWING
+  const okay = [];    // valid in-bounds but is DRAWING (last resort)
+
+  for (const d of dirs) {
+    const nr=r+d[0], nc=c+d[1];
+    if (nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
+    const t = gc(nr,nc);
+    if (t===DRAWING) { okay.push(d); continue; }
+    safe.push(d);
+  }
+
+  const pool = safe.length > 0 ? safe : okay;
+  if (pool.length === 0) return autoState.dir || [1,0];
+
+  // Prefer continuing current direction if it's in the safe pool
+  if (autoState.dir && Math.random() > 0.2) {
+    const [cdr,cdc] = autoState.dir;
+    const nr=r+cdr, nc=c+cdc;
+    if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS && gc(nr,nc)!==DRAWING) {
+      return autoState.dir;
+    }
+  }
+
+  // Pick randomly from safe pool, weighted away from reversing
+  const [ldr,ldc] = autoState.dir || [0,0];
+  const nonReverse = pool.filter(([dr,dc]) => !(dr===-ldr && dc===-ldc));
+  const candidates = nonReverse.length > 0 ? nonReverse : pool;
+  autoState.dir = candidates[Math.floor(Math.random()*candidates.length)];
+  return autoState.dir;
+}
+
+// HUNTER: seeks nearest large open area, cuts straight across it
+function autoHunter(r, c) {
+  // Re-pick target every N steps or when reached
+  if (!autoState.target || autoState.steps<=0 || (player.row===autoState.target[0]&&player.col===autoState.target[1])) {
+    autoState.target = findOpenTarget(r, c);
+    autoState.steps = 40 + Math.floor(Math.random()*30);
+  }
+  autoState.steps--;
+  if (!autoState.target) return autoWander(r,c);
+  const [tr,tc] = autoState.target;
+  const dr = tr===r ? 0 : (tr>r?1:-1);
+  const dc = tc===c ? 0 : (tc>c?1:-1);
+
+  // Prefer dominant axis, but skip if that cell is DRAWING
+  const candidates = Math.abs(tr-r) >= Math.abs(tc-c)
+    ? [[dr,0],[0,dc]]
+    : [[0,dc],[dr,0]];
+
+  for (const [mdr,mdc] of candidates) {
+    if (mdr===0&&mdc===0) continue;
+    const nr=r+mdr, nc=c+mdc;
+    if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS && gc(nr,nc)!==DRAWING) return [mdr,mdc];
+  }
+  // Fallback: wander safely
+  return autoWander(r, c);
+}
+
+function findOpenTarget(r, c) {
+  // sample random open cells, pick one that's far away
+  let best=null, bestDist=0;
+  for (let i=0;i<20;i++) {
+    const tr=1+Math.floor(Math.random()*(ROWS-2));
+    const tc=1+Math.floor(Math.random()*(COLS-2));
+    if (gc(tr,tc)===OPEN) {
+      const d=Math.abs(tr-r)+Math.abs(tc-c);
+      if (d>bestDist) { bestDist=d; best=[tr,tc]; }
+    }
+  }
+  return best || [Math.floor(ROWS/2), Math.floor(COLS/2)];
+}
+
+// BOUNCE: moves in a diagonal, reflects off walls/borders like a billiard ball
+function autoBounce(r, c) {
+  if (!autoState.bounceDir) autoState.bounceDir = [1,1];
+  let [bdr,bdc] = autoState.bounceDir;
+  const nr=r+bdr, nc=c+bdc;
+
+  // check each axis independently for reflection
+  const hitR = nr<0||nr>=ROWS||gc(nr,c)===BORDER||gc(nr,c)===CLAIMED;
+  const hitC = nc<0||nc>=COLS||gc(r,nc)===BORDER||gc(r,nc)===CLAIMED;
+
+  if (hitR && hitC) { bdr=-bdr; bdc=-bdc; }
+  else if (hitR)    { bdr=-bdr; }
+  else if (hitC)    { bdc=-bdc; }
+
+  autoState.bounceDir = [bdr,bdc];
+  // bounce moves one axis per tick (alternates) for grid compatibility
+  if (!autoState.bounceAxis) autoState.bounceAxis = 0;
+  autoState.bounceAxis ^= 1;
+  return autoState.bounceAxis ? [bdr,0] : [0,bdc];
+}
+
+// TRACER: follows the border clockwise, then cuts inward at intervals
+function autoTracer(r, c, onBorder) {
+  if (!autoState.tracerState) autoState.tracerState = 'border';
+  if (!autoState.cutCountdown) autoState.cutCountdown = 15 + Math.floor(Math.random()*20);
+
+  if (autoState.tracerState === 'border') {
+    autoState.cutCountdown--;
+    if (autoState.cutCountdown <= 0) {
+      autoState.tracerState = 'cut';
+      autoState.cutDir = autoState.tracerDir||[0,1];
+      autoState.cutSteps = 8 + Math.floor(Math.random()*12);
+      autoState.cutCountdown = 15 + Math.floor(Math.random()*20);
+    }
+    return tracerFollowBorder(r, c);
+  }
+
+  if (autoState.tracerState === 'cut') {
+    autoState.cutSteps--;
+    if (autoState.cutSteps <= 0) { autoState.tracerState = 'border'; }
+    return autoState.cutDir || [0,1];
+  }
+
+  return tracerFollowBorder(r, c);
+}
+
+function tracerFollowBorder(r, c) {
+  // Try to stay adjacent to border/claimed, move clockwise
+  const cw = [[0,1],[1,0],[0,-1],[-1,0]]; // right, down, left, up
+  if (!autoState.tracerFacing) autoState.tracerFacing = 0;
+
+  // Turn right first (clockwise wall-following: try right, forward, left, back)
+  const turnRight = (autoState.tracerFacing+1)%4;
+  const tryOrder = [turnRight, autoState.tracerFacing, (autoState.tracerFacing+3)%4, (autoState.tracerFacing+2)%4];
+
+  for (const fi of tryOrder) {
+    const [dr,dc] = cw[fi];
+    const nr=r+dr, nc=c+dc;
+    if (nr<0||nr>=ROWS||nc<0||nc>=COLS) continue;
+    const t=gc(nr,nc);
+    if (t===OPEN||t===BORDER||t===CLAIMED) {
+      autoState.tracerFacing = fi;
+      autoState.tracerDir = [dr,dc];
+      return [dr,dc];
+    }
+  }
+  return cw[autoState.tracerFacing];
+}
+
+// ═══════════════════════════════════════════════════
+// SHAPE FILL
+// ═══════════════════════════════════════════════════
+function completeShape(pathSnapshot) {
+  const activePath = pathSnapshot || drawPath;
+  // In GLASS mode ignore strokes too short to meaningfully enclose anything
+  if (gameState === S.GLASS && activePath.length < 4) {
+    for (const [r,c] of activePath) if(gc(r,c)===DRAWING) sc(r,c,OPEN);
+    player.drawing=false; drawPath=[];
+    return;
+  }
+  // Cooldown — prevent re-firing on the same region immediately after a fill
+  if (gameState === S.GLASS && glassFillCooldown > 0) {
+    for (const [r,c] of activePath) if(gc(r,c)===DRAWING) sc(r,c,OPEN);
+    player.drawing=false; drawPath=[];
+    return;
+  }
+  if (gameState === S.CITY) {
+    // City mode: just make the trail permanent — convert DRAWING to CLAIMED
+    // with the trail color. No flood fill. The outline IS the art.
+    for (const [r,c] of activePath) {
+      sc(r,c,CLAIMED);
+      cellColors[r+','+c] = paintTrailColor;
+    }
+    claimedCount += activePath.length;
+    player.drawing=false; drawPath=[];
+    updateHUD();
+    return;
+  }
+
+  for (const [r,c] of activePath) sc(r,c,BORDER);
+
+  if (gameState === S.PAINT || gameState === S.GLASS) {
+    // Paint/Glass mode: find all disconnected OPEN regions, fill smallest (or all if tied)
+    // Only OPEN cells are fillable — CLAIMED cells already have a color and stay put.
+    // The bird can still DRAW over claimed cells (that's handled elsewhere), but the
+    // flood fill itself only targets newly-enclosed open territory.
+    const fillable = (v) => v===OPEN;
+    const visited = new Uint8Array(COLS * ROWS);
+    const regions = [];
+
+    for (let i=0; i<COLS*ROWS; i++) {
+      if (fillable(grid[i]) && !visited[i]) {
+        const cells = [];
+        const q = [i]; visited[i]=1;
+        let h=0;
+        while (h<q.length) {
+          const idx=q[h++];
+          cells.push(idx);
+          const r2=Math.floor(idx/COLS), c2=idx%COLS;
+          for (const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+            const nr=r2+dr, nc=c2+dc;
+            if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS) {
+              const ni=nr*COLS+nc;
+              if (fillable(grid[ni]) && !visited[ni]) { visited[ni]=1; q.push(ni); }
+            }
+          }
+        }
+        regions.push(cells);
+      }
+    }
+
+    if (regions.length===0) { player.drawing=false; drawPath=[]; return; }
+
+    const maxFillSize = Math.floor(totalOpen * 0.35);
+
+    let fillTargets;
+    if (gameState === S.GLASS) {
+      // Fill ALL enclosed regions under the cap — don't just pick smallest
+      if (regions.length === 1) {
+        fillTargets = regions[0].length <= maxFillSize ? regions : [];
+      } else {
+        fillTargets = regions.filter(r => r.length <= maxFillSize);
+      }
+    } else {
+      // PAINT mode: original behavior — fill smallest region(s) only
+      const minSize = Math.min(...regions.map(r=>r.length));
+      const toFill = regions.filter(r=>r.length===minSize);
+      fillTargets = (regions.length===1 && regions[0].length > maxFillSize)
+        ? []
+        : (regions.length===1 ? regions : toFill.filter(r=>r.length<=maxFillSize));
+    }
+
+    let gained=0;
+    for (const cells of fillTargets) {
+      // Each region in glass mode gets its own random jewel
+      const fc = gameState === S.GLASS ? randomJewel() : paintFillColor;
+      for (const idx of cells) {
+        grid[idx]=CLAIMED; gained++;
+        const r2=Math.floor(idx/COLS), c2=idx%COLS;
+        cellColors[r2+','+c2]=fc;
+      }
+    }
+
+    claimedCount+=gained;
+    if (gameState===S.GLASS) {
+      glassStats.shapes += fillTargets.length;
+      glassFillCooldown = 12; // ~12 ticks before next fill can fire
+      updateGlassStatsDisplay();
+    }
+    player.drawing=false; drawPath=[];
+    updateHUD();
+    return;
+  }
+
+  // Classic mode: BFS flood from each enemy to mark their side
+  const scratch = new Uint8Array(grid);
+  for (const e of enemies) {
+    bfsMark(scratch, (e.py/TILE)|0, (e.px/TILE)|0, OPEN, 99);
+  }
+
+  let gained=0;
+  for (let i=0; i<scratch.length; i++) {
+    if (scratch[i]===OPEN) { grid[i]=CLAIMED; gained++; }
+  }
+
+  for (const e of enemies) {
+    if (enemyOverlapsSolid(e.px, e.py)) teleportToOpen(e);
+  }
+
+  claimedCount+=gained;
+  score+=gained*8*level;
+  player.drawing=false; drawPath=[];
+  updateHUD();
+
+  if (getClaimedPct()>=CLAIM_TARGET) setTimeout(()=>{ level++; showBanner(); }, 500);
+}
+
+// BFS to find nearest OPEN cell from a starting position
+function findNearestOpen(startR, startC) {
+  const visited = new Uint8Array(COLS*ROWS);
+  const q = [[startR, startC]]; let h=0;
+  visited[startR*COLS+startC]=1;
+  while (h<q.length) {
+    const [r,c]=q[h++];
+    if (gc(r,c)===OPEN) return [r,c];
+    for (const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]]) {
+      const nr=r+dr, nc=c+dc;
+      if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&!visited[nr*COLS+nc]) {
+        visited[nr*COLS+nc]=1; q.push([nr,nc]);
+      }
+    }
+  }
+  return null;
+}
+
+function bfsMark(arr, sr, sc2, from, to) {
+  if (sr<0||sr>=ROWS||sc2<0||sc2>=COLS||arr[sr*COLS+sc2]!==from) return;
+  const q=[[sr,sc2]]; arr[sr*COLS+sc2]=to; let h=0;
+  while (h<q.length) {
+    const [r,c]=q[h++];
+    for (const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+      const nr=r+dr, nc=c+dc;
+      if (nr>=0&&nr<ROWS&&nc>=0&&nc<COLS&&arr[nr*COLS+nc]===from) {
+        arr[nr*COLS+nc]=to; q.push([nr,nc]);
+      }
+    }
+  }
+}
+
+const getClaimedPct = () => claimedCount/totalOpen;
+
+// ═══════════════════════════════════════════════════
+// ENEMIES
+// ═══════════════════════════════════════════════════
+// Half-size of enemy bounding box in pixels (slightly smaller than TILE so it fits in a cell)
+const EHALF = TILE * 0.45;
+
+// Returns true if a world-pixel point is inside a solid cell
+function isSolidPx(wx, wy) {
+  const r=(wy/TILE)|0, c=(wx/TILE)|0;
+  const v=gc(r,c);
+  return v===BORDER||v===CLAIMED;
+}
+
+// Returns true if the enemy AABB at (wx,wy) overlaps any solid cell
+function enemyOverlapsSolid(wx, wy) {
+  // Check all four corners of the bounding box
+  const x0=wx-EHALF, x1=wx+EHALF;
+  const y0=wy-EHALF, y1=wy+EHALF;
+  return isSolidPx(x0,y0)||isSolidPx(x1,y0)||isSolidPx(x0,y1)||isSolidPx(x1,y1);
+}
+
+// Build a list of guaranteed OPEN cell centers for safe spawning/teleport
+function getOpenCells() {
+  const open=[];
+  for (let r=2;r<ROWS-2;r++)
+    for (let c=2;c<COLS-2;c++)
+      if (gc(r,c)===OPEN) open.push([r,c]);
+  return open;
+}
+
+function randomOpenPos() {
+  // Pick random OPEN cell, return its pixel center
+  let tries=0;
+  while(tries++<200) {
+    const r=2+Math.floor(Math.random()*(ROWS-4));
+    const c=2+Math.floor(Math.random()*(COLS-4));
+    if (gc(r,c)===OPEN && !enemyOverlapsSolid(c*TILE+TILE/2, r*TILE+TILE/2))
+      return [c*TILE+TILE/2, r*TILE+TILE/2];
+  }
+  // Fallback: scan from top-left
+  for (let r=2;r<ROWS-2;r++)
+    for (let c=2;c<COLS-2;c++)
+      if (gc(r,c)===OPEN) return [c*TILE+TILE/2, r*TILE+TILE/2];
+  return [W/2, H/2];
+}
+
+function spawnEnemies(count) {
+  enemies=[];
+  for (let i=0;i<count;i++) {
+    const [px,py] = randomOpenPos();
+    // Start at a random diagonal-ish angle (never axis-aligned)
+    const a = (Math.random()*0.6+0.2)*Math.PI + Math.floor(Math.random()*4)*(Math.PI/2);
+    const spd = 0.8 + i*0.15 + Math.random()*0.3 + level*0.08;
+    enemies.push({
+      px, py,
+      vx: Math.cos(a)*spd, vy: Math.sin(a)*spd,
+      kind: i%4,
+      stuckCheckX: px, stuckCheckY: py,   // position at last stuck check
+      stuckTimer: 0,                        // frames since last stuck check
+    });
+  }
+}
+
+function teleportToOpen(e) {
+  const [px,py]=randomOpenPos();
+  e.px=px; e.py=py;
+  // Full random angle on teleport, guaranteed diagonal
+  const a = Math.random()*Math.PI*2;
+  const spd = Math.hypot(e.vx,e.vy) || 1.0;
+  e.vx=Math.cos(a)*spd; e.vy=Math.sin(a)*spd;
+  e.stuckCheckX=px; e.stuckCheckY=py; e.stuckTimer=0;
+}
+
+function applyBounce(e, reflectX, reflectY) {
+  const spd = Math.hypot(e.vx, e.vy);
+
+  // Reflect
+  if (reflectX) e.vx = -e.vx;
+  if (reflectY) e.vy = -e.vy;
+
+  // Add ±50° jitter to current angle
+  let angle = Math.atan2(e.vy, e.vx);
+  angle += (Math.random() - 0.5) * (Math.PI * 0.55);
+
+  // Enforce min 20° off-axis so birds can't hug walls
+  const MIN_OFF = Math.PI * 0.111; // 20°
+  if (reflectX) {
+    // After X-wall hit, need meaningful vy (sin of angle not near zero)
+    if (Math.abs(Math.sin(angle)) < Math.sin(MIN_OFF)) {
+      angle = (Math.sin(angle) >= 0 ? 1 : -1) * MIN_OFF + (Math.cos(angle) >= 0 ? 0 : Math.PI);
+    }
+  }
+  if (reflectY) {
+    // After Y-wall hit, need meaningful vx (cos of angle not near zero)
+    if (Math.abs(Math.cos(angle)) < Math.sin(MIN_OFF)) {
+      angle = Math.PI/2 * (Math.sin(angle) >= 0 ? 1 : -1) - (Math.cos(angle) >= 0 ? 1 : -1) * MIN_OFF;
+    }
+  }
+
+  e.vx = Math.cos(angle) * spd;
+  e.vy = Math.sin(angle) * spd;
+
+  // NaN guard — fall back to safe 45° diagonal at original speed
+  if (!isFinite(e.vx) || !isFinite(e.vy) || spd === 0) {
+    const a = Math.PI/4 + Math.floor(Math.random()*4) * Math.PI/2;
+    const s = spd || 1.0;
+    e.vx = Math.cos(a) * s;
+    e.vy = Math.sin(a) * s;
+  }
+}
+
+const STUCK_FRAMES = 60;  // check every 60 frames (~1 sec)
+const STUCK_DIST  = TILE; // must move at least 1 tile or considered stuck
+
+function updateEnemies() {
+  for (const e of enemies) {
+
+    // --- Stuck detection (every STUCK_FRAMES frames) ---
+    e.stuckTimer++;
+    if (e.stuckTimer >= STUCK_FRAMES) {
+      const dx = e.px - e.stuckCheckX;
+      const dy = e.py - e.stuckCheckY;
+      if (Math.hypot(dx,dy) < STUCK_DIST) {
+        // Hasn't moved enough — teleport to two positions away from current
+        teleportToOpen(e);
+        continue;
+      }
+      e.stuckCheckX = e.px;
+      e.stuckCheckY = e.py;
+      e.stuckTimer  = 0;
+    }
+
+    // --- Move X, check AABB ---
+    const nx = e.px + e.vx;
+    if (enemyOverlapsSolid(nx, e.py)) {
+      applyBounce(e, true, false);
+      const nx2 = e.px + e.vx;
+      e.px = enemyOverlapsSolid(nx2, e.py) ? e.px : nx2;
+    } else {
+      e.px = nx;
+    }
+
+    // --- Move Y, check AABB ---
+    const ny = e.py + e.vy;
+    if (enemyOverlapsSolid(e.px, ny)) {
+      applyBounce(e, false, true);
+      const ny2 = e.py + e.vy;
+      e.py = enemyOverlapsSolid(e.px, ny2) ? e.py : ny2;
+    } else {
+      e.py = ny;
+    }
+
+    // Clamp to world bounds
+    e.px = Math.max(TILE+EHALF+1, Math.min(W-TILE-EHALF-1, e.px));
+    e.py = Math.max(TILE+EHALF+1, Math.min(H-TILE-EHALF-1, e.py));
+
+    // Nuclear escape: if still overlapping solid, teleport
+    if (enemyOverlapsSolid(e.px, e.py)) {
+      teleportToOpen(e);
+      continue;
+    }
+
+    // --- Game collision checks ---
+    const er=(e.py/TILE)|0, ec=(e.px/TILE)|0;
+    // Line hit: always deadly while drawing
+    if (player.alive && player.drawing && gc(er,ec)===DRAWING) { killPlayer(); continue; }
+    // Body hit: only deadly while drawing (on wall = safe)
+    if (player.alive && player.drawing && Math.abs(er-player.row)<=1 && Math.abs(ec-player.col)<=1) killPlayer();
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// CAMERA
+// ═══════════════════════════════════════════════════
+function updateCamera() {
+  const tx=player.col*TILE+TILE/2-viewW/2;
+  const ty=player.row*TILE+TILE/2-viewH/2;
+  camX+=(tx-camX)*0.12;
+  camY+=(ty-camY)*0.12;
+  camX=Math.max(0,Math.min(W-viewW,camX));
+  camY=Math.max(0,Math.min(H-viewH,camY));
+}
+
+// ═══════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════
+function drawScene() {
+  ctx.fillStyle=C.bg; ctx.fillRect(0,0,viewW,viewH);
+  const cx=Math.floor(camX), cy=Math.floor(camY);
+
+  const c0=Math.max(0,Math.floor(cx/TILE)-1);
+  const c1=Math.min(COLS-1,Math.ceil((cx+viewW)/TILE)+1);
+  const r0=Math.max(0,Math.floor(cy/TILE)-1);
+  const r1=Math.min(ROWS-1,Math.ceil((cy+viewH)/TILE)+1);
+
+  for (let r=r0;r<=r1;r++) {
+    for (let c=c0;c<=c1;c++) {
+      const v=grid[r*COLS+c];
+      const sx=c*TILE-cx, sy=r*TILE-cy;
+      if (v===OPEN) {
+        ctx.fillStyle=C.dot;
+        ctx.fillRect(sx+TILE/2-1,sy+TILE/2-1,2,2);
+      } else if (v===BORDER) {
+        const bc = (gameState===S.PAINT||gameState===S.GLASS) ? cellColors[r+','+c] : null;
+        ctx.fillStyle = bc || C.border;
+        ctx.fillRect(sx,sy,TILE,TILE);
+        ctx.fillStyle = bc || C.borderHi;
+        ctx.fillRect(sx,sy,TILE,1);
+        ctx.fillRect(sx,sy,1,TILE);
+      } else if (v===CLAIMED) {
+        const cc = cellColors[r+','+c];
+        ctx.fillStyle = cc || C.claimed;
+        ctx.fillRect(sx,sy,TILE,TILE);
+        ctx.fillStyle = cc ? cc+'cc' : C.claimedFg;
+        ctx.fillRect(sx+1,sy+1,TILE-2,TILE-2);
+      } else if (v===DRAWING) {
+        const tc = (gameState===S.PAINT||gameState===S.GLASS||gameState===S.CITY) ? (cellColors[r+','+c]||paintTrailColor) : C.drawing;
+        ctx.fillStyle = tc;
+        ctx.fillRect(sx,sy,TILE,TILE);
+        ctx.fillStyle = '#ffffff55';
+        ctx.fillRect(sx+1,sy+1,TILE-2,TILE-2);
+      }
+    }
+  }
+
+  // Enemies — single TILE-sized pixel square
+  for (const e of enemies) {
+    const sx=Math.floor(e.px)-cx, sy=Math.floor(e.py)-cy;
+    if (sx<-TILE||sx>viewW||sy<-TILE||sy>viewH) continue;
+    ctx.fillStyle=C.enemy[e.kind];
+    ctx.fillRect(sx,sy,TILE,TILE);
+    // bright 1px center
+    ctx.fillStyle='#ffffff';
+    ctx.fillRect(sx+1,sy+1,TILE-2,TILE-2);
+  }
+
+  // Player — single TILE pixel + glow halo
+  if (player.alive||(Math.floor(Date.now()/100)%2===0)) {
+    const sx=player.col*TILE-cx, sy=player.row*TILE-cy;
+    ctx.fillStyle=C.playerGlow;
+    ctx.fillRect(sx-2,sy-2,TILE+4,TILE+4);
+    ctx.fillStyle=C.player;
+    ctx.fillRect(sx,sy,TILE,TILE);
+    ctx.fillStyle='#ffffff';
+    ctx.fillRect(sx+1,sy+1,TILE-2,TILE-2);
+  }
+
+  drawMinimap(cx,cy);
+}
+
+function drawCityScene() {
+  const cx = 0;
+  const cy = 0;
+  // Deep night sky background
+  ctx.fillStyle='#2a4020';
+  ctx.fillRect(0,0,viewW,viewH);
+
+  const c0=Math.max(0,Math.floor(cx/TILE)-1);
+  const c1=Math.min(COLS-1,Math.ceil((cx+viewW)/TILE)+1);
+  const r0=Math.max(0,Math.floor(cy/TILE)-1);
+  const r1=Math.min(ROWS-1,Math.ceil((cy+viewH)/TILE)+1);
+
+  for (let r=r0;r<=r1;r++) {
+    for (let c=c0;c<=c1;c++) {
+      const v=grid[r*COLS+c];
+      const sx=c*TILE-cx, sy=r*TILE-cy;
+      if (v===CLAIMED||v===BORDER) {
+        const cc=cellColors[r+','+c]||'#222244';
+        ctx.fillStyle=cc;
+        ctx.fillRect(sx,sy,TILE,TILE);
+      }
+    }
+  }
+
+  // Stars in unclaimed sky cells
+  if (!cityDone || Math.floor(Date.now()/500)%2===0) {
+    ctx.fillStyle='rgba(255,255,255,0.6)';
+    // Deterministic stars using cell position as seed
+    for (let r=r0;r<=r1;r++) {
+      for (let c=c0;c<=c1;c++) {
+        if (grid[r*COLS+c]===OPEN) {
+          // cheap hash to scatter stars
+          const h=(r*31+c*17)%100;
+          if (h<3) {
+            const sx=c*TILE-cx+(h%TILE), sy=r*TILE-cy+(h%TILE);
+            ctx.fillRect(sx,sy,1,1);
+          }
+        }
+      }
+    }
+  }
+
+  // Progress indicator while building
+  if (!cityDone && cityBuildings.length) {
+    const pct = cityBuildIdx/cityBuildings.length;
+    ctx.fillStyle='rgba(0,255,255,0.15)';
+    ctx.fillRect(0,viewH-3,viewW*pct,3);
+  }
+}
+
+function drawMinimap(cx,cy) {
+  const mmW=64,mmH=50,mmX=viewW-mmW-4,mmY=6;
+  ctx.fillStyle='rgba(0,12,0,0.88)';
+  ctx.fillRect(mmX,mmY,mmW,mmH);
+  ctx.strokeStyle='#2a6a2a'; ctx.lineWidth=1;
+  ctx.strokeRect(mmX,mmY,mmW,mmH);
+
+  const sx=mmW/W, sy=mmH/H;
+  // Draw claimed/border blocks (sampled)
+  const step=4;
+  for (let r=0;r<ROWS;r+=step) {
+    for (let c=0;c<COLS;c+=step) {
+      const v=grid[r*COLS+c];
+      if (v===OPEN) continue;
+      ctx.fillStyle=v===BORDER?'#00cc00':v===CLAIMED?'#1a5a1a':C.drawing;
+      ctx.fillRect(mmX+c*sx,mmY+r*sy,Math.ceil(step*sx)+1,Math.ceil(step*sy)+1);
+    }
+  }
+
+  // Enemies
+  for (const e of enemies) {
+    ctx.fillStyle=C.enemy[e.kind];
+    ctx.fillRect(mmX+(e.px/W)*mmW-0.5,mmY+(e.py/H)*mmH-0.5,2,2);
+  }
+
+  // Player dot
+  ctx.fillStyle=C.player;
+  ctx.fillRect(mmX+player.col*(mmW/(COLS))-1,mmY+player.row*(mmH/(ROWS))-1,3,3);
+
+  // Viewport rect
+  ctx.strokeStyle='rgba(0,255,102,0.5)'; ctx.lineWidth=1;
+  ctx.strokeRect(mmX+cx*sx,mmY+cy*sy,viewW*sx,viewH*sy);
+}
+
+// ═══════════════════════════════════════════════════
+// HUD
+// ═══════════════════════════════════════════════════
+function updateHUD() {
+  document.getElementById('hudLevel').textContent=level||1;
+  document.getElementById('hudPct').textContent=Math.floor((getClaimedPct()||0)*100);
+  document.getElementById('hudLives').textContent=lives||0;
+  document.getElementById('hudScore').textContent=score||0;
+  document.getElementById('progressFill').style.width=(getClaimedPct()||0)*100+'%';
+}
+
+// ═══════════════════════════════════════════════════
+// SCREENS
+// ═══════════════════════════════════════════════════
+function showBanner() {
+  gameState=S.BANNER; levelBannerTimer=140;
+  const b=document.getElementById('bannerScreen');
+  b.classList.remove('hidden');
+  document.getElementById('bannerTitle').textContent='LEVEL '+level;
+  document.getElementById('bannerSub').textContent=level===1?'GET READY!':(level+1)+' ENEMY BIRDS!';
+}
+function hideBanner() { document.getElementById('bannerScreen').classList.add('hidden'); }
+
+function showGameOver() {
+  gameState=S.GAMEOVER;
+  document.getElementById('goStats').innerHTML=
+    'SCORE: '+score+'<br>LEVEL: '+level+'<br>CLAIMED: '+Math.floor(getClaimedPct()*100)+'%';
+  document.getElementById('gameOverScreen').classList.remove('hidden');
+}
+
+function showMenu() {
+  gameState=S.MENU;
+  document.getElementById('menuScreen').classList.remove('hidden');
+  document.getElementById('gameOverScreen').classList.add('hidden');
+  document.getElementById('bannerScreen').classList.add('hidden');
+  document.getElementById('paintHud').classList.remove('active');
+  document.getElementById('cityHud').classList.remove('active');
+  document.getElementById('glassHud').classList.remove('active');
+  document.getElementById('glassPicker').classList.remove('open');
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('progressBar').style.display='';
+}
+
+// ═══════════════════════════════════════════════════
+// GAME FLOW
+// ═══════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
+// CITYSCAPE GENERATOR
+// ═══════════════════════════════════════════════════
+const NEON = [
+  '#00ffff','#ff44ff','#ffff00','#ff6600',
+  '#44ffaa','#ff2266','#66aaff','#ffffff',
+  '#ff88ff','#00ff88','#ffaa00','#aa44ff'
+];
+const DARK_BLDG = ['#222244','#002244','#220022','#002200'];
+
+function rnd(a,b){ return a+Math.floor(Math.random()*(b-a+1)); }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+function buildTemplate() {
+  // Returns an array of zones: {r, c, w, h, trail, fill, zType}
+  // zType: 'sky','building','window','road','sidewalk','gap'
+  // Zones must tile the entire grid with no gaps for 100% fill.
+
+  const R = ROWS, C = COLS;
+  const horizonR = Math.floor(R * 0.70); // row where buildings meet ground
+  const roadH    = R - horizonR;         // rows of road below horizon
+
+  // Pick a template variant
+  const variant = rnd(0, 2);
+  const zones   = [];
+
+  // ── Template helper: add a zone ──
+  const z = (r,c,w,h,trail,fill,zType) => zones.push({r,c,w,h,trail,fill,zType});
+
+  // ── SKY (full width, top to horizon) ──
+  // Split sky into vertical color bands for interest
+  const skyBands = rnd(4, 8);
+  const bandW    = Math.floor((C-2) / skyBands);
+  const skyPalette = [
+    ['#00ffff','#1a2820'],['#ff44ff','#0a001a'],['#ffff00','#08080a'],
+    ['#ff8800','#2a1400'],['#00ff88','#00140a'],['#aaaaff','#04040f'],
+    ['#ff2255','#2a0014'],['#44ffcc','#001410'],
+  ];
+  for (let i=0; i<skyBands; i++) {
+    const lc = 1 + i*bandW;
+    const bw = (i===skyBands-1) ? (C-2) - i*bandW : bandW;
+    const [trail, fill] = skyPalette[i % skyPalette.length];
+    z(1, lc, bw, horizonR-1, trail, fill, 'sky');
+  }
+
+  // ── BUILDINGS ──
+  // Define building slots across the width
+  const buildingDefs = variant===0 ? [
+    // Template 0: classic NYC-style dense skyline
+    {cFrac:0.01, wFrac:0.08, hFrac:0.55},
+    {cFrac:0.10, wFrac:0.06, hFrac:0.80},
+    {cFrac:0.17, wFrac:0.10, hFrac:0.65},
+    {cFrac:0.28, wFrac:0.05, hFrac:0.90},
+    {cFrac:0.34, wFrac:0.08, hFrac:0.70},
+    {cFrac:0.43, wFrac:0.12, hFrac:0.95}, // center tower
+    {cFrac:0.56, wFrac:0.07, hFrac:0.72},
+    {cFrac:0.64, wFrac:0.09, hFrac:0.60},
+    {cFrac:0.74, wFrac:0.06, hFrac:0.85},
+    {cFrac:0.81, wFrac:0.10, hFrac:0.68},
+    {cFrac:0.92, wFrac:0.07, hFrac:0.50},
+  ] : variant===1 ? [
+    // Template 1: sparse wide towers
+    {cFrac:0.01, wFrac:0.14, hFrac:0.60},
+    {cFrac:0.16, wFrac:0.10, hFrac:0.88},
+    {cFrac:0.27, wFrac:0.16, hFrac:0.50},
+    {cFrac:0.44, wFrac:0.12, hFrac:0.99},
+    {cFrac:0.57, wFrac:0.14, hFrac:0.55},
+    {cFrac:0.72, wFrac:0.10, hFrac:0.82},
+    {cFrac:0.83, wFrac:0.16, hFrac:0.62},
+  ] : [
+    // Template 2: tiered skyline
+    {cFrac:0.01, wFrac:0.18, hFrac:0.45},
+    {cFrac:0.20, wFrac:0.12, hFrac:0.65},
+    {cFrac:0.33, wFrac:0.08, hFrac:0.85},
+    {cFrac:0.42, wFrac:0.16, hFrac:0.98},
+    {cFrac:0.59, wFrac:0.08, hFrac:0.80},
+    {cFrac:0.68, wFrac:0.12, hFrac:0.62},
+    {cFrac:0.81, wFrac:0.18, hFrac:0.44},
+  ];
+
+  const bldgColors = [
+    ['#00ffff','#0a1a3a'],['#ff44ff','#2a002a'],['#ffff00','#2a2a00'],
+    ['#ff8800','#2a1400'],['#00ff88','#002a14'],['#ff2255','#2a0014'],
+    ['#44aaff','#001a2a'],['#ffaaff','#2a002a'],['#aaffaa','#002800'],
+  ];
+
+  // Track which columns are covered by buildings at each row
+  // so we can fill gaps with sky color
+  const colCoveredBy = new Array(C).fill(null); // c → zone idx for gap fill
+
+  const bldgZones = [];
+  for (let bi=0; bi<buildingDefs.length; bi++) {
+    const def  = buildingDefs[bi];
+    const lc   = Math.max(1, Math.round(def.cFrac * (C-2)) + 1);
+    const bw   = Math.max(4, Math.round(def.wFrac * (C-2)));
+    const bh   = Math.max(4, Math.round(def.hFrac * (horizonR-2)));
+    const tr   = Math.max(1, horizonR - bh);
+    const rc2  = Math.min(C-2, lc + bw - 1);
+    const actualW = rc2 - lc + 1;
+    const [trail, fill] = bldgColors[bi % bldgColors.length];
+
+    // Building body zone
+    z(tr, lc, actualW, horizonR - tr, trail, fill, 'building');
+    bldgZones.push({lc, rc:rc2, tr, fill, trail});
+
+    // Mark these columns as covered
+    for (let c=lc; c<=rc2; c++) colCoveredBy[c] = bi;
+
+    // Windows: 2 rows of windows inside building
+    if (actualW >= 6 && bh >= 8) {
+      const winRows   = Math.min(3, Math.floor(bh/4));
+      const winTrail  = pick(NEON);
+      const winFill   = pick(['#ffff44','#44ffff','#ff44ff','#ffffff','#ff8800']);
+      for (let wi=0; wi<winRows; wi++) {
+        const wr  = tr + 2 + wi*3;
+        const wc  = lc + 2;
+        const www = Math.max(2, actualW - 4);
+        const wh  = 2;
+        if (wr+wh < horizonR) z(wr, wc, www, wh, winTrail, winFill, 'window');
+      }
+    }
+  }
+
+  // ── SKY GAPS between buildings ──
+  // Fill columns not covered by buildings with sky segments
+  let gapStart = null;
+  for (let c=1; c<C-1; c++) {
+    const inBldg = colCoveredBy[c] !== null;
+    if (!inBldg && gapStart === null) gapStart = c;
+    if ((inBldg || c===C-2) && gapStart !== null) {
+      const gapEnd = inBldg ? c-1 : c;
+      const gw = gapEnd - gapStart + 1;
+      if (gw > 0) {
+        const si = Math.floor(gapStart / bandW) % skyPalette.length;
+        const [gt, gf] = skyPalette[si];
+        z(1, gapStart, gw, horizonR-1, gt, gf, 'sky_gap');
+      }
+      gapStart = null;
+    }
+  }
+
+  // ── SIDEWALK ──
+  z(horizonR, 1, C-2, 2, '#aaaaff', '#3a3a5a', 'sidewalk');
+
+  // ── ROAD (fills remaining rows to bottom border) ──
+  const roadTop = horizonR + 2;
+  const roadRows = R - 1 - roadTop;
+  if (roadRows > 0) {
+    // Road split into lanes
+    const laneCount = rnd(2,4);
+    const laneH = Math.max(1, Math.floor(roadRows / laneCount));
+    const roadColors = [
+      ['#ffff00','#333333'],['#ffffff','#2a2a2a'],
+      ['#ff8800','#0d0d0d'],['#00ffff','#0a0a14'],
+    ];
+    for (let li=0; li<laneCount; li++) {
+      const lr = roadTop + li*laneH;
+      const lh = (li===laneCount-1) ? (R-1-roadTop) - li*laneH : laneH;
+      if (lh<=0) continue;
+      const [rt,rf] = roadColors[li % roadColors.length];
+      z(lr, 1, C-2, lh, rt, rf, 'road');
+    }
+  }
+
+  return zones;
+}
+
+// Convert a zone into a sequence of waypoints that outline it then close back
+function zoneToWaypoints(zone, zIdx) {
+  const {r, c, w, h} = zone;
+  const tr = r, br = r+h-1, lc = c, rc = c+w-1;
+  const wps = [];
+
+  // Navigate to entry point (top-left of zone) along border/claimed
+  // Entry: from border, step into open space
+  // The "border" entry row for each zone is tr-1 (the row above, which must be claimed)
+
+  // Outline: top-left → top-right → bottom-right → bottom-left → back to entry
+  for (let cc=lc; cc<=rc; cc++) wps.push({r:tr, c:cc, zIdx});        // top edge
+  for (let rr=tr+1; rr<=br; rr++) wps.push({r:rr, c:rc, zIdx});      // right edge
+  for (let cc=rc-1; cc>=lc; cc--) wps.push({r:br, c:cc, zIdx});      // bottom edge
+  for (let rr=br-1; rr>=tr+1; rr--) wps.push({r:rr, c:lc, zIdx});    // left edge
+
+  return wps;
+}
+
+let cityZones      = [];
+let cityZoneIdx    = 0;
+let cityWaypoints  = [];
+let cityWaypointIdx= 0;
+let cityBirdTimer  = 0;
+const CITY_BIRD_DELAY = 1;
+
+function generateCity() {
+  cellColors   = {};
+  cityWindows  = [];
+  cityDone     = false;
+  cityBuildIdx = 0;
+
+  initGrid();
+
+  // Build template zones
+  cityZones    = buildTemplate();
+  cityZoneIdx  = 0;
+
+  // Convert zones → flat waypoint list with border-navigation between zones
+  cityWaypoints   = [];
+  cityWaypointIdx = 0;
+
+  for (let zi=0; zi<cityZones.length; zi++) {
+    const zone = cityZones[zi];
+    // Move to entry: row above zone's top-left (must be border or ROWS-1/0)
+    // We navigate along top border (row 0) or bottom border (ROWS-1)
+    // For now: nav along top border to zone's left col, then descend
+    const entryR = zone.r - 1; // row just above zone (should be border or claimed)
+    const entryC = zone.c;
+
+    // Navigate to (0, entryC) along top border, then down to entryR
+    cityWaypoints.push({r:0, c:entryC, zIdx:zi, phase:'nav'});
+    if (entryR > 0) cityWaypoints.push({r:entryR, c:entryC, zIdx:zi, phase:'nav'});
+
+    // Outline waypoints
+    const outline = zoneToWaypoints(zone, zi);
+    for (const wp of outline) cityWaypoints.push({...wp, phase:'draw'});
+
+    // Return to border after closing
+    cityWaypoints.push({r:0, c:zone.c, zIdx:zi, phase:'nav'});
+  }
+
+  // End at top-right corner
+  cityWaypoints.push({r:0, c:COLS-2, zIdx:-1, phase:'nav'});
+
+  camX = 0; camY = 0;
+}
+
+function stepCityAnimation() {
+  if (cityDone) { flickerWindows(); return; }
+
+  if (cityWaypointIdx >= cityWaypoints.length) {
+    cityDone = true;
+    registerWindows();
+    return;
+  }
+
+  cityBirdTimer++;
+  if (cityBirdTimer < CITY_BIRD_DELAY) return;
+  cityBirdTimer = 0;
+
+  const wp = cityWaypoints[cityWaypointIdx];
+
+  // Set zone colors
+  if (wp.zIdx >= 0 && wp.zIdx < cityZones.length) {
+    paintTrailColor = cityZones[wp.zIdx].trail;
+    paintFillColor  = cityZones[wp.zIdx].fill;
+  }
+
+  // If already at target, advance
+  if (player.row === wp.r && player.col === wp.c) {
+    cityWaypointIdx++;
+    return;
+  }
+
+  // Step one cell toward waypoint
+  const dr = wp.r - player.row;
+  const dc = wp.c - player.col;
+  let mr = player.row, mc = player.col;
+  if (Math.abs(dr) >= Math.abs(dc) && dr !== 0) mr = player.row + Math.sign(dr);
+  else if (dc !== 0) mc = player.col + Math.sign(dc);
+
+  autoMovePlayer(mr, mc);
+}
+
+function onSafe(r, c) {
+  const v = gc(r, c);
+  return v === BORDER || v === CLAIMED;
+}
+
+function autoMovePlayer(nr, nc) {
+  if (!player.alive) { initPlayer(); return; }
+  if (nr<0||nr>=ROWS||nc<0||nc>=COLS) return;
+  const t = gc(nr, nc);
+
+  if (t === BORDER || t === CLAIMED) {
+    if (player.drawing && drawPath.length > 1) completeShape();
+    else { player.drawing=false; drawPath=[]; }
+    player.col=nc; player.row=nr; player.drawing=false;
+  } else if (t === OPEN) {
+    for (const [pr,pc] of drawPath) {
+      if (pr===nr && pc===nc) {
+        for (const [dr2,dc2] of drawPath) if(gc(dr2,dc2)===DRAWING) sc(dr2,dc2,OPEN);
+        drawPath=[]; player.drawing=false; return;
+      }
+    }
+    player.drawing=true;
+    sc(nr,nc,DRAWING);
+    drawPath.push([nr,nc]);
+    if (gameState === S.CITY) cellColors[nr+','+nc] = paintTrailColor;
+    else if (gameState===S.PAINT) cellColors[nr+','+nc] = paintTrailColor;
+    player.col=nc; player.row=nr;
+  } else if (t === DRAWING) {
+    for (const [dr2,dc2] of drawPath) if(gc(dr2,dc2)===DRAWING) sc(dr2,dc2,OPEN);
+    drawPath=[]; player.drawing=false;
+  }
+}
+
+function startCity() {
+  document.getElementById('menuScreen').classList.add('hidden');
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('paintHud').classList.remove('active');
+  document.getElementById('cityHud').classList.add('active');
+  document.getElementById('progressBar').style.display='none';
+  enemies=[]; drawPath=[];
+  generateCity();
+  initPlayer();
+  player.row = 0; player.col = 1;
+  cityBirdTimer   = 0;
+  cityWaypointIdx = 0;
+  cityZoneIdx     = 0;
+  camX = 0; camY = 0;
+  gameState = S.CITY;
+}
+
+function exportCityCanvas() {
+  const oc=document.createElement('canvas');
+  oc.width=W; oc.height=H;
+  const octx=oc.getContext('2d');
+  octx.fillStyle='#2a4020'; octx.fillRect(0,0,W,H);
+  for (let r=0; r<ROWS; r++) {
+    for (let c=0; c<COLS; c++) {
+      const v=grid[r*COLS+c];
+      if (v===CLAIMED||v===BORDER) {
+        octx.fillStyle=cellColors[r+','+c]||C.border;
+        octx.fillRect(c*TILE,r*TILE,TILE,TILE);
+      }
+    }
+  }
+  oc.toBlob(blob=>{
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='birdixel-city-'+Date.now()+'.png'; a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),3000);
+  },'image/png');
+}
+
+function showMenuFromCity() {
+  gameState=S.MENU;
+  document.getElementById('cityHud').classList.remove('active');
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('progressBar').style.display='';
+  document.getElementById('menuScreen').classList.remove('hidden');
+}
+
+// ── PAINT SWATCHES ───────────────────────────────────
+const SWATCHES = [
+  // Reds
+  '#ff0000','#ff3333','#ff6666','#cc0000','#880000','#ffaaaa',
+  // Oranges
+  '#ff8800','#ffaa33','#ffcc66','#cc6600','#883300','#ffd4aa',
+  // Yellows
+  '#ffff00','#ffff55','#ffffaa','#cccc00','#888800','#ffffcc',
+  // Greens
+  '#00ff00','#33ff33','#66ff66','#00cc00','#008800','#aaffaa',
+  '#00ff88','#33ffaa','#66ffcc','#00cc66','#008844','#aaffdd',
+  '#004400','#006600','#228822','#446644','#668866','#aaccaa',
+  // Cyans
+  '#00ffff','#33ffff','#66ffff','#00cccc','#008888','#aaffff',
+  // Blues
+  '#0000ff','#3333ff','#6666ff','#0000cc','#000088','#aaaaff',
+  '#0088ff','#33aaff','#66ccff','#0066cc','#004488','#aaddff',
+  '#001144','#002266','#113388','#224499','#3355aa','#6688cc',
+  // Purples
+  '#8800ff','#aa33ff','#cc66ff','#6600cc','#440088','#ddaaff',
+  '#ff00ff','#ff33ff','#ff66ff','#cc00cc','#880088','#ffaaff',
+  // Pinks
+  '#ff0088','#ff33aa','#ff66cc','#cc0066','#880044','#ffaadd',
+  // Whites/greys/blacks
+  '#ffffff','#dddddd','#bbbbbb','#999999','#666666','#444444',
+  '#222222','#111111','#000000',
+  // Browns/earth
+  '#8B4513','#A0522D','#CD853F','#D2691E','#F4A460','#DEB887',
+  // Neons
+  '#39ff14','#ff6fff','#00f5ff','#ffff33','#ff073a','#bc13fe',
+];
+
+const JEWELS = [
+  // Ruby / Garnet
+  '#9b111e','#c0392b','#e74c3c','#ff4757','#d63031',
+  // Amber / Topaz
+  '#e67e22','#f39c12','#f1c40f','#ffc312','#ffdd59',
+  // Emerald
+  '#00b894','#00cec9','#27ae60','#2ecc71','#55efc4',
+  // Sapphire
+  '#0652dd','#1289a7','#1e90ff','#0984e3','#74b9ff',
+  // Amethyst
+  '#6c5ce7','#8e44ad','#a29bfe','#9b59b6','#fd79a8',
+  // Aquamarine / Tourmaline
+  '#00d2d3','#01a3a4','#48dbfb','#0abde3','#006266',
+  // Rose / Spinel
+  '#e84393','#fd3a69','#ff6b81','#c44569','#f8a5c2',
+  // Citrine
+  '#ffd32a','#ffb142','#ff9f43','#ffa502','#eccc68',
+  // Peridot
+  '#6ab04c','#badc58','#7bed9f','#2ed573','#a3cb38',
+  // Tanzanite
+  '#4834d4','#686de0','#be2edd','#833471','#9980fa',
+];
+
+function randomJewel() {
+  return JEWELS[Math.floor(Math.random() * JEWELS.length)];
+}
+
+let swatchTarget = 'trail'; // 'trail' or 'fill'
+
+function buildSwatchPanel(panelId, target) {
+  const panel = document.getElementById(panelId);
+  if (!panel) return;
+  panel.innerHTML = '';
+  for (const color of SWATCHES) {
+    const s = document.createElement('div');
+    s.className = 'swatch';
+    s.style.background = color;
+    s.title = color;
+    s.addEventListener('click', () => {
+      if (target === 'trail') {
+        paintTrailColor = color;
+        document.getElementById('trailPreview').style.background = color;
+      } else if (target === 'glass') {
+        paintTrailColor = color;
+        document.getElementById('glassTrailPreview').style.background = color;
+      } else {
+        paintFillColor = color;
+        document.getElementById('fillPreview').style.background = color;
+      }
+      panel.querySelectorAll('.swatch').forEach(x=>x.classList.remove('active-sel'));
+      s.classList.add('active-sel');
+    });
+    panel.appendChild(s);
+  }
+}
+
+function buildSwatches() {
+  buildSwatchPanel('trailPicker', 'trail');
+  buildSwatchPanel('fillPicker', 'fill');
+}
+
+function startPaint() {
+  cellColors = {};
+  initGrid(); initPlayer(); enemies = [];
+  lives = 999; // unlimited in paint mode
+  claimedCount=0; score=0; level=1;
+  document.getElementById('menuScreen').classList.add('hidden');
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('paintHud').classList.add('active');
+  document.getElementById('progressBar').style.display='none';
+  buildSwatches();
+  updateCamera();
+  gameState = S.PAINT;
+}
+
+function clearPaint() {
+  cellColors = {};
+  initGrid(); initPlayer();
+  claimedCount=0;
+}
+
+function exportCanvas() {
+  // Render entire world to an offscreen canvas then save as PNG
+  const oc = document.createElement('canvas');
+  oc.width = W; oc.height = H;
+  const octx = oc.getContext('2d');
+
+  octx.fillStyle = C.bg;
+  octx.fillRect(0,0,W,H);
+
+  for (let r=0; r<ROWS; r++) {
+    for (let c=0; c<COLS; c++) {
+      const v = grid[r*COLS+c];
+      const sx=c*TILE, sy=r*TILE;
+      if (v===OPEN) {
+        octx.fillStyle=C.dot;
+        octx.fillRect(sx+TILE/2,sy+TILE/2,1,1);
+      } else if (v===BORDER) {
+        octx.fillStyle=C.border;
+        octx.fillRect(sx,sy,TILE,TILE);
+      } else if (v===CLAIMED) {
+        const cc=cellColors[r+','+c];
+        octx.fillStyle=cc||C.claimed;
+        octx.fillRect(sx,sy,TILE,TILE);
+        octx.fillStyle=cc?cc+'cc':C.claimedFg;
+        octx.fillRect(sx+1,sy+1,TILE-2,TILE-2);
+      } else if (v===DRAWING) {
+        octx.fillStyle=paintTrailColor;
+        octx.fillRect(sx,sy,TILE,TILE);
+      }
+    }
+  }
+
+  oc.toBlob(blob=>{
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;
+    a.download='birdixel-'+Date.now()+'.png';
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),3000);
+  },'image/png');
+}
+
+function showMenuFromPaint() {
+  gameState=S.MENU;
+  document.getElementById('paintHud').classList.remove('active');
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('progressBar').style.display='';
+  document.getElementById('menuScreen').classList.remove('hidden');
+}
+
+function startGlass() {
+  cellColors = {};
+  initGrid(); initPlayer(); enemies = [];
+  lives = 999;
+  claimedCount=0; score=0; level=1;
+  paintTrailColor = '#111111';
+  glassStrokeColor = randomJewel();
+  document.getElementById('glassTrailPreview').style.background = paintTrailColor;
+  document.getElementById('menuScreen').classList.add('hidden');
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('glassHud').classList.add('active');
+  document.getElementById('progressBar').style.display='none';
+  buildSwatchPanel('glassPicker', 'glass');
+  updateCamera();
+  gameState = S.GLASS;
+}
+
+function startPhoto() {
+  cellColors = {};
+  initGrid(); enemies = [];
+  player = { col:Math.floor(COLS/2), row:Math.floor(ROWS/2), alive:true, drawing:false, moveTimer:0, moveDelay:1 };
+  drawPath = [];
+  photoQueue = []; photoIdx = 0; photoReady = false;
+  document.getElementById('menuScreen').classList.add('hidden');
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('photoHud').style.display = 'flex';
+  document.getElementById('progressBar').style.display='none';
+  document.getElementById('dpad').style.display = 'none';
+  updateCamera();
+  gameState = S.PHOTO;
+  // Immediately prompt for an image
+  document.getElementById('photoFileInput').click();
+}
+
+function showMenuFromPhoto() {
+  gameState=S.MENU;
+  photoQueue = []; photoIdx = 0; photoReady = false;
+  document.getElementById('photoHud').style.display = 'none';
+  document.getElementById('dpad').style.display = '';
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('progressBar').style.display='';
+  document.getElementById('menuScreen').classList.remove('hidden');
+}
+
+function handlePhotoFile(file) {
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    cellColors = {};
+    initGrid();
+    processPhotoImage(img);
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+}
+
+function showMenuFromGlass() {
+  autoMode = null; autoState = {};
+  if (glassTimerInterval) { clearInterval(glassTimerInterval); glassTimerInterval = null; }
+  document.querySelectorAll('.auto-btn').forEach(b => b.classList.remove('auto-on'));
+  document.getElementById('dpad').style.display = '';
+  document.getElementById('glassStats').style.display = 'none';
+  gameState=S.MENU;
+  document.getElementById('glassHud').classList.remove('active');
+  document.getElementById('glassPicker').classList.remove('open');
+  document.getElementById('hud').classList.remove('hidden');
+  document.getElementById('progressBar').style.display='';
+  document.getElementById('menuScreen').classList.remove('hidden');
+}
+function startGame() {
+  level=1; lives=3; score=0;
+  document.getElementById('menuScreen').classList.add('hidden');
+  document.getElementById('gameOverScreen').classList.add('hidden');
+  initGrid(); initPlayer(); spawnEnemies(level+1);
+  updateHUD();
+  showBanner();
+}
+
+function startLevel() {
+  initGrid(); initPlayer(); spawnEnemies(level+1);
+  updateHUD(); gameState=S.PLAYING;
+}
+
+// ═══════════════════════════════════════════════════
+// LOOP
+// ═══════════════════════════════════════════════════
+function loop() {
+  switch(gameState) {
+    case S.PLAYING:
+      updatePlayer(); updateEnemies(); updateCamera(); drawScene(); break;
+    case S.PAINT:
+      updatePlayer(); updateCamera(); drawScene(); break;
+    case S.GLASS:
+      updatePlayer(); updateCamera(); drawScene(); break;
+    case S.PHOTO:
+      updatePhoto(); updateCamera(); drawScene(); break;
+    case S.CITY:
+      stepCityAnimation();
+      updateCamera();
+      drawScene();
+      break;
+    case S.BANNER:
+      updateCamera(); drawScene();
+      if (--levelBannerTimer<=0) { hideBanner(); startLevel(); }
+      break;
+    default:
+      if (grid) { updateCamera(); drawScene(); } break;
+  }
+  requestAnimationFrame(loop);
+}
+
+// ═══════════════════════════════════════════════════
+// INPUT
+// ═══════════════════════════════════════════════════
+document.addEventListener('keydown',e=>{
+  keys[e.key]=true;
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) {
+    e.preventDefault();
+    if (autoMode) setAutoMode(null); // manual input cancels auto
+  }
+});
+document.addEventListener('keyup',e=>{ keys[e.key]=false; });
+
+function bindBtn(id,key) {
+  const btn=document.getElementById(id);
+  const on=()=>{ keys[key]=true; btn.classList.add('on'); if(autoMode) setAutoMode(null); };
+  const off=()=>{ keys[key]=false; btn.classList.remove('on'); };
+  btn.addEventListener('touchstart',e=>{ e.preventDefault(); on(); },{passive:false});
+  btn.addEventListener('touchend',  e=>{ e.preventDefault(); off();},{passive:false});
+  btn.addEventListener('touchcancel',e=>{ e.preventDefault(); off();},{passive:false});
+  btn.addEventListener('mousedown',on);
+  document.addEventListener('mouseup',off);
+}
+bindBtn('btnU','ArrowUp'); bindBtn('btnD','ArrowDown');
+bindBtn('btnL','ArrowLeft'); bindBtn('btnR','ArrowRight');
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('retryBtn').addEventListener('click', startGame);
+document.getElementById('goMenuBtn').addEventListener('click', showMenu);
+document.getElementById('paintBtn').addEventListener('click', startPaint);
+document.getElementById('clearBtn').addEventListener('click', clearPaint);
+document.getElementById('exportBtn').addEventListener('click', exportCanvas);
+document.getElementById('paintMenuBtn').addEventListener('click', showMenuFromPaint);
+document.getElementById('glassBtn').addEventListener('click', startGlass);
+document.getElementById('photoBtn').addEventListener('click', startPhoto);
+document.getElementById('photoUploadBtn').addEventListener('click', ()=> document.getElementById('photoFileInput').click());
+document.getElementById('photoExportBtn').addEventListener('click', exportCanvas);
+document.getElementById('photoMenuBtn').addEventListener('click', showMenuFromPhoto);
+document.getElementById('photoFileInput').addEventListener('change', (e)=> handlePhotoFile(e.target.files[0]));
+document.getElementById('glassClearBtn').addEventListener('click', ()=>{ cellColors={}; initGrid(); initPlayer(); claimedCount=0; autoState={}; glassFillCooldown=0; });
+document.getElementById('glassExportBtn').addEventListener('click', exportCanvas);
+document.getElementById('glassMenuBtn').addEventListener('click', showMenuFromGlass);
+
+function setAutoMode(mode) {
+  if (autoMode === mode) {
+    autoMode = null;
+    autoState = {};
+    player.moveDelay = 4;
+  } else {
+    autoMode = mode;
+    autoState = {};
+    player.moveDelay = 2;
+  }
+  document.querySelectorAll('.auto-btn').forEach(b => b.classList.remove('auto-on'));
+  const dpad = document.getElementById('dpad');
+  const statsEl = document.getElementById('glassStats');
+  if (autoMode) {
+    const map = { wander:'autoWanderBtn', hunter:'autoHunterBtn', bounce:'autoBounceBtn', tracer:'autoTracerBtn' };
+    document.getElementById(map[autoMode])?.classList.add('auto-on');
+    dpad.style.display = 'none';
+    statsEl.style.display = 'block';
+    resetGlassStats();
+  } else {
+    dpad.style.display = '';
+    statsEl.style.display = 'none';
+  }
+}
+
+document.getElementById('autoWanderBtn').addEventListener('click', ()=> setAutoMode('wander'));
+document.getElementById('autoHunterBtn').addEventListener('click', ()=> setAutoMode('hunter'));
+document.getElementById('autoBounceBtn').addEventListener('click', ()=> setAutoMode('bounce'));
+document.getElementById('autoTracerBtn').addEventListener('click', ()=> setAutoMode('tracer'));
+document.getElementById('cityBtn').addEventListener('click', startCity);
+document.getElementById('cityRegenBtn').addEventListener('click', ()=>{ generateCity(); gameState=S.CITY; });
+document.getElementById('cityExportBtn').addEventListener('click', exportCityCanvas);
+document.getElementById('cityMenuBtn').addEventListener('click', showMenuFromCity);
+document.getElementById('glassTrailLabel').addEventListener('click', ()=>{
+  const gp = document.getElementById('glassPicker');
+  const isOpen = gp.classList.contains('open');
+  gp.classList.toggle('open', !isOpen);
+  document.getElementById('glassTrailPreview').classList.toggle('active-picker', !isOpen);
+});
+document.getElementById('trailLabel').addEventListener('click', ()=>{
+  const tp = document.getElementById('trailPicker');
+  const fp = document.getElementById('fillPicker');
+  const isOpen = tp.classList.contains('open');
+  fp.classList.remove('open');
+  document.getElementById('fillPreview').classList.remove('active-picker');
+  tp.classList.toggle('open', !isOpen);
+  document.getElementById('trailPreview').classList.toggle('active-picker', !isOpen);
+});
+document.getElementById('fillLabel').addEventListener('click', ()=>{
+  const tp = document.getElementById('trailPicker');
+  const fp = document.getElementById('fillPicker');
+  const isOpen = fp.classList.contains('open');
+  tp.classList.remove('open');
+  document.getElementById('trailPreview').classList.remove('active-picker');
+  fp.classList.toggle('open', !isOpen);
+  document.getElementById('fillPreview').classList.toggle('active-picker', !isOpen);
+});
+document.getElementById('menuBtn').addEventListener('click',()=>{
+  if(gameState===S.PLAYING||gameState===S.BANNER) showMenu();
+});
+
+// ═══════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════
+level=1; lives=3; score=0;
+initGrid(); initPlayer(); spawnEnemies(2); updateHUD();
+camX=W/2-viewW/2; camY=H/2-viewH/2;
+loop();
+</script>
+</body>
+</html>

@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rogue Analog Transducer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0b;}
+#viz-canvas{position:fixed;inset:0;width:100%;height:100%;display:none;}
+
+/* HUB */
+#hub{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;background:#0a0a0b;transition:opacity 0.6s ease;overflow-y:auto;}
+#hub.fade-out{opacity:0;pointer-events:none;}
+.hub-label{font-family:'Courier New',monospace;font-size:0.6rem;letter-spacing:0.55em;color:#3f3f46;text-transform:uppercase;margin-bottom:10px;}
+.hub-artist{font-family:'Courier New',monospace;font-weight:900;font-size:clamp(0.85rem,3vw,1.6rem);color:#71717a;letter-spacing:0.2em;text-transform:uppercase;margin-bottom:4px;}
+.hub-title{font-family:'Courier New',monospace;font-weight:900;font-size:clamp(1.6rem,6vw,3.2rem);color:#fff;letter-spacing:0.15em;text-transform:uppercase;margin-bottom:6px;}
+.hub-rule{width:48px;height:2px;background:#27272a;margin:20px auto 44px;}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:2px;width:100%;max-width:1050px;}
+.tile{position:relative;min-height:148px;display:flex;flex-direction:column;justify-content:flex-end;padding:18px 18px 15px;background:#111113;border:1px solid #27272a;cursor:pointer;overflow:hidden;transition:border-color 0.2s,background 0.2s;user-select:none;}
+.tile:hover{background:#16161a;}
+.tile:active{transform:scale(0.98);}
+.tile-glow{position:absolute;inset:0;opacity:0.35;transition:opacity 0.3s;pointer-events:none;}
+.tile:hover .tile-glow{opacity:0.7;}
+.tile-glow{animation:glowPulse 3s ease-in-out infinite;}
+@keyframes glowPulse{0%,100%{transform:scale(1);opacity:0.35;}50%{transform:scale(1.12);opacity:0.65;}}
+.tile-num{font-family:'Courier New',monospace;font-size:0.55rem;letter-spacing:0.4em;color:#3f3f46;margin-bottom:10px;position:relative;}
+.tile-name{font-family:'Courier New',monospace;font-weight:900;font-size:clamp(0.75rem,1.9vw,1rem);letter-spacing:0.08em;text-transform:uppercase;position:relative;line-height:1.2;}
+.tile-genre{font-family:'Courier New',monospace;font-size:0.53rem;letter-spacing:0.2em;color:#52525b;text-transform:uppercase;margin-top:6px;position:relative;}
+.tile-arrow{position:absolute;top:14px;right:14px;font-size:0.9rem;color:#3f3f46;transition:transform 0.2s,color 0.2s;}
+.tile:hover .tile-arrow{color:#fff;transform:translate(3px,-3px);}
+.tile::after{content:'';position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.07) 3px,rgba(0,0,0,0.07) 4px);}
+.hub-footer{margin-top:34px;font-family:'Courier New',monospace;font-size:0.55rem;letter-spacing:0.35em;color:#27272a;text-transform:uppercase;text-align:center;}
+
+/* VIZ UI */
+#viz-ui{position:fixed;inset:0;pointer-events:none;display:none;flex-direction:column;justify-content:flex-end;opacity:0;transition:opacity 0.6s ease;}
+#viz-ui.visible{opacity:1;}#viz-ui.fade-out{opacity:0;}
+#viz-bottom{pointer-events:all;padding:16px 26px 18px;display:flex;align-items:flex-end;justify-content:space-between;background:linear-gradient(transparent,rgba(0,0,0,0.88));}
+#viz-track-title{font-family:'Courier New',monospace;font-weight:900;font-size:clamp(0.9rem,3vw,1.6rem);letter-spacing:0.12em;text-transform:uppercase;}
+#viz-track-sub{font-family:'Courier New',monospace;font-size:0.62rem;letter-spacing:0.25em;color:#71717a;text-transform:uppercase;margin-top:3px;}
+#viz-controls{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
+#viz-time{font-family:'Courier New',monospace;font-size:0.6rem;letter-spacing:0.15em;color:#52525b;}
+#viz-progress{width:160px;height:3px;background:#ffffff18;cursor:pointer;}
+#viz-progress-bar{height:100%;width:0%;transition:width 0.1s linear;}
+#viz-play-btn{background:transparent;border:2px solid currentColor;font-family:'Courier New',monospace;font-size:0.62rem;letter-spacing:0.2em;padding:7px 18px;cursor:pointer;text-transform:uppercase;transition:background 0.15s;}
+#viz-play-btn:hover{background:rgba(255,255,255,0.08);}
+#back-btn{position:fixed;top:16px;left:16px;z-index:300;pointer-events:all;font-family:'Courier New',monospace;font-size:0.6rem;letter-spacing:0.25em;text-transform:uppercase;color:#ffffff55;border:1px solid #ffffff22;padding:7px 14px;background:rgba(0,0,0,0.5);cursor:pointer;transition:color 0.15s,border-color 0.15s;display:none;}
+#back-btn:hover{color:#fff;border-color:#fff;}
+#fx-btn{position:fixed;top:16px;right:16px;z-index:300;font-family:'Courier New',monospace;font-size:0.6rem;letter-spacing:0.2em;text-transform:uppercase;color:#ffffff55;border:1px solid #ffffff22;padding:7px 14px;background:rgba(0,0,0,0.5);cursor:pointer;display:none;}
+#fx-btn:hover{color:#fff;border-color:#fff;}
+
+/* LAUNCH OVERLAY */
+#launch-overlay{position:fixed;inset:0;z-index:200;display:none;flex-direction:column;align-items:center;justify-content:center;gap:22px;transition:opacity 0.7s ease;}
+#launch-overlay.fade-out{opacity:0;pointer-events:none;}
+#launch-title{font-family:'Courier New',monospace;font-weight:900;font-size:clamp(1.8rem,7vw,4rem);letter-spacing:0.15em;text-align:center;text-transform:uppercase;animation:glitch 5s infinite;}
+#launch-sub{font-family:'Courier New',monospace;font-size:0.7rem;letter-spacing:0.4em;text-transform:uppercase;opacity:0.5;}
+#launch-loading{font-family:'Courier New',monospace;font-size:0.65rem;letter-spacing:0.3em;text-transform:uppercase;opacity:0;transition:opacity 0.3s;}
+#launch-loading.visible{opacity:1;}
+#launch-btn{background:transparent;border:2px solid currentColor;font-family:'Courier New',monospace;font-weight:700;font-size:0.88rem;letter-spacing:0.3em;padding:13px 42px;cursor:pointer;text-transform:uppercase;transition:all 0.2s;animation:borderPulse 2s ease infinite;}
+#launch-btn:hover{background:rgba(255,255,255,0.08);}
+#launch-btn:disabled{opacity:0.3;cursor:not-allowed;animation:none;}
+@keyframes glitch{0%,88%,100%{transform:translate(0);}89%{transform:translate(-2px,0);}90%{transform:translate(2px,0);}91%{transform:translate(0);}}
+@keyframes borderPulse{0%,100%{box-shadow:0 0 20px rgba(255,255,255,0.2);}50%{box-shadow:0 0 40px rgba(255,255,255,0.4);}}
+#cursor{position:fixed;width:10px;height:10px;background:#fff;border-radius:50%;pointer-events:none;z-index:9999;transform:translate(-50%,-50%);mix-blend-mode:difference;}
+</style>
+</head>
+<body>
+<div id="cursor"></div>
+<div id="hub">
+  <div class="hub-label">Select Track</div>
+  <div class="hub-artist">Rogue Analog Transducer</div>
+  <div class="hub-title">RAT</div>
+  <div class="hub-rule"></div>
+  <div class="grid" id="grid"></div>
+  <div class="hub-footer">Use headphones &bull; Rogue Analog Transducer &bull; RAT</div>
+</div>
+
+<canvas id="viz-canvas"></canvas>
+
+<div id="launch-overlay">
+  <div id="launch-title">TITLE</div>
+  <div id="launch-sub">GENRE</div>
+  <div id="launch-loading">Loading audio...</div>
+  <button id="launch-btn">LAUNCH</button>
+</div>
+
+<div id="viz-ui">
+  <div id="viz-bottom">
+    <div><div id="viz-track-title">TITLE</div><div id="viz-track-sub">GENRE</div></div>
+    <div id="viz-controls">
+      <div id="viz-time">0:00 / 0:00</div>
+      <div id="viz-progress"><div id="viz-progress-bar"></div></div>
+      <button id="viz-play-btn">PAUSE</button>
+    </div>
+  </div>
+</div>
+<button id="back-btn">&#8592; Tracks</button>
+<button id="fx-btn">FX</button>
+
+<script src="visualizers.js"></script>
+<script>
+let TRACKS = {};
+let viz = null;
+function buildHub(list){
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  list.forEach((t, i) => {
+    TRACKS[t.id] = t;
+    const el = document.createElement('div');
+    el.className = 'tile';
+    el.dataset.track = t.id;
+    el.innerHTML = '<div class="tile-glow"></div><span class="tile-arrow">&#8599;</span>'
+      + '<div class="tile-num">' + String(i + 1).padStart(2, '0') + '</div>'
+      + '<div class="tile-name"></div><div class="tile-genre"></div>';
+    el.querySelector('.tile-glow').style.background = 'radial-gradient(ellipse at 50% 65%,' + t.accent + '22,transparent 70%)';
+    el.querySelector('.tile-name').textContent = t.title;
+    el.querySelector('.tile-name').style.color = t.accent;
+    el.querySelector('.tile-genre').textContent = t.genre;
+    el.addEventListener('click', () => goToTrack(t.id));
+    grid.appendChild(el);
+  });
+}
+fetch('tracks.json', {cache: 'no-store'})
+  .then(r => r.json())
+  .then(buildHub)
+  .catch(err => { document.getElementById('grid').textContent = 'Track list failed to load: ' + err.message; });
+
+const canvas = document.getElementById('viz-canvas');
+const c = canvas.getContext('2d');
+let W, H;
+function resize(){ W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+resize(); window.addEventListener('resize', resize);
+viz = RATVIZ.create(canvas);
+
+// Graphics quality: AUTO picks from the device, then drops to LOW if the frame rate sinks
+const FX_KEY = 'rat-fx', FX_ORDER = ['auto', 'high', 'low'];
+const fxBtn = document.getElementById('fx-btn');
+const fxDetect = RATVIZ.detectTier();
+let fxChoice = 'auto';
+try { fxChoice = localStorage.getItem(FX_KEY) || 'auto'; } catch(e) {}
+if (FX_ORDER.indexOf(fxChoice) < 0) fxChoice = 'auto';
+let fxTier = fxChoice === 'auto' ? fxDetect.tier : fxChoice;
+function applyFx(){
+  viz.setQuality(fxTier);
+  fxBtn.textContent = 'FX: ' + (fxChoice === 'auto' ? 'AUTO ' : '') + fxTier.toUpperCase();
+}
+const fxGuard = RATVIZ.fpsGuard(() => { if (fxChoice === 'auto' && fxTier === 'high') { fxTier = 'low'; applyFx(); } });
+fxBtn.addEventListener('click', () => {
+  fxChoice = FX_ORDER[(FX_ORDER.indexOf(fxChoice) + 1) % FX_ORDER.length];
+  fxTier = fxChoice === 'auto' ? fxDetect.tier : fxChoice;
+  try { localStorage.setItem(FX_KEY, fxChoice); } catch(e) {}
+  fxGuard.reset();
+  applyFx();
+});
+applyFx();
+
+let audioCtx = null, analyser = null, sourceNode = null, audioBuffer = null;
+let isPlaying = false, startTime = 0, pauseOffset = 0, duration = 0;
+let freq = new Uint8Array(1024), timeData = new Uint8Array(2048);
+let currentTrackId = null, animFrameId = null, frameCount = 0;
+
+function initAudioCtx(){
+  if(!audioCtx){
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.82;
+    viz.setAnalyser(analyser);
+  }
+}
+
+function stopAudio(){
+  if(sourceNode){ try{ sourceNode.stop(); }catch(e){} sourceNode = null; }
+  isPlaying = false; pauseOffset = 0;
+}
+
+function playFrom(offset){
+  if(!audioBuffer) return;
+  if(sourceNode){ try{ sourceNode.stop(); }catch(e){} }
+  sourceNode = audioCtx.createBufferSource();
+  sourceNode.buffer = audioBuffer;
+  sourceNode.connect(analyser);
+  analyser.connect(audioCtx.destination);
+  sourceNode.start(0, offset);
+  startTime = audioCtx.currentTime;
+  pauseOffset = offset;
+  isPlaying = true;
+  sourceNode.onended = () => {
+    if(isPlaying){ isPlaying = false; pauseOffset = 0; document.getElementById('viz-play-btn').textContent = 'PLAY'; }
+  };
+}
+
+function pauseAudio(){
+  if(!isPlaying) return;
+  pauseOffset = getCurrentTime();
+  if(sourceNode){ try{ sourceNode.stop(); }catch(e){} }
+  isPlaying = false;
+}
+
+function getCurrentTime(){
+  if(!audioCtx || !isPlaying) return pauseOffset;
+  return audioCtx.currentTime - startTime + pauseOffset;
+}
+
+function fmt(s){ let m = Math.floor(s/60), sec = Math.floor(s%60); return m + ':' + (sec<10?'0':'') + sec; }
+function getBass(){ let b=0; for(let i=0;i<10;i++) b+=freq[i]; return b/10/255; }
+function getMid(){ let m=0; for(let i=10;i<100;i++) m+=freq[i]; return m/90/255; }
+function getTreble(){ let t=0; for(let i=100;i<300;i++) t+=freq[i]; return t/200/255; }
+
+function goToHub(){
+  stopAudio(); audioBuffer = null; currentTrackId = null;
+  if(animFrameId){ cancelAnimationFrame(animFrameId); animFrameId = null; }
+  const vizUI = document.getElementById('viz-ui');
+  vizUI.classList.add('fade-out');
+  setTimeout(()=>{
+    vizUI.style.display = 'none'; vizUI.classList.remove('visible','fade-out');
+    document.getElementById('launch-overlay').style.display = 'none';
+    document.getElementById('viz-canvas').style.display = 'none';
+    document.getElementById('back-btn').style.display = 'none';
+    fxBtn.style.display = 'none';
+    const hub = document.getElementById('hub');
+    hub.style.display = 'flex'; hub.style.opacity = '0';
+    hub.style.transition = 'opacity 0.5s ease';
+    setTimeout(()=> hub.style.opacity = '1', 20);
+  }, 400);
+}
+
+function goToTrack(trackId){
+  const track = TRACKS[trackId]; currentTrackId = trackId; viz.reset(track.viz, track.accent);
+  document.getElementById('hub').classList.add('fade-out');
+  setTimeout(()=>{
+    document.getElementById('hub').style.display = 'none';
+    document.getElementById('hub').classList.remove('fade-out');
+    const lo = document.getElementById('launch-overlay');
+    lo.style.background = track.launchBg;
+    document.getElementById('launch-title').textContent = track.title;
+    document.getElementById('launch-title').style.color = track.accent;
+    document.getElementById('launch-title').style.textShadow = '0 0 30px ' + track.accent + ',0 0 80px ' + track.accent + '55';
+    document.getElementById('launch-sub').textContent = track.genre;
+    document.getElementById('launch-sub').style.color = track.accent;
+    document.getElementById('launch-btn').style.color = track.accent;
+    document.getElementById('launch-loading').textContent = 'Loading audio...';
+    document.getElementById('launch-loading').classList.remove('visible');
+    document.getElementById('launch-btn').disabled = false;
+    document.getElementById('launch-btn').textContent = 'LAUNCH';
+    lo.style.display = 'flex'; lo.style.opacity = '1'; lo.classList.remove('fade-out');
+    document.getElementById('viz-track-title').textContent = track.title;
+    document.getElementById('viz-track-title').style.color = track.accent;
+    document.getElementById('viz-track-title').style.textShadow = '0 0 16px ' + track.accent + '88';
+    document.getElementById('viz-track-sub').textContent = track.genre;
+    document.getElementById('viz-progress-bar').style.background = track.accent;
+    document.getElementById('viz-progress-bar').style.boxShadow = '0 0 8px ' + track.accent;
+    document.getElementById('viz-play-btn').style.color = track.accent;
+  }, 400);
+}
+
+document.getElementById('launch-btn').addEventListener('click', function(){
+  const track = TRACKS[currentTrackId];
+  this.disabled = true;
+  const ll = document.getElementById('launch-loading');
+  ll.classList.add('visible');
+  ll.textContent = 'Loading audio...';
+  initAudioCtx();
+  // Fetch the MP3 file then decode it
+  fetch(track.src)
+    .then(r => {
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      ll.textContent = 'Decoding...';
+      return r.arrayBuffer();
+    })
+    .then(buf => audioCtx.decodeAudioData(buf))
+    .then(decoded => {
+      audioBuffer = decoded; duration = decoded.duration;
+      const lo = document.getElementById('launch-overlay');
+      lo.classList.add('fade-out');
+      setTimeout(()=>{
+        lo.style.display = 'none'; lo.classList.remove('fade-out');
+        document.getElementById('viz-canvas').style.display = 'block';
+        const vizUI = document.getElementById('viz-ui');
+        vizUI.style.display = 'flex';
+        setTimeout(()=> vizUI.classList.add('visible'), 20);
+        document.getElementById('back-btn').style.display = 'block'; fxBtn.style.display = 'block'; fxGuard.reset();
+        document.getElementById('viz-play-btn').textContent = 'PAUSE';
+        playFrom(0); frameCount = 0; startLoop();
+      }, 600);
+    })
+    .catch(err => {
+      ll.textContent = 'Error: ' + err.message;
+      document.getElementById('launch-btn').disabled = false;
+    });
+});
+
+function startLoop(){
+  if(animFrameId) cancelAnimationFrame(animFrameId);
+  function loop(){
+    animFrameId = requestAnimationFrame(loop); frameCount++;
+    if(analyser){ analyser.getByteFrequencyData(freq); analyser.getByteTimeDomainData(timeData); }
+    viz.frame();
+    fxGuard.tick(performance.now());
+    if(duration > 0){
+      let cur = Math.min(getCurrentTime(), duration);
+      document.getElementById('viz-progress-bar').style.width = (cur/duration*100) + '%';
+      document.getElementById('viz-time').textContent = fmt(cur) + ' / ' + fmt(duration);
+    }
+  }
+  loop();
+}
+
+document.getElementById('back-btn').addEventListener('click', goToHub);
+document.getElementById('viz-play-btn').addEventListener('click', function(){
+  if(!audioBuffer) return;
+  if(isPlaying){ pauseAudio(); this.textContent = 'PLAY'; }
+  else{ if(audioCtx.state === 'suspended') audioCtx.resume(); playFrom(pauseOffset); this.textContent = 'PAUSE'; }
+});
+document.getElementById('viz-progress').addEventListener('click', function(e){
+  if(!audioBuffer || !duration) return;
+  pauseOffset = (e.clientX - this.getBoundingClientRect().left) / this.offsetWidth * duration;
+  if(isPlaying) playFrom(pauseOffset);
+});
+document.addEventListener('mousemove', e => {
+  document.getElementById('cursor').style.left = e.clientX + 'px';
+  document.getElementById('cursor').style.top = e.clientY + 'px';
+});
+
+</script>
+</body>
+</html>

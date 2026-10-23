@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>GRIDMARK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+<link href="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@5.0.0/dist/maplibre-gl.js"></script>
+<style>
+:root{--bg:#0a0c0f;--surface:#111418;--border:#1e2530;--border-bright:#2e3d52;--text:#c8d8e8;--text-dim:#5a7090;--work:#00e5ff;--personal:#7fff6e;--accent:#ff6b35;--gps:#ffd600;--heat:#ff4400;--panel-w:300px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;height:100dvh;overflow:hidden;display:flex;flex-direction:column}
+header{display:flex;align-items:center;justify-content:space-between;padding:0 12px;height:48px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;z-index:10;gap:8px}
+.logo{font-family:'Share Tech Mono',monospace;font-size:16px;letter-spacing:3px;color:var(--work);text-shadow:0 0 12px rgba(0,229,255,.4);flex-shrink:0}
+.logo span{color:var(--text-dim)}
+.header-right{display:flex;align-items:center;gap:6px}
+.mode-row{display:flex;gap:4px}
+.mode-btn{background:none;border:1px solid var(--border-bright);color:var(--text-dim);font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1px;padding:4px 8px;cursor:pointer;border-radius:2px;transition:all .2s}
+.mode-btn.active{border-color:var(--work);color:var(--work);background:rgba(0,229,255,.08)}
+.mode-btn.heat.active{border-color:var(--heat);color:var(--heat);background:rgba(255,68,0,.08)}
+.gps-btn{display:flex;align-items:center;gap:5px;background:none;border:1px solid var(--border-bright);color:var(--text-dim);font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1px;padding:4px 8px;cursor:pointer;border-radius:2px;transition:all .2s;white-space:nowrap}
+.gps-btn.active{border-color:var(--gps);color:var(--gps);box-shadow:0 0 8px rgba(255,214,0,.3)}
+.gps-btn.error{border-color:var(--accent);color:var(--accent)}
+.gps-dot{width:6px;height:6px;border-radius:50%;background:var(--text-dim);flex-shrink:0}
+.gps-btn.active .gps-dot{background:var(--gps);animation:pulse 1.5s infinite}
+.gps-btn.error .gps-dot{background:var(--accent)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.panel-toggle{background:none;border:1px solid var(--border-bright);color:var(--text-dim);font-size:16px;width:30px;height:30px;cursor:pointer;border-radius:2px;display:flex;align-items:center;justify-content:center}
+.main{flex:1;display:flex;overflow:hidden;position:relative}
+#map{flex:1;height:100%}
+.panel{width:var(--panel-w);background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;transition:width .25s,opacity .25s;flex-shrink:0}
+.panel.collapsed{width:0;opacity:0;pointer-events:none}
+.panel-header{padding:10px 14px 8px;border-bottom:1px solid var(--border);flex-shrink:0}
+.panel-title{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--text-dim);margin-bottom:8px}
+.filter-row{display:flex;gap:6px}
+.filter-btn{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text-dim);font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;letter-spacing:1px;padding:4px 0;cursor:pointer;border-radius:2px;transition:all .15s;text-transform:uppercase}
+.filter-btn.work.active{border-color:var(--work);color:var(--work);background:rgba(0,229,255,.06)}
+.filter-btn.personal.active{border-color:var(--personal);color:var(--personal);background:rgba(127,255,110,.06)}
+.filter-btn.all.active{border-color:var(--border-bright);color:var(--text);background:rgba(255,255,255,.04)}
+#poiPanel{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.poi-list{flex:1;overflow-y:auto;padding:6px 0}
+.poi-list::-webkit-scrollbar{width:3px}
+.poi-list::-webkit-scrollbar-thumb{background:var(--border-bright);border-radius:2px}
+.poi-item{padding:8px 14px;cursor:pointer;border-left:2px solid transparent;transition:all .15s}
+.poi-item:hover{background:rgba(255,255,255,.03)}
+.poi-item.active{background:rgba(255,255,255,.05)}
+.poi-item.work{border-left-color:var(--work)}
+.poi-item.personal{border-left-color:var(--personal)}
+.poi-name{font-weight:700;font-size:13px;line-height:1.2;margin-bottom:2px}
+.poi-item.work .poi-name{color:var(--work)}
+.poi-item.personal .poi-name{color:var(--personal)}
+.poi-notes{font-size:11px;color:var(--text-dim);line-height:1.3;font-family:'Share Tech Mono',monospace}
+.poi-coords{font-size:10px;color:#334455;font-family:'Share Tech Mono',monospace;margin-top:2px}
+.section-label{padding:6px 14px 3px;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:3px;color:#2a3a4a;border-top:1px solid var(--border);margin-top:3px}
+#heatControls{display:none;flex-direction:column;gap:10px;padding:16px 14px;flex:1}
+.heat-title{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--heat);margin-bottom:4px}
+.heat-btn{background:none;border:1px solid var(--border-bright);color:var(--text-dim);font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:1px;padding:8px;cursor:pointer;border-radius:2px;transition:all .2s;text-align:center}
+.heat-btn:hover{border-color:var(--heat);color:var(--heat)}
+.heat-stat{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:1px}
+.maplibregl-popup-content{background:var(--surface)!important;border:1px solid var(--border-bright)!important;border-radius:3px!important;padding:12px 14px!important;color:var(--text)!important;font-family:'Rajdhani',sans-serif!important;min-width:180px;box-shadow:0 4px 24px rgba(0,0,0,.6)!important}
+.maplibregl-popup-tip{display:none!important}
+.maplibregl-popup-close-button{color:var(--text-dim)!important;font-size:16px!important;padding:4px 8px!important}
+.popup-name{font-weight:700;font-size:16px;margin-bottom:4px}
+.popup-cat{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;margin-bottom:8px}
+.popup-notes{font-size:13px;color:var(--text-dim);line-height:1.5;border-top:1px solid var(--border);padding-top:8px}
+.popup-coords{font-family:'Share Tech Mono',monospace;font-size:10px;color:#334455;margin-top:6px}
+.statusbar{height:26px;background:var(--bg);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 12px;gap:16px;flex-shrink:0;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:1px}
+.status-item{display:flex;align-items:center;gap:4px}
+.status-dot{width:5px;height:5px;border-radius:50%;background:var(--border-bright)}
+.status-dot.work{background:var(--work)}
+.status-dot.personal{background:var(--personal)}
+.status-dot.gps-live{background:var(--gps);animation:pulse 1.5s infinite}
+.maplibregl-ctrl-group{background:var(--surface)!important;border:1px solid var(--border-bright)!important;border-radius:2px!important}
+.maplibregl-ctrl-group button{background:var(--surface)!important;color:var(--text)!important}
+.maplibregl-ctrl-attrib{display:none!important}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.modal-backdrop.open{opacity:1;pointer-events:all}
+.modal{background:var(--surface);border:1px solid var(--border-bright);padding:20px;width:280px;border-radius:3px;transform:translateY(10px);transition:transform .2s}
+.modal-backdrop.open .modal{transform:translateY(0)}
+.modal-title{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:3px;color:var(--text-dim);margin-bottom:16px}
+.field{margin-bottom:12px}
+.field label{display:block;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--text-dim);margin-bottom:5px}
+.field input,.field textarea,.field select{width:100%;background:var(--bg);border:1px solid var(--border-bright);color:var(--text);font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:500;padding:7px 10px;border-radius:2px;outline:none}
+.field input:focus,.field textarea:focus{border-color:var(--work)}
+.field select option{background:var(--surface)}
+.field textarea{resize:vertical;min-height:60px}
+.modal-actions{display:flex;gap:8px;margin-top:16px}
+.btn{flex:1;padding:8px;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;border:1px solid var(--border-bright);background:none;color:var(--text-dim);cursor:pointer;border-radius:2px;text-transform:uppercase}
+.btn.primary{border-color:var(--work);color:var(--work);background:rgba(0,229,255,.06)}
+.fab{position:absolute;bottom:16px;right:16px;width:44px;height:44px;background:var(--work);color:var(--bg);border:none;border-radius:50%;font-size:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 0 16px rgba(0,229,255,.4);z-index:5}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">GRID<span>//</span>MARK</div>
+  <div class="mode-row">
+    <button class="mode-btn active" id="btnMap" onclick="setMode('map')">MAP</button>
+    <button class="mode-btn heat" id="btnHeat" onclick="setMode('heat')">HEAT</button>
+  </div>
+  <div class="header-right">
+    <button class="gps-btn" id="gpsBtn" onclick="toggleGPS()"><span class="gps-dot"></span><span id="gpsLabel">GPS OFF</span></button>
+    <button class="panel-toggle" onclick="togglePanel()">&#9776;</button>
+  </div>
+</header>
+<div class="main">
+  <div id="map"></div>
+  <div class="panel" id="panel">
+    <div class="panel-header">
+      <div class="panel-title">// MARKED LOCATIONS</div>
+      <div class="filter-row">
+        <button class="filter-btn all active" id="fAll" onclick="setFilter('all')">ALL</button>
+        <button class="filter-btn work" id="fWork" onclick="setFilter('work')">WORK</button>
+        <button class="filter-btn personal" id="fPersonal" onclick="setFilter('personal')">PERSONAL</button>
+      </div>
+    </div>
+    <div id="poiPanel">
+      <div class="poi-list" id="poiList"></div>
+    </div>
+    <div id="heatControls">
+      <div class="heat-title">// HEATMAP</div>
+      <div class="heat-stat">Points recorded: <span id="heatCount">0 PTS</span></div>
+      <button class="heat-btn" id="trackBtn" onclick="toggleTracking()">START TRACK</button>
+      <button class="heat-btn" onclick="clearHeat()" style="color:#ff4444;border-color:#ff4444">CLEAR DATA</button>
+      <div class="heat-stat" style="margin-top:8px;color:#5a7090;font-size:9px;line-height:1.6">GPS must be ON to track.<br>Records position every 10 sec.<br>Data stored locally on device.</div>
+    </div>
+  </div>
+  <button class="fab" onclick="openAddModal(null)">+</button>
+</div>
+<div class="statusbar">
+  <div class="status-item"><span class="status-dot work"></span><span id="workCount">0 WORK</span></div>
+  <div class="status-item"><span class="status-dot personal"></span><span id="personalCount">0 PERSONAL</span></div>
+  <div class="status-item" id="gpsStatus" style="display:none"><span class="status-dot gps-live"></span><span id="gpsCoords">--</span></div>
+  <div class="status-item" style="margin-left:auto"><span id="tileStatus">LOADING...</span></div>
+</div>
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle">// ADD LOCATION</div>
+    <div class="field"><label>NAME</label><input type="text" id="fName" placeholder="Location name"></div>
+    <div class="field"><label>CATEGORY</label><select id="fCat"><option value="work">WORK</option><option value="personal">PERSONAL</option></select></div>
+    <div class="field"><label>NOTES</label><textarea id="fNotes" placeholder="Access notes, details..."></textarea></div>
+    <div class="field">
+      <label>COORDINATES</label>
+      <input type="text" id="fCoords" readonly style="color:var(--text-dim)">
+      <button id="useMyLocBtn" onclick="useMyLocation()" style="margin-top:6px;width:100%;background:none;border:1px solid #2e3d52;color:#5a7090;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1px;padding:6px;cursor:pointer;border-radius:2px">USE MY LOCATION</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">CANCEL</button>
+      <button class="btn" id="deleteBtn" onclick="deleteCurrentPOI()" style="border-color:#ff4444;color:#ff4444;display:none">DEL</button>
+      <button class="btn primary" onclick="savePOI()">SAVE</button>
+    </div>
+  </div>
+</div>
+<script>
+window.addEventListener('load', function() {
+
+var map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    sources: {
+      osm: {
+        type: 'raster',
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+        tileSize: 256,
+        attribution: '&copy; OpenStreetMap contributors'
+      }
+    },
+    layers: [{
+      id: 'osm-tiles',
+      type: 'raster',
+      source: 'osm',
+      paint: {
+        'raster-brightness-min': 0,
+        'raster-brightness-max': 0.15,
+        'raster-saturation': -0.8,
+        'raster-contrast': 0.2,
+        'raster-hue-rotate': 190
+      }
+    }]
+  },
+  center: [-114.053, 35.189],
+  zoom: 7,
+  attributionControl: false
+});
+
+map.addControl(new maplibregl.NavigationControl({showCompass:true}), 'top-left');
+map.addControl(new maplibregl.ScaleControl({unit:'imperial'}), 'bottom-left');
+map.on('error', function(){
+  document.getElementById('tileStatus').textContent = 'TILE ERROR';
+  document.getElementById('tileStatus').style.color = '#ff6b35';
+});
+
+var pois = [
+  {id:'w1', name:'Safeway Parker #2075',          category:'work', notes:'121 W Riverside Dr, Parker AZ 85344',            lng:-114.2893, lat:34.1478},
+  {id:'w2', name:'Safeway Bullhead City #0248',    category:'work', notes:'1751 Hwy 95, Bullhead City AZ 86442',             lng:-114.5632, lat:35.1478},
+  {id:'w3', name:'Safeway Fort Mohave #1474',      category:'work', notes:'4823 S Hwy 95, Fort Mohave AZ 86426',             lng:-114.5712, lat:35.0021},
+  {id:'w4', name:'Safeway Lake Havasu #0216',      category:'work', notes:'1650 McCulloch Blvd N, Lake Havasu AZ 86403',     lng:-114.3224, lat:34.4971},
+  {id:'w5', name:'Albertsons Lake Havasu #3204',   category:'work', notes:'1980 McCulloch Blvd, Lake Havasu AZ 86403',       lng:-114.3328, lat:34.4768},
+  {id:'w6', name:'Safeway N Kingman #1887',        category:'work', notes:'3970 Stockton Hill Rd, Kingman AZ 86409',         lng:-114.0591, lat:35.2442},
+  {id:'w7', name:'Safeway S Kingman #2017',        category:'work', notes:'3125 Stockton Hill Rd, Kingman AZ 86401',         lng:-114.0469, lat:35.1894},
+  {id:'w8', name:'Safeway Williams #1639',         category:'work', notes:'637 W Route 66, Williams AZ 86046',                lng:-112.1956, lat:35.2494},
+  {id:'w9', name:'Safeway Flagstaff Univ #2028',   category:'work', notes:'1200 S Milton Rd, Flagstaff AZ 86001',            lng:-111.6537, lat:35.1814},
+  {id:'w10',name:'Safeway Flagstaff Hwy 89 #0270', category:'work', notes:'4910 N Hwy 89, Flagstaff AZ 86004',               lng:-111.6041, lat:35.2472},
+  {id:'w11',name:'Safeway Flagstaff #1225',        category:'work', notes:'1201 S Plaza Way, Flagstaff AZ 86001',            lng:-111.6491, lat:35.1822},
+  {id:'w12',name:'Safeway Page #0249',             category:'work', notes:'650 Elm St, Page AZ 86040',                        lng:-111.4552, lat:36.9146}
+];
+
+try{var s=localStorage.getItem('gm_pois');if(s)pois=JSON.parse(s);}catch(e){}
+var heatTrack=[];
+try{var h=localStorage.getItem('gm_heat');if(h)heatTrack=JSON.parse(h);}catch(e){}
+function save(){try{localStorage.setItem('gm_pois',JSON.stringify(pois));}catch(e){}}
+function saveHeat(){try{localStorage.setItem('gm_heat',JSON.stringify(heatTrack));}catch(e){}}
+
+var activeMode='map', markers={}, activeFilter='all', currentPopup=null;
+var watchId=null, gpsMarker=null, tracking=false, trackInterval=null;
+
+map.on('load', function() {
+  document.getElementById('tileStatus').textContent = 'ONLINE TILES';
+  map.addSource('heat', {type:'geojson', data:buildHeatGeoJSON()});
+  map.addLayer({
+    id:'heat-layer', type:'heatmap', source:'heat',
+    paint:{
+      'heatmap-weight':1,
+      'heatmap-intensity':['interpolate',['linear'],['zoom'],5,0.4,12,1.5],
+      'heatmap-color':['interpolate',['linear'],['heatmap-density'],
+        0,'rgba(0,0,0,0)',0.1,'rgba(0,100,255,0.4)',0.3,'rgba(0,200,255,0.6)',
+        0.5,'rgba(0,255,180,0.7)',0.7,'rgba(255,200,0,0.85)',1.0,'rgba(255,60,0,1)'],
+      'heatmap-radius':['interpolate',['linear'],['zoom'],5,8,12,25],
+      'heatmap-opacity':0
+    }
+  });
+  renderMarkers();
+  updateHeatCount();
+});
+
+function buildHeatGeoJSON(){
+  return {type:'FeatureCollection',features:heatTrack.map(function(pt){
+    return {type:'Feature',geometry:{type:'Point',coordinates:[pt.lng,pt.lat]},properties:{}};
+  })};
+}
+function updateHeatSource(){
+  var src=map.getSource('heat');
+  if(src)src.setData(buildHeatGeoJSON());
+  updateHeatCount();
+}
+function updateHeatCount(){
+  document.getElementById('heatCount').textContent=heatTrack.length+' PTS';
+}
+
+window.setMode=function(m){
+  activeMode=m;
+  document.getElementById('btnMap').classList.toggle('active',m==='map');
+  document.getElementById('btnHeat').classList.toggle('active',m==='heat');
+  if(m==='heat'){
+    Object.keys(markers).forEach(function(k){markers[k].remove();});
+    if(gpsMarker)gpsMarker.remove();
+    map.setPaintProperty('heat-layer','heatmap-opacity',0.85);
+    document.getElementById('heatControls').style.display='flex';
+    document.getElementById('poiPanel').style.display='none';
+  } else {
+    map.setPaintProperty('heat-layer','heatmap-opacity',0);
+    document.getElementById('heatControls').style.display='none';
+    document.getElementById('poiPanel').style.display='flex';
+    renderMarkers();
+    if(gpsMarker)gpsMarker.addTo(map);
+  }
+};
+
+window.toggleTracking=function(){tracking?stopTracking():startTracking();};
+function startTracking(){
+  if(!navigator.geolocation){alert('No GPS available');return;}
+  tracking=true;
+  document.getElementById('trackBtn').textContent='STOP TRACK';
+  document.getElementById('trackBtn').style.borderColor='#ff6b35';
+  document.getElementById('trackBtn').style.color='#ff6b35';
+  function record(){
+    navigator.geolocation.getCurrentPosition(function(pos){
+      heatTrack.push({lng:pos.coords.longitude,lat:pos.coords.latitude,t:Date.now()});
+      saveHeat();updateHeatSource();
+    },null,{enableHighAccuracy:true,maximumAge:5000});
+  }
+  record();
+  trackInterval=setInterval(record,10000);
+}
+function stopTracking(){
+  tracking=false;
+  if(trackInterval){clearInterval(trackInterval);trackInterval=null;}
+  document.getElementById('trackBtn').textContent='START TRACK';
+  document.getElementById('trackBtn').style.borderColor='#2e3d52';
+  document.getElementById('trackBtn').style.color='#5a7090';
+}
+window.clearHeat=function(){
+  if(!confirm('Clear all heatmap data?'))return;
+  heatTrack=[];saveHeat();updateHeatSource();
+};
+
+function mkEl(poi){
+  var c=poi.category==='work'?'#00e5ff':'#7fff6e';
+  var el=document.createElement('div');
+  el.style.cssText='width:14px;height:14px;border-radius:50%;background:'+c+';border:2px solid '+c+';box-shadow:0 0 10px '+c+';cursor:pointer;transition:transform .15s';
+  el.addEventListener('mouseenter',function(){el.style.transform='scale(1.5)';});
+  el.addEventListener('mouseleave',function(){el.style.transform='scale(1)';});
+  return el;
+}
+function popHTML(poi){
+  var c=poi.category==='work'?'#00e5ff':'#7fff6e';
+  return '<div class="popup-name" style="color:'+c+'">'+poi.name+'</div>'+
+    '<div class="popup-cat" style="color:'+c+'88">'+poi.category+'</div>'+
+    (poi.notes?'<div class="popup-notes">'+poi.notes+'</div>':'')+
+    '<div class="popup-coords">'+poi.lng.toFixed(5)+', '+poi.lat.toFixed(5)+'</div>'+
+    '<div style="margin-top:10px"><button onclick="openEditModal(\''+poi.id+'\')" style="width:100%;background:none;border:1px solid #2e3d52;color:#5a7090;font-family:Rajdhani,sans-serif;font-weight:700;font-size:12px;padding:5px;cursor:pointer;border-radius:2px">EDIT</button></div>';
+}
+function renderMarkers(){
+  Object.keys(markers).forEach(function(k){markers[k].remove();});
+  markers={};
+  if(activeMode!=='map')return;
+  pois.forEach(function(poi){
+    if(activeFilter!=='all'&&poi.category!==activeFilter)return;
+    var el=mkEl(poi);
+    var m=new maplibregl.Marker({element:el}).setLngLat([poi.lng,poi.lat]).addTo(map);
+    el.addEventListener('click',function(e){
+      e.stopPropagation();
+      if(currentPopup)currentPopup.remove();
+      currentPopup=new maplibregl.Popup({closeButton:true,maxWidth:'240px',offset:10})
+        .setLngLat([poi.lng,poi.lat]).setHTML(popHTML(poi)).addTo(map);
+      hlItem(poi.id);
+    });
+    markers[poi.id]=m;
+  });
+  renderList();updateStatus();
+}
+function renderList(){
+  var list=document.getElementById('poiList');
+  list.innerHTML='';
+  var filtered=activeFilter==='all'?pois:pois.filter(function(p){return p.category===activeFilter;});
+  var work=filtered.filter(function(p){return p.category==='work';});
+  var pers=filtered.filter(function(p){return p.category==='personal';});
+  function addGrp(items,label){
+    if(!items.length)return;
+    if(activeFilter==='all'){
+      var s=document.createElement('div');
+      s.className='section-label';s.textContent='// '+label;list.appendChild(s);
+    }
+    items.forEach(function(poi){
+      var d=document.createElement('div');
+      d.className='poi-item '+poi.category;d.id='li-'+poi.id;
+      d.innerHTML='<div class="poi-name">'+poi.name+'</div>'+
+        (poi.notes?'<div class="poi-notes">'+poi.notes+'</div>':'')+
+        '<div class="poi-coords">'+poi.lng.toFixed(4)+', '+poi.lat.toFixed(4)+'</div>';
+      d.addEventListener('click',function(){
+        map.flyTo({center:[poi.lng,poi.lat],zoom:14,duration:600});
+        setTimeout(function(){
+          if(currentPopup)currentPopup.remove();
+          currentPopup=new maplibregl.Popup({closeButton:true,maxWidth:'240px',offset:10})
+            .setLngLat([poi.lng,poi.lat]).setHTML(popHTML(poi)).addTo(map);
+        },650);
+        hlItem(poi.id);
+      });
+      list.appendChild(d);
+    });
+  }
+  addGrp(work,'WORK');addGrp(pers,'PERSONAL');
+}
+function hlItem(id){
+  document.querySelectorAll('.poi-item').forEach(function(e){e.classList.remove('active');});
+  var el=document.getElementById('li-'+id);
+  if(el){el.classList.add('active');el.scrollIntoView({behavior:'smooth',block:'nearest'});}
+}
+function updateStatus(){
+  document.getElementById('workCount').textContent=pois.filter(function(p){return p.category==='work';}).length+' WORK';
+  document.getElementById('personalCount').textContent=pois.filter(function(p){return p.category==='personal';}).length+' PERSONAL';
+}
+window.setFilter=function(f){
+  activeFilter=f;
+  ['fAll','fWork','fPersonal'].forEach(function(id){document.getElementById(id).classList.remove('active');});
+  document.getElementById({all:'fAll',work:'fWork',personal:'fPersonal'}[f]).classList.add('active');
+  renderMarkers();
+};
+var panelOpen=true;
+window.togglePanel=function(){
+  panelOpen=!panelOpen;
+  document.getElementById('panel').classList.toggle('collapsed',!panelOpen);
+};
+
+window.toggleGPS=function(){watchId?stopGPS():startGPS();};
+function startGPS(){
+  if(!navigator.geolocation){setGPSState('error','NO GPS');return;}
+  setGPSState('waiting','LOCATING...');
+  navigator.geolocation.getCurrentPosition(function(pos){
+    var lng=pos.coords.longitude,lat=pos.coords.latitude,acc=pos.coords.accuracy;
+    setGPSState('active','GPS LIVE');
+    if(!gpsMarker){
+      var el=document.createElement('div');
+      el.style.cssText='width:18px;height:18px;border-radius:50%;background:#ffd600;border:3px solid #fff;box-shadow:0 0 0 4px rgba(255,214,0,.4),0 0 20px #ffd600';
+      gpsMarker=new maplibregl.Marker({element:el}).setLngLat([lng,lat]).addTo(map);
+      map.flyTo({center:[lng,lat],zoom:11,duration:1000});
+    } else {gpsMarker.setLngLat([lng,lat]);}
+    document.getElementById('gpsStatus').style.display='flex';
+    document.getElementById('gpsCoords').textContent=lat.toFixed(4)+','+lng.toFixed(4)+' +/-'+Math.round(acc)+'m';
+    watchId=navigator.geolocation.watchPosition(function(p){
+      gpsMarker.setLngLat([p.coords.longitude,p.coords.latitude]);
+      document.getElementById('gpsCoords').textContent=p.coords.latitude.toFixed(4)+','+p.coords.longitude.toFixed(4)+' +/-'+Math.round(p.coords.accuracy)+'m';
+    },function(){},{enableHighAccuracy:true,maximumAge:5000});
+  },function(err){
+    setGPSState('error',err.code===1?'DENIED':err.code===2?'UNAVAIL':'TIMEOUT');
+  },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+}
+function stopGPS(){
+  if(watchId){navigator.geolocation.clearWatch(watchId);watchId=null;}
+  if(gpsMarker){gpsMarker.remove();gpsMarker=null;}
+  setGPSState('off','GPS OFF');
+  document.getElementById('gpsStatus').style.display='none';
+  stopTracking();
+}
+function setGPSState(s,label){
+  document.getElementById('gpsBtn').className='gps-btn'+(s==='active'?' active':s==='error'?' error':'');
+  document.getElementById('gpsLabel').textContent=label;
+}
+
+var editingId=null,pendingCoords=null;
+window.openAddModal=function(ll){
+  editingId=null;
+  if(!ll&&gpsMarker){var ll2=gpsMarker.getLngLat();pendingCoords={lng:ll2.lng,lat:ll2.lat};}
+  else{pendingCoords=ll||map.getCenter();}
+  document.getElementById('modalTitle').textContent='// ADD LOCATION';
+  document.getElementById('fName').value='';
+  document.getElementById('fCat').value='work';
+  document.getElementById('fNotes').value='';
+  document.getElementById('fCoords').value=pendingCoords.lng.toFixed(6)+', '+pendingCoords.lat.toFixed(6);
+  document.getElementById('deleteBtn').style.display='none';
+  document.getElementById('modalBackdrop').classList.add('open');
+  setTimeout(function(){document.getElementById('fName').focus();},50);
+};
+window.useMyLocation=function(){
+  if(!navigator.geolocation)return;
+  navigator.geolocation.getCurrentPosition(function(pos){
+    pendingCoords={lng:pos.coords.longitude,lat:pos.coords.latitude};
+    document.getElementById('fCoords').value=pendingCoords.lng.toFixed(6)+', '+pendingCoords.lat.toFixed(6);
+    var btn=document.getElementById('useMyLocBtn');
+    btn.textContent='UPDATED';
+    setTimeout(function(){btn.textContent='USE MY LOCATION';},1500);
+  },null,{enableHighAccuracy:true,maximumAge:5000});
+};
+window.openEditModal=function(id){
+  var poi=null;
+  for(var i=0;i<pois.length;i++){if(pois[i].id===id){poi=pois[i];break;}}
+  if(!poi)return;
+  if(currentPopup)currentPopup.remove();
+  editingId=id;pendingCoords={lng:poi.lng,lat:poi.lat};
+  document.getElementById('modalTitle').textContent='// EDIT LOCATION';
+  document.getElementById('fName').value=poi.name;
+  document.getElementById('fCat').value=poi.category;
+  document.getElementById('fNotes').value=poi.notes||'';
+  document.getElementById('fCoords').value=poi.lng.toFixed(6)+', '+poi.lat.toFixed(6);
+  document.getElementById('deleteBtn').style.display='';
+  document.getElementById('modalBackdrop').classList.add('open');
+};
+window.closeModal=function(){
+  document.getElementById('modalBackdrop').classList.remove('open');
+  editingId=null;pendingCoords=null;
+};
+window.savePOI=function(){
+  var name=document.getElementById('fName').value.trim();
+  if(!name){document.getElementById('fName').focus();return;}
+  var cat=document.getElementById('fCat').value;
+  var notes=document.getElementById('fNotes').value.trim();
+  if(editingId){
+    for(var i=0;i<pois.length;i++){if(pois[i].id===editingId){pois[i].name=name;pois[i].category=cat;pois[i].notes=notes;break;}}
+  } else {
+    pois.push({id:'poi_'+Date.now(),name:name,category:cat,notes:notes,lng:pendingCoords.lng,lat:pendingCoords.lat});
+  }
+  save();closeModal();renderMarkers();
+};
+window.deleteCurrentPOI=function(){
+  if(!editingId)return;
+  if(!confirm('Delete this location?'))return;
+  pois=pois.filter(function(p){return p.id!==editingId;});
+  save();closeModal();renderMarkers();
+};
+document.getElementById('modalBackdrop').addEventListener('click',function(e){
+  if(e.target===document.getElementById('modalBackdrop'))closeModal();
+});
+map.on('contextmenu',function(e){if(activeMode==='map')openAddModal(e.lngLat);});
+var pressTimer=null;
+map.getCanvas().addEventListener('touchstart',function(e){
+  if(e.touches.length!==1)return;
+  pressTimer=setTimeout(function(){
+    if(activeMode!=='map')return;
+    var r=map.getCanvas().getBoundingClientRect();
+    var t=e.touches[0];
+    openAddModal(map.unproject({x:t.clientX-r.left,y:t.clientY-r.top}));
+  },600);
+},{passive:true});
+map.getCanvas().addEventListener('touchend',function(){clearTimeout(pressTimer);});
+map.getCanvas().addEventListener('touchmove',function(){clearTimeout(pressTimer);});
+
+}); // end load
+</script>
+</body>
+</html>

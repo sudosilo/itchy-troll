@@ -1,0 +1,1 @@
+window.DQ_API="";

@@ -1,0 +1,2149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>LOOPER v2</title>
+<!--
+  BLUE PHONE: v2 band sync.
+    Band panel with a room code. Phones that type the same room code share one server clock and one tempo,
+    including phones running other apps on the same server.
+    While the band loop runs, a loop starts on the shared bar line, a new recording is trimmed to whole bars,
+    and each pass of the loop is started fresh from the server clock so it cannot drift.
+  BLUE PHONE: v3 band grooves. Drum and bass presets built from the Looper sound bank, played on the band clock
+    in double time against the band tempo, with a sub bass line in the key of the groove the room is playing.
+    A loop follows tempo changes by changing its playback speed.
+-->
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;600;800&display=swap');
+
+  :root {
+    --bg: #09090c;
+    --panel: #13131a;
+    --panel-hi: #1b1b24;
+    --border: #2c2c3a;
+    --accent: #e8ff00;
+    --red: #ff3b3b;
+    --green: #00e676;
+    --blue: #29b6f6;
+    --orange: #ff9100;
+    --purple: #ce93d8;
+    --pink: #f48fb1;
+    --teal: #26c6da;
+    --text: #dcdce8;
+    --dim: #585868;
+    --mono: 'Share Tech Mono', monospace;
+    --sans: 'Barlow Condensed', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+    overflow-x: hidden;
+  }
+
+  header {
+    width: 100%;
+    max-width: 520px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-bottom: 14px;
+    position: relative;
+  }
+
+  /* RGB seam under header */
+  header::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, #ff3b3b 0%, #ff9100 20%, #e8ff00 40%, #00e676 60%, #29b6f6 80%, #ce93d8 100%);
+    opacity: 0.6;
+  }
+
+  header h1 {
+    font-family: var(--sans);
+    font-weight: 800;
+    font-size: 2rem;
+    letter-spacing: 0.15em;
+    color: #fff;
+    text-shadow: 0 0 20px rgba(232,255,0,0.25);
+  }
+
+  header span {
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    color: var(--dim);
+  }
+
+  .main {
+    width: 100%;
+    max-width: 520px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* STATUS */
+  .status-bar {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 0 transparent;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* thin top-edge highlight seam */
+  .status-bar::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 4px 4px 0 0;
+  }
+
+  .status-dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--dim);
+    flex-shrink: 0;
+  }
+
+  .status-dot.idle      { background: #333340; }
+  .status-dot.recording { background: var(--red);    box-shadow: 0 0 0 3px rgba(255,59,59,0.2), 0 0 14px var(--red);    animation: blink .6s infinite; }
+  .status-dot.playing   { background: var(--green);  box-shadow: 0 0 0 3px rgba(0,230,118,0.2), 0 0 12px var(--green); }
+  .status-dot.overdub   { background: var(--orange); box-shadow: 0 0 0 3px rgba(255,145,0,0.2), 0 0 14px var(--orange); animation: blink .8s infinite; }
+  .status-dot.paused    { background: var(--blue);   box-shadow: 0 0 0 3px rgba(41,182,246,0.2), 0 0 10px var(--blue); }
+
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  .status-text { flex: 1; }
+
+  .status-label {
+    font-family: var(--sans);
+    font-weight: 800;
+    font-size: 1rem;
+    letter-spacing: 0.1em;
+    line-height: 1;
+  }
+
+  .status-sub {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: var(--dim);
+    margin-top: 2px;
+  }
+
+  .loop-counter {
+    text-align: right;
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: var(--dim);
+  }
+
+  /* WAVEFORM */
+  .waveform-wrap {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    position: relative;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  .waveform-wrap::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: rgba(232,255,0,0.18);
+    border-radius: 4px 4px 0 0;
+  }
+
+  canvas#waveform     { width: 100%; height: 50px; display: block; }
+  canvas#progress-bar { width: 100%; height: 5px;  display: block; margin-top: 5px; }
+
+  .time-labels {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 0.58rem;
+    color: var(--dim);
+    margin-top: 3px;
+  }
+
+  /* BLUE PHONE: v2 band panel */
+  .band-box {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .band-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .band-room {
+    background: var(--panel-hi);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    padding: 7px 10px;
+    border-radius: 4px;
+    width: 150px;
+  }
+  .band-text { font-family: var(--mono); font-size: 0.68rem; color: var(--text); letter-spacing: 0.04em; }
+  .band-btn {
+    background: var(--panel-hi);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    width: 36px; height: 30px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .band-go {
+    background: var(--panel-hi);
+    border: 1px solid var(--green);
+    color: var(--green);
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    padding: 7px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    min-width: 92px;
+  }
+  .band-go.on { border-color: var(--blue); color: var(--blue); }
+  .band-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .band-chip {
+    background: var(--panel-hi);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    padding: 7px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .band-chip.on { border-color: var(--accent); color: var(--accent); }
+  .band-trim { font-family: var(--mono); font-size: 0.72rem; color: var(--accent); min-width: 58px; text-align: center; }
+
+  /* SECTION LABEL */
+  .section-label {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: #888898;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, #2c2c3a 0%, transparent 100%);
+  }
+
+  /* FAVORITES ROW */
+  .fav-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .fav-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-height: 36px;
+    background: #0e0e14;
+    border: 1px solid #252530;
+    border-radius: 4px;
+    padding: 6px;
+    align-items: center;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+
+  .fav-empty {
+    font-family: var(--mono);
+    font-size: 0.6rem;
+    color: #2e2e3a;
+    padding: 0 4px;
+  }
+
+  .fav-chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: #1c1c26;
+    border: 1px solid #38384a;
+    border-radius: 20px;
+    padding: 5px 10px 5px 8px;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.08s;
+    font-family: var(--sans);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
+  }
+
+  .fav-chip:active, .fav-chip.firing {
+    transform: scale(0.93);
+    filter: brightness(1.6);
+  }
+
+  .fav-chip .chip-icon  { font-size: 1rem; line-height: 1; }
+  .fav-chip .chip-name  { font-weight: 700; font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; color: #c8c8d8; }
+  .fav-chip .chip-rm    { font-size: 0.7rem; color: var(--dim); margin-left: 2px; line-height: 1; cursor: pointer; }
+  .fav-chip .chip-rm:hover { color: var(--red); }
+
+  /* CATEGORY TABS */
+  .cat-tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .cat-tab {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 5px 12px;
+    border-radius: 3px;
+    border: 1px solid #2c2c3a;
+    background: #111118;
+    color: #606070;
+    cursor: pointer;
+    transition: all 0.1s;
+    user-select: none;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+
+  .cat-tab:hover {
+    color: #a0a0b8;
+    border-color: #404055;
+  }
+
+  .cat-tab.active {
+    background: var(--accent);
+    color: #000;
+    border-color: var(--accent);
+    box-shadow: 0 0 10px rgba(232,255,0,0.35), inset 0 1px 0 rgba(255,255,255,0.3);
+  }
+
+  /* PAD GRID */
+  .pad-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 7px;
+  }
+
+  .pad-btn {
+    background: #111118;
+    border: 1px solid #2c2c3a;
+    border-radius: 6px;
+    padding: 11px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    transition: all 0.08s;
+    user-select: none;
+    position: relative;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+
+  /* top-edge LED seam per category */
+  .pad-btn::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 10%; right: 10%;
+    height: 1px;
+    border-radius: 4px;
+    opacity: 0.55;
+  }
+
+  .pad-btn[data-cat="drums"]::before  { background: #ff3b3b; }
+  .pad-btn[data-cat="perc"]::before   { background: #ff9100; }
+  .pad-btn[data-cat="bass"]::before   { background: #00e676; }
+  .pad-btn[data-cat="synth"]::before  { background: #29b6f6; }
+  .pad-btn[data-cat="keys"]::before   { background: #ce93d8; }
+  .pad-btn[data-cat="fx"]::before     { background: #26c6da; }
+  .pad-btn[data-cat="foley"]::before  { background: #f48fb1; }
+  .pad-btn[data-cat="vox"]::before    { background: #ff6070; }
+
+  .pad-btn:active, .pad-btn.firing {
+    transform: scale(0.91);
+    filter: brightness(1.6);
+  }
+
+  .pad-icon { font-size: 1.2rem; line-height: 1; }
+
+  .pad-name {
+    font-family: var(--sans);
+    font-weight: 800;
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    text-align: center;
+    color: #b0b0c0;
+  }
+
+  .pad-star {
+    position: absolute;
+    top: 3px;
+    right: 5px;
+    font-size: 0.65rem;
+    color: #2e2e3a;
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px;
+    transition: color 0.1s;
+  }
+
+  .pad-star.starred { color: var(--accent); text-shadow: 0 0 6px rgba(232,255,0,0.6); }
+  .pad-star:hover   { color: #888; }
+  .pad-star.starred:hover { color: #b8cc00; }
+
+  /* pad border + glow on fire per category */
+  .pad-btn[data-cat="drums"]  { border-color: #3a1e1e; }
+  .pad-btn[data-cat="perc"]   { border-color: #3a2800; }
+  .pad-btn[data-cat="bass"]   { border-color: #0e3018; }
+  .pad-btn[data-cat="synth"]  { border-color: #0e1830; }
+  .pad-btn[data-cat="keys"]   { border-color: #22103a; }
+  .pad-btn[data-cat="fx"]     { border-color: #0e2c30; }
+  .pad-btn[data-cat="foley"]  { border-color: #301020; }
+  .pad-btn[data-cat="vox"]    { border-color: #301010; }
+
+  .pad-btn.firing[data-cat="drums"]  { border-color: var(--red);    background: #1e0a0a; box-shadow: 0 0 12px rgba(255,59,59,0.4),    inset 0 1px 0 rgba(255,59,59,0.2); }
+  .pad-btn.firing[data-cat="perc"]   { border-color: var(--orange); background: #1a1000; box-shadow: 0 0 12px rgba(255,145,0,0.4),   inset 0 1px 0 rgba(255,145,0,0.2); }
+  .pad-btn.firing[data-cat="bass"]   { border-color: var(--green);  background: #081a0e; box-shadow: 0 0 12px rgba(0,230,118,0.4),   inset 0 1px 0 rgba(0,230,118,0.2); }
+  .pad-btn.firing[data-cat="synth"]  { border-color: var(--blue);   background: #080e1a; box-shadow: 0 0 12px rgba(41,182,246,0.4),  inset 0 1px 0 rgba(41,182,246,0.2); }
+  .pad-btn.firing[data-cat="keys"]   { border-color: var(--purple); background: #120a1e; box-shadow: 0 0 12px rgba(206,147,216,0.4), inset 0 1px 0 rgba(206,147,216,0.2); }
+  .pad-btn.firing[data-cat="fx"]     { border-color: var(--teal);   background: #081418; box-shadow: 0 0 12px rgba(38,198,218,0.4),  inset 0 1px 0 rgba(38,198,218,0.2); }
+  .pad-btn.firing[data-cat="foley"]  { border-color: var(--pink);   background: #180a10; box-shadow: 0 0 12px rgba(244,143,177,0.4), inset 0 1px 0 rgba(244,143,177,0.2); }
+  .pad-btn.firing[data-cat="vox"]    { border-color: #ff6070;       background: #1a0808; box-shadow: 0 0 12px rgba(255,96,112,0.4),  inset 0 1px 0 rgba(255,96,112,0.2); }
+
+  /* SLOT GRID */
+  .slot-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 7px;
+  }
+
+  .slot-btn {
+    background: #111118;
+    border: 1px solid #2c2c3a;
+    border-radius: 4px;
+    padding: 8px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color .15s, background .15s, box-shadow .15s;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  .slot-btn:active { transform: scale(0.96); }
+  .slot-btn.has-loop    { border-color: #3c3c4e; }
+  .slot-btn.active-slot { border-color: var(--accent); background: #151500; box-shadow: 0 0 10px rgba(232,255,0,0.2), inset 0 1px 0 rgba(232,255,0,0.15); }
+
+  .slot-num {
+    font-family: var(--sans);
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: #444455;
+    line-height: 1;
+  }
+
+  .slot-btn.has-loop .slot-num    { color: var(--text); }
+  .slot-btn.active-slot .slot-num { color: var(--accent); text-shadow: 0 0 8px rgba(232,255,0,0.5); }
+
+  .slot-dur { font-family: var(--mono); font-size: 0.52rem; color: var(--dim); }
+
+  .slot-indicator {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: #222230;
+  }
+
+  .slot-btn.has-loop .slot-indicator    { background: var(--green); box-shadow: 0 0 5px rgba(0,230,118,0.6); }
+  .slot-btn.active-slot .slot-indicator { background: var(--accent); box-shadow: 0 0 6px rgba(232,255,0,0.7); }
+
+  /* CONTROLS */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+  }
+
+  .controls.three-col { grid-template-columns: 1fr 1fr 1fr; }
+
+  .ctrl-btn {
+    background: #111118;
+    border: 1px solid #2c2c3a;
+    border-radius: 4px;
+    padding: 13px 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    transition: all 0.1s;
+    user-select: none;
+    font-family: var(--sans);
+    color: var(--text);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* top seam per button type */
+  .btn-record::before  { content:''; position:absolute; top:0;left:15%;right:15%;height:1px;background:rgba(255,59,59,0.5); }
+  .btn-overdub::before { content:''; position:absolute; top:0;left:15%;right:15%;height:1px;background:rgba(255,145,0,0.5); }
+  .btn-play::before    { content:''; position:absolute; top:0;left:15%;right:15%;height:1px;background:rgba(0,230,118,0.5); }
+  .btn-stop::before    { content:''; position:absolute; top:0;left:15%;right:15%;height:1px;background:rgba(41,182,246,0.4); }
+  .btn-undo::before    { content:''; position:absolute; top:0;left:15%;right:15%;height:1px;background:rgba(255,255,255,0.12); }
+  .btn-clear::before   { content:''; position:absolute; top:0;left:15%;right:15%;height:1px;background:rgba(255,59,59,0.4); }
+  .btn-download::before{ content:''; position:absolute; top:0;left:15%;right:15%;height:1px;background:rgba(41,182,246,0.4); }
+
+  .ctrl-btn:active { transform: scale(0.97); }
+  .ctrl-btn .icon    { font-size: 1.3rem; line-height: 1; }
+  .ctrl-btn .label   { font-weight: 800; font-size: 0.8rem; letter-spacing: 0.1em; text-transform: uppercase; }
+  .ctrl-btn .sublabel { font-family: var(--mono); font-size: 0.55rem; color: var(--dim); text-align: center; }
+
+  .btn-record  { border-color: #3a1e1e; }
+  .btn-overdub { border-color: #3a2800; }
+  .btn-play    { border-color: #0e3018; }
+
+  .btn-record.active-btn, .btn-record:hover  { border-color: var(--red);    background: #1e0a0a; box-shadow: 0 0 12px rgba(255,59,59,0.25),  inset 0 1px 0 rgba(255,59,59,0.15); }
+  .btn-overdub.active-btn,.btn-overdub:hover { border-color: var(--orange); background: #1a1000; box-shadow: 0 0 12px rgba(255,145,0,0.25),  inset 0 1px 0 rgba(255,145,0,0.15); }
+  .btn-play.active-btn,   .btn-play:hover    { border-color: var(--green);  background: #081808; box-shadow: 0 0 12px rgba(0,230,118,0.25),  inset 0 1px 0 rgba(0,230,118,0.15); }
+  .btn-stop:hover     { border-color: var(--blue);  background: #080e18; box-shadow: 0 0 10px rgba(41,182,246,0.2); }
+  .btn-undo:hover     { border-color: #666688; background: #181820; }
+  .btn-clear:hover    { border-color: var(--red);   background: #1a0808; }
+  .btn-download:hover { border-color: var(--blue);  background: #080e18; }
+
+  .btn-disabled { opacity: 0.22; pointer-events: none; }
+
+  /* VOL ROW */
+  .vol-row {
+    background: #111118;
+    border: 1px solid #2c2c3a;
+    border-radius: 4px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  }
+
+  .vol-row label { font-family: var(--mono); font-size: 0.6rem; color: #787888; width: 90px; flex-shrink: 0; }
+  .vol-row input[type=range] { flex: 1; accent-color: var(--accent); cursor: pointer; }
+  .vol-val { font-family: var(--mono); font-size: 0.6rem; color: var(--text); width: 28px; text-align: right; }
+
+  .rec-hint {
+    background: #160808;
+    border: 1px solid #4a1a1a;
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    color: #ff8080;
+    text-align: center;
+    display: none;
+    box-shadow: 0 0 10px rgba(255,59,59,0.15);
+  }
+
+  .rec-hint.visible { display: block; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>LOOPER</h1>
+  <span>SYNTH / PAD MODE</span>
+</header>
+
+<div class="main">
+
+  <!-- STATUS -->
+  <div class="status-bar">
+    <div class="status-dot idle" id="status-dot"></div>
+    <div class="status-text">
+      <div class="status-label" id="status-label">READY</div>
+      <div class="status-sub"  id="status-sub">Tap a pad to begin</div>
+    </div>
+    <div class="loop-counter">
+      <div style="font-size:.58rem;color:var(--dim)">LOOPS</div>
+      <div id="loop-count" style="font-size:.9rem;font-family:var(--mono);color:var(--text)">0</div>
+    </div>
+  </div>
+
+  <!-- BAND -->
+  <div id="band-wrap" hidden>
+    <div class="section-label" style="margin-bottom:10px">Band</div>
+    <div class="band-box">
+      <div class="band-row">
+        <button class="band-go" id="band-play">&#9654; PLAY</button>
+        <input type="text" class="band-room" id="band-room" maxlength="24" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="room code" aria-label="Room code">
+        <span class="band-text" id="band-clock">clock off</span>
+      </div>
+      <div class="band-row"><span class="band-text" id="band-status">band off</span></div>
+      <div class="band-row"><span class="band-text">GROOVE</span><div class="band-chips" id="band-grooves"></div></div>
+      <div class="band-row">
+        <span class="band-text">TIMING</span>
+        <button class="band-btn" id="band-trim-dn" aria-label="Play earlier">-</button>
+        <span class="band-trim" id="band-trim">0 ms</span>
+        <button class="band-btn" id="band-trim-up" aria-label="Play later">+</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WAVEFORM -->
+  <div class="waveform-wrap">
+    <canvas id="waveform" height="50"></canvas>
+    <canvas id="progress-bar" height="5"></canvas>
+    <div class="time-labels">
+      <span id="time-cur">0:00.0</span>
+      <span id="time-total">0:00.0</span>
+    </div>
+  </div>
+
+  <!-- FAVORITES -->
+  <div class="section-label">Favorites</div>
+  <div class="fav-section">
+    <div class="fav-row" id="fav-row">
+      <span class="fav-empty" id="fav-empty">Tap the star on any pad to add it here</span>
+    </div>
+  </div>
+
+  <!-- SOUND PADS -->
+  <div class="section-label">Sound Pads</div>
+  <div class="rec-hint" id="rec-hint">RECORDING -- tap pads to build loop, then press STOP</div>
+  <div class="cat-tabs" id="cat-tabs"></div>
+  <div class="pad-grid" id="pad-grid"></div>
+
+  <!-- TRANSPORT -->
+  <div class="section-label">Transport</div>
+  <div class="controls">
+    <button class="ctrl-btn btn-record" id="btn-record">
+      <span class="icon">⏺</span>
+      <span class="label">Record</span>
+      <span class="sublabel">Arm + tap pads</span>
+    </button>
+    <button class="ctrl-btn btn-stop btn-disabled" id="btn-stop">
+      <span class="icon">⏹</span>
+      <span class="label">Stop</span>
+      <span class="sublabel">End / stop loop</span>
+    </button>
+    <button class="ctrl-btn btn-play btn-disabled" id="btn-play">
+      <span class="icon">▶</span>
+      <span class="label">Play</span>
+      <span class="sublabel">Play active slot</span>
+    </button>
+    <button class="ctrl-btn btn-overdub btn-disabled" id="btn-overdub">
+      <span class="icon">⊕</span>
+      <span class="label">Overdub</span>
+      <span class="sublabel">Layer over loop</span>
+    </button>
+  </div>
+
+  <!-- EDITING -->
+  <div class="section-label">Editing</div>
+  <div class="controls three-col">
+    <button class="ctrl-btn btn-undo btn-disabled" id="btn-undo">
+      <span class="icon">↩</span><span class="label">Undo</span>
+      <span class="sublabel">Remove last dub</span>
+    </button>
+    <button class="ctrl-btn btn-clear btn-disabled" id="btn-clear">
+      <span class="icon">✕</span><span class="label">Clear</span>
+      <span class="sublabel">Erase slot</span>
+    </button>
+    <button class="ctrl-btn btn-download btn-disabled" id="btn-download">
+      <span class="icon">↓</span><span class="label">Export</span>
+      <span class="sublabel">Save as WAV</span>
+    </button>
+  </div>
+
+  <!-- SLOTS -->
+  <div class="section-label">Memory Slots</div>
+  <div class="slot-grid" id="slot-grid"></div>
+
+  <!-- LEVELS -->
+  <div class="section-label">Levels</div>
+  <div class="vol-row">
+    <label>PLAYBACK VOL</label>
+    <input type="range" min="0" max="100" value="80" id="vol-playback">
+    <span class="vol-val" id="vol-pb-val">80</span>
+  </div>
+  <div class="vol-row">
+    <label>OVERDUB MIX</label>
+    <input type="range" min="0" max="100" value="100" id="vol-overdub">
+    <span class="vol-val" id="vol-od-val">100</span>
+  </div>
+
+</div><!-- /main -->
+
+<script src="looper-v2-config.js"></script>
+<script src="looper-v2-sync.js"></script>
+<script src="looper-v2-clock.js"></script>
+<script>
+// ============================================================
+//  AUDIO CONTEXT
+// ============================================================
+
+let audioCtx = null;
+
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+// ============================================================
+//  SOUND BANK  (cat: drums | perc | bass | synth | keys | fx | foley | vox)
+// ============================================================
+
+const SOUNDS = [
+  // ---- DRUMS ----
+  {
+    id: 'kick1', name: 'KICK', icon: '\uD83E\uDD41', cat: 'drums',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.45, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=Math.sin(2*Math.PI*(180*Math.exp(-t*28))*t)*Math.exp(-t*14)*0.95;}
+      return b;
+    }
+  },
+  {
+    id: 'kick2', name: 'SUB KICK', icon: '\uD83D\uDCA5', cat: 'drums',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.6, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=Math.sin(2*Math.PI*(60*Math.exp(-t*12))*t)*Math.exp(-t*7)*0.98;}
+      return b;
+    }
+  },
+  {
+    id: 'kick3', name: 'PUNCHY', icon: '\uD83D\uDC4A', cat: 'drums',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.3, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;const click=(Math.random()*2-1)*Math.exp(-t*200);const body=Math.sin(2*Math.PI*(150*Math.exp(-t*40))*t)*Math.exp(-t*20);d[i]=(click*0.3+body*0.9);}
+      return b;
+    }
+  },
+  {
+    id: 'snare1', name: 'SNARE', icon: '\uD83D\uDD14', cat: 'drums',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.3, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=(Math.sin(2*Math.PI*220*t)*Math.exp(-t*30)*0.4+(Math.random()*2-1)*Math.exp(-t*18)*0.7)*0.85;}
+      return b;
+    }
+  },
+  {
+    id: 'snare2', name: 'RIM', icon: '\uD83E\uDD62', cat: 'drums',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.08, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=(Math.sin(2*Math.PI*1200*t)+Math.sin(2*Math.PI*1800*t))*0.5*Math.exp(-t*80);}
+      return b;
+    }
+  },
+  {
+    id: 'snare3', name: 'BRUSH', icon: '\uD83D\uDD8C\uFE0F', cat: 'drums',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.25, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=(Math.random()*2-1)*Math.exp(-t*22)*0.5+Math.sin(2*Math.PI*180*t)*Math.exp(-t*35)*0.2;}
+      return b;
+    }
+  },
+  {
+    id: 'hhc', name: 'HI-HAT', icon: '\uD83C\uDFB5', cat: 'drums',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.1, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=(Math.random()*2-1)*Math.exp(-t*60)*0.7;}
+      return b;
+    }
+  },
+  {
+    id: 'hho', name: 'OPEN HH', icon: '\uD83D\uDD13', cat: 'drums',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.55, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=(Math.random()*2-1)*Math.exp(-t*7)*0.6;}
+      return b;
+    }
+  },
+  {
+    id: 'ride', name: 'RIDE', icon: '\uD83E\uDE98', cat: 'drums',
+    render(ctx) {
+      const n = ctx.sampleRate * 1.0, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;const ring=Math.sin(2*Math.PI*740*t)*0.3+Math.sin(2*Math.PI*1480*t)*0.15;const noise=(Math.random()*2-1)*0.1;d[i]=(ring+noise)*Math.exp(-t*4)*0.7;}
+      return b;
+    }
+  },
+  {
+    id: 'crash', name: 'CRASH', icon: '\uD83D\uDCAB', cat: 'drums',
+    render(ctx) {
+      const n = ctx.sampleRate * 1.5, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=(Math.random()*2-1)*Math.exp(-t*3.5)*0.75;}
+      return b;
+    }
+  },
+  {
+    id: 'tom1', name: 'HI TOM', icon: '\uD83D\uDFE4', cat: 'drums',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.35, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=Math.sin(2*Math.PI*(300*Math.exp(-t*18))*t)*Math.exp(-t*10)*0.8;}
+      return b;
+    }
+  },
+  {
+    id: 'tom2', name: 'LO TOM', icon: '\uD83D\uDFEB', cat: 'drums',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.5, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=Math.sin(2*Math.PI*(140*Math.exp(-t*12))*t)*Math.exp(-t*7)*0.85;}
+      return b;
+    }
+  },
+
+  // ---- PERC ----
+  {
+    id: 'clap', name: 'CLAP', icon: '\uD83D\uDC4F', cat: 'perc',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.18, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;const b1=(Math.random()*2-1)*Math.exp(-t*120)*(t<0.005?1:0);const b2=(Math.random()*2-1)*Math.exp(-(t-0.012)*60)*(t>0.008?1:0);d[i]=(b1+b2)*0.8;}
+      return b;
+    }
+  },
+  {
+    id: 'clave', name: 'CLAVE', icon: '\uD83E\uDEB5', cat: 'perc',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.06, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=(Math.sin(2*Math.PI*2500*t)+Math.sin(2*Math.PI*3300*t))*0.5*Math.exp(-t*120)*0.8;}
+      return b;
+    }
+  },
+  {
+    id: 'cowbell', name: 'COWBELL', icon: '\uD83D\uDD14', cat: 'perc',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.7, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=(Math.sin(2*Math.PI*562*t)+Math.sin(2*Math.PI*845*t))*0.5*Math.exp(-t*6)*0.7;}
+      return b;
+    }
+  },
+  {
+    id: 'shaker', name: 'SHAKER', icon: '\uD83E\uDD5A', cat: 'perc',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.15, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;const env=Math.sin(Math.PI*t/0.15);d[i]=(Math.random()*2-1)*env*0.45;}
+      return b;
+    }
+  },
+  {
+    id: 'tamb', name: 'TAMBR', icon: '\uD83E\uDE87', cat: 'perc',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.2, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;const jingle=Math.sin(2*Math.PI*3200*t)*Math.exp(-t*35)*0.5;const noise=(Math.random()*2-1)*Math.exp(-t*20)*0.4;d[i]=jingle+noise;}
+      return b;
+    }
+  },
+  {
+    id: 'congas', name: 'CONGA', icon: '\uD83E\uDD41', cat: 'perc',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.3, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=Math.sin(2*Math.PI*(400*Math.exp(-t*15))*t)*Math.exp(-t*12)*0.8;}
+      return b;
+    }
+  },
+
+  // ---- BASS ----
+  {
+    id: 'bass1', name: 'BASS', icon: '~\uFE0F', cat: 'bass',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.6, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=Math.sin(2*Math.PI*(80+40*Math.exp(-t*10))*t)*Math.exp(-t*5)*0.9;}
+      return b;
+    }
+  },
+  {
+    id: 'bass2', name: 'SUB', icon: '\uD83D\uDCC9', cat: 'bass',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.9, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=Math.sin(2*Math.PI*55*t)*Math.exp(-t*3)*0.95;}
+      return b;
+    }
+  },
+  {
+    id: 'bass3', name: 'PLUCK', icon: '\uD83C\uDFB8', cat: 'bass',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.5, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;const saw=((110*t)%1)*2-1;d[i]=saw*Math.exp(-t*8)*0.7;}
+      return b;
+    }
+  },
+  {
+    id: 'bass4', name: 'FRETLESS', icon: '\uD83C\uDFB5', cat: 'bass',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.8, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;const f=98*(1+0.005*Math.sin(2*Math.PI*5*t));d[i]=Math.sin(2*Math.PI*f*t)*Math.exp(-t*4)*0.8;}
+      return b;
+    }
+  },
+  {
+    id: 'bass5', name: '808', icon: '\uD83C\uDF9A\uFE0F', cat: 'bass',
+    render(ctx) {
+      const n = ctx.sampleRate * 1.2, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;const f=50+200*Math.exp(-t*30);d[i]=Math.sin(2*Math.PI*f*t)*Math.exp(-t*2)*0.95;}
+      return b;
+    }
+  },
+
+  // ---- SYNTH ----
+  {
+    id: 'lead1', name: 'LEAD', icon: '\uD83C\uDFB9', cat: 'synth',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.5, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;const saw=((440*t)%1)*2-1;d[i]=saw*Math.exp(-t*4)*0.5;}
+      return b;
+    }
+  },
+  {
+    id: 'lead2', name: 'SQUARE', icon: '\uD83D\uDFE6', cat: 'synth',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.5, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=(Math.sin(2*Math.PI*440*t)>0?1:-1)*Math.exp(-t*4)*0.45;}
+      return b;
+    }
+  },
+  {
+    id: 'lead3', name: 'SINE', icon: '~', cat: 'synth',
+    render(ctx) {
+      const n = ctx.sampleRate * 0.6, b = ctx.createBuffer(1,n,ctx.sampleRate), d = b.getChannelData(0);
+      for (let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=Math.sin(2*Math.PI*440*t)*Math.exp(-t*3)*0.7;}
+      return b;
+    }
+  },
+  {
+    id: 'chord1', name: 'CHORD', icon: '\uD83C\uDFB8', cat: 'synth',
+    render(ctx) {
+      const n=ctx.sampleRate*0.9,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      const fr=[261.6,329.6,392.0];
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;let s=0;for(const f of fr)s+=Math.sin(2*Math.PI*f*t);d[i]=(s/fr.length)*Math.exp(-t*3.5)*0.7;}
+      return b;
+    }
+  },
+  {
+    id: 'chord2', name: 'MIN CHORD', icon: '\uD83C\uDFBB', cat: 'synth',
+    render(ctx) {
+      const n=ctx.sampleRate*0.9,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      const fr=[261.6,311.1,392.0];
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;let s=0;for(const f of fr)s+=Math.sin(2*Math.PI*f*t);d[i]=(s/fr.length)*Math.exp(-t*3.5)*0.7;}
+      return b;
+    }
+  },
+  {
+    id: 'arp1', name: 'ARP UP', icon: '\uD83D\uDCC8', cat: 'synth',
+    render(ctx) {
+      const sr=ctx.sampleRate,n=sr*0.6,b=ctx.createBuffer(1,n,sr),d=b.getChannelData(0);
+      const notes=[261.6,329.6,392.0,523.2];
+      for(let i=0;i<n;i++){const t=i/sr;const ni=Math.min(Math.floor(t/0.15),notes.length-1);const f=notes[ni];d[i]=Math.sin(2*Math.PI*f*t)*Math.exp(-(t%0.15)*20)*0.6;}
+      return b;
+    }
+  },
+  {
+    id: 'arp2', name: 'ARP DN', icon: '\uD83D\uDCC9', cat: 'synth',
+    render(ctx) {
+      const sr=ctx.sampleRate,n=sr*0.6,b=ctx.createBuffer(1,n,sr),d=b.getChannelData(0);
+      const notes=[523.2,392.0,329.6,261.6];
+      for(let i=0;i<n;i++){const t=i/sr;const ni=Math.min(Math.floor(t/0.15),notes.length-1);const f=notes[ni];d[i]=Math.sin(2*Math.PI*f*t)*Math.exp(-(t%0.15)*20)*0.6;}
+      return b;
+    }
+  },
+  {
+    id: 'pad1', name: 'PAD', icon: '\u2601\uFE0F', cat: 'synth',
+    render(ctx) {
+      const n=ctx.sampleRate*1.5,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      const fr=[220,277.2,329.6];
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;let s=0;for(const f of fr)s+=Math.sin(2*Math.PI*f*t+Math.sin(2*Math.PI*0.5*t)*0.2);const env=Math.min(t*2,1)*Math.exp(-t*1.2);d[i]=(s/fr.length)*env*0.5;}
+      return b;
+    }
+  },
+  {
+    id: 'stab', name: 'STAB', icon: '\u26A1', cat: 'synth',
+    render(ctx) {
+      const n=ctx.sampleRate*0.2,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      const fr=[261.6,392.0,523.2];
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;let s=0;for(const f of fr)s+=((f*t)%1)*2-1;d[i]=(s/fr.length)*Math.exp(-t*25)*0.6;}
+      return b;
+    }
+  },
+
+  // ---- KEYS ----
+  {
+    id: 'piano', name: 'PIANO', icon: '\uD83C\uDFB9', cat: 'keys',
+    render(ctx) {
+      const n=ctx.sampleRate*1.2,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      const f=261.6;
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;const h=Math.sin(2*Math.PI*f*t)+Math.sin(2*Math.PI*f*2*t)*0.4+Math.sin(2*Math.PI*f*3*t)*0.2+Math.sin(2*Math.PI*f*4*t)*0.1;d[i]=(h/1.7)*Math.exp(-t*3)*0.7;}
+      return b;
+    }
+  },
+  {
+    id: 'epiano', name: 'E-PIANO', icon: '\uD83C\uDFB5', cat: 'keys',
+    render(ctx) {
+      const n=ctx.sampleRate*1.0,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      const f=329.6;
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;const mod=Math.sin(2*Math.PI*f*4*t)*0.8;const car=Math.sin(2*Math.PI*f*t+mod);d[i]=car*Math.exp(-t*2.5)*0.65;}
+      return b;
+    }
+  },
+  {
+    id: 'organ', name: 'ORGAN', icon: '\u26EA', cat: 'keys',
+    render(ctx) {
+      const n=ctx.sampleRate*1.0,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      const f=261.6;
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;const s=Math.sin(2*Math.PI*f*t)+Math.sin(2*Math.PI*f*2*t)*0.9+Math.sin(2*Math.PI*f*3*t)*0.6+Math.sin(2*Math.PI*f*4*t)*0.4;const env=Math.min(t*20,1)*(1-Math.max(0,(t-0.9)*10));d[i]=(s/2.9)*env*0.55;}
+      return b;
+    }
+  },
+  {
+    id: 'marimba', name: 'MARIMBA', icon: '\uD83E\uDE87', cat: 'keys',
+    render(ctx) {
+      const n=ctx.sampleRate*0.8,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      const f=523.2;
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=(Math.sin(2*Math.PI*f*t)+Math.sin(2*Math.PI*f*4*t)*0.15)*Math.exp(-t*5)*0.7;}
+      return b;
+    }
+  },
+  {
+    id: 'vibe', name: 'VIBES', icon: '\u2728', cat: 'keys',
+    render(ctx) {
+      const n=ctx.sampleRate*1.5,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      const f=440;
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;const vib=Math.sin(2*Math.PI*5*t)*0.01;d[i]=Math.sin(2*Math.PI*(f+vib)*t)*Math.exp(-t*2)*0.65;}
+      return b;
+    }
+  },
+  {
+    id: 'bells', name: 'BELLS', icon: '\uD83D\uDD14', cat: 'keys',
+    render(ctx) {
+      const n=ctx.sampleRate*2.0,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      const partials=[[1,1],[2.756,0.6],[5.404,0.25],[8.933,0.12]];
+      const f=440;
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;let s=0;for(const[r,a]of partials)s+=Math.sin(2*Math.PI*f*r*t)*a*Math.exp(-t*r*1.5);d[i]=s*0.4;}
+      return b;
+    }
+  },
+
+  // ---- FX ----
+  {
+    id: 'riser', name: 'RISER', icon: '\uD83D\uDE80', cat: 'fx',
+    render(ctx) {
+      const n=ctx.sampleRate*1.5,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/n;const f=100+3000*t;d[i]=Math.sin(2*Math.PI*f*(i/ctx.sampleRate))*(t*0.7);}
+      return b;
+    }
+  },
+  {
+    id: 'drop', name: 'DROP', icon: '\uD83D\uDCC9', cat: 'fx',
+    render(ctx) {
+      const n=ctx.sampleRate*1.0,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/n;const f=2000-1900*t;d[i]=Math.sin(2*Math.PI*f*(i/ctx.sampleRate))*Math.exp(-t*2)*0.7;}
+      return b;
+    }
+  },
+  {
+    id: 'zap', name: 'ZAP', icon: '\u26A1', cat: 'fx',
+    render(ctx) {
+      const n=ctx.sampleRate*0.2,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/n;const f=4000-3500*t;d[i]=Math.sin(2*Math.PI*f*(i/ctx.sampleRate))*Math.exp(-t*15)*0.8;}
+      return b;
+    }
+  },
+  {
+    id: 'laser', name: 'LASER', icon: '\uD83D\uDD34', cat: 'fx',
+    render(ctx) {
+      const n=ctx.sampleRate*0.35,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/n;const f=3000-2500*(t*t);const sq=Math.sin(2*Math.PI*f*(i/ctx.sampleRate))>0?1:-1;d[i]=sq*Math.exp(-t*5)*0.7;}
+      return b;
+    }
+  },
+  {
+    id: 'rewind', name: 'REWIND', icon: '\u23EA', cat: 'fx',
+    render(ctx) {
+      const n=ctx.sampleRate*0.8,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/n;const f=800+1200*(1-t);d[i]=(Math.random()*2-1)*0.3+Math.sin(2*Math.PI*f*(i/ctx.sampleRate))*0.4*t;}
+      return b;
+    }
+  },
+  {
+    id: 'cymrev', name: 'REV CYM', icon: '\uD83C\uDF00', cat: 'fx',
+    render(ctx) {
+      const n=ctx.sampleRate*1.2,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/n;d[i]=(Math.random()*2-1)*Math.exp(-(1-t)*6)*0.65;}
+      return b;
+    }
+  },
+  {
+    id: 'glitch', name: 'GLITCH', icon: '\uD83D\uDCFA', cat: 'fx',
+    render(ctx) {
+      const n=ctx.sampleRate*0.3,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;const gate=Math.floor(t*40)%3!==0?1:0;d[i]=(Math.random()*2-1)*gate*0.7;}
+      return b;
+    }
+  },
+  {
+    id: 'whoosh', name: 'WHOOSH', icon: '\uD83D\uDCA8', cat: 'fx',
+    render(ctx) {
+      const n=ctx.sampleRate*0.7,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/n;const env=Math.sin(Math.PI*t);d[i]=(Math.random()*2-1)*env*0.6;}
+      return b;
+    }
+  },
+
+  // ---- FOLEY ----
+  {
+    id: 'click', name: 'CLICK', icon: '\uD83D\uDDB1\uFE0F', cat: 'foley',
+    render(ctx) {
+      const n=ctx.sampleRate*0.02,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=(Math.random()*2-1)*Math.exp(-t*800)*0.9;}
+      return b;
+    }
+  },
+  {
+    id: 'snap', name: 'SNAP', icon: '\uD83E\uDD0C', cat: 'foley',
+    render(ctx) {
+      const n=ctx.sampleRate*0.05,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=(Math.random()*2-1)*Math.exp(-t*150)*0.85;}
+      return b;
+    }
+  },
+  {
+    id: 'thud', name: 'THUD', icon: '\uD83E\uDEA8', cat: 'foley',
+    render(ctx) {
+      const n=ctx.sampleRate*0.25,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;d[i]=(Math.sin(2*Math.PI*60*t)+(Math.random()*2-1)*0.3)*Math.exp(-t*18)*0.9;}
+      return b;
+    }
+  },
+  {
+    id: 'stomp', name: 'STOMP', icon: '\uD83D\uDC5F', cat: 'foley',
+    render(ctx) {
+      const n=ctx.sampleRate*0.3,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;const low=Math.sin(2*Math.PI*80*t)*Math.exp(-t*20);const slap=(Math.random()*2-1)*Math.exp(-t*80)*0.5;d[i]=(low+slap)*0.85;}
+      return b;
+    }
+  },
+  {
+    id: 'glass', name: 'GLASS', icon: '\uD83E\uDD42', cat: 'foley',
+    render(ctx) {
+      const n=ctx.sampleRate*1.8,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      const fr=[523.2,783.99,1046.5];
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;let s=0;for(const f of fr)s+=Math.sin(2*Math.PI*f*t);d[i]=(s/fr.length)*Math.exp(-t*1.2)*0.5;}
+      return b;
+    }
+  },
+
+  // ---- VOX ----
+  {
+    id: 'vox1', name: 'SHOUT', icon: '\uD83D\uDCE2', cat: 'vox',
+    render(ctx) {
+      const n=ctx.sampleRate*0.25,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;const f=300+50*Math.sin(2*Math.PI*8*t);const vow=Math.sin(2*Math.PI*f*t)+Math.sin(2*Math.PI*f*2*t)*0.5+Math.sin(2*Math.PI*900*t)*0.3;d[i]=(vow/1.8)*Math.exp(-t*10)*0.6;}
+      return b;
+    }
+  },
+  {
+    id: 'vox2', name: 'HEY', icon: '\uD83D\uDDE3\uFE0F', cat: 'vox',
+    render(ctx) {
+      const n=ctx.sampleRate*0.35,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;const f=220+20*Math.sin(2*Math.PI*6*t);const vow=Math.sin(2*Math.PI*f*t)*0.8+Math.sin(2*Math.PI*800*t)*0.2;const env=Math.min(t*30,1)*Math.exp(-t*5);d[i]=vow*env*0.55;}
+      return b;
+    }
+  },
+  {
+    id: 'vox3', name: 'BREATH', icon: '\uD83D\uDCA8', cat: 'vox',
+    render(ctx) {
+      const n=ctx.sampleRate*0.5,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/n;const env=Math.sin(Math.PI*t);d[i]=(Math.random()*2-1)*env*0.3;}
+      return b;
+    }
+  },
+  {
+    id: 'vox4', name: 'GRUNT', icon: '\uD83D\uDE24', cat: 'vox',
+    render(ctx) {
+      const n=ctx.sampleRate*0.2,b=ctx.createBuffer(1,n,ctx.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<n;i++){const t=i/ctx.sampleRate;const f=120+30*Math.sin(2*Math.PI*10*t);const noise=(Math.random()*2-1)*0.4;const tone=Math.sin(2*Math.PI*f*t)*0.6;d[i]=(tone+noise)*Math.exp(-t*12)*0.7;}
+      return b;
+    }
+  },
+];
+
+const CATEGORIES = ['ALL','drums','perc','bass','synth','keys','fx','foley','vox'];
+
+let renderedSounds = null;
+let currentCat = 'ALL';
+let favorites = [];
+
+try { favorites = JSON.parse(localStorage.getItem('looper_favs') || '[]'); } catch(e) { favorites = []; }
+
+function saveFavs() {
+  try { localStorage.setItem('looper_favs', JSON.stringify(favorites)); } catch(e) {}
+}
+
+function preRenderSounds() {
+  const ctx = getCtx();
+  renderedSounds = {};
+  for (const s of SOUNDS) {
+    try { renderedSounds[s.id] = s.render(ctx); } catch(e) { console.warn('render fail', s.id, e); renderedSounds[s.id] = ctx.createBuffer(1,1,ctx.sampleRate); }
+  }
+}
+
+// ============================================================
+//  LOOPER STATE
+// ============================================================
+
+const NUM_SLOTS = 8;
+let state = 'idle';
+let activeSlot = 0;
+let loopCount = 0;
+
+let slots = Array.from({length: NUM_SLOTS}, () => ({ buffer: null, undoStack: [], duration: 0 }));
+
+let recSessionStart = 0;
+let recEvents = [];
+let loopDuration = 0;
+let playbackSource = null;
+let loopStartTime = 0;
+let drawLoopActive = false;
+
+// ============================================================
+//  DOM REFS
+// ============================================================
+
+const statusDot   = document.getElementById('status-dot');
+const statusLabel = document.getElementById('status-label');
+const statusSub   = document.getElementById('status-sub');
+const loopCountEl = document.getElementById('loop-count');
+const waveCanvas  = document.getElementById('waveform');
+const progCanvas  = document.getElementById('progress-bar');
+const timeCur     = document.getElementById('time-cur');
+const timeTotal   = document.getElementById('time-total');
+const favRow      = document.getElementById('fav-row');
+const favEmpty    = document.getElementById('fav-empty');
+const catTabsEl   = document.getElementById('cat-tabs');
+const padGridEl   = document.getElementById('pad-grid');
+const slotGridEl  = document.getElementById('slot-grid');
+const recHint     = document.getElementById('rec-hint');
+
+const btnRecord   = document.getElementById('btn-record');
+const btnStop     = document.getElementById('btn-stop');
+const btnPlay     = document.getElementById('btn-play');
+const btnOverdub  = document.getElementById('btn-overdub');
+const btnUndo     = document.getElementById('btn-undo');
+const btnClear    = document.getElementById('btn-clear');
+const btnDownload = document.getElementById('btn-download');
+
+const volPlayback = document.getElementById('vol-playback');
+const volOverdub  = document.getElementById('vol-overdub');
+document.getElementById('vol-pb-val').textContent = volPlayback.value;
+document.getElementById('vol-od-val').textContent = volOverdub.value;
+volPlayback.addEventListener('input', () => document.getElementById('vol-pb-val').textContent = volPlayback.value);
+volOverdub.addEventListener('input',  () => document.getElementById('vol-od-val').textContent = volOverdub.value);
+
+// ============================================================
+//  FIRE PAD
+// ============================================================
+
+function firePad(id, el) {
+  if (!renderedSounds) preRenderSounds();
+  const ctx = getCtx();
+  const buf = renderedSounds[id];
+  if (!buf) return;
+
+  el.classList.add('firing');
+  setTimeout(() => el.classList.remove('firing'), 130);
+
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(ctx.destination);
+  src.start();
+
+  if (state === 'recording' || state === 'overdub') {
+    // BLUE PHONE: v2 while the band plays the loop, a tap is filed at the spot of the loop it landed on
+    const when = bandPlay ? bandPos() : ctx.currentTime - recSessionStart;
+    if (when != null) recEvents.push({ soundId: id, time: when });
+  }
+}
+
+// ============================================================
+//  FAVORITES UI
+// ============================================================
+
+function buildFavRow() {
+  // clear chips (keep the empty span)
+  Array.from(favRow.children).forEach(c => { if (!c.classList.contains('fav-empty')) c.remove(); });
+
+  if (favorites.length === 0) {
+    favEmpty.style.display = '';
+    return;
+  }
+  favEmpty.style.display = 'none';
+
+  for (const id of favorites) {
+    const sound = SOUNDS.find(s => s.id === id);
+    if (!sound) continue;
+
+    const chip = document.createElement('div');
+    chip.className = 'fav-chip';
+    chip.dataset.id = id;
+    chip.dataset.cat = sound.cat;
+    chip.innerHTML = `<span class="chip-icon">${sound.icon}</span><span class="chip-name">${sound.name}</span><span class="chip-rm" title="Remove from favorites">\u2715</span>`;
+
+    chip.addEventListener('pointerdown', e => {
+      if (e.target.classList.contains('chip-rm')) return;
+      e.preventDefault();
+      firePad(id, chip);
+    });
+
+    chip.querySelector('.chip-rm').addEventListener('click', e => {
+      e.stopPropagation();
+      favorites = favorites.filter(f => f !== id);
+      saveFavs();
+      buildFavRow();
+      // update star in pad grid
+      const star = padGridEl.querySelector(`.pad-star[data-id="${id}"]`);
+      if (star) star.classList.remove('starred');
+    });
+
+    favRow.appendChild(chip);
+  }
+}
+
+// ============================================================
+//  CATEGORY TABS
+// ============================================================
+
+function buildCatTabs() {
+  catTabsEl.innerHTML = '';
+  for (const cat of CATEGORIES) {
+    const btn = document.createElement('button');
+    btn.className = 'cat-tab' + (cat === currentCat ? ' active' : '');
+    btn.textContent = cat === 'ALL' ? 'ALL' : cat.toUpperCase();
+    btn.addEventListener('click', () => {
+      currentCat = cat;
+      buildCatTabs();
+      buildPadGrid();
+    });
+    catTabsEl.appendChild(btn);
+  }
+}
+
+// ============================================================
+//  PAD GRID
+// ============================================================
+
+function buildPadGrid() {
+  padGridEl.innerHTML = '';
+  const visible = currentCat === 'ALL' ? SOUNDS : SOUNDS.filter(s => s.cat === currentCat);
+
+  for (const sound of visible) {
+    const btn = document.createElement('button');
+    btn.className = 'pad-btn';
+    btn.dataset.cat = sound.cat;
+    btn.dataset.id  = sound.id;
+
+    const starred = favorites.includes(sound.id);
+    btn.innerHTML = `
+      <span class="pad-star${starred ? ' starred' : ''}" data-id="${sound.id}" title="Add to favorites">\u2605</span>
+      <span class="pad-icon">${sound.icon}</span>
+      <span class="pad-name">${sound.name}</span>
+    `;
+
+    btn.addEventListener('pointerdown', e => {
+      if (e.target.classList.contains('pad-star')) return;
+      e.preventDefault();
+      firePad(sound.id, btn);
+    });
+
+    btn.querySelector('.pad-star').addEventListener('click', e => {
+      e.stopPropagation();
+      const star = e.currentTarget;
+      if (favorites.includes(sound.id)) {
+        favorites = favorites.filter(f => f !== sound.id);
+        star.classList.remove('starred');
+      } else {
+        favorites.push(sound.id);
+        star.classList.add('starred');
+      }
+      saveFavs();
+      buildFavRow();
+    });
+
+    padGridEl.appendChild(btn);
+  }
+}
+
+// ============================================================
+//  SLOT UI
+// ============================================================
+
+function buildSlots() {
+  slotGridEl.innerHTML = '';
+  for (let i = 0; i < NUM_SLOTS; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'slot-btn' + (i === activeSlot ? ' active-slot' : '') + (slots[i].buffer ? ' has-loop' : '');
+    btn.innerHTML = `<div class="slot-num">${i+1}</div><div class="slot-indicator"></div><div class="slot-dur">${slots[i].buffer ? fmtTime(slots[i].duration) : '--'}</div>`;
+    btn.addEventListener('click', () => selectSlot(i));
+    slotGridEl.appendChild(btn);
+  }
+}
+
+function refreshSlot(i) {
+  const btn = slotGridEl.querySelectorAll('.slot-btn')[i];
+  if (!btn) return;
+  btn.className = 'slot-btn' + (i === activeSlot ? ' active-slot' : '') + (slots[i].buffer ? ' has-loop' : '');
+  btn.querySelector('.slot-dur').textContent = slots[i].buffer ? fmtTime(slots[i].duration) : '--';
+}
+
+function selectSlot(i) {
+  if (state === 'recording' || state === 'overdub') return;
+  stopPlayback(false);
+  activeSlot = i;
+  loopCount = 0;
+  loopCountEl.textContent = 0;
+  buildSlots();
+  updateStatus();
+  updateButtons();
+  drawWaveform();
+  timeCur.textContent  = '0:00.0';
+  timeTotal.textContent = slots[i].buffer ? fmtTime(slots[i].duration) : '0:00.0';
+}
+
+// ============================================================
+//  STATUS + BUTTONS
+// ============================================================
+
+const STATUS_MAP = {
+  idle:      { label: 'READY',       sub: 'Tap a pad to begin',           dot: 'idle' },
+  recording: { label: 'RECORDING',   sub: 'Tap pads -- press STOP to end', dot: 'recording' },
+  playing:   { label: 'PLAYING',     sub: 'Loop playback active',          dot: 'playing' },
+  overdub:   { label: 'OVERDUBBING', sub: 'Tap pads to layer, then STOP',  dot: 'overdub' },
+  paused:    { label: 'PAUSED',      sub: 'Press Play to resume',          dot: 'paused' },
+};
+
+function updateStatus() {
+  const s = STATUS_MAP[state] || STATUS_MAP.idle;
+  statusDot.className  = 'status-dot ' + s.dot;
+  statusLabel.textContent = s.label;
+  statusSub.textContent   = s.sub;
+}
+
+function updateButtons() {
+  const hasLoop = !!slots[activeSlot].buffer;
+  const isRec   = state === 'recording';
+  const isDub   = state === 'overdub';
+  const isPlay  = state === 'playing';
+  const hasUndo = slots[activeSlot].undoStack.length > 0;
+
+  setBtn(btnRecord,   !isRec && !isDub,                       isRec);
+  setBtn(btnStop,     isRec || isPlay || isDub);
+  setBtn(btnPlay,     hasLoop && !isPlay && !isRec && !isDub,  isPlay);
+  setBtn(btnOverdub,  hasLoop && !isRec && !isDub,             isDub);
+  setBtn(btnUndo,     hasLoop && hasUndo && !isRec && !isDub && !isPlay);
+  setBtn(btnClear,    hasLoop && !isRec && !isDub && !isPlay);
+  setBtn(btnDownload, hasLoop && !isRec && !isDub);
+
+  recHint.className = 'rec-hint' + (isRec || isDub ? ' visible' : '');
+}
+
+function setBtn(btn, enabled, active=false) {
+  btn.classList.toggle('btn-disabled', !enabled);
+  btn.classList.toggle('active-btn',   active);
+}
+
+// ============================================================
+//  RECORDING
+// ============================================================
+
+function startRecording() {
+  if (!renderedSounds) preRenderSounds();
+  const ctx = getCtx();
+  recEvents = [];
+  recSessionStart = ctx.currentTime;
+  // BLUE PHONE: v2 while the band loop runs, the recording counts from the bar line just passed
+  bandRec = null;
+  if (bandLocked()) {
+    const bar = bandBarAt(bandRoom, bandClock.now());
+    bandRec = { bar: bar, tempo: bandTempoAt(bandRoom, bar) };
+    recSessionStart = bandAudioAt(bandBarTime(bandRoom, bar));
+    bandBeat();
+  }
+  state = 'recording';
+  updateStatus();
+  updateButtons();
+}
+
+function stopRecording() {
+  const ctx = getCtx();
+  let duration = ctx.currentTime - recSessionStart;
+
+  if (recEvents.length === 0 || duration < 0.05) {
+    state = slots[activeSlot].buffer ? 'paused' : 'idle';
+    updateStatus();
+    updateButtons();
+    return;
+  }
+
+  // BLUE PHONE: v2 a recording made with the band is trimmed to whole bars
+  let bars = 0, anchor = null;
+  if (bandRec) {
+    const barSec = bandBarMs(bandRec.tempo) / 1000;
+    bars = Math.max(1, Math.round(duration / barSec));
+    duration = bars * barSec;
+    anchor = bandRec.bar;
+    recEvents.forEach(e => { e.time = ((e.time % duration) + duration) % duration; });
+    bandRec = null;
+  }
+
+  const rendered = renderEvents(recEvents, duration, 1.0);
+  slots[activeSlot].undoStack = [];
+  slots[activeSlot].buffer   = rendered;
+  slots[activeSlot].duration = duration;
+  slots[activeSlot].bars     = bars;
+  slots[activeSlot].anchor   = anchor;
+  loopDuration = duration;
+
+  refreshSlot(activeSlot);
+  drawWaveform();
+  loopCount = 0;
+  loopCountEl.textContent = 0;
+  state = 'paused';
+  updateStatus();
+  updateButtons();
+  startPlayback();
+}
+
+// ============================================================
+//  OVERDUB
+// ============================================================
+
+function startOverdub() {
+  if (!slots[activeSlot].buffer) return;
+  if (!renderedSounds) preRenderSounds();
+  const ctx = getCtx();
+
+  slots[activeSlot].undoStack.push(slots[activeSlot].buffer);
+  recEvents = [];
+  recSessionStart = ctx.currentTime;
+  loopDuration = slots[activeSlot].duration;
+
+  state = 'overdub';
+  updateStatus();
+  updateButtons();
+  startPlayback();
+}
+
+function stopOverdub() {
+  const existingBuf = slots[activeSlot].buffer;
+  const ctx = getCtx();
+  stopPlayback(false);
+
+  const dubMix = parseInt(volOverdub.value) / 100;
+  const trimmed = recEvents.filter(e => e.time < loopDuration);
+  const newLayer = renderEvents(trimmed, loopDuration, dubMix);
+
+  const sr = ctx.sampleRate;
+  const totalSamples = Math.round(loopDuration * sr);
+  const offCtx = new OfflineAudioContext(1, totalSamples, sr);
+
+  const s1 = offCtx.createBufferSource(); s1.buffer = existingBuf; s1.connect(offCtx.destination); s1.start(0);
+  const s2 = offCtx.createBufferSource(); s2.buffer = newLayer;    s2.connect(offCtx.destination); s2.start(0);
+
+  offCtx.startRendering().then(rendered => {
+    slots[activeSlot].buffer   = rendered;
+    slots[activeSlot].duration = loopDuration;
+    refreshSlot(activeSlot);
+    drawWaveform();
+    loopCount = 0;
+    loopCountEl.textContent = 0;
+    state = 'paused';
+    updateStatus();
+    updateButtons();
+    startPlayback();
+  });
+}
+
+// ============================================================
+//  RENDER EVENTS
+// ============================================================
+
+function renderEvents(events, duration, gainMul) {
+  const ctx = getCtx();
+  const sr = ctx.sampleRate;
+  const totalSamples = Math.max(Math.round(duration * sr), 1);
+  const out = new Float32Array(totalSamples);
+
+  for (const ev of events) {
+    const buf = renderedSounds[ev.soundId];
+    if (!buf) continue;
+    const startSample = Math.round(ev.time * sr);
+    const data = buf.getChannelData(0);
+    for (let j = 0; j < data.length; j++) {
+      const pos = startSample + j;
+      if (pos < totalSamples) out[pos] += data[j] * gainMul;
+    }
+  }
+
+  let peak = 0;
+  for (let i = 0; i < out.length; i++) if (Math.abs(out[i]) > peak) peak = Math.abs(out[i]);
+  if (peak > 0.98) { const sc = 0.95 / peak; for (let i = 0; i < out.length; i++) out[i] *= sc; }
+
+  const buf = ctx.createBuffer(1, totalSamples, sr);
+  buf.copyToChannel(out, 0);
+  return buf;
+}
+
+// ============================================================
+//  PLAYBACK
+// ============================================================
+
+function startPlayback() {
+  if (!slots[activeSlot].buffer) return;
+  stopPlayback(false);
+
+  // BLUE PHONE: v2 in a room the band clock starts the loop
+  if (bandReady()) { bandStartPlayback(); return; }
+
+  const ctx = getCtx();
+  const gain = ctx.createGain();
+  gain.gain.value = parseInt(volPlayback.value) / 100;
+  gain.connect(ctx.destination);
+
+  playbackSource = ctx.createBufferSource();
+  playbackSource.buffer = slots[activeSlot].buffer;
+  playbackSource.loop = true;
+  playbackSource.connect(gain);
+  loopStartTime = ctx.currentTime;
+  playbackSource.start(0);
+
+  if (state !== 'overdub') state = 'playing';
+  updateStatus();
+  updateButtons();
+  startDrawLoop();
+}
+
+function stopPlayback(updateSt=true) {
+  if (playbackSource) { try { playbackSource.stop(); } catch(e) {} playbackSource = null; }
+  if (bandPlay) { bandPlay.sources.forEach(src => { try { src.stop(); } catch(e) {} }); bandPlay = null; }
+  stopDrawLoop();
+  drawProgress(0);
+  if (updateSt) {
+    state = slots[activeSlot].buffer ? 'paused' : 'idle';
+    loopCount = 0;
+    loopCountEl.textContent = 0;
+    updateStatus();
+    updateButtons();
+  }
+}
+
+// ============================================================
+//  UNDO / CLEAR
+// ============================================================
+
+function undoOverdub() {
+  if (!slots[activeSlot].undoStack.length) return;
+  slots[activeSlot].buffer   = slots[activeSlot].undoStack.pop();
+  slots[activeSlot].duration = slots[activeSlot].buffer.duration;
+  refreshSlot(activeSlot);
+  drawWaveform();
+  updateButtons();
+}
+
+function clearSlot() {
+  stopPlayback();
+  slots[activeSlot] = { buffer: null, undoStack: [], duration: 0 };
+  state = 'idle';
+  buildSlots();
+  drawWaveform();
+  drawProgress(0);
+  timeCur.textContent   = '0:00.0';
+  timeTotal.textContent = '0:00.0';
+  loopCount = 0;
+  loopCountEl.textContent = 0;
+  updateStatus();
+  updateButtons();
+}
+
+// ============================================================
+//  EXPORT WAV
+// ============================================================
+
+function exportWav() {
+  const buf = slots[activeSlot].buffer;
+  if (!buf) return;
+  const wav  = bufferToWav(buf);
+  const blob = new Blob([wav], { type: 'audio/wav' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'loop-slot' + (activeSlot + 1) + '.wav'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+function bufferToWav(buffer) {
+  const numCh=buffer.numberOfChannels,sr=buffer.sampleRate,len=buffer.length;
+  const ab=new ArrayBuffer(44+len*numCh*2),v=new DataView(ab);
+  const ws=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));};
+  ws(0,'RIFF');v.setUint32(4,36+len*numCh*2,true);ws(8,'WAVE');ws(12,'fmt ');v.setUint32(16,16,true);
+  v.setUint16(20,1,true);v.setUint16(22,numCh,true);v.setUint32(24,sr,true);v.setUint32(28,sr*numCh*2,true);
+  v.setUint16(32,numCh*2,true);v.setUint16(34,16,true);ws(36,'data');v.setUint32(40,len*numCh*2,true);
+  let off=44;
+  for(let i=0;i<len;i++){for(let c=0;c<numCh;c++){const s=Math.max(-1,Math.min(1,buffer.getChannelData(c)[i]));v.setInt16(off,s<0?s*0x8000:s*0x7FFF,true);off+=2;}}
+  return ab;
+}
+
+// ============================================================
+//  DRAW LOOP
+// ============================================================
+
+function startDrawLoop() { drawLoopActive = true; drawTick(); }
+function stopDrawLoop()  { drawLoopActive = false; }
+
+function drawTick() {
+  if (!drawLoopActive) return;
+  const ctx = audioCtx;
+  if (ctx && (state === 'playing' || state === 'overdub')) {
+    const dur = slots[activeSlot].buffer ? slots[activeSlot].buffer.duration : 0;
+    if (dur > 0) {
+      const elapsed = bandPlay ? (bandPos() || 0) : (ctx.currentTime - loopStartTime) % dur;
+      drawProgress(elapsed / dur);
+      timeCur.textContent   = fmtTime(elapsed);
+      timeTotal.textContent = fmtTime(dur);
+      const lc = bandPlay ? bandPlay.count : Math.floor((ctx.currentTime - loopStartTime) / dur);
+      if (lc !== loopCount) { loopCount = lc; loopCountEl.textContent = lc; }
+    }
+  }
+  requestAnimationFrame(drawTick);
+}
+
+function drawProgress(frac) {
+  const dpr=window.devicePixelRatio||1,w=progCanvas.offsetWidth*dpr,h=5*dpr;
+  progCanvas.width=w;progCanvas.height=h;
+  const c=progCanvas.getContext('2d');
+  c.fillStyle='#1e1e1e';c.fillRect(0,0,w,h);
+  if(frac>0){c.fillStyle=state==='overdub'?'#ff9100':'#00e676';c.fillRect(0,0,w*frac,h);}
+}
+
+function drawWaveform() {
+  const buf=slots[activeSlot].buffer;
+  const dpr=window.devicePixelRatio||1,w=waveCanvas.offsetWidth*dpr,h=50*dpr;
+  waveCanvas.width=w;waveCanvas.height=h;
+  const c=waveCanvas.getContext('2d');
+  c.fillStyle='#111';c.fillRect(0,0,w,h);
+  if(!buf){c.strokeStyle='#2a2a2a';c.lineWidth=1;c.beginPath();c.moveTo(0,h/2);c.lineTo(w,h/2);c.stroke();return;}
+  const data=buf.getChannelData(0),step=Math.ceil(data.length/w);
+  c.strokeStyle='#e8ff00';c.lineWidth=1;c.beginPath();
+  for(let x=0;x<w;x++){let mn=1,mx=-1;for(let j=0;j<step;j++){const s=data[x*step+j]||0;if(s<mn)mn=s;if(s>mx)mx=s;}c.moveTo(x,((1-mx)/2)*h);c.lineTo(x,((1-mn)/2)*h);}
+  c.stroke();
+}
+
+// ============================================================
+//  BUTTON EVENTS
+// ============================================================
+
+btnRecord.addEventListener('click', () => { getCtx(); if(!renderedSounds)preRenderSounds(); startRecording(); });
+btnStop.addEventListener('click', () => { if(state==='recording')stopRecording(); else if(state==='overdub')stopOverdub(); else stopPlayback(); });
+btnPlay.addEventListener('click', () => { getCtx(); startPlayback(); });
+btnOverdub.addEventListener('click', () => { getCtx(); startOverdub(); });
+btnUndo.addEventListener('click', undoOverdub);
+btnClear.addEventListener('click', clearSlot);
+btnDownload.addEventListener('click', exportWav);
+
+// ============================================================
+//  BAND SYNC
+//  BLUE PHONE: v2 shared room on the sync server. The server sends a clock and a loop state:
+//  tempo, epoch (server time where bar barOffset begins) and a pending change that lands on a bar line.
+// ============================================================
+
+const BAND_URL = (window.LOOPER_CONFIG && window.LOOPER_CONFIG.syncUrl) || '';
+let bandRoom = null;
+let bandPhones = 0;
+let bandTrim = 0;
+let bandPlay = null;   // the loop the band clock is playing right now, or null
+let bandRec = null;    // set while a recording counts from a band bar line
+let bandJoined = false; // BLUE PHONE: v2 set by the Band panel PLAY button, this phone counts as a player
+
+const bandBarMs = tempo => 240000 / tempo;
+function bandPendingAt(s) { return s.epoch + (s.pending.atBar - s.barOffset) * bandBarMs(s.tempo); }
+function bandBarTime(s, bar) {
+  if (s.pending && bar >= s.pending.atBar) return bandPendingAt(s) + (bar - s.pending.atBar) * bandBarMs(s.pending.tempo);
+  return s.epoch + (bar - s.barOffset) * bandBarMs(s.tempo);
+}
+function bandBarAt(s, t) {
+  if (s.pending) { const at = bandPendingAt(s); if (t >= at) return s.pending.atBar + Math.floor((t - at) / bandBarMs(s.pending.tempo)); }
+  return s.barOffset + Math.floor((t - s.epoch) / bandBarMs(s.tempo));
+}
+function bandTempoAt(s, bar) { return s.pending && bar >= s.pending.atBar ? s.pending.tempo : s.tempo; }
+
+const bandClock = createServerClock({
+  send: m => bandSync.send(m.type, m),
+  onChange: () => renderBand()
+});
+const bandSync = createBoardSync({
+  app: 'looper', schema: 1, url: BAND_URL,
+  exportState: () => null, loadState: () => false, applyChange: () => {},
+  onStatus: s => {
+    if (s === 'live') { bandClock.start(); bandBeat(); }
+    else { bandClock.stop(); bandRoom = null; if (bandPlay) stopPlayback(); }
+    renderBand();
+  }
+});
+bandSync.on('pong', m => bandClock.pong(m));
+bandSync.on('loop', m => {
+  const s = m.state;
+  bandRoom = s && typeof s.tempo === 'number' && s.tempo > 0 && typeof s.epoch === 'number' ? s : null;
+  bandPhones = m.phones || 0;
+  // The band stopped while this phone was playing along, so this loop stops too.
+  if (bandPlay && bandPlay.sawPlaying && !(bandRoom && bandRoom.playing) && state === 'playing') stopPlayback();
+  renderBand();
+});
+
+// In a room with a locked clock.
+function bandReady() { return !!(bandRoom && bandSync.status === 'live' && bandClock.synced); }
+// In a room whose loop is running.
+function bandLocked() { return bandReady() && bandRoom.playing; }
+
+// Server time in milliseconds to a time on this phone's audio clock.
+function bandAudioAt(serverMs) {
+  const late = (bandTrim - 1000 * (audioCtx.outputLatency || 0)) / 1000;
+  return audioCtx.currentTime + (serverMs - bandClock.now()) / 1000 + late;
+}
+
+function bandStartPlayback() {
+  const ctx = getCtx();
+  const gain = ctx.createGain();
+  gain.gain.value = parseInt(volPlayback.value) / 100;
+  gain.connect(ctx.destination);
+  bandPlay = { slot: slots[activeSlot], gain: gain, sources: [], marks: [], cursor: 0, first: true, sawPlaying: false, count: 0, tempo: 0 };
+  if (!bandRoom.playing) bandSync.send('transport', { action: 'start' });
+  if (state !== 'overdub') state = 'playing';
+  bandBeat();
+  updateStatus();
+  updateButtons();
+  startDrawLoop();
+  renderBand();
+}
+
+// Runs many times a second. Starts one pass of the loop on each bar line where a pass begins.
+function bandTick() {
+  const p = bandPlay;
+  if (!p || !audioCtx || !bandLocked() || !p.slot.buffer) return;
+  p.sawPlaying = true;
+  const slot = p.slot;
+  const sNow = bandClock.now(), sHorizon = sNow + 150;
+  if (p.cursor < sNow - 50 || p.cursor > sHorizon) p.cursor = sNow;
+  // A loop recorded without the band is fitted to the nearest whole number of bars.
+  if (!slot.bars) slot.bars = Math.max(1, Math.round(slot.duration / (bandBarMs(bandTempoAt(bandRoom, bandBarAt(bandRoom, sNow))) / 1000)));
+  for (let bar = Math.max(bandBarAt(bandRoom, p.cursor), bandRoom.barOffset); bandBarTime(bandRoom, bar) < sHorizon; bar++) {
+    const t = bandBarTime(bandRoom, bar);
+    if (t < p.cursor) continue;
+    if (slot.anchor == null) slot.anchor = bar;
+    const k = (((bar - slot.anchor) % slot.bars) + slot.bars) % slot.bars;
+    const tempo = bandTempoAt(bandRoom, bar);
+    const rate = slot.duration / (slot.bars * bandBarMs(tempo) / 1000);
+    const when = Math.max(audioCtx.currentTime, bandAudioAt(t));
+    const offset = k * slot.duration / slot.bars;
+    if (k === 0 || p.first) {
+      const src = audioCtx.createBufferSource();
+      src.buffer = slot.buffer;
+      src.playbackRate.value = rate;
+      src.connect(p.gain);
+      src.start(when, offset);
+      src.onended = () => { const i = p.sources.indexOf(src); if (i >= 0) p.sources.splice(i, 1); };
+      p.sources.push(src);
+      p.marks.push({ when: when, rate: rate, offset: offset });
+      if (k === 0 && !p.first) p.count++;
+      p.first = false;
+    } else if (tempo !== p.tempo && p.sources.length) {
+      // The tempo changed inside a long loop, so the pass that is sounding changes speed on this bar line.
+      p.sources[p.sources.length - 1].playbackRate.setValueAtTime(rate, when);
+      p.marks.push({ when: when, rate: rate, offset: offset });
+    }
+    p.tempo = tempo;
+    if (p.marks.length > 12) p.marks.shift();
+  }
+  p.cursor = sHorizon;
+}
+
+// Where in the loop the sound is right now, in seconds of the recording. Null before the first pass starts.
+function bandPos() {
+  const p = bandPlay;
+  if (!p || !audioCtx) return null;
+  const now = audioCtx.currentTime;
+  for (let i = p.marks.length - 1; i >= 0; i--) {
+    const m = p.marks[i];
+    if (m.when <= now) return (m.offset + (now - m.when) * m.rate) % p.slot.duration;
+  }
+  return null;
+}
+
+// ============================================================
+//  BAND GROOVES
+//  BLUE PHONE: v3 drum and bass presets. Each pattern is two band bars of 32 steps,
+//  so it runs in double time against the band tempo. x is a full hit, o is a soft hit.
+//  The bass line uses digits for steps of the minor scale above the root of the room groove.
+// ============================================================
+
+const GROOVE_SCALE = [0, 2, 3, 5, 7, 8, 10, 12, 14, 15];
+// Semitones from A for the root of each room groove, so the sub bass sits in the same key.
+const GROOVE_ROOTS = { 'Pocket': 0, 'Four Floor': 7, 'Half Time': 5, 'Click': 0 };
+const GROOVES = {
+  'TWO STEP': {
+    kick1: 'x.........x.....x.........x.....x.........x.....x.........x..x..',
+    snare1:'....x.......x.......x.......x.......x.......x.......x.......x.o.',
+    hhc:   'x.o.x.o.x.o.x.o.x.o.x.o.x.o.x.o.x.o.x.o.x.o.x.o.x.o.x.o.x.o.x.o.',
+    hho:   '......x.......x.......x.......x.......x.......x.......x.......x.',
+    bass:  '0.........0.....0.......3...2...0.........0.....5.......4...3...'
+  },
+  'AMEN': {
+    kick1: 'x.x.......xx....x.x.......x.....x.x.......xx....x.x.......x..x..',
+    snare1:'....x..o.o..x..o....x..o.o....x.....x..o.o..x..o....x..o.o..x.xo',
+    ride:  'x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.x.',
+    crash: 'x...............................................................',
+    bass:  '0.....0...0.......0.....3.......0.....0...0.......5.....4...3...'
+  },
+  'ROLLER': {
+    kick3: 'x.........x...x.x.........x.....x.........x...x.x.........x..x..',
+    snare1:'....x..o....x.......x..o....x.......x..o....x.......x..o....x...',
+    hhc:   'xoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxo',
+    shaker:'..x...x...x...x...x...x...x...x...x...x...x...x...x...x...x...x.',
+    bass:  '0.0...0.0...0...0.0...0.0...3...0.0...0.0...0...0.0...5.4...3...'
+  },
+  'LIQUID': {
+    kick1: 'x.........x.....x.........x.....x.........x.....x.........x.....',
+    snare3:'....x.......x.......x.......x.......x.......x.......x.......x...',
+    clap:  '....o.......o.......o.......o.......o.......o.......o.......o...',
+    shaker:'xoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxoxo',
+    ride:  '..x...x...x...x...x...x...x...x...x...x...x...x...x...x...x...x.',
+    bass:  '0...............4...........3...2...............5.......4.......'
+  },
+  'HALFTIME': {
+    kick3: 'x.....................x.........x.................x.....x.......',
+    snare1:'................x...............................x...............',
+    hhc:   'x...x...x...x...x...x...x...x...x...x...x...x...x...x...x...x...',
+    hho:   '..............x...............x...............x.............x...',
+    bass:  '0.....................0.........3.................2.....0.......'
+  }
+};
+let bandGroove = null;  // name of the groove this phone plays, or null
+let grooveCursor = 0;
+let grooveOut = null;   // { full, soft } gain nodes
+let grooveBassSrc = null;
+
+function grooveNodes() {
+  if (grooveOut) return grooveOut;
+  const ctx = getCtx();
+  const full = ctx.createGain(), soft = ctx.createGain();
+  soft.gain.value = 0.45;
+  full.connect(ctx.destination); soft.connect(ctx.destination);
+  grooveOut = { full: full, soft: soft };
+  return grooveOut;
+}
+
+function grooveHit(id, when, soft, rate, until) {
+  const buf = renderedSounds && renderedSounds[id];
+  if (!buf) return null;
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  if (rate) src.playbackRate.value = rate;
+  src.connect(soft ? grooveOut.soft : grooveOut.full);
+  src.start(when);
+  if (until) src.stop(until);
+  return src;
+}
+
+// Runs many times a second next to bandTick. Schedules every step of the groove that begins inside the next short window.
+function grooveTick() {
+  if (!bandGroove || !audioCtx || !bandLocked() || !renderedSounds) { grooveCursor = 0; return; }
+  const pat = GROOVES[bandGroove];
+  if (!pat) return;
+  grooveNodes();
+  const level = parseInt(volPlayback.value) / 100;
+  grooveOut.full.gain.value = level;
+  grooveOut.soft.gain.value = level * 0.45;
+  const sNow = bandClock.now(), sHorizon = sNow + 150;
+  if (grooveCursor < sNow - 50 || grooveCursor > sHorizon) grooveCursor = sNow;
+  const root = GROOVE_ROOTS[(bandRoom.pending || bandRoom).groove] || 0;
+  for (let bar = Math.max(bandBarAt(bandRoom, grooveCursor), bandRoom.barOffset); bandBarTime(bandRoom, bar) < sHorizon; bar++) {
+    const t0 = bandBarTime(bandRoom, bar), stepMs = bandBarMs(bandTempoAt(bandRoom, bar)) / 32;
+    const half = ((bar % 2) + 2) % 2;
+    for (let k = 0; k < 32; k++) {
+      const t = t0 + k * stepMs;
+      if (t < grooveCursor || t >= sHorizon) continue;
+      const i = half * 32 + k;
+      const when = Math.max(audioCtx.currentTime, bandAudioAt(t));
+      Object.keys(pat).forEach(track => {
+        const c = pat[track][i];
+        if (!c || c === '.') return;
+        if (track === 'bass') {
+          const deg = GROOVE_SCALE[+c] || 0;
+          const rate = Math.pow(2, (root + deg) / 12);
+          // The sub bass is one voice: a new note cuts the one before it.
+          if (grooveBassSrc) { try { grooveBassSrc.stop(when + 0.01); } catch (e) {} }
+          grooveBassSrc = grooveHit('bass2', when, false, rate, when + Math.min(0.85, stepMs * 12 / 1000));
+        } else {
+          grooveHit(track, when, c === 'o');
+        }
+      });
+    }
+  }
+  grooveCursor = sHorizon;
+}
+
+function setGroove(name) {
+  getCtx();
+  if (!renderedSounds) preRenderSounds();
+  bandGroove = name && GROOVES[name] ? name : null;
+  grooveCursor = 0;
+  if (bandGroove) {
+    bandJoined = true;
+    if (bandReady() && !bandRoom.playing) bandSync.send('transport', { action: 'start' });
+    bandBeat();
+  }
+  try { localStorage.setItem('looper-band-groove', bandGroove || ''); } catch (e) {}
+  renderGrooves();
+  renderBand();
+}
+
+function renderGrooves() {
+  document.querySelectorAll('#band-grooves .band-chip').forEach(b => b.classList.toggle('on', (b.dataset.g || null) === bandGroove));
+}
+
+// A phone that is playing and on screen tells the server every 10 seconds. With no player the server stops the loop.
+function bandBeat() {
+  if ((bandJoined || state === 'playing' || state === 'overdub' || state === 'recording') && bandSync.status === 'live' && document.visibilityState === 'visible') bandSync.send('beat');
+}
+
+function renderBand() {
+  const st = bandSync.status;
+  let text = st === 'off' ? 'band off' : st === 'no room' ? 'type a room code' : st;
+  if (st === 'live') {
+    text = bandPhones + (bandPhones === 1 ? ' phone' : ' phones') + ' in room, ';
+    if (bandRoom && bandRoom.playing) text += 'band playing at ' + bandTempoAt(bandRoom, bandBarAt(bandRoom, bandClock.now())) + ' bpm' + (bandPlay ? ', loop locked to band' : bandJoined ? ', joined, Record lands on the bar lines' : ', PLAY here joins the band') + (bandGroove ? ', groove ' + bandGroove : '');
+    else text += bandRoom && bandRoom.idle ? 'paused, no player' : 'band stopped, PLAY here starts the band';
+  }
+  document.getElementById('band-status').textContent = text;
+  const go = document.getElementById('band-play');
+  const on = bandJoined || !!bandPlay;
+  go.textContent = on ? '\u25A0 STOP' : '\u25B6 PLAY';
+  go.classList.toggle('on', on);
+  document.getElementById('band-clock').textContent = bandClock.synced ? 'clock locked, trip ' + Math.round(bandClock.rtt) + ' ms' : 'clock off';
+}
+
+(function initBand() {
+  if (!BAND_URL) return;
+  document.getElementById('band-wrap').hidden = false;
+  const roomEl = document.getElementById('band-room');
+  roomEl.value = bandSync.room;
+  roomEl.addEventListener('change', () => { roomEl.value = bandSync.setRoom(roomEl.value); });
+  roomEl.addEventListener('keydown', e => { if (e.key === 'Enter') roomEl.blur(); });
+  const trimEl = document.getElementById('band-trim');
+  function setTrim(ms) {
+    bandTrim = Math.min(300, Math.max(-300, Math.round(ms) || 0));
+    try { localStorage.setItem('looper-band-trim', String(bandTrim)); } catch (e) {}
+    trimEl.textContent = (bandTrim > 0 ? '+' : '') + bandTrim + ' ms';
+  }
+  let saved = 0;
+  try { saved = +localStorage.getItem('looper-band-trim'); } catch (e) {}
+  setTrim(saved);
+  document.getElementById('band-trim-dn').addEventListener('click', () => setTrim(bandTrim - 5));
+  document.getElementById('band-trim-up').addEventListener('click', () => setTrim(bandTrim + 5));
+  // BLUE PHONE: v2 the Band panel PLAY button works with or without a recorded loop.
+  // It starts the band when it is stopped, and plays the loop of the open slot on the band clock when there is one.
+  document.getElementById('band-play').addEventListener('click', () => {
+    getCtx();
+    if (!renderedSounds) preRenderSounds();
+    if (bandJoined || bandPlay) {
+      bandJoined = false;
+      bandGroove = null;
+      renderGrooves();
+      if (state === 'recording') stopRecording();
+      else if (state === 'overdub') stopOverdub();
+      if (bandPlay) stopPlayback();
+      renderBand();
+      return;
+    }
+    bandJoined = true;
+    if (bandReady() && !bandRoom.playing) bandSync.send('transport', { action: 'start' });
+    if (slots[activeSlot].buffer && state !== 'recording') startPlayback();
+    bandBeat();
+    renderBand();
+  });
+  const grooveBox = document.getElementById('band-grooves');
+  ['OFF'].concat(Object.keys(GROOVES)).forEach(name => {
+    const b = document.createElement('button');
+    b.className = 'band-chip';
+    b.textContent = name;
+    if (name !== 'OFF') b.dataset.g = name;
+    b.addEventListener('click', () => setGroove(name === 'OFF' ? null : name));
+    grooveBox.appendChild(b);
+  });
+  renderGrooves();
+  setInterval(grooveTick, 25);
+  setInterval(bandTick, 25);
+  setInterval(bandBeat, 10000);
+  setInterval(renderBand, 1000);
+  document.addEventListener('visibilitychange', bandBeat);
+  bandSync.connect();
+  renderBand();
+})();
+
+// ============================================================
+//  UTILS
+// ============================================================
+
+function fmtTime(s) {
+  if(!s||isNaN(s))return'0:00.0';
+  return Math.floor(s/60)+':'+(s%60).toFixed(1).padStart(4,'0');
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+
+buildFavRow();
+buildCatTabs();
+buildPadGrid();
+buildSlots();
+updateStatus();
+updateButtons();
+drawWaveform();
+</script>
+</body>
+</html>

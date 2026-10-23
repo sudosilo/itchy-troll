@@ -1,0 +1,1229 @@
+<!DOCTYPE html>
+<!-- parcelsun-kq v4 : parcel locker solar heat model -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Parcelsun V4</title>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --panel: #ffffff;
+    --ink: #111111;
+    --muted: #5d5850;
+    --line: #111111;
+    --soft: #e7e2d8;
+    --accent: #2f6fa8;
+    --hot: #c8102e;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 13px; line-height: 1.35; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; background: var(--panel); border-bottom: 2px solid var(--line);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .brand { display: flex; align-items: center; gap: 8px; }
+  .brand h1 { margin: 0; font-size: 16px; letter-spacing: 0.14em; font-weight: 800; }
+  .badge { border: 2px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 11px; font-weight: 800; background: #f6d04d; }
+  .sub { font-size: 10px; color: var(--muted); letter-spacing: 0.06em; text-align: center; }
+  @media (max-width: 460px) { .sub { display: none; } }
+  button, select, input[type=number] {
+    font: inherit; font-size: 12px; color: var(--ink); background: var(--panel);
+    border: 2px solid var(--line); border-radius: 5px; padding: 4px 8px;
+  }
+  button { font-weight: 700; cursor: pointer; }
+  button:active { background: var(--soft); }
+  input[type=number] { width: 78px; text-align: center; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  main { max-width: 760px; margin: 0 auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+  .card { background: var(--panel); border: 2px solid var(--line); border-radius: 8px; padding: 10px; }
+  .card h2 { margin: 0 0 8px; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; text-align: center; }
+  #view { position: relative; height: 46vh; min-height: 280px; padding: 0; overflow: hidden; touch-action: none; }
+  #view canvas { display: block; width: 100%; height: 100%; }
+  .hud { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; justify-content: space-between; pointer-events: none; }
+  .hud span { background: rgba(255,255,255,0.9); border: 2px solid var(--line); border-radius: 5px; padding: 2px 6px; font-size: 11px; font-weight: 700; }
+  .viewbar { position: absolute; bottom: 8px; left: 8px; right: 8px; display: flex; justify-content: center; gap: 8px; }
+  .viewbar label { background: rgba(255,255,255,0.92); border: 2px solid var(--line); border-radius: 5px; padding: 3px 8px; font-size: 11px; font-weight: 700; display: flex; align-items: center; gap: 5px; }
+  .heatkey { position: absolute; bottom: 46px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; background: rgba(255,255,255,0.92); border: 2px solid var(--line); border-radius: 5px; padding: 2px 6px; pointer-events: none; }
+  .heatkey i { display: block; width: 110px; height: 8px; border: 1px solid var(--line); background: linear-gradient(90deg, rgb(158,201,240), rgb(233,242,200), rgb(246,208,77), rgb(239,122,42), rgb(200,16,46)); }
+  .timebar { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .timebar > * { width: 100%; }
+  .clock { text-align: center; font-size: 22px; font-weight: 800; letter-spacing: 0.04em; margin: 2px 0 4px; }
+  .readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .ro { border: 2px solid var(--line); border-radius: 6px; padding: 5px 8px; display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+  .ro b { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+  .ro span { font-size: 14px; font-weight: 800; white-space: nowrap; }
+  .ro.alarm { background: #fde3e6; }
+  .ro.warn { background: #fff3c4; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+  @media (max-width: 520px) { .stats { grid-template-columns: 1fr; } }
+  #chart { width: 100%; height: 230px; display: block; }
+  .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; font-size: 11px; margin-top: 6px; }
+  .legend i { display: inline-block; width: 14px; height: 4px; border: 1px solid var(--line); vertical-align: middle; margin-right: 4px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+  .field { display: flex; flex-direction: column; gap: 3px; }
+  .field > span { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.04em; }
+  .field select, .field input[type=number] { width: 100%; }
+  .field.full, .check.full, .subhead { grid-column: 1 / -1; }
+  .subhead { font-size: 10px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; text-align: center; border-top: 2px solid var(--line); padding-top: 8px; margin-top: 2px; }
+  .check { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 12px; }
+  .check input { width: 18px; height: 18px; accent-color: var(--accent); }
+  .facing-row { display: flex; align-items: center; gap: 10px; }
+  .facing-row span { min-width: 104px; text-align: center; font-weight: 800; border: 2px solid var(--line); border-radius: 5px; padding: 3px 4px; }
+  #infoModal { position: fixed; inset: 0; background: rgba(244,241,234,0.96); display: none; z-index: 20; overflow-y: auto; }
+  #infoModal .sheet { max-width: 640px; margin: 16px auto; background: var(--panel); border: 2px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+  #infoModal h3 { margin: 14px 0 4px; font-size: 13px; letter-spacing: 0.06em; }
+  #infoModal p { margin: 4px 0; }
+  .center { text-align: center; }
+  footer { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0 20px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <h1>PARCELSUN</h1><span class="badge">V4</span>
+  </div>
+  <div class="sub">PARCEL LOCKER HEAT MODEL</div>
+  <button id="infoBtn">Info</button>
+</header>
+
+<main>
+  <section class="card" id="view">
+    <div class="hud"><span id="hudSun">Sun</span><span id="hudFacing">Facing</span></div>
+    <div class="heatkey" id="heatKey"><span id="keyLo">60</span><i></i><span id="keyHi">160 F</span></div>
+    <div class="viewbar">
+      <label><input type="checkbox" id="heatView" checked> Heat view</label>
+      <button id="frontCam">Front</button>
+      <button id="backCam">Back</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Date and time</h2>
+    <div class="timebar">
+      <select id="month"></select>
+      <input type="number" id="day" min="1" max="31" value="15">
+      <button id="playBtn">Play day</button>
+    </div>
+    <div class="clock" id="clock">3:00 PM</div>
+    <input type="range" id="hour" min="0" max="23.75" step="0.25" value="15">
+  </section>
+
+  <section class="card">
+    <h2>At this moment</h2>
+    <div class="readouts">
+      <div class="ro"><b>Outside air</b><span id="roAmb"></span></div>
+      <div class="ro"><b>Sun height</b><span id="roAlt"></span></div>
+      <div class="ro" id="roGlassBox"><b>Screen glass</b><span id="roGlass"></span></div>
+      <div class="ro" id="roConBox"><b>Console air</b><span id="roCon"></span></div>
+      <div class="ro" id="roStripBox"><b>Board strip air</b><span id="roStrip"></span></div>
+      <div class="ro"><b>Locker bays air</b><span id="roBank"></span></div>
+      <div class="ro"><b>Front skin</b><span id="roFront"></span></div>
+      <div class="ro"><b id="roTopLabel">Roof skin</b><span id="roTop"></span></div>
+      <div class="ro"><b>Console back</b><span id="roConBack"></span></div>
+      <div class="ro"><b>Cooling load</b><span id="roAC"></span></div>
+      <div class="ro"><b>Sun on front</b><span id="roIF"></span></div>
+      <div class="ro"><b>Gear heat</b><span id="roGear"></span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Whole day</h2>
+    <canvas id="chart"></canvas>
+    <div class="legend">
+      <span><i style="background:#8a8580"></i>Outside air</span>
+      <span><i style="background:#2f6fa8"></i>Screen glass</span>
+      <span><i style="background:#c8102e"></i>Console air</span>
+      <span><i style="background:#7a4fa0"></i>Board strip</span>
+      <span><i style="background:#ef7a2a"></i>Locker bays</span>
+      <span><i style="background:#e0b400"></i>Front skin</span>
+    </div>
+    <div class="stats">
+      <div class="ro"><b>Peak glass</b><span id="stGlass"></span></div>
+      <div class="ro"><b>Peak console</b><span id="stCon"></span></div>
+      <div class="ro"><b>Peak board strip</b><span id="stStrip"></span></div>
+      <div class="ro"><b>Touch over limit</b><span id="stTouch"></span></div>
+      <div class="ro"><b>Hot to touch</b><span id="stSkin"></span></div>
+      <div class="ro"><b>Electronics over</b><span id="stElec"></span></div>
+      <div class="ro"><b>Boards over</b><span id="stBoard"></span></div>
+      <div class="ro"><b>Peak cooling</b><span id="stAC"></span></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Locker</h2>
+    <div class="grid">
+      <label class="field"><span>Modules left of console</span><input type="number" id="nL" min="0" max="6" value="2" data-build></label>
+      <label class="field"><span>Modules right of console</span><input type="number" id="nR" min="0" max="6" value="1" data-build></label>
+      <label class="field"><span>Door layout</span>
+        <select id="doorLayout" data-build>
+          <option value="photo">Mixed sizes, field style</option>
+          <option value="even">Even rows</option>
+        </select></label>
+      <label class="field"><span>Doors per column (even rows)</span><input type="number" id="rows" min="4" max="20" value="12" data-build></label>
+      <label class="field"><span>Module width (in)</span><input type="number" id="modW" min="18" max="60" value="36" data-build></label>
+      <label class="field"><span>Module height (in)</span><input type="number" id="modH" min="48" max="108" value="76" data-build></label>
+      <label class="field"><span>Module depth (in)</span><input type="number" id="modD" min="12" max="40" value="25" data-build></label>
+      <label class="field"><span>Paint</span>
+        <select id="color" data-build>
+          <option value="yellow">Yellow</option>
+          <option value="blue">Blue</option>
+          <option value="gray">Gray</option>
+          <option value="white">White</option>
+        </select></label>
+      <label class="field"><span>Paint sun absorption (0 to 1)</span><input type="number" id="absorb" min="0.1" max="0.98" step="0.01" value="0.50"></label>
+
+      <div class="subhead">Screen console</div>
+      <label class="field full"><span>Console type</span>
+        <select id="consoleType" data-build>
+          <option value="screen">Screen console</option>
+          <option value="lowpower">Low power, no screen</option>
+        </select></label>
+      <label class="field"><span>Screen and backlight (W)</span><input type="number" id="wScreen" min="0" max="400" value="45"></label>
+      <label class="field"><span>Computer and boards (W)</span><input type="number" id="wBoards" min="0" max="400" value="35"></label>
+      <label class="field"><span>Router (W)</span><input type="number" id="wRouter" min="0" max="100" value="12"></label>
+      <label class="field"><span>Power strip and supplies (W)</span><input type="number" id="wPower" min="0" max="200" value="20"></label>
+      <label class="field"><span>Low power console total (W)</span><input type="number" id="wLow" min="0" max="100" value="10"></label>
+      <label class="field"><span>Back louver venting (W/K)</span><input type="number" id="vent" min="0" max="60" step="0.5" value="5"></label>
+      <label class="field"><span>Screen column</span>
+        <select id="scrCol" data-build>
+          <option value="left">Left column</option>
+          <option value="right">Right column</option>
+          <option value="center">Across both</option>
+        </select></label>
+      <label class="field"><span>Screen width (in)</span><input type="number" id="scrW" min="4" max="30" value="9" data-build></label>
+      <label class="field"><span>Screen height (in)</span><input type="number" id="scrH" min="3" max="24" value="7" data-build></label>
+      <label class="field full"><span>Screen center above ground (in)</span><input type="number" id="scrY" min="20" max="80" value="42" data-build></label>
+
+      <div class="subhead">Top board strip and hat</div>
+      <label class="field"><span>Board strip height (in)</span><input type="number" id="stripH" min="2" max="16" value="4" data-build></label>
+      <label class="field"><span>Door boards per module (W)</span><input type="number" id="wDoorBoard" min="0" max="60" value="4"></label>
+      <label class="check full"><input type="checkbox" id="hat" checked data-build> Hat on top with light</label>
+      <label class="field"><span>Hat overhang (in)</span><input type="number" id="hatOver" min="0" max="24" value="1" data-build></label>
+      <label class="field"><span>Hat light (W)</span><input type="number" id="wLight" min="0" max="60" value="10"></label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Site</h2>
+    <div class="grid">
+      <div class="field full"><span>Front of locker faces</span>
+        <div class="facing-row"><input type="range" id="facing" min="0" max="359" step="1" value="180" data-build><span id="facingLabel">180 S</span></div>
+      </div>
+      <label class="field"><span>Latitude</span><input type="number" id="lat" step="0.01" value="36.17"></label>
+      <label class="field"><span>Longitude</span><input type="number" id="lon" step="0.01" value="-115.14"></label>
+      <label class="field"><span>Shade</span>
+        <select id="shade" data-build>
+          <option value="none">None, open sky</option>
+          <option value="awning">Awning over front</option>
+          <option value="full">Full shade structure</option>
+          <option value="indoor">Indoor lobby</option>
+        </select></label>
+      <label class="field"><span>Awning reach past front (in)</span><input type="number" id="awning" min="0" max="120" value="36" data-build></label>
+      <label class="field"><span>Ground reflection (0 to 1)</span><input type="number" id="rho" min="0" max="0.9" step="0.05" value="0.30"></label>
+      <label class="field"><span>Wind (mph)</span><input type="number" id="wind" min="0" max="40" value="5"></label>
+      <label class="field"><span>Heat wave add (F)</span><input type="number" id="heatOffset" min="-20" max="25" value="0"></label>
+      <label class="field"><span>Lobby air (F)</span><input type="number" id="indoorT" min="55" max="95" value="76"></label>
+      <label class="check"><input type="checkbox" id="backWall" data-build> Back against a wall</label>
+      <label class="check"><input type="checkbox" id="dst" checked> Daylight saving clock</label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Cooling and build</h2>
+    <div class="grid">
+      <label class="check full"><input type="checkbox" id="ac"> Console air conditioner</label>
+      <label class="field"><span>AC capacity (watts)</span><input type="number" id="acCap" min="50" max="3000" value="400"></label>
+      <label class="field"><span>AC setpoint (F)</span><input type="number" id="acSet" min="60" max="120" value="95"></label>
+      <label class="field"><span>Cabinet wall U (W/m2K)</span><input type="number" id="U" min="0.3" max="8" step="0.1" value="5.0"></label>
+      <label class="field"><span>Screen glass U (W/m2K)</span><input type="number" id="Ug" min="1" max="8" step="0.1" value="5.8"></label>
+      <label class="field"><span>Console lag (hours)</span><input type="number" id="tauC" min="0.1" max="6" step="0.05" value="0.75"></label>
+      <label class="field"><span>Locker bays lag (hours)</span><input type="number" id="tauB" min="0.1" max="8" step="0.05" value="1.5"></label>
+      <label class="field full"><span>Board strip lag (hours)</span><input type="number" id="tauT" min="0.05" max="4" step="0.05" value="0.4"></label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Limits</h2>
+    <div class="grid">
+      <label class="field"><span>Touch stops working (F)</span><input type="number" id="limTouch" min="90" max="200" value="140"></label>
+      <label class="field"><span>Hot to touch (F)</span><input type="number" id="limSkin" min="90" max="200" value="120"></label>
+      <label class="field"><span>Electronics air limit (F)</span><input type="number" id="limElec" min="80" max="200" value="122"></label>
+      <label class="field"><span>Door board air limit (F)</span><input type="number" id="limBoard" min="80" max="220" value="140"></label>
+    </div>
+  </section>
+
+  <footer>parcelsun-kq v4</footer>
+</main>
+
+<div id="infoModal">
+  <div class="sheet">
+    <div class="center"><button id="infoClose">Close</button></div>
+    <h3>What is this thing?</h3>
+    <p>A parcel locker sitting in the desert sun bakes. This app shows how hot each side of the locker gets, how hot the screen glass gets, how hot the air inside the screen console gets, and how hot the strip of door control boards along the top gets, hour by hour, for any day of the year.</p>
+    <p>Turn the locker to face a different direction, add shade, change the paint, change how much heat the electronics make, or turn on an air conditioner, and see what each change does.</p>
+    <h3>Why bother?</h3>
+    <p>Picking where a locker goes and which way it faces costs almost nothing before install. Fixing heat damage after install costs a truck roll every time. This shows which placements will cook the screen and the boards and which ones stay workable.</p>
+    <h3>How to read it</h3>
+    <p>The 3D view shows the locker, the sun, and the shadows at the time on the slider. With Heat view on, every surface is tinted by how hot it is: pale blue is cool, yellow is warm, red is very hot. Heat builds toward the top of each section, spreads out from the screen console into the modules beside it, and shows on the back of the console where the gear sits. Tap Back to look at the back of the locker.</p>
+    <p>The chart shows the whole day. The dashed lines are your limits. Anything above them is a problem hour.</p>
+    <h3>Okay, now the details</h3>
+    <p>Sun position comes from the NOAA solar equations for the latitude and longitude you enter. Clear sky sunlight comes from the ASHRAE monthly clear sky model, split into direct beam, sky light, and light bounced off the ground.</p>
+    <p>Each outside face gets a sol air temperature: outside air plus the sunlight that face absorbs, divided by how fast wind carries heat off it. The roof also loses a little heat to the open night sky.</p>
+    <p>The locker is three air spaces. The screen console runs the full depth of its module and holds the screen, computer, boards, router, and power strip, and its back louvers trade air with the outside. The locker bays beside it hold no powered gear. The board strip is the closed box along the top of every module that holds the door control boards, and it sits right under the roof. Each space gains heat through its walls, trades heat with its neighbors through shared steel panels, and responds with a time lag you can set.</p>
+    <p>The hat on top shades the roof and casts a shadow down every side. The higher the sun, the farther down that shadow reaches, so with the sun straight overhead the sides are fully shaded. The board strip gets shaded first because it is at the top. The awning works the same way on the front with a longer reach. Full shade blocks direct sun on every face and part of the sky light. Indoor lobby removes the sun and uses the lobby air temperature.</p>
+    <p>Screen glass temperature balances the sun the glass absorbs and the outside air against the hot console air behind it.</p>
+    <p>Outside air follows the average daily high and low for each month in the Las Vegas valley, with the low near dawn and the high mid afternoon. Heat wave add pushes the whole day hotter.</p>
+    <p>The heat tint inside each section rises toward the top in step with how much hotter that section runs than the air outside, and the console heat fades out across the neighboring modules. This tint is for reading the picture; the numbers in the readouts come from the three air space model.</p>
+    <p>All of this assumes clear sky. Clouds, dust storms, nearby walls, and parked cars are not modeled.</p>
+    <div class="center" style="margin-top:12px"><button id="infoClose2">Close</button></div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+const $ = id => document.getElementById(id);
+const D2R = Math.PI / 180;
+const IN = 0.0254;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const F2C = f => (f - 32) * 5 / 9;
+const C2F = c => c * 9 / 5 + 32;
+const VFACES = ['front', 'back', 'left', 'right'];
+
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MDAYS = [31,28,31,30,31,30,31,31,30,31,30,31];
+// ASHRAE clear sky constants: A (W/m2), B, C
+const ASHRAE = [[1230,.142,.058],[1215,.144,.060],[1186,.156,.071],[1136,.180,.097],[1104,.196,.121],[1088,.205,.134],
+                [1085,.207,.136],[1107,.201,.122],[1151,.177,.092],[1192,.160,.073],[1221,.149,.063],[1233,.142,.057]];
+// Las Vegas valley average daily high and low, F
+const TEMPS = [[58,40],[63,44],[71,50],[78,57],[89,67],[99,76],[105,82],[103,81],[94,72],[80,59],[66,46],[57,39]];
+const PAINT = {
+  yellow: { hex: '#f2a51c', a: 0.52 },
+  blue:   { hex: '#2f5d9e', a: 0.75 },
+  gray:   { hex: '#8d9196', a: 0.65 },
+  white:  { hex: '#eeeeea', a: 0.30 }
+};
+const H_IN = 8;       // inside surface film, W/m2K
+const U_INT = 3.0;    // console to bays side panel, W/m2K
+const U_SHELF = 4.0;  // lower sections to board strip shelf, W/m2K
+const A_GLASS = 0.90;
+
+MONTHS.forEach((m, i) => { const o = document.createElement('option'); o.value = i; o.textContent = m; $('month').appendChild(o); });
+$('month').value = 6;
+
+function readState() {
+  const g = id => parseFloat($(id).value);
+  const S = {
+    lat: g('lat'), lon: g('lon'), dst: $('dst').checked,
+    month: parseInt($('month').value, 10), day: g('day'), hour: g('hour'),
+    nL: Math.round(clamp(g('nL'), 0, 6)), nR: Math.round(clamp(g('nR'), 0, 6)), rows: Math.round(clamp(g('rows'), 4, 20)),
+    modW: clamp(g('modW'), 18, 60), modH: clamp(g('modH'), 48, 108), modD: clamp(g('modD'), 12, 40),
+    color: $('color').value, absorb: clamp(g('absorb'), 0.05, 0.98),
+    consoleType: $('consoleType').value, doorLayout: $('doorLayout').value, scrCol: $('scrCol').value,
+    wScreen: Math.max(0, g('wScreen')), wBoards: Math.max(0, g('wBoards')), wRouter: Math.max(0, g('wRouter')),
+    wPower: Math.max(0, g('wPower')), wLow: Math.max(0, g('wLow')), vent: Math.max(0, g('vent')),
+    scrW: g('scrW'), scrH: g('scrH'), scrY: g('scrY'),
+    stripH: clamp(g('stripH'), 2, 16), wDoorBoard: Math.max(0, g('wDoorBoard')),
+    hat: $('hat').checked, hatOver: clamp(g('hatOver'), 0, 24), wLight: Math.max(0, g('wLight')),
+    facing: g('facing'), backWall: $('backWall').checked,
+    shade: $('shade').value, awning: Math.max(0, g('awning')),
+    rho: clamp(g('rho'), 0, 0.9), wind: Math.max(0, g('wind')), heatOffset: g('heatOffset'), indoorT: g('indoorT'),
+    U: Math.max(0.1, g('U')), Ug: Math.max(0.5, g('Ug')),
+    tauC: Math.max(0.05, g('tauC')), tauB: Math.max(0.05, g('tauB')), tauT: Math.max(0.05, g('tauT')),
+    ac: $('ac').checked, acCap: Math.max(0, g('acCap')), acSet: g('acSet'),
+    limTouch: g('limTouch'), limSkin: g('limSkin'), limElec: g('limElec'), limBoard: g('limBoard'),
+    heatView: $('heatView').checked
+  };
+  for (const k in S) if (typeof S[k] === 'number' && !isFinite(S[k])) S[k] = 0;
+  S.day = clamp(Math.round(S.day) || 1, 1, MDAYS[S.month]);
+  S.hasScreen = S.consoleType === 'screen';
+  S.lowH = S.modH - S.stripH;
+  S.scrW = clamp(S.scrW, 4, S.scrCol === 'center' ? S.modW - 4 : S.modW / 2 - 4);
+  S.scrH = clamp(S.scrH, 3, S.lowH / 2);
+  S.scrY = clamp(S.scrY, S.scrH / 2 + 14, S.lowH - S.scrH / 2 - 6);
+  S.gearW = S.hasScreen ? S.wScreen + S.wBoards + S.wRouter + S.wPower : S.wLow;
+  return S;
+}
+
+function dayOfYear(S) { let n = S.day; for (let i = 0; i < S.month; i++) n += MDAYS[i]; return n; }
+
+// NOAA solar position. Azimuth measured clockwise from north.
+function sunPos(doy, hour, S) {
+  const dstOn = S.dst && doy >= 70 && doy <= 308;
+  const tz = dstOn ? -7 : -8;
+  const g = 2 * Math.PI / 365 * (doy - 1 + (hour - 12) / 24);
+  const eq = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
+  const dec = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
+  const tst = hour * 60 + eq + 4 * S.lon - 60 * tz;
+  const ha = (tst / 4 - 180) * D2R;
+  const la = S.lat * D2R;
+  const cz = Math.sin(la) * Math.sin(dec) + Math.cos(la) * Math.cos(dec) * Math.cos(ha);
+  const alt = Math.asin(clamp(cz, -1, 1));
+  let az = Math.atan2(Math.sin(ha), Math.cos(ha) * Math.sin(la) - Math.tan(dec) * Math.cos(la)) + Math.PI;
+  az = (az + 2 * Math.PI) % (2 * Math.PI);
+  return { alt, az };
+}
+
+function irradiance(sun, month, faceAz, tiltDeg, rho) {
+  if (sun.alt <= 0) return { beam: 0, sky: 0, gnd: 0 };
+  const [A, B, C] = ASHRAE[month];
+  const dni = A * Math.exp(-B / Math.max(0.03, Math.sin(sun.alt)));
+  const b = tiltDeg * D2R;
+  const cosT = Math.cos(sun.alt) * Math.cos(sun.az - faceAz) * Math.sin(b) + Math.sin(sun.alt) * Math.cos(b);
+  return {
+    beam: dni * Math.max(0, cosT),
+    sky: C * dni * (1 + Math.cos(b)) / 2,
+    gnd: rho * dni * (Math.sin(sun.alt) + C) * (1 - Math.cos(b)) / 2
+  };
+}
+
+function ambientF(S, h) {
+  const [hi, lo] = TEMPS[S.month];
+  let f;
+  if (h >= 5 && h <= 15) f = (1 - Math.cos(Math.PI * (h - 5) / 10)) / 2;
+  else { const t = h < 5 ? h + 24 : h; f = (1 + Math.cos(Math.PI * (t - 15) / 14)) / 2; }
+  return lo + (hi - lo) * f + S.heatOffset;
+}
+
+// Outside conditions at one moment, in C and W/m2.
+// Every vertical face is split into the board strip band at the top and the lower section below it,
+// because the hat and awning shadows reach the strip first.
+function conditions(S, doy, h) {
+  const sun = sunPos(doy, h, S);
+  const indoor = S.shade === 'indoor';
+  const To = F2C(indoor ? S.indoorT : ambientF(S, h));
+  const ho = indoor ? 8 : 5.7 + 3.8 * (S.wind * 0.447);
+  const psi = S.facing * D2R;
+  const H = S.modH * IN, hs = S.stripH * IN, Hl = H - hs;
+  const faceAz = { front: psi, back: psi + Math.PI, left: psi + Math.PI / 2, right: psi - Math.PI / 2 };
+  const hatD = S.hat ? S.hatOver * IN : 0;
+  const out = { sun, To, ho };
+  const sol = I => To + S.absorb * I / ho;
+  for (const k of VFACES) {
+    let Ilow = 0, Istrip = 0;
+    if (!indoor && sun.alt > 0) {
+      const r = irradiance(sun, S.month, faceAz[k], 90, S.rho);
+      let skyF = 1, fracStrip = 0, fracLow = 0;
+      if (S.shade === 'full') { fracStrip = 1; fracLow = 1; skyF = 0.4; }
+      else {
+        let d = hatD;
+        if (k === 'front' && S.shade === 'awning') { d = Math.max(d, S.awning * IN); skyF = 1 - 0.5 * d / (d + H); }
+        const c = Math.cos(sun.az - faceAz[k]);
+        if (d > 0 && c > 0.001) {
+          const shadow = d * Math.tan(sun.alt) / c;
+          fracStrip = clamp(shadow / hs, 0, 1);
+          fracLow = clamp((shadow - hs) / Hl, 0, 1);
+        }
+      }
+      Istrip = r.beam * (1 - fracStrip) + r.sky * skyF + r.gnd;
+      Ilow = r.beam * (1 - fracLow) + r.sky * skyF + r.gnd;
+    }
+    let low = sol(Ilow), strip = sol(Istrip);
+    if (k === 'back' && S.backWall) { Ilow = 0; Istrip = 0; low = To; strip = To; }
+    out[k] = { Ilow, Istrip, low, strip };
+  }
+  // roof: open, under hat, under awning, or under full shade
+  let Iroof = 0, roof = To, hatT = null;
+  if (!indoor && sun.alt > 0) {
+    const r = irradiance(sun, S.month, 0, 0, S.rho);
+    const Iopen = r.beam + r.sky;
+    if (S.shade === 'full') { Iroof = 0.4 * r.sky; roof = sol(Iroof); }
+    else if (S.hat) { Iroof = Iopen; roof = To + 0.35 * S.absorb * Iopen / ho; }
+    else if (S.shade === 'awning' && S.awning > 0) { Iroof = 0.3 * r.sky; roof = sol(Iroof); }
+    else { Iroof = Iopen; roof = sol(Iopen); }
+    if (S.hat) hatT = sol(Iopen);
+  }
+  if (S.hat && hatT === null) hatT = To;
+  if (!indoor && S.shade !== 'full') {
+    if (!S.hat && !(S.shade === 'awning' && S.awning > 0)) roof -= 3.9;
+    if (S.hat) hatT -= 3.9;
+  }
+  if (S.hat && S.shade === 'full') hatT = sol(0.4 * (sun.alt > 0 && !indoor ? irradiance(sun, S.month, 0, 0, S.rho).sky : 0));
+  out.top = { I: Iroof, Tsa: roof };
+  out.hatT = hatT;
+  out.glassTsa = To + A_GLASS * out.front.Ilow / ho;
+  return out;
+}
+
+// Three air spaces: console (C), locker bays (B), board strip (T). Run three days, keep the last.
+function simulate(S) {
+  const doy = dayOfYear(S);
+  const W = S.modW * IN, H = S.modH * IN, Dp = S.modD * IN, hs = S.stripH * IN, Hl = H - hs;
+  const nS = S.nL + S.nR, n = nS + 1;
+  const As = S.hasScreen ? S.scrW * S.scrH * IN * IN : 0;
+  const cA = { front: W * Hl - As, back: W * Hl, left: S.nL === 0 ? Hl * Dp : 0, right: S.nR === 0 ? Hl * Dp : 0 };
+  const bA = { front: nS * W * Hl, back: nS * W * Hl, left: S.nL > 0 ? Hl * Dp : 0, right: S.nR > 0 ? Hl * Dp : 0 };
+  const tA = { front: n * W * hs, back: n * W * hs, left: hs * Dp, right: hs * Dp };
+  const Aroof = n * W * Dp;
+  const Acb = ((S.nL > 0) + (S.nR > 0)) * Hl * Dp;
+  const Act = W * Dp, Abt = nS * W * Dp;
+  let UAc = As * S.Ug + Acb * U_INT + Act * U_SHELF + S.vent;
+  let UAb = Acb * U_INT + Abt * U_SHELF;
+  let UAt = Act * U_SHELF + Abt * U_SHELF + Aroof * S.U;
+  for (const k of VFACES) { UAc += cA[k] * S.U; UAb += bA[k] * S.U; UAt += tA[k] * S.U; }
+  const Cc = S.tauC * 3600 * UAc;
+  const Cb = nS > 0 ? S.tauB * 3600 * UAb : 1;
+  const Ct = S.tauT * 3600 * UAt;
+  const Qcon = S.gearW;
+  const Qstrip = S.wDoorBoard * n + (S.hat ? 0.5 * S.wLight : 0);
+  const set = F2C(S.acSet);
+  const dt = 60;
+  const start = conditions(S, doy, 0);
+  let Tc = start.To, Tb = start.To, Tt = start.To;
+  const rec = [];
+  for (let i = 0; i < 3 * 1440; i++) {
+    const h = (i % 1440) / 60;
+    const f = conditions(S, doy, h);
+    const TbUse = nS > 0 ? Tb : Tc;
+    let Qc = Qcon + As * S.Ug * (f.glassTsa - Tc) + Acb * U_INT * (TbUse - Tc) + Act * U_SHELF * (Tt - Tc) + S.vent * (f.To - Tc);
+    for (const k of VFACES) Qc += cA[k] * S.U * (f[k].low - Tc);
+    let Qac = 0;
+    if (S.ac) {
+      const need = Qc + Cc * (Tc - set) / dt;
+      Qac = clamp(need, 0, S.acCap);
+      Qc -= Qac;
+    }
+    let Qt = Qstrip + Act * U_SHELF * (Tc - Tt) + Abt * U_SHELF * (TbUse - Tt) + Aroof * S.U * (f.top.Tsa - Tt);
+    for (const k of VFACES) Qt += tA[k] * S.U * (f[k].strip - Tt);
+    let TbNew = Tb;
+    if (nS > 0) {
+      let Qb = Acb * U_INT * (Tc - Tb) + Abt * U_SHELF * (Tt - Tb);
+      for (const k of VFACES) Qb += bA[k] * S.U * (f[k].low - Tb);
+      TbNew = Tb + Qb * dt / Cb;
+    }
+    Tc += Qc * dt / Cc;
+    Tt += Qt * dt / Ct;
+    Tb = nS > 0 ? TbNew : Tc;
+    if (i >= 2 * 1440 && i % 10 === 0) {
+      const skin = (Tsa, Tin) => (f.ho * Tsa + H_IN * Tin) / (f.ho + H_IN);
+      const bayIn = nS > 0 ? Tb : Tc;
+      rec.push({
+        h, f, To: f.To, Tc, Tb, Tt, Qac,
+        Tg: S.hasScreen ? skin(f.glassTsa, Tc) : null,
+        conFront: skin(f.front.low, Tc), conBack: skin(f.back.low, Tc),
+        conLeft: skin(f.left.low, Tc), conRight: skin(f.right.low, Tc),
+        bayFront: skin(f.front.low, bayIn), bayBack: skin(f.back.low, bayIn),
+        bayLeft: skin(f.left.low, bayIn), bayRight: skin(f.right.low, bayIn),
+        stripFront: skin(f.front.strip, Tt), stripBack: skin(f.back.strip, Tt),
+        stripLeft: skin(f.left.strip, Tt), stripRight: skin(f.right.strip, Tt),
+        roof: skin(f.top.Tsa, Tt),
+        hat: f.hatT
+      });
+    }
+  }
+  return rec;
+}
+
+/* ---------------- 3D ---------------- */
+const viewEl = $('view');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+viewEl.insertBefore(renderer.domElement, viewEl.firstChild);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#eaf0f4');
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 400);
+const hemi = new THREE.HemisphereLight(0xffffff, 0xe6d8b8, 1.6);
+scene.add(hemi);
+const sunLight = new THREE.DirectionalLight(0xfff3d6, 2.4);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048);
+Object.assign(sunLight.shadow.camera, { left: -22, right: 22, top: 22, bottom: -22, near: 1, far: 120 });
+sunLight.shadow.bias = -0.0006;
+scene.add(sunLight); scene.add(sunLight.target);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), new THREE.MeshStandardMaterial({ color: '#e2d4b4', roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+const sunBall = new THREE.Mesh(new THREE.SphereGeometry(0.9, 24, 16), new THREE.MeshBasicMaterial({ color: '#f5b700' }));
+scene.add(sunBall);
+
+function textSprite(txt, color) {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 128;
+  const x = c.getContext('2d');
+  x.fillStyle = '#ffffff'; x.strokeStyle = '#111111'; x.lineWidth = 8;
+  x.beginPath(); x.arc(64, 64, 52, 0, Math.PI * 2); x.fill(); x.stroke();
+  x.fillStyle = color; x.font = 'bold 64px system-ui, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText(txt, 64, 68);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t }));
+  s.scale.set(1.6, 1.6, 1);
+  return s;
+}
+[['N', 0, -1, '#c8102e'], ['E', 1, 0, '#111111'], ['S', 0, 1, '#111111'], ['W', -1, 0, '#111111']].forEach(([t, x, z, col]) => {
+  const s = textSprite(t, col); s.position.set(x * 15, 0.9, z * 15); scene.add(s);
+});
+
+// heat glow: adds the vertex color as light so heat tints read clearly on shaded faces
+const glow = { value: 0.3 };       // sides, hat strip, roof
+const glowFront = { value: 0.3 };  // door fronts, which carry their own painted texture
+const frontMats = [];
+function heatMaterial(opts) {
+  const m = new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.55, metalness: 0.08, vertexColors: true, color: '#ffffff' }, opts));
+  if (opts.map) { m.emissiveMap = opts.map; m.emissive = new THREE.Color('#ffffff'); m.emissiveIntensity = 0; frontMats.push(m); }
+  const g = opts.map ? glowFront : glow;
+  m.onBeforeCompile = sh => {
+    sh.uniforms.heatGlow = g;
+    sh.fragmentShader = 'uniform float heatGlow;\n' + sh.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      '#include <emissivemap_fragment>\n#ifdef USE_COLOR\n  totalEmissiveRadiance += vColor.rgb * heatGlow;\n#endif');
+  };
+  return m;
+}
+
+const bank = new THREE.Group();
+scene.add(bank);
+let parts = null;
+let bankHeightFt = 7, bankWidthFt = 9;
+
+// Door patterns for the field style layout, top to bottom, in relative heights:
+// small doors stacked up top, medium in the middle, tall ones near the ground.
+const PATTERNS = [
+  [1, 1, 1, 1, 1.3, 1.3, 1.8, 1.8],
+  [1, 1, 1, 1.3, 1.3, 1.3, 1.8, 2],
+  [1.3, 1, 1, 1, 1, 1.3, 1.8, 2.2],
+  [1, 1, 1, 1, 1, 1.3, 1.8, 1.8],
+  [1, 1, 1.3, 1.3, 1, 1.3, 1.8, 2],
+  [1, 1, 1, 1, 1.3, 1.8, 1.8, 1.8]
+];
+
+function shadeHex(hex, k) {
+  const c = new THREE.Color(hex);
+  return `rgb(${Math.round(c.r * 255 * k)},${Math.round(c.g * 255 * k)},${Math.round(c.b * 255 * k)})`;
+}
+
+// Shared seam layout. Every column gap is the same width, and each module carries
+// half of that gap at each outer edge, so two modules side by side show one full gap.
+const SEAM_IN = 0.45;
+function seamLayout(cw, pxIn) {
+  const g = SEAM_IN * pxIn;
+  const mid = cw / 2;
+  return { g, mid, cols: [[g / 2, mid - g / 2], [mid + g / 2, cw - g / 2]] };
+}
+function lighten(hex, k) {
+  const c = new THREE.Color(hex);
+  const f = v => Math.round(Math.min(255, v * 255 + (255 - v * 255) * k));
+  return `rgb(${f(c.r)},${f(c.g)},${f(c.b)})`;
+}
+function drawSeamV(x, x0, w, h, colorHex) {
+  x.fillStyle = shadeHex(colorHex, 0.38); x.fillRect(x0, 0, w, h);
+  x.fillStyle = shadeHex(colorHex, 0.62); x.fillRect(x0, 0, Math.max(1, w * 0.25), h);
+}
+function drawSeamH(x, x0, x1, y, colorHex) {
+  x.fillStyle = shadeHex(colorHex, 0.42); x.fillRect(x0, y - 1.5, x1 - x0, 3);
+  x.fillStyle = lighten(colorHex, 0.35); x.fillRect(x0, y + 1.5, x1 - x0, 1.5);
+}
+
+function doorTexture(S, isConsole, colorHex, modIndex) {
+  const cw = 512, ch = Math.round(512 * S.lowH / S.modW);
+  const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+  const x = c.getContext('2d');
+  const pxIn = cw / S.modW;
+  x.fillStyle = colorHex; x.fillRect(0, 0, cw, ch);
+  const sheen = x.createLinearGradient(0, 0, 0, ch);
+  sheen.addColorStop(0, 'rgba(255,255,255,0.10)'); sheen.addColorStop(1, 'rgba(0,0,0,0.06)');
+  x.fillStyle = sheen; x.fillRect(0, 0, cw, ch);
+  const L = seamLayout(cw, pxIn);
+  const kick = Math.round(2.5 * pxIn);
+  const top = 0, bot = ch - kick;
+
+  // console panel: one door opening that holds the screen, scanner, and keypad
+  let panel = null;
+  if (isConsole) {
+    const pTop = S.hasScreen ? S.scrY + S.scrH / 2 + 4.5 : 50;
+    const pBot = S.hasScreen ? S.scrY - S.scrH / 2 - 8 : 38;
+    const cols = S.scrCol === 'center' ? [0, 1] : S.scrCol === 'right' ? [1] : [0];
+    panel = { y0: (S.lowH - pTop) * pxIn, y1: (S.lowH - pBot) * pxIn, cols };
+  }
+
+  const seamsFor = (y0, y1, pattern) => {
+    const sum = pattern.reduce((a, v) => a + v, 0);
+    const ys = []; let y = y0;
+    pattern.forEach((u, k) => { y += (y1 - y0) * u / sum; if (k < pattern.length - 1) ys.push(y); });
+    return ys;
+  };
+  for (let col = 0; col < 2; col++) {
+    const [x0, x1] = L.cols[col];
+    let ys = [];
+    if (panel && panel.cols.includes(col)) {
+      const nAbove = Math.max(1, Math.round((panel.y0 - top) / (0.075 * (bot - top))));
+      ys = ys.concat(seamsFor(top, panel.y0, new Array(nAbove).fill(1)), [panel.y0, panel.y1]);
+      const nBelow = Math.max(1, Math.round((bot - panel.y1) / (0.13 * (bot - top))));
+      ys = ys.concat(seamsFor(panel.y1, bot, new Array(nBelow).fill(0).map((_, k) => 1 + k * 0.3)));
+    } else if (S.doorLayout === 'even') {
+      ys = seamsFor(top, bot, new Array(Math.max(3, Math.round(S.rows * S.lowH / S.modH))).fill(1));
+    } else {
+      ys = seamsFor(top, bot, PATTERNS[(modIndex * 2 + col) % PATTERNS.length]);
+    }
+    ys.forEach(y => drawSeamH(x, x0, x1, y, colorHex));
+    // lock side marks: a small keyhole dot on each door, on the side away from the hinge
+    const edges = [top].concat(ys, [bot]);
+    for (let k = 0; k < edges.length - 1; k++) {
+      if (panel && panel.cols.includes(col) && Math.abs(edges[k] - panel.y0) < 1) continue;
+      const cy = (edges[k] + edges[k + 1]) / 2;
+      const kx = col === 0 ? x1 - 0.9 * pxIn : x0 + 0.9 * pxIn;
+      x.fillStyle = shadeHex(colorHex, 0.62);
+      x.beginPath(); x.arc(kx, cy, 0.22 * pxIn, 0, Math.PI * 2); x.fill();
+    }
+  }
+
+  if (panel) {
+    const pc = panel.cols;
+    const px0 = L.cols[pc[0]][0], px1 = L.cols[pc[pc.length - 1]][1];
+    const cx = (px0 + px1) / 2;
+    if (S.hasScreen) {
+      const sy = (S.lowH - S.scrY) * pxIn;
+      // small label plate above the screen
+      x.fillStyle = '#2b2d31';
+      x.fillRect(cx - 2.2 * pxIn, panel.y0 + 1.1 * pxIn, 4.4 * pxIn, 1.1 * pxIn);
+      x.fillStyle = '#f2f2f0';
+      x.fillRect(cx - 1.8 * pxIn, panel.y0 + 1.35 * pxIn, 3.6 * pxIn, 0.6 * pxIn);
+      // screen bezel; the glass is its own 3D piece
+      const bw = (S.scrW + 1.8) * pxIn, bh = (S.scrH + 1.8) * pxIn;
+      x.fillStyle = '#d9dbde';
+      x.fillRect(cx - bw / 2 - 0.4 * pxIn, sy - bh / 2 - 0.4 * pxIn, bw + 0.8 * pxIn, bh + 0.8 * pxIn);
+      x.fillStyle = '#3a3d42';
+      x.fillRect(cx - bw / 2, sy - bh / 2, bw, bh);
+      // scanner window, status lights, and keypad under the screen
+      const ky = sy + bh / 2 + 1.4 * pxIn;
+      x.fillStyle = '#2b2d31';
+      x.fillRect(cx - 3.6 * pxIn, ky, 3.4 * pxIn, 1.4 * pxIn);
+      x.fillStyle = '#d23a2a';
+      x.fillRect(cx - 3.4 * pxIn, ky + 2 * pxIn, 0.7 * pxIn, 0.7 * pxIn);
+      x.fillStyle = '#3fae49';
+      x.fillRect(cx - 2.4 * pxIn, ky + 2 * pxIn, 0.7 * pxIn, 0.7 * pxIn);
+      x.fillStyle = '#c9ccd1';
+      x.fillRect(cx + 0.4 * pxIn, ky, 3.4 * pxIn, 3.4 * pxIn);
+      x.fillStyle = '#5b5f66';
+      for (let r = 0; r < 4; r++) for (let k = 0; k < 3; k++)
+        x.fillRect(cx + 0.75 * pxIn + k * 1.05 * pxIn, ky + 0.3 * pxIn + r * 0.78 * pxIn, 0.6 * pxIn, 0.5 * pxIn);
+    } else {
+      x.fillStyle = '#3a3d42';
+      x.fillRect(cx - 3 * pxIn, (panel.y0 + panel.y1) / 2 - 1.5 * pxIn, 6 * pxIn, 3 * pxIn);
+    }
+  }
+
+  // column gaps: full gap in the middle, half gap at each module edge
+  drawSeamV(x, L.mid - L.g / 2, L.g, bot, colorHex);
+  drawSeamV(x, 0, L.g / 2, bot, colorHex);
+  drawSeamV(x, cw - L.g / 2, L.g / 2, bot, colorHex);
+  // base kick rail with a shadow line above it
+  x.fillStyle = shadeHex(colorHex, 0.78);
+  x.fillRect(0, bot, cw, kick);
+  x.fillStyle = shadeHex(colorHex, 0.45);
+  x.fillRect(0, bot, cw, 3);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
+function stripTexture(S, colorHex, isConsole) {
+  const cw = 512, ch = Math.max(32, Math.round(512 * S.stripH / S.modW));
+  const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+  const x = c.getContext('2d');
+  const pxIn = cw / S.modW;
+  x.fillStyle = colorHex; x.fillRect(0, 0, cw, ch);
+  x.fillStyle = 'rgba(255,255,255,0.10)'; x.fillRect(0, 0, cw, ch);
+  const L = seamLayout(cw, pxIn);
+  drawSeamV(x, L.mid - L.g / 2, L.g, ch, colorHex);
+  drawSeamV(x, 0, L.g / 2, ch, colorHex);
+  drawSeamV(x, cw - L.g / 2, L.g / 2, ch, colorHex);
+  drawSeamH(x, 0, cw, ch - 2, colorHex);
+  // small service tag plate on the left column of every module
+  const tx = L.cols[0][0] + 1.5 * pxIn;
+  x.fillStyle = '#f4f4f2'; x.fillRect(tx, ch * 0.3, 3 * pxIn, ch * 0.32);
+  x.strokeStyle = shadeHex(colorHex, 0.5); x.lineWidth = 2; x.strokeRect(tx, ch * 0.3, 3 * pxIn, ch * 0.32);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function disposeGroup(g) {
+  g.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) {
+      const ms = Array.isArray(o.material) ? o.material : [o.material];
+      ms.forEach(mm => { if (mm.map) mm.map.dispose(); mm.dispose(); });
+    }
+  });
+  while (g.children.length) g.remove(g.children[0]);
+}
+
+function addColorAttr(geo) {
+  const count = geo.attributes.position.count;
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(count * 3).fill(1), 3));
+}
+
+function build(S) {
+  disposeGroup(bank);
+  frontMats.length = 0;
+  const W = S.modW / 12, H = S.modH / 12, D = S.modD / 12, hs = S.stripH / 12, Hl = H - hs;
+  const n = S.nL + S.nR + 1;
+  const Wt = n * W;
+  const base = 0.15;
+  bankHeightFt = H; bankWidthFt = Wt;
+  const paint = PAINT[S.color].hex;
+  const side = heatMaterial({});
+  parts = { lows: [], strips: [], side, screen: null, hat: null, W, Hl, hs, D, conX: -Wt / 2 + W * (S.nL + 0.5) };
+  for (let i = 0; i < n; i++) {
+    const isCon = i === S.nL;
+    const x = -Wt / 2 + W * (i + 0.5);
+    // material order: +X right, -X left, +Y top, -Y bottom, +Z front, -Z back
+    const lowGeo = new THREE.BoxGeometry(W, Hl, D, 8, 12, 1);
+    addColorAttr(lowGeo);
+    const front = heatMaterial({ map: doorTexture(S, isCon, paint, i) });
+    const low = new THREE.Mesh(lowGeo, [side, side, side, side, front, side]);
+    low.position.set(x, base + Hl / 2, 0);
+    low.castShadow = true; low.receiveShadow = true;
+    low.userData = { isCon, i, outerL: i === 0, outerR: i === n - 1 };
+    bank.add(low); parts.lows.push(low);
+    const stripGeo = new THREE.BoxGeometry(W, hs, D, 8, 1, 1);
+    const stripFront = heatMaterial({ map: stripTexture(S, paint, isCon) });
+    addColorAttr(stripGeo);
+    const strip = new THREE.Mesh(stripGeo, [side, side, side, side, stripFront, side]);
+    strip.position.set(x, base + Hl + hs / 2, 0);
+    strip.castShadow = true; strip.receiveShadow = true;
+    strip.userData = { isCon, i, outerL: i === 0, outerR: i === n - 1 };
+    bank.add(strip); parts.strips.push(strip);
+  }
+  const padMesh = new THREE.Mesh(new THREE.BoxGeometry(Wt + 1.5, 0.15, D + 1.5), new THREE.MeshStandardMaterial({ color: '#cfccc4', roughness: 0.9 }));
+  padMesh.position.set(0, 0.075, 0.4); padMesh.receiveShadow = true;
+  bank.add(padMesh);
+  if (S.hasScreen) {
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(S.scrW / 12, S.scrH / 12),
+      new THREE.MeshStandardMaterial({ color: '#1d2833', roughness: 0.12, metalness: 0.3 }));
+    const colOff = S.scrCol === 'left' ? -W / 4 : S.scrCol === 'right' ? W / 4 : 0;
+    scr.position.set(parts.conX + colOff, base + S.scrY / 12, D / 2 + 0.012);
+    scr.receiveShadow = true;
+    bank.add(scr); parts.screen = scr;
+  }
+  // flared feet at both outer ends
+  const footShape = new THREE.Shape();
+  footShape.moveTo(0, 0); footShape.lineTo(0.2, 0); footShape.lineTo(0, 0.38); footShape.lineTo(0, 0);
+  const footGeo = new THREE.ExtrudeGeometry(footShape, { depth: 0.12, bevelEnabled: false });
+  const footMat = new THREE.MeshStandardMaterial({ color: paint, roughness: 0.5, metalness: 0.15 });
+  [[1, Wt / 2], [-1, -Wt / 2]].forEach(([dir, xEdge]) => {
+    [D / 2 - 0.14, -D / 2 + 0.02].forEach(z => {
+      const foot = new THREE.Mesh(footGeo, footMat);
+      foot.scale.x = dir;
+      foot.position.set(xEdge, base, z);
+      foot.castShadow = true;
+      bank.add(foot);
+    });
+  });
+
+  // back louvers: only behind the IT cabinet, lined up with the screen panel
+  const louverMat = new THREE.MeshStandardMaterial({ color: '#2a2a2a', roughness: 0.8 });
+  const colOffL = S.scrCol === 'left' ? -W / 4 : S.scrCol === 'right' ? W / 4 : 0;
+  const lw = S.scrCol === 'center' ? W * 0.6 : W * 0.32;
+  const cabTop = (S.hasScreen ? S.scrY + S.scrH / 2 + 4.5 : 50) / 12;
+  const cabBot = (S.hasScreen ? S.scrY - S.scrH / 2 - 8 : 38) / 12;
+  const nSl = Math.max(3, Math.floor((cabTop - cabBot - 0.25) / 0.14));
+  for (let j = 0; j < nSl; j++) {
+    const sl = new THREE.Mesh(new THREE.PlaneGeometry(lw, 0.05), louverMat);
+    sl.rotation.y = Math.PI;
+    sl.position.set(parts.conX + colOffL, base + cabBot + 0.18 + j * 0.14, -D / 2 - 0.012);
+    bank.add(sl);
+  }
+  // service seams on the back sheet at every module joint
+  const backSeamMat = new THREE.MeshStandardMaterial({ color: shadeHex(paint, 0.45), roughness: 0.8 });
+  for (let i = 1; i < n; i++) {
+    const sm = new THREE.Mesh(new THREE.PlaneGeometry(SEAM_IN / 12, H), backSeamMat);
+    sm.rotation.y = Math.PI;
+    sm.position.set(-Wt / 2 + W * i, base + H / 2, -D / 2 - 0.011);
+    bank.add(sm);
+  }
+  if (S.hat) {
+    const o = S.hatOver / 12;
+    const hatH = 0.2;
+    const hat = new THREE.Mesh(new THREE.BoxGeometry(Wt + 2 * o, hatH, D + 2 * o),
+      new THREE.MeshStandardMaterial({ color: paint, roughness: 0.45, metalness: 0.15 }));
+    hat.position.set(0, base + H + hatH / 2, 0);
+    hat.castShadow = true; hat.receiveShadow = true;
+    bank.add(hat); parts.hat = hat;
+    const boltMat = new THREE.MeshStandardMaterial({ color: '#222222', roughness: 0.6 });
+    [-1, 1].forEach(sx => {
+      const pod = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.12), boltMat);
+      pod.position.set(parts.conX + sx * W * 0.3, base + H + hatH + 0.08, D * 0.15);
+      pod.castShadow = true;
+      bank.add(pod);
+    });
+    if (S.wLight > 0) {
+      const lamp = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.5, 0.05), new THREE.MeshBasicMaterial({ color: '#fff7d6' }));
+      lamp.rotation.x = Math.PI / 2;
+      lamp.position.set(parts.conX, base + H - 0.001, D / 2 + o * 0.5);
+      bank.add(lamp);
+    }
+  }
+  const wallMat = new THREE.MeshStandardMaterial({ color: '#d8d2c6', roughness: 0.95 });
+  if (S.backWall || S.shade === 'indoor') {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(Wt + 6, H + 3, 0.5), wallMat);
+    wall.position.set(0, (H + 3) / 2, -D / 2 - 0.4);
+    wall.castShadow = true; wall.receiveShadow = true;
+    bank.add(wall);
+  }
+  const roofMat = new THREE.MeshStandardMaterial({ color: '#b9b3a6', roughness: 0.8, side: THREE.DoubleSide });
+  if (S.shade === 'awning' && S.awning > 0) {
+    const d = S.awning / 12;
+    const aw = new THREE.Mesh(new THREE.BoxGeometry(Wt + 0.6, 0.08, D + d), roofMat);
+    aw.position.set(0, base + H + (S.hat ? 0.55 : 0.3), d / 2);
+    aw.castShadow = true; aw.receiveShadow = true;
+    bank.add(aw);
+  }
+  if (S.shade === 'full') {
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(Wt + 8, 0.12, D + 10), roofMat);
+    roof.position.set(0, H + 3, 1.5);
+    roof.castShadow = true;
+    bank.add(roof);
+    const postMat = new THREE.MeshStandardMaterial({ color: '#7c776d' });
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sz]) => {
+      const p = new THREE.Mesh(new THREE.BoxGeometry(0.3, H + 3, 0.3), postMat);
+      p.position.set(sx * (Wt / 2 + 3.6), (H + 3) / 2, 1.5 + sz * (D / 2 + 4.6));
+      p.castShadow = true;
+      bank.add(p);
+    });
+  }
+  if (S.shade === 'indoor') {
+    const ceil = new THREE.Mesh(new THREE.BoxGeometry(Wt + 6, 0.2, D + 12), roofMat);
+    ceil.position.set(0, H + 3, 5);
+    ceil.castShadow = true;
+    bank.add(ceil);
+  }
+  bank.rotation.y = Math.PI - S.facing * D2R;
+}
+
+// Heat colors stretch from just under the outside air to the hottest surface at that moment,
+// so the hot spots stand out at every hour. The sun baked hat is left out of the range so it does not wash out the body.
+const STOPS = [[0, [158, 201, 240]], [0.25, [233, 242, 200]], [0.5, [246, 208, 77]], [0.75, [239, 122, 42]], [1, [200, 16, 46]]];
+const SCALE = { lo: 60, hi: 160 };
+function heatRGB(f) {
+  const t = clamp((f - SCALE.lo) / (SCALE.hi - SCALE.lo), 0, 1);
+  for (let i = 1; i < STOPS.length; i++) {
+    if (t <= STOPS[i][0]) {
+      const u = (t - STOPS[i - 1][0]) / (STOPS[i][0] - STOPS[i - 1][0]);
+      const a = STOPS[i - 1][1], b = STOPS[i][1];
+      return a.map((v, j) => (v + (b[j] - v) * u) / 255);
+    }
+  }
+  return STOPS[STOPS.length - 1][1].map(v => v / 255);
+}
+function setScale(S, r) {
+  const keys = ['Tc', 'Tb', 'Tt', 'conFront', 'conBack', 'conLeft', 'conRight', 'bayFront', 'bayBack', 'bayLeft', 'bayRight', 'stripFront', 'stripBack', 'stripLeft', 'stripRight', 'roof'];
+  let hi = -1e9;
+  keys.forEach(k => { if (r[k] !== null && r[k] !== undefined) hi = Math.max(hi, C2F(r[k])); });
+  if (r.Tg !== null) hi = Math.max(hi, C2F(r.Tg));
+  const lo = C2F(r.To) - 4;
+  SCALE.lo = Math.floor(lo);
+  SCALE.hi = Math.ceil(Math.max(hi + 3, lo + 25));
+  $('keyLo').textContent = `${SCALE.lo}`;
+  $('keyHi').textContent = `${SCALE.hi} F`;
+}
+// linear values for vertex colors (renderer works in linear space)
+const lin = c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+const heatLin = f => heatRGB(f).map(lin);
+
+// Paints every vertex of a module part. tempAt(face, x, y) returns F for that point.
+function paintMesh(mesh, tempAt, paintLin, frontIsTextured) {
+  const g = mesh.geometry;
+  const pos = g.attributes.position, nor = g.attributes.normal, col = g.attributes.color;
+  for (let v = 0; v < pos.count; v++) {
+    const nx = nor.getX(v), ny = nor.getY(v), nz = nor.getZ(v);
+    const face = nz > 0.5 ? 'front' : nz < -0.5 ? 'back' : nx > 0.5 ? 'right' : nx < -0.5 ? 'left' : ny > 0.5 ? 'top' : 'bottom';
+    let rgb;
+    if (paintLin) rgb = (face === 'front' && frontIsTextured) ? [1, 1, 1] : paintLin;
+    else rgb = heatLin(tempAt(face, mesh.position.x + pos.getX(v), pos.getY(v)));
+    col.setXYZ(v, rgb[0], rgb[1], rgb[2]);
+  }
+  col.needsUpdate = true;
+}
+
+function colorBank(S, r) {
+  if (!parts) return;
+  const P = parts;
+  const nS = S.nL + S.nR;
+  if (!S.heatView) {
+    glow.value = 0.28;
+    glowFront.value = 0;
+    frontMats.forEach(m => { m.emissiveIntensity = 0.32; });
+    const c = new THREE.Color(PAINT[S.color].hex);
+    const pl = [c.r, c.g, c.b];
+    P.lows.forEach(m => paintMesh(m, null, pl, true));
+    P.strips.forEach(m => paintMesh(m, null, pl, true));
+    if (P.hat) { P.hat.material.color.set(PAINT[S.color].hex); P.hat.material.emissive.set('#000000'); }
+    if (P.screen) P.screen.material.color.set('#1d2833');
+    return;
+  }
+  glow.value = 0.3;
+  glowFront.value = 0.3;
+  frontMats.forEach(m => { m.emissiveIntensity = 0; });
+  setScale(S, r);
+  const To = C2F(r.To);
+  const conRise = C2F(r.Tc) - To, bayRise = C2F(r.Tb) - To;
+  // warmer section, taller heat gradient toward its top
+  const stratCon = clamp(4 + conRise * 0.35, 3, 22);
+  const stratBay = clamp(2 + bayRise * 0.25 + (C2F(r.Tt) - C2F(r.Tb)) * 0.15, 1, 14);
+  const bleed = 0.45 * P.W;
+  const conFace = { front: C2F(r.conFront), back: C2F(r.conBack), left: C2F(r.conLeft), right: C2F(r.conRight), top: C2F(r.Tc), bottom: C2F(r.Tc) };
+  const bayFace = { front: C2F(r.bayFront), back: C2F(r.bayBack), left: C2F(r.bayLeft), right: C2F(r.bayRight), top: C2F(r.Tb), bottom: C2F(r.Tb) };
+  const stripFace = { front: C2F(r.stripFront), back: C2F(r.stripBack), left: C2F(r.stripLeft), right: C2F(r.stripRight), top: C2F(r.roof), bottom: C2F(r.Tt) };
+  P.lows.forEach(m => {
+    const ud = m.userData;
+    paintMesh(m, (face, x, y) => {
+      const frac = y / P.Hl + 0.5;
+      if (ud.isCon) {
+        let t = conFace[face];
+        if ((face === 'left' && !ud.outerL) || (face === 'right' && !ud.outerR)) t = C2F(r.Tc);
+        return t + stratCon * (frac - 0.5);
+      }
+      let t = bayFace[face];
+      if ((face === 'left' && !ud.outerL) || (face === 'right' && !ud.outerR)) t = C2F(r.Tb);
+      if (nS > 0 && (face === 'front' || face === 'back' || face === 'top')) {
+        const dc = Math.max(0, Math.abs(x - P.conX) - P.W / 2);
+        t += (conFace[face] - bayFace[face]) * 0.6 * Math.exp(-dc / bleed);
+      }
+      return t + stratBay * (frac - 0.5);
+    }, null, true);
+  });
+  P.strips.forEach(m => {
+    paintMesh(m, (face, x) => {
+      let t = stripFace[face];
+      const dc = Math.max(0, Math.abs(x - P.conX) - P.W / 2);
+      t += (C2F(r.Tc) - C2F(r.Tb)) * 0.25 * Math.exp(-dc / bleed);
+      return t;
+    }, null, true);
+  });
+  if (P.hat) {
+    const c = heatRGB(C2F(r.hat));
+    P.hat.material.color.setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
+    P.hat.material.emissive.setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace).multiplyScalar(0.45);
+  }
+  if (P.screen && r.Tg !== null) {
+    const c = heatRGB(C2F(r.Tg));
+    P.screen.material.color.setRGB(c[0] * 0.6, c[1] * 0.6, c[2] * 0.6, THREE.SRGBColorSpace);
+  }
+}
+
+// camera orbit
+const cam = { yaw: Math.PI, pitch: 0.32, dist: 22 };
+function aimCam(back) {
+  cam.yaw = (S.facing + (back ? 180 : 0)) * D2R;
+  cam.pitch = 0.3;
+  cam.dist = Math.max(14, bankWidthFt * 1.9);
+}
+function placeCamera() {
+  const tY = bankHeightFt * 0.45;
+  const dx = Math.sin(cam.yaw), dz = -Math.cos(cam.yaw);
+  camera.position.set(dx * cam.dist * Math.cos(cam.pitch), tY + cam.dist * Math.sin(cam.pitch), dz * cam.dist * Math.cos(cam.pitch));
+  camera.lookAt(0, tY, 0);
+}
+const ptrs = new Map();
+let pinch0 = 0, dist0 = 0;
+renderer.domElement.addEventListener('pointerdown', e => {
+  renderer.domElement.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 2) { const p = [...ptrs.values()]; pinch0 = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y); dist0 = cam.dist; }
+});
+renderer.domElement.addEventListener('pointermove', e => {
+  if (!ptrs.has(e.pointerId)) return;
+  const prev = ptrs.get(e.pointerId);
+  if (ptrs.size === 1) {
+    cam.yaw += (e.clientX - prev.x) * 0.008;
+    cam.pitch = clamp(cam.pitch + (e.clientY - prev.y) * 0.006, 0.03, 1.45);
+  }
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 2 && pinch0 > 0) {
+    const p = [...ptrs.values()];
+    const d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+    cam.dist = clamp(dist0 * pinch0 / d, 5, 80);
+  }
+  requestRender();
+});
+const endPtr = e => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch0 = 0; };
+renderer.domElement.addEventListener('pointerup', endPtr);
+renderer.domElement.addEventListener('pointercancel', endPtr);
+renderer.domElement.addEventListener('wheel', e => { e.preventDefault(); cam.dist = clamp(cam.dist * (1 + e.deltaY * 0.001), 5, 80); requestRender(); }, { passive: false });
+
+let renderQueued = false;
+function requestRender() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; placeCamera(); renderer.render(scene, camera); });
+}
+function resize() {
+  const w = viewEl.clientWidth, h = viewEl.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  requestRender();
+  drawChart();
+}
+window.addEventListener('resize', resize);
+
+/* ---------------- UI ---------------- */
+let S = readState();
+let REC = [];
+
+const cardinal = d => ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round(((d % 360) + 360) % 360 / 22.5) % 16];
+const fmtF = c => `${Math.round(C2F(c))} F`;
+const fmtTime = h => {
+  const hh = Math.floor(h), mm = Math.round((h - hh) * 60);
+  const ap = hh >= 12 ? 'PM' : 'AM';
+  const h12 = ((hh + 11) % 12) + 1;
+  return `${h12}:${String(mm).padStart(2, '0')} ${ap}`;
+};
+const hoursOver = (key, limF) => REC.filter(r => r[key] !== null && C2F(r[key]) > limF).length * 10 / 60;
+const fmtHours = h => h === 0 ? 'none' : (h < 1 ? `${Math.round(h * 60)} min` : `${(Math.round(h * 4) / 4).toString()} hr`);
+function sampleAt(h) { return REC[clamp(Math.round(h * 6), 0, REC.length - 1)]; }
+
+function updateMoment() {
+  const r = sampleAt(S.hour);
+  if (!r) return;
+  const f = r.f;
+  const nS = S.nL + S.nR;
+  $('clock').textContent = `${fmtTime(S.hour)}, ${MONTHS[S.month]} ${S.day}`;
+  $('roAmb').textContent = fmtF(r.To);
+  $('roAlt').textContent = f.sun.alt > 0 ? `${Math.round(f.sun.alt / D2R)} deg` : 'below horizon';
+  $('roGlass').textContent = r.Tg === null ? 'no screen' : fmtF(r.Tg);
+  $('roCon').textContent = fmtF(r.Tc);
+  $('roStrip').textContent = fmtF(r.Tt);
+  $('roBank').textContent = nS > 0 ? fmtF(r.Tb) : 'none';
+  $('roFront').textContent = fmtF(nS > 0 ? r.bayFront : r.conFront);
+  $('roTopLabel').textContent = S.hat ? 'Hat skin' : 'Roof skin';
+  $('roTop').textContent = fmtF(S.hat ? r.hat : r.roof);
+  $('roConBack').textContent = fmtF(r.conBack);
+  $('roAC').textContent = S.ac ? `${Math.round(r.Qac)} W` : 'AC off';
+  $('roIF').textContent = `${Math.round(f.front.Ilow)} W/m2`;
+  $('roGear').textContent = `${Math.round(S.gearW + S.wDoorBoard * (nS + 1))} W`;
+  const gF = r.Tg === null ? 0 : C2F(r.Tg);
+  $('roGlassBox').className = 'ro' + (gF > S.limTouch ? ' alarm' : gF > S.limSkin ? ' warn' : '');
+  $('roConBox').className = 'ro' + (C2F(r.Tc) > S.limElec ? ' alarm' : '');
+  $('roStripBox').className = 'ro' + (C2F(r.Tt) > S.limBoard ? ' alarm' : '');
+  $('hudSun').textContent = f.sun.alt > 0 ? `Sun ${Math.round(f.sun.alt / D2R)} up, ${Math.round(f.sun.az / D2R)} ${cardinal(f.sun.az / D2R)}` : 'Sun down';
+  $('hudFacing').textContent = `Front faces ${Math.round(S.facing)} ${cardinal(S.facing)}`;
+  $('heatKey').style.display = S.heatView ? 'flex' : 'none';
+
+  const alt = f.sun.alt, az = f.sun.az;
+  const dir = new THREE.Vector3(Math.cos(alt) * Math.sin(az), Math.sin(alt), -Math.cos(alt) * Math.cos(az));
+  const indoor = S.shade === 'indoor';
+  const up = alt > 0 && !indoor;
+  sunLight.intensity = up ? 2.1 : 0;
+  hemi.intensity = up ? 1.6 : (indoor ? 1.9 : 0.9);
+  sunLight.position.copy(dir.clone().multiplyScalar(50));
+  sunLight.target.position.set(0, 0, 0);
+  sunBall.visible = alt > 0;
+  sunBall.position.copy(dir.clone().multiplyScalar(26));
+
+  colorBank(S, r);
+  requestRender();
+  drawChart();
+}
+
+function drawChart() {
+  const cv = $('chart');
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w) return;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const x = cv.getContext('2d');
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.clearRect(0, 0, w, h);
+  if (!REC.length) return;
+  const nS = S.nL + S.nR;
+  const L = 36, R = 8, T = 8, B = 22;
+  const frontKey = nS > 0 ? 'bayFront' : 'conFront';
+  const series = [
+    ['To', '#8a8580', false], ['Tg', '#2f6fa8', false], ['Tc', '#c8102e', false], ['Tt', '#7a4fa0', false], ['Tb', '#ef7a2a', false], [frontKey, '#e0b400', true]
+  ].filter(([k]) => !(k === 'Tb' && nS === 0) && !(k === 'Tg' && !S.hasScreen));
+  let lo = 1e9, hi = -1e9;
+  REC.forEach(r => series.forEach(([k]) => { const v = C2F(r[k]); lo = Math.min(lo, v); hi = Math.max(hi, v); }));
+  [S.limTouch, S.limSkin, S.limElec, S.limBoard].forEach(v => { hi = Math.max(hi, v + 4); });
+  lo = Math.floor((lo - 4) / 10) * 10; hi = Math.ceil(hi / 10) * 10;
+  const px = hr => L + (w - L - R) * hr / 24;
+  const py = v => T + (h - T - B) * (1 - (v - lo) / (hi - lo));
+  x.strokeStyle = '#e3ded4'; x.lineWidth = 1; x.fillStyle = '#5d5850'; x.font = '10px system-ui, sans-serif';
+  x.textAlign = 'right'; x.textBaseline = 'middle';
+  for (let v = lo; v <= hi; v += 20) { x.beginPath(); x.moveTo(L, py(v)); x.lineTo(w - R, py(v)); x.stroke(); x.fillText(`${v}`, L - 4, py(v)); }
+  x.textAlign = 'center'; x.textBaseline = 'top';
+  for (let hr = 0; hr <= 24; hr += 6) { x.beginPath(); x.moveTo(px(hr), T); x.lineTo(px(hr), h - B); x.stroke(); x.fillText(hr === 0 || hr === 24 ? '12a' : hr === 12 ? '12p' : hr < 12 ? `${hr}a` : `${hr - 12}p`, px(hr), h - B + 5); }
+  const lim = (v, col) => { x.setLineDash([5, 4]); x.strokeStyle = col; x.lineWidth = 1.5; x.beginPath(); x.moveTo(L, py(v)); x.lineTo(w - R, py(v)); x.stroke(); x.setLineDash([]); };
+  if (S.hasScreen) { lim(S.limTouch, '#2f6fa8'); lim(S.limSkin, '#7aa6cf'); }
+  lim(S.limElec, '#c8102e');
+  lim(S.limBoard, '#7a4fa0');
+  series.forEach(([k, col, dashed]) => {
+    x.strokeStyle = col; x.lineWidth = 2.5; x.setLineDash(dashed ? [6, 4] : []);
+    x.beginPath();
+    REC.forEach((r, i) => { const X = px(r.h), Y = py(C2F(r[k])); i ? x.lineTo(X, Y) : x.moveTo(X, Y); });
+    x.stroke();
+  });
+  x.setLineDash([]);
+  x.strokeStyle = '#111111'; x.lineWidth = 2;
+  x.beginPath(); x.moveTo(px(S.hour), T); x.lineTo(px(S.hour), h - B); x.stroke();
+  x.strokeRect(L, T, w - L - R, h - T - B);
+}
+
+function updateStats() {
+  const peak = key => { let best = null; REC.forEach(r => { if (r[key] !== null && (!best || r[key] > best[key])) best = r; }); return best; };
+  const pg = peak('Tg'), pc = peak('Tc'), pt = peak('Tt');
+  $('stGlass').textContent = pg ? `${fmtF(pg.Tg)} at ${fmtTime(pg.h)}` : 'no screen';
+  $('stCon').textContent = `${fmtF(pc.Tc)} at ${fmtTime(pc.h)}`;
+  $('stStrip').textContent = `${fmtF(pt.Tt)} at ${fmtTime(pt.h)}`;
+  $('stTouch').textContent = S.hasScreen ? fmtHours(hoursOver('Tg', S.limTouch)) : 'no screen';
+  $('stSkin').textContent = S.hasScreen ? fmtHours(hoursOver('Tg', S.limSkin)) : 'no screen';
+  $('stElec').textContent = fmtHours(hoursOver('Tc', S.limElec));
+  $('stBoard').textContent = fmtHours(hoursOver('Tt', S.limBoard));
+  const qmax = REC.reduce((m, r) => Math.max(m, r.Qac), 0);
+  const capped = S.ac && REC.some(r => r.Qac >= S.acCap - 0.5 && C2F(r.Tc) > S.acSet + 0.5);
+  $('stAC').textContent = S.ac ? `${Math.round(qmax)} W${capped ? ', maxed out' : ''}` : 'AC off';
+}
+
+function recompute(rebuild) {
+  S = readState();
+  $('facingLabel').textContent = `${Math.round(S.facing)} ${cardinal(S.facing)}`;
+  if (rebuild) build(S);
+  REC = simulate(S);
+  updateStats();
+  updateMoment();
+}
+
+document.querySelectorAll('input, select').forEach(el => {
+  if (el.id === 'hour' || el.id === 'heatView') return;
+  el.addEventListener('input', () => {
+    if (el.id === 'color') $('absorb').value = PAINT[el.value].a.toFixed(2);
+    recompute(el.hasAttribute('data-build') || el.id === 'color');
+    if (['facing', 'nL', 'nR', 'modW'].includes(el.id)) { aimCam(false); requestRender(); }
+  });
+});
+$('hour').addEventListener('input', () => { S = readState(); updateMoment(); });
+$('heatView').addEventListener('change', () => { S = readState(); updateMoment(); });
+$('frontCam').addEventListener('click', () => { aimCam(false); requestRender(); });
+$('backCam').addEventListener('click', () => { aimCam(true); requestRender(); });
+
+let playing = null;
+$('playBtn').addEventListener('click', () => {
+  if (playing) { clearInterval(playing); playing = null; $('playBtn').textContent = 'Play day'; return; }
+  $('playBtn').textContent = 'Stop';
+  playing = setInterval(() => {
+    let h = parseFloat($('hour').value) + 0.25;
+    if (h > 23.75) h = 0;
+    $('hour').value = h;
+    S = readState(); updateMoment();
+  }, 120);
+});
+
+const openInfo = () => { $('infoModal').style.display = 'block'; };
+const closeInfo = () => { $('infoModal').style.display = 'none'; };
+$('infoBtn').addEventListener('click', openInfo);
+$('infoClose').addEventListener('click', closeInfo);
+$('infoClose2').addEventListener('click', closeInfo);
+
+build(S);
+aimCam(false);
+recompute(false);
+resize();
+</script>
+</body>
+</html>

@@ -1,0 +1,2299 @@
+<!DOCTYPE html>
+<!--
+=========================================================================
+FIELD STUDY
+Single file study tool for general workplace safety training.
+
+CONTENT SCOPE
+  General safety only: lockout/tagout, arc flash and electrical safety,
+  machine guarding, hand tools, ladders. Sourced from standard safety
+  curriculum concepts (NFPA 70E and general industry practice).
+  No employer name, internal system, role title, workflow, or proprietary
+  procedure appears anywhere in this file. An earlier build carried a
+  field service operations module; it was removed in full because it
+  described internal systems rather than general safety, and nothing
+  from it remains. Keep it that way when adding sets.
+
+ARCHITECTURE  (RED PHONE)
+  Everything is driven by the MODULES registry near the top of the
+  script. Adding a study set is one object pushed onto that array and
+  requires no other change. Seven set types exist:
+
+    cards     flashcards plus a multiple choice quiz
+              { q, options[], answer (index into options), note }
+              Any option count works, so a two option true/false item
+              can sit in the same set as four option questions.
+    sort      many items into a few named buckets
+              categories[{id,name}] + items[{t, cat}]
+    match     one to one pairing, pairs[{a,b}]
+    multi     select all that apply, { q, options[], correct[], note }
+    order     sequencing, steps[] stored in correct order
+    tf        true or false rows, statements[{t, a:bool, note}]
+    scenario  panels[] read in turn, then questions[{q,options,answer,note}]
+
+  Modes: Career is the gated, scored run. Flashcards opens every set and
+  converts it through toCards() into front/back cards with no scoring.
+  The chosen mode persists with progress.
+
+  Skin: comic style. Ink (#1B1B1B) is used for borders and hard offset
+  shadows only, never as a background.
+
+  Gating: sets unlock in registry order at PASS (80%). Progress and the
+  unlock-all toggle persist through the Store wrapper, which tries the
+  artifact storage bridge, then browser storage, then memory, so the same
+  file works in preview and on a deploy.
+
+  Conventions held throughout: light backgrounds only, never near black.
+  No function name may be shadowed by a local variable (a rename of the
+  home screen entry point to openModule fixed a crash caused by a local
+  named open). Verify with headless Node before delivery.
+
+DOCUMENTATION CONTRIBUTION  (BLUE PHONE)
+  Blue Phone supplied the Mohave Technology Group creator seal block
+  (mtg-seal-demo.html), a self contained drop-in that writes maker
+  identity into the page head and renders an expandable footer seal.
+  Not installed here yet; it is a one block paste before </body> if
+  this tool is ever published under the MTG name.
+=========================================================================
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#FFF1B8">
+<title>Field Study</title>
+<style>
+/* RED PHONE: shared tokens. Light backgrounds only, never near black. */
+:root{
+  --bg:#E4E7E1;
+  --surface:#FFFFFF;
+  --surface-2:#F3F5F1;
+  --ink:#1F2724;
+  --ink-soft:#5C6661;
+  --rule:#C7CDC5;
+  --accent:#2F6F4E;
+  --accent-soft:#DCEBE1;
+  --amber:#B45B14;
+  --amber-soft:#F7E6D6;
+  --pick:#1F4E79;
+  --pick-soft:#DCE7F2;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--ink);
+  font-family:"Inter","Helvetica Neue",Helvetica,Arial,sans-serif;
+  font-size:16px;line-height:1.42;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+.wrap{max-width:640px;margin:0 auto;padding:18px 14px 110px}
+
+/* RED PHONE: header, doubles as the back control inside a module */
+.top{display:flex;align-items:center;gap:10px;margin-bottom:14px;min-height:34px}
+.back{
+  font:inherit;font-size:14px;font-weight:600;border:1px solid var(--rule);background:var(--surface);
+  color:var(--ink);border-radius:9px;padding:8px 11px;cursor:pointer;flex:0 0 auto
+}
+.top-title{font-size:18px;font-weight:700;letter-spacing:-0.01em;margin:0;flex:1 1 auto;min-width:0}
+.top-meta{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-soft);flex:0 0 auto}
+.lede{margin:0 0 14px;font-size:15px;color:var(--ink-soft)}
+
+.bar{height:5px;background:var(--surface-2);border:1px solid var(--rule);border-radius:99px;overflow:hidden;margin-bottom:16px}
+.bar span{display:block;height:100%;background:var(--accent);width:0;transition:width .22s ease}
+
+/* RED PHONE: home list */
+.tile{
+  display:block;width:100%;text-align:left;font:inherit;background:var(--surface);
+  border:1px solid var(--rule);border-radius:14px;padding:16px 15px;margin-bottom:11px;
+  color:var(--ink);cursor:pointer;box-shadow:0 1px 2px rgba(31,39,36,.07)
+}
+.tile .kind{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;letter-spacing:.11em;text-transform:uppercase;color:var(--accent);font-weight:700}
+.tile h2{margin:7px 0 3px;font-size:18px;font-weight:700;letter-spacing:-0.01em}
+.tile p{margin:0;font-size:14px;color:var(--ink-soft)}
+.tile .head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.tile .badge{
+  flex:0 0 28px;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:15px;font-weight:700;background:var(--surface-2);border:1px solid var(--rule);color:var(--ink-soft)
+}
+.tile.done{border-color:var(--accent);background:var(--accent-soft)}
+.tile.done .badge{background:var(--accent);border-color:var(--accent);color:#fff}
+.tile.done .kind{color:var(--accent)}
+.tile.locked{opacity:.6;cursor:not-allowed;box-shadow:none}
+.tile.locked .kind{color:var(--ink-soft)}
+.gate{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-soft);margin-top:8px;display:block}
+.reset-link{display:block;width:100%;text-align:center;font:inherit;font-size:13px;color:var(--ink-soft);background:none;border:0;padding:14px 0 0;cursor:pointer;text-decoration:underline}
+.toggle{
+  display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;text-align:left;
+  font:inherit;background:var(--surface-2);border:1px solid var(--rule);border-radius:12px;
+  padding:12px 14px;margin-bottom:14px;color:var(--ink);cursor:pointer
+}
+.toggle strong{display:block;font-size:15px}
+.toggle .sub{display:block;font-size:13px;color:var(--ink-soft);margin-top:2px}
+.toggle .switch{
+  flex:0 0 auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;letter-spacing:.09em;
+  text-transform:uppercase;font-weight:700;padding:7px 12px;border-radius:99px;
+  background:var(--surface);border:1px solid var(--rule);color:var(--ink-soft)
+}
+.toggle.on{background:var(--pick-soft);border-color:var(--pick)}
+.toggle.on .switch{background:var(--pick);border-color:var(--pick);color:#fff}
+
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--surface-2);border:1px solid var(--rule);border-radius:12px;padding:5px;margin-bottom:16px}
+.modes button{font:inherit;font-size:15px;font-weight:600;padding:11px 8px;border:0;border-radius:8px;background:transparent;color:var(--ink-soft);cursor:pointer}
+.modes button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(31,39,36,.14)}
+
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:14px;padding:20px 16px;box-shadow:0 1px 2px rgba(31,39,36,.08)}
+.tag{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:12px}
+
+.flash{min-height:230px;display:flex;flex-direction:column;justify-content:center;cursor:pointer}
+.flash .q{font-size:20px;font-weight:600;line-height:1.35;margin:0}
+.flash .a{margin:14px 0 0;font-size:19px;font-weight:600;color:var(--accent)}
+.a-label{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin:18px 0 0;border-top:1px solid var(--rule);padding-top:14px}
+.hint{text-align:center;font-size:13px;color:var(--ink-soft);margin:12px 0 0}
+
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+button.btn{font:inherit;font-size:16px;font-weight:600;padding:14px 12px;border-radius:11px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);cursor:pointer;min-height:50px}
+button.btn:active{transform:translateY(1px)}
+button.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.btn:disabled{opacity:.4;cursor:default}
+.btn-wide{width:100%;margin-top:10px}
+
+.opts{display:flex;flex-direction:column;gap:9px;margin-top:16px}
+.opt{display:flex;gap:11px;align-items:flex-start;text-align:left;width:100%;font:inherit;font-size:16px;line-height:1.35;padding:13px;border-radius:11px;border:1px solid var(--rule);background:var(--surface-2);color:var(--ink);cursor:pointer}
+.opt .k{flex:0 0 24px;height:24px;border-radius:6px;background:var(--surface);border:1px solid var(--rule);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;color:var(--ink-soft)}
+.opt.right{background:var(--accent-soft);border-color:var(--accent)}
+.opt.right .k{background:var(--accent);border-color:var(--accent);color:#fff}
+.opt.wrong{background:var(--amber-soft);border-color:var(--amber)}
+.opt.wrong .k{background:var(--amber);border-color:var(--amber);color:#fff}
+.opt.chosen{background:var(--pick-soft);border-color:var(--pick)}
+.opt.chosen .k{background:var(--pick);border-color:var(--pick);color:#fff}
+.opt.missed{background:var(--surface);border-style:dashed}
+.opt .mark{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;display:block;margin-top:5px}
+.opt:disabled{cursor:default}
+.verdict{margin-top:14px;font-size:15px;font-weight:600}
+.verdict.ok{color:var(--accent)}
+.verdict.no{color:var(--amber)}
+.score{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;letter-spacing:.06em;color:var(--ink-soft);text-align:center;margin-top:16px}
+
+.big{font-size:48px;font-weight:700;letter-spacing:-0.03em;margin:6px 0 0;color:var(--accent)}
+.big.low{color:var(--amber)}
+.miss{border-top:1px solid var(--rule);padding-top:14px;margin-top:14px}
+.miss h3{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 10px}
+.miss-item{margin-bottom:14px}
+.miss-item p{margin:0 0 4px;font-size:15px;font-weight:600}
+.miss-item span{font-size:15px;color:var(--accent)}
+
+/* RED PHONE: sorting drill pieces */
+.tray{background:var(--surface-2);border:1px solid var(--rule);border-radius:14px;padding:12px;margin-bottom:16px}
+.tray-label{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:10px}
+.tray-empty,.bin-empty{font-size:14px;color:var(--ink-soft);padding:4px 2px}
+.chip{display:block;width:100%;text-align:left;font:inherit;font-size:15px;line-height:1.35;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:12px;margin-bottom:8px;color:var(--ink);cursor:pointer;min-height:46px}
+.chip:last-child{margin-bottom:0}
+.chip.picked{background:var(--pick-soft);border-color:var(--pick);box-shadow:0 0 0 2px var(--pick-soft)}
+.chip.right{background:var(--accent-soft);border-color:var(--accent)}
+.chip.wrong{background:var(--amber-soft);border-color:var(--amber)}
+.chip .mark{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;display:block;margin-top:6px}
+.chip .sub{display:block;margin-top:5px;font-size:14px;color:var(--ink-soft)}
+.chip.picked .sub{color:var(--pick)}
+.chip:disabled{opacity:.45;cursor:default}
+.chip.right .mark{color:var(--accent)}
+.chip.wrong .mark{color:var(--amber)}
+.bin{background:var(--surface);border:1px solid var(--rule);border-radius:14px;margin-bottom:12px;overflow:hidden}
+.bin-head{width:100%;text-align:left;font:inherit;font-size:16px;font-weight:700;background:var(--pick);color:#fff;border:0;padding:13px 14px;cursor:default;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.bin.open .bin-head{cursor:pointer;background:var(--accent)}
+.bin-head .cue{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;letter-spacing:.1em;text-transform:uppercase;opacity:.87;font-weight:600}
+.bin-body{padding:12px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+.result{background:var(--surface);border:1px solid var(--rule);border-radius:14px;padding:18px 14px;margin-top:16px;text-align:center}
+
+/* RED PHONE: true or false rows */
+.tfrow{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:13px 13px 12px;margin-bottom:10px}
+.tfrow.right{background:var(--accent-soft);border-color:var(--accent)}
+.tfrow.wrong{background:var(--amber-soft);border-color:var(--amber)}
+.tftext{margin:0 0 11px;font-size:16px;line-height:1.35}
+.tfbtns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tfb{
+  font:inherit;font-size:15px;font-weight:600;padding:11px 8px;min-height:44px;
+  border:1px solid var(--rule);background:var(--surface-2);color:var(--ink-soft);border-radius:9px;cursor:pointer
+}
+.tfb.on{background:var(--pick);border-color:var(--pick);color:#fff}
+.tfb:disabled{cursor:default}
+.tfrow.right .tfb.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.tfrow.wrong .tfb.on{background:var(--amber);border-color:var(--amber);color:#fff}
+.tfnote{margin:10px 0 0;font-size:14px;color:var(--ink-soft);line-height:1.4}
+
+.foot{text-align:center;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin-top:26px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* RED PHONE: comic skin */
+:root{
+  --bg:#FFF1B8; --surface:#FFFFFF; --surface-2:#FFF9E3;
+  --ink:#1B1B1B; --ink-soft:#4A4A4A; --rule:#1B1B1B;
+  --accent:#00A86B; --accent-soft:#C9F7DE;
+  --amber:#FF5A36; --amber-soft:#FFD8CC;
+  --pick:#7B3FE4; --pick-soft:#E8DCFF;
+  --pop:#FF3E9A; --zap:#FFD23F; --sky:#3EC8FF;
+}
+body{
+  background-color:var(--bg);
+  background-image:radial-gradient(rgba(255,62,154,.16) 1.6px, transparent 1.8px);
+  background-size:14px 14px;
+}
+.top-title,.tile h2,.big,.title,.bin-head,.modes button,.btn,.back{
+  font-family:"Arial Black","Impact","Helvetica Neue",Arial,sans-serif;
+  letter-spacing:.02em;
+}
+.top-title{text-transform:uppercase;text-shadow:3px 3px 0 var(--pop)}
+.tile,.card,.tray,.bin,.result,.tfrow,.toggle,.opt,.chip,.btn,.tfb,.modes,.back,.tile .badge{
+  border:3px solid var(--ink) !important;
+  border-radius:8px !important;
+  box-shadow:5px 5px 0 var(--ink) !important;
+}
+.chip,.opt,.tfb{box-shadow:3px 3px 0 var(--ink) !important}
+.bar{border:3px solid var(--ink) !important;height:12px;border-radius:99px}
+.bar span{background:repeating-linear-gradient(45deg,var(--pop) 0 8px,var(--zap) 8px 16px)}
+.tile{transition:transform .08s ease}
+.tile:nth-child(odd){transform:rotate(-.6deg)}
+.tile:nth-child(even){transform:rotate(.5deg)}
+.tile:active,.btn:active,.chip:active,.opt:active,.tfb:active{transform:translate(3px,3px) !important;box-shadow:2px 2px 0 var(--ink) !important}
+.tile .kind{color:var(--pop)}
+.tile .badge{background:var(--zap);color:var(--ink)}
+.tile.done{background:var(--accent-soft)}
+.tile.done .badge{background:var(--accent);color:#fff}
+.bin-head{background:var(--pick);border-bottom:3px solid var(--ink)}
+.bin.open .bin-head{background:var(--pop)}
+.btn.primary{background:var(--zap);color:var(--ink)}
+.btn.primary:disabled{background:var(--surface-2)}
+.modes{background:var(--sky)}
+.modes button[aria-pressed="true"]{background:var(--zap);color:var(--ink);box-shadow:2px 2px 0 var(--ink)}
+.modes button{color:var(--ink)}
+.card.flash{background:var(--surface)}
+.flash .a{color:var(--pick)}
+.big{text-shadow:3px 3px 0 var(--ink)}
+.tag,.a-label{color:var(--pop);font-weight:700}
+.ctx{font-size:14px;color:var(--ink-soft);margin:0 0 12px;padding:10px;background:var(--surface-2);border:2px dashed var(--ink);border-radius:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top" id="topbar"></div>
+  <div class="bar" id="barWrap"><span id="bar"></span></div>
+  <div id="stage"></div>
+  <p class="foot">Field Study &middot; Service Training</p>
+</div>
+
+<script>
+/* =======================================================================
+   RED PHONE: MODULE REGISTRY
+   Add a new study set by pushing one object onto MODULES.
+   type "cards": flashcards plus a 4 option quiz. Each card needs
+     q, options (4), answer (0-3 index), note.
+   type "sort": tap to categorize drill. categories need id and name,
+     items need t and cat matching a category id.
+   ======================================================================= */
+var MODULES = [
+  {
+    id: "loto",
+    type: "sort",
+    title: "Lockout / Tagout Roles",
+    blurb: "Sort each statement into Authorized, Affected, or Other Employees.",
+    lede: "Tap an item, then tap the category it belongs to. Tap a placed item to send it back.",
+    categories: [
+      { id:"auth", name:"Authorized Employees" },
+      { id:"aff", name:"Affected Employees" },
+      { id:"other", name:"Other Employees" }
+    ],
+    items: [
+      { t:"Trained by employer on how to perform lockout/tagout.", cat:"auth" },
+      { t:"Are the only employees who can participate in lockout/tagout.", cat:"auth" },
+      { t:"Can safely perform repairs because of lockout/tagout.", cat:"auth" },
+      { t:"Apply and remove the locks and tags on the equipment.", cat:"auth" },
+      { t:"May be asked to shut down a machine they operate.", cat:"aff" },
+      { t:"Work in an area where lockout takes place, but do not participate in the procedure.", cat:"aff" },
+      { t:"Operate the equipment that is being locked out.", cat:"aff" },
+      { t:"Include visitors and contractors.", cat:"other" },
+      { t:"Do not work in the area where lockout takes place, but may pass through.", cat:"other" },
+      { t:"Need to know not to touch or restart locked out equipment.", cat:"other" }
+    ]
+  },
+  {
+    id: "energy",
+    type: "match",
+    title: "Energy Sources",
+    blurb: "Match each energy source to how it is produced or stored.",
+    lede: "Tap a source, then tap its description. Tap a matched pair to break it apart.",
+    leftLabel: "Energy sources",
+    rightLabel: "Descriptions",
+    pairs: [
+      { a:"Radiant Energy", b:"Sources include X-rays, microwaves, and ultraviolet light." },
+      { a:"Electrical Energy", b:"May be stored in a battery or capacitor." },
+      { a:"Gravitational Energy", b:"Created when objects fall." },
+      { a:"Mechanical Energy", b:"Typically created by an object's motion, position, or both." },
+      { a:"Chemical Energy", b:"Released during a chemical reaction." },
+      { a:"Thermal Energy", b:"Generated by high heat." },
+      { a:"Hydraulic / Pneumatic Energy", b:"Source is pressurized liquid or air." }
+    ]
+  },
+  {
+    id: "responsibilities",
+    type: "multi",
+    title: "Lockout Responsibilities",
+    blurb: "Select all that apply. Every correct answer has to be picked and nothing else.",
+    lede: "Tap every answer that applies, then check.",
+    questions: [
+      {
+        q: "Which of the following accurately describes a responsibility affected workers have during a lockout/tagout procedure?",
+        options: [
+          "Stay out of the area during the lockout/tagout.",
+          "Do not remove locks or tags from equipment.",
+          "Help out with lockout/tagout procedures whenever possible.",
+          "Return to the lockout area regularly to check progress.",
+          "Do not attempt to operate locked/tagged equipment."
+        ],
+        correct: [0,1,4],
+        note: "Affected workers stay clear and hands off. Participating in the procedure or checking on progress belongs to authorized employees."
+      },
+      {
+        q: "Which of the following describe authorized employees?",
+        options: [
+          "Trained by the employer on how to perform lockout/tagout.",
+          "Apply and remove the locks and tags on the equipment.",
+          "Are the only employees who may participate in lockout/tagout.",
+          "Include visitors and contractors.",
+          "Pass through the area but do not work there."
+        ],
+        correct: [0,1,2],
+        note: "Visitors, contractors, and pass through traffic fall under Other Employees."
+      },
+      {
+        q: "Which energy sources have to be controlled before equipment is serviced?",
+        options: [
+          "Electrical energy stored in a battery or capacitor.",
+          "Hydraulic or pneumatic pressure.",
+          "Gravitational energy from a suspended or raised load.",
+          "Thermal energy from high heat.",
+          "Ambient light in the room."
+        ],
+        correct: [0,1,2,3],
+        note: "Stored and residual energy counts. Room lighting is not a hazardous energy source."
+      }
+    ]
+  },
+  {
+    id: "steps",
+    type: "order",
+    title: "Basic Lockout / Tagout Steps",
+    blurb: "Put the five steps of a lockout in the order they are performed.",
+    lede: "Tap a step to drop it into the next open slot. Tap a placed step to pull it back out.",
+    poolLabel: "Steps",
+    steps: [
+      "Inform Others",
+      "De-energize Machine",
+      "Apply Locks/Tags",
+      "Release Stored Energy",
+      "Confirm De-energized"
+    ],
+    note: "Notify everyone affected, shut the machine down, lock and tag it, bleed off anything still stored, then verify it is dead before you touch it."
+  },
+  {
+    id: "practices",
+    type: "sort",
+    title: "Safe Work Practices",
+    blurb: "Decide whether each practice around locked out equipment is safe or unsafe.",
+    lede: "Tap a practice, then tap Safe or Unsafe. Tap a placed item to send it back.",
+    categories: [
+      { id:"safe", name:"Safe" },
+      { id:"unsafe", name:"Unsafe" }
+    ],
+    items: [
+      { t:"An authorized worker must perform a lockout before reaching into a machine to unjam it.", cat:"safe" },
+      { t:"Do not attempt to operate equipment that is locked or tagged out.", cat:"safe" },
+      { t:"If you see a tag on the floor, take it to your facility's lost and found.", cat:"unsafe" },
+      { t:"When in doubt, do not power up a machine until you have checked its status with your supervisor.", cat:"safe" },
+      { t:"Be aware that a contractor's locks may look different from internal locks.", cat:"safe" },
+      { t:"If a machine's controls are in the off position you can safely bypass its guards.", cat:"unsafe" },
+      { t:"Notify your supervisor if you notice a tag left on equipment that is running.", cat:"safe" }
+    ]
+  },
+  {
+    id: "hazards",
+    type: "sort",
+    title: "Hazards and Injuries",
+    blurb: "Tell an arc flash apart from an electric shock by its cause and its injuries.",
+    lede: "Tap a statement, then tap the hazard it describes. Tap a placed item to send it back.",
+    categories: [
+      { id:"arc", name:"Arc Flash" },
+      { id:"shock", name:"Electric Shock" }
+    ],
+    items: [
+      { t:"A conductive object bridges an energized conductor to ground.", cat:"arc" },
+      { t:"Contact causes a current to ground path through the body.", cat:"shock" },
+      { t:"Electrocution, tissue or organ damage, and suffocation are possible injuries.", cat:"shock" },
+      { t:"Burns, eye and ear damage, and wounds are possible injuries.", cat:"arc" },
+      { t:"Severity of injury depends on the amount of current and its path.", cat:"shock" },
+      { t:"This phenomenon results in visual electric light and high temperatures.", cat:"arc" },
+      { t:"Sparks burn until equipment failure or upstream devices interrupt current.", cat:"arc" },
+      { t:"Temperatures can reach 35,000 degrees F close to the point of origin.", cat:"arc" }
+    ]
+  },
+  {
+    id: "livework",
+    type: "scenario",
+    title: "Staying Safe with Live Work",
+    blurb: "Read the job setup, then decide what protections belong on the permit.",
+    panels: [
+      "Stan, an electrically qualified worker, and his helper Ashley are assigned to replace a breaker for an air vent motor circuit. The breaker is old and no longer able to carry normal current without occasionally tripping.",
+      "The panel also feeds life safety systems, so it cannot be de-energized without evacuating employees from affected areas, something the company wants to avoid if possible. Stan's supervisor thinks Stan can safely replace the breaker if he takes the proper precautions.",
+      "The panel has a full current rating of 25kA and 480V. Stan will need Ashley's help to remove the panel cover. She has demonstrated the necessary skills to safely assist with this task.",
+      "Stan knows that live work at this location carries the hazard of both electric shock and arc flash. He consults the arc flash boundary table in Section 130.7 of NFPA 70E and sees that it should be 36 inches with a PPE category of 2. He consults the protection boundary for electric shock hazard and sees that the limited approach boundary is 42 inches."
+    ],
+    questions: [
+      {
+        q: "What protections should Stan set up?",
+        options: [
+          "Permit, job briefing, set barrier for limited approach, wear category 2 PPE, supervise helper",
+          "Job briefing, set barrier for limited approach, wear category 2 PPE, supervise helper",
+          "Permit, job briefing, set barriers for limited approach and arc flash, wear category 2 PPE, supervise helper",
+          "Permit, job briefing, set barrier for limited approach, wear category 1 PPE, supervise helper"
+        ],
+        answer: 2,
+        note: "Two hazards means two boundaries. The 42 inch limited approach covers shock and the 36 inch arc flash boundary covers the blast, so both get barriers. Energized work needs a permit, the table calls for category 2, and Ashley is a helper who has to be supervised."
+      }
+    ]
+  },
+  {
+    id: "program",
+    type: "tf",
+    title: "Program Requirements",
+    blurb: "True or false on what an electrical safety program actually requires.",
+    lede: "Mark each statement true or false, then check.",
+    statements: [
+      { t:"Electrically qualified workers must retrain annually.",
+        a:false, note:"Retraining runs at intervals not to exceed three years, not every year." },
+      { t:"An electrical safety program includes consideration of maintenance, awareness, and controls.",
+        a:true, note:"Those are core elements of the program." },
+      { t:"A work permit must accompany every electrical task.",
+        a:false, note:"An energized work permit is for work inside the boundaries on live equipment, not for every electrical task." },
+      { t:"All workers receive first aid training.",
+        a:false, note:"First aid and CPR training goes to employees whose duties expose them to the hazard, not to everyone." },
+      { t:"Qualified worker training requires a familiarity with NFPA 70E approach distance tables and voltages.",
+        a:true, note:"A qualified worker has to know the boundaries and the voltages involved." },
+      { t:"Workers being trained can work unsupervised within the limited approach boundary.",
+        a:false, note:"A worker in training stays under the direct supervision of a qualified person inside that boundary." },
+      { t:"Employers must verify and document employee training annually.",
+        a:true, note:"Retraining is on a three year cycle, but the employer still verifies compliance and documents it every year." }
+    ]
+  },
+  {
+    id: "whatwould",
+    type: "scenario",
+    title: "What Would You Do?",
+    blurb: "You need equipment that is locked and tagged. Work through what happens next.",
+    panels: [
+      "Frank gets to work, eager to finish an order he started yesterday so he can move on to another project. He turns on the lathe, but it does not start.",
+      "Frank checks to see if the lathe is plugged in, and it is.",
+      "Frank goes into the control room and sees that the circuit breaker that controls the lathe is switched off, and that someone has locked and tagged it in the off position."
+    ],
+    questions: [
+      {
+        q: "What should Frank do?",
+        options: [
+          "Find some bolt cutters, cut off the lock and tag, and restore power to the lathe.",
+          "Find someone with bolt cutters to cut the lock off, and then restore power to the lathe.",
+          "Find something else to do until the authorized worker removes the lock and tag.",
+          "Ask his supervisor to remove the lock and tag and restore power to the machine."
+        ],
+        answer: 2,
+        note: "A lock comes off by the person who put it on. That lock means someone may have their hands in that machine right now. Cutting it yourself, having someone else cut it, or routing the request through a supervisor all end the same way, with power restored while a worker is still exposed. The schedule waits."
+      }
+    ]
+  },
+  {
+    id: "briefing",
+    type: "sort",
+    title: "Briefing, Permit, or Both?",
+    blurb: "Sort what belongs to a job briefing, an energized work permit, or both.",
+    lede: "Tap a description, then tap where it belongs. Tap a placed item to send it back.",
+    categories: [
+      { id:"brief", name:"Job Briefing" },
+      { id:"permit", name:"Energized Work Permit" },
+      { id:"both", name:"Both" }
+    ],
+    items: [
+      { t:"Always required when a job involves more than one person.", cat:"brief" },
+      { t:"Not required if employee is working alone.", cat:"brief" },
+      { t:"Any competent person can do one.", cat:"brief" },
+      { t:"Provides details if work involves live components of 50v or more.", cat:"both" },
+      { t:"Not required for troubleshooting with meters if using safe practices and PPE.", cat:"permit" },
+      { t:"Must be signed by authorized person or owner.", cat:"permit" },
+      { t:"Must include evidence of a job briefing.", cat:"permit" }
+    ]
+  },
+  {
+    id: "arcexam",
+    type: "cards",
+    title: "Arc Flash Exam",
+    blurb: "All 30 exam items. Correct answers are from the confirmed key, wrong options are written by me for practice.",
+    cards: [
+      { q:"What is arc flash?", options:["Visual light and heat released during an arc fault","Current passing through the body to ground","Slow overheating of conductor insulation","Static discharge between two ungrounded conductors"], answer:0, note:"The light and heat of the fault itself, not current through a person." },
+      { q:"What is the minimum voltage generally considered capable of causing a serious shock?", options:["24 volts","50 volts","120 volts","240 volts"], answer:1, note:"50 volts is the threshold that triggers the shock rules and the permit requirement." },
+      { q:"What injuries can an arc flash cause?", options:["Eye injury only","Burns only","Eye injury and burns","Suffocation and organ damage"], answer:2, note:"The blast brings both light and heat, so eyes and skin are both at risk." },
+      { q:"The severity of an electric shock injury depends on what?", options:["The amount of current and the path it takes","The available current and how long the event lasts","Distance from the point of origin","Ambient temperature at the panel"], answer:0, note:"Shock is about current and its path through the body." },
+      { q:"The severity of an arc flash injury depends on what?", options:["The amount of current and the path through the body","The available current and the duration of the arc","The color of the conductor insulation","The number of workers present"], answer:1, note:"Arc flash is about available fault current and how long it burns." },
+      { q:"What is the arc flash protection boundary?", options:["The distance at which no burn of any kind can occur","The distance at which a burn would be less than a mild sunburn","The distance at which shock is the only remaining hazard","A fixed distance set by the equipment manufacturer"], answer:1, note:"Less than a mild sunburn, not zero burn. This one catches people." },
+      { q:"How are approach and arc flash boundaries determined?", options:["Measured with a meter at the panel","Set by the utility for each service","From NFPA 70E tables or the employer's safe work practice tables","Assigned by the inspector on each job"], answer:2, note:"Published tables, either 70E or the employer's equivalent." },
+      { q:"What defines an electrically safe working condition?", options:["The breaker has been switched off","Locked, tagged, de-energized, and tested for no stored or potential energy","The disconnect is open and taped over","The equipment is unplugged and has cooled down"], answer:1, note:"Off is not safe. Verified and de-energized with stored energy released is safe." },
+      { q:"What qualifies a helper to assist a qualified worker?", options:["Completion of classroom training","A supervisor's verbal approval","Two years of experience in the trade","Demonstrated ability to safely perform that specific task"], answer:3, note:"Demonstrated ability on that task, not general seniority." },
+      { q:"What general skills does a qualified worker need?", options:["Knowledge of the task only","Hazard recognition training only","Knowledge of the task plus training to recognize and avoid hazards","A journeyman license"], answer:2, note:"Both halves. Knowing the work and knowing the hazard." },
+      { q:"How does an employer deliver electrical safety training?", options:["Classroom only","On the job only","Self study only","A combination of classroom and on the job"], answer:3, note:"Both settings together." },
+      { q:"When is a job briefing required?", options:["Before every job","Only when live parts are exposed","Only when more than three people are working","Only when a permit has been issued"], answer:0, note:"Always. The absence of live work does not excuse it." },
+      { q:"What does a risk assessment accomplish?", options:["Identifies the hazards present","Estimates the likelihood and severity of injury","Determines the protective measures needed","All of these"], answer:3, note:"All three, in that order." },
+      { q:"When is retraining required?", options:["When supervision or inspection shows the employee is not complying with safe work practices","Every twelve months without exception","Only after a recordable injury","Whenever equipment is replaced"], answer:0, note:"Observed non-compliance triggers it, on top of the normal cycle." },
+      { q:"What must a worker be able to do to work within the limited approach boundary?", options:["Recognize the hazards only","Determine the boundaries only","Select the right PPE only","Recognize the hazards, determine the boundaries, and use the right PPE and procedures"], answer:3, note:"All of it together, which is what makes someone qualified for that space." },
+      { q:"What is the purpose of a lock and tag?", options:["To mark equipment as out of service permanently","To prevent equipment from being re-energized during repairs or maintenance","To identify which department owns the machine","To record the last service date"], answer:1, note:"It exists to keep power off while someone is exposed." },
+      { q:"You find equipment with Danger, Do Not Operate tags on it. What do you do?", options:["Remove the tags and note it in the log","Operate it only if the machine appears safe","Do not remove the tags and do not operate the controls","Ask a coworker to remove them for you"], answer:2, note:"Hands off both the tag and the controls." },
+      { q:"What is the preferred lockout and tagout method?", options:["Locks only","Tags only","Whichever is closer at hand","Use both locks and tags together"], answer:3, note:"The lock is the barrier, the tag is the message. Use both." },
+      { q:"Which are examples of equipment used to de-energize and isolate?", options:["Chains, fasteners, and hasps only","Gang lockboxes only","Chains, fasteners, and hasps plus gang lockboxes","Warning cones and barrier tape"], answer:2, note:"Both families of hardware." },
+      { q:"Which statement about tags is true?", options:["Tags carry the same meaning as locks","Tags form an effective physical barrier","Tags are optional whenever a lock is used","Tags may be removed by anyone working in the area"], answer:0, note:"Same meaning, no physical barrier. That distinction shows up again on the LOTO exam." },
+      { q:"After a lock has to be removed in another worker's absence, what else is required?", options:["Nothing further once power is restored","Follow up with documentation of the occurrence","A verbal notice to the current shift only","A report only if someone was injured"], answer:1, note:"The event gets documented, not just handled." },
+      { q:"Which step prevents injury from a startup caused by residual energy?", options:["Release of stored energy","Turning off the controls","Applying the tag","Informing others"], answer:0, note:"Controls off is not the hazard. Capacitors, pressure, and suspended loads are." },
+      { q:"Which tasks require demonstrated proficiency?", options:["Choosing and using test instruments only","Reading and interpreting test displays only","Choosing and using test instruments plus reading and interpreting their displays","Replacing the batteries in a tester"], answer:2, note:"Picking the right meter and understanding what it tells you." },
+      { q:"What is included in every job briefing?", options:["Hazards only","Work procedures and special precautions only","Energy source controls and PPE only","Hazards, work procedures and special precautions, and energy source controls and PPE"], answer:3, note:"All of it, every time." },
+      { q:"Who ensures the job briefing occurs?", options:["The safety manager","The person in charge of the work","Each worker for themselves","The owner of the equipment"], answer:1, note:"The person in charge owns it." },
+      { q:"What must happen to an energized work permit before work begins?", options:["It must be signed by an authorized person or the owner","It must be filed with the utility","It must be posted for 24 hours first","Nothing, it is a record completed afterward"], answer:0, note:"Signed by someone with the authority to accept the risk." },
+      { q:"When may an employer authorize energized work on 50 volts or more?", options:["When the schedule will not allow a shutdown","When the worker is qualified and has PPE","When de-energizing introduces additional or increased hazards, or is infeasible due to equipment design or operational limitations","Any time a permit is available"], answer:2, note:"Added hazard or infeasibility. Inconvenience is not on the list." },
+      { q:"Which part of an insulated work boot provides the dielectric protection?", options:["The steel toe","The sole","The laces","The leather upper"], answer:1, note:"The sole is what stands between you and the path to ground." },
+      { q:"What are a worker's responsibilities regarding PPE?", options:["Wear and use it properly only","Maintain and inspect it only","Wear and use it properly, and maintain and inspect it","Store it in the vehicle between jobs"], answer:2, note:"Using it right and keeping it serviceable are both on you." },
+      { q:"When is fall protection equipment required?", options:["More than four feet above ground level","More than six feet above ground level","More than ten feet above ground level","At any height above the floor"], answer:0, note:"Four feet is the general industry trigger." }
+    ]
+  },
+  {
+    id: "lotoexam",
+    type: "cards",
+    title: "Lockout / Tagout Exam",
+    blurb: "All 12 exam items. Correct answers are from the confirmed key, wrong options are written by me for practice.",
+    cards: [
+      { q:"What secures energy isolating devices to prevent accidental startup?", options:["Locks","Tags","Warning signs","Barrier tape"], answer:0, note:"The lock is the thing that physically holds the device." },
+      { q:"Which employee category has occasional access to the area but does not participate in lockout?", options:["Authorized","Affected","Other","Qualified"], answer:2, note:"Other employees pass through. Affected employees work there." },
+      { q:"What is an affected employee's responsibility during a lockout?", options:["Assist the authorized worker when asked","Verify the lock is secure","Check on progress periodically","Avoid the area and do not attempt to help"], answer:3, note:"Stay clear and hands off." },
+      { q:"What type of energy is stored inside a battery?", options:["Chemical energy","Mechanical energy","Electrical energy","Thermal energy"], answer:2, note:"The exam treats stored battery energy as electrical." },
+      { q:"Which energy source can cause extreme temperatures, fire, explosion, or toxic gas when uncontrolled?", options:["Mechanical energy","Gravitational energy","Chemical energy","Radiant energy"], answer:2, note:"Chemical reactions bring heat, fire, and fumes." },
+      { q:"Which employees must receive lockout related training?", options:["Authorized employees only","Authorized and affected employees only","Contractors only","All of them"], answer:3, note:"Everyone gets training scaled to their role." },
+      { q:"Which statement about lockout locks is true?", options:["They are only used to lock out equipment, so their meaning is clear","They may double as toolbox or locker locks","They may be shared between workers on a shift","Any lock on site is acceptable"], answer:0, note:"Single purpose locks mean a lock on a disconnect is never ambiguous." },
+      { q:"Which is NOT a feature of tagout tags?", options:["They warn against operating the device","They identify who applied them","They create an effective barrier to accidental energy release","They carry the same meaning as a lock"], answer:2, note:"A tag is a message, not a barrier. That is the whole limitation." },
+      { q:"If a tag is used alone because the equipment cannot be locked out, what is required?", options:["A supervisor present at all times","Another way to prevent accidental energizing","Two tags instead of one","A permit signed by the owner"], answer:1, note:"Something else has to do the job the lock would have done." },
+      { q:"What is the correct order of the basic lockout steps?", options:["Inform others, de-energize, apply locks and tags, release stored energy, confirm de-energized","De-energize, apply locks and tags, inform others, confirm de-energized, release stored energy","Apply locks and tags, inform others, de-energize, confirm de-energized, release stored energy","Inform others, apply locks and tags, de-energize, confirm de-energized, release stored energy"], answer:0, note:"Verification is always last." },
+      { q:"Which statement about outside contractors performing lockout is true?", options:["Contractors use the facility's locks","A contractor's locks may differ in appearance from the facility's locks","Contractors are exempt from lockout on short jobs","Facility staff may remove a contractor's lock at shift end"], answer:1, note:"A lock that looks unfamiliar is still somebody's lock." },
+      { q:"Which is acceptable behavior for affected workers cleaning their machine?", options:["Removing a guard for better access","Keeping proper safeguards in place","Jogging the machine to reposition it","Reaching past a guard with a rag"], answer:1, note:"Cleaning does not suspend the guarding rules." }
+    ]
+  },
+  {
+    id: "guardmatch",
+    type: "match",
+    title: "Machine Guards and Devices",
+    blurb: "Match each guard or device to what it actually does. All seven pairs are from the verified activity.",
+    lede: "Tap a guard, then tap its description. Tap a matched pair to break it apart.",
+    leftLabel: "Guards and devices",
+    rightLabel: "Descriptions",
+    pairs: [
+      { a:"Interlocked Device", b:"Designed so that when a guard is opened, lifted, or removed, power automatically shuts off." },
+      { a:"Adjustable or Self-Adjusting Guard", b:"Allows materials, but not the operator's hands, to pass through the machine's danger area." },
+      { a:"Feeding and Ejection Device", b:"Protects the operator's hands with a push stick or block when they are close to the point of operation." },
+      { a:"Two-Hand Control", b:"Requires constant use of two hands to activate and operate the machine." },
+      { a:"Safety Trip Control", b:"Stops operation using a pressure sensitive body bar if anyone is drawn toward the machine." },
+      { a:"Fixed Guard", b:"Preferred type of guard because it is simple, easy to maintain, fairly inexpensive, and permanent." },
+      { a:"Location or Distance Device", b:"Ensures hazardous machine parts remain inaccessible from areas where operators walk or work." }
+    ]
+  },
+  {
+    id: "guardresp",
+    type: "multi",
+    title: "Machine Guarding Responsibilities",
+    blurb: "Pick every action that protects you around mechanical equipment. The wrong options are written by me.",
+    lede: "Tap every answer that applies, then check.",
+    questions: [
+      {
+        q: "Which actions should you take to protect yourself when operating mechanical equipment?",
+        options: [
+          "Make sure guards are in the proper position and in good condition.",
+          "Perform pre-use inspections on safeguards.",
+          "Be aware of the potential hazards of each machine you use.",
+          "Remove and clean machine guards at the end of each work shift.",
+          "Report, repair, or take out of service machines that are not operating properly."
+        ],
+        correct: [0,1,2,4],
+        note: "Guards come off for service by the people who service them, not as a shift routine. That option is the confirmed wrong answer from the exam."
+      },
+      {
+        q: "Which of these are also your responsibility?",
+        options: [
+          "Use caution when bypassing, altering, or modifying safety devices.",
+          "After re-energizing a machine, put the guards back properly.",
+          "Wear appropriate PPE properly and according to the manufacturer's instructions.",
+          "Be aware that PPE can cause hazards and may only provide limited protection.",
+          "Assume PPE removes the hazard so the guard is no longer needed."
+        ],
+        correct: [0,1,2,3],
+        note: "PPE is the last line, never a substitute for the guard. The other four are all listed responsibilities."
+      }
+    ]
+  },
+  {
+    id: "guardexam",
+    type: "cards",
+    title: "Machine Guarding Exam",
+    blurb: "All 12 exam items. Correct answers are from the confirmed key, wrong options are written by me for practice.",
+    cards: [
+      { q:"Where do injuries from moving machinery often occur?", options:["At the electrical panel","At the point of operation","At the control station","At the material staging area"], answer:1, note:"The point of operation is where the work touches the material." },
+      { q:"What can result from unsafeguarded machines?", options:["Injuries ranging from minor to fatal","Nuisance shutdowns only","Reduced production speed only","Warranty issues only"], answer:0, note:"The full range, up to and including fatal." },
+      { q:"Where can injuries occur on mechanical equipment?", options:["Only at the point of operation","Only at the power transmission device","Only where guards are missing","At any moving part or pinch point"], answer:3, note:"Anything that moves can catch you." },
+      { q:"What is the power transmission device?", options:["The switch that starts the machine","The area where the mechanical system transmits energy to the working part","The guard covering the motor","The circuit feeding the machine"], answer:1, note:"Belts, gears, shafts, the path from motor to work." },
+      { q:"Which statement describes an appropriate safeguarding method?", options:["It slows the machine to a safe speed","It makes hazardous moving parts inaccessible","It warns the operator with a light or horn","It records who operated the machine"], answer:1, note:"Inaccessible, not merely announced." },
+      { q:"How do safeguard devices protect users?", options:["By stopping the machine if a hand enters the danger area","By requiring two hand control","By restraining or withdrawing the hands from the danger area","By doing all of these"], answer:3, note:"Different devices, same goal." },
+      { q:"What is a requirement for a machine safeguard?", options:["It must prevent hands from being placed into hazardous moving parts","It must be removable without tools","It must be transparent","It must be interlocked to the main breaker"], answer:0, note:"Keeping hands out is the whole job." },
+      { q:"Which statement about machine safeguards is true?", options:["Only the point of operation needs guarding","Any part, function, or process that can cause injury must be safeguarded","Guarding is required only on machines over a certain horsepower","Guarding applies only to automatic equipment"], answer:1, note:"Anything that can injure, not just the obvious pinch point." },
+      { q:"Which statement about machine guards is true?", options:["Adjustable guards are always preferred","Interlocked guards are required on all machines","A fixed guard is usually preferable because it is simple and permanent","Guards should be removed for cleaning access"], answer:2, note:"Simple, permanent, nothing to fail." },
+      { q:"What is a safe practice for PPE around mechanical equipment?", options:["Wear PPE properly according to the manufacturer's instructions","Wear PPE only when a supervisor is present","Substitute PPE for a missing guard","Choose PPE based on comfort"], answer:0, note:"Worn correctly and per the instructions, or it is not doing its job." },
+      { q:"Are there hazards associated with PPE around machinery?", options:["No, PPE only reduces risk","Yes, PPE can introduce its own hazards","Only with hearing protection","Only with gloves"], answer:1, note:"Loose gear can be caught, and PPE can limit vision or grip." },
+      { q:"Which is NOT a way to take responsibility and prevent injuries?", options:["Performing pre-use inspections on safeguards","Reporting machines that are not operating properly","Removing and cleaning machine guards at the end of each work shift","Putting guards back properly after re-energizing"], answer:2, note:"Routine guard removal is the wrong answer here, and it shows up again in the responsibilities drill." }
+    ]
+  },
+  {
+    id: "toolmatch",
+    type: "match",
+    title: "Hand Tools by Power Source",
+    blurb: "Match each power source to the hazard it brings. All five pairs are from the verified activity.",
+    lede: "Tap a power source, then tap its hazard. Tap a matched pair to break it apart.",
+    leftLabel: "Power source",
+    rightLabel: "Hazard",
+    pairs: [
+      { a:"Liquid-fueled", b:"Burning or exploding vapors, or dangerous fumes." },
+      { a:"Manually powered", b:"Operator cutting or smashing fingers." },
+      { a:"Powder-actuated", b:"Hazards similar to those presented by a loaded gun." },
+      { a:"Electric", b:"Burns and shocks." },
+      { a:"Pneumatic", b:"Operator or bystander being hit by a projectile hose or fastener." }
+    ]
+  },
+  {
+    id: "toolprep",
+    type: "sort",
+    title: "Tool Use Preparation",
+    blurb: "Sort each preparation task as safer or less safe. From the verified sort activity.",
+    lede: "Tap a task, then tap Safer or Less Safe. Tap a placed item to send it back.",
+    categories: [
+      { id:"safer", name:"Safer" },
+      { id:"less", name:"Less Safe" }
+    ],
+    items: [
+      { t:"Sharpening a cutting tool.", cat:"safer" },
+      { t:"Setting up screens in the space to protect bystanders from flying objects.", cat:"safer" },
+      { t:"Choosing a workspace with a vise or clamp available.", cat:"safer" },
+      { t:"Choosing to use a tool with a power interruption switch.", cat:"safer" },
+      { t:"Putting on loose clothing and lightweight shoes.", cat:"less" },
+      { t:"Removing a safety guard prior to tool use.", cat:"less" },
+      { t:"Closing windows and doors before using a liquid fueled power tool.", cat:"less" }
+    ]
+  },
+  {
+    id: "toolexam",
+    type: "cards",
+    title: "Hand Tools Exam",
+    blurb: "All 10 exam items. Correct answers are from the confirmed key, wrong options are written by me for practice.",
+    cards: [
+      { q:"Which tool type presents hazards similar to a loaded gun?", options:["Powder-actuated tool","Pneumatic tool","Hydraulic tool","Electric tool"], answer:0, note:"It is a firearm in everything but name." },
+      { q:"Which tool component is unlikely to present a hazard?", options:["An exposed rotating shaft","A constant pressure switch","A worn cord grip","A missing guard"], answer:1, note:"A constant pressure switch stops the tool the moment you let go." },
+      { q:"For which tool type is an unsecured hose a common hazard?", options:["Electric tool","Powder-actuated tool","Manually powered tool","Pneumatic tool"], answer:3, note:"A loose air hose becomes a projectile under pressure." },
+      { q:"Which is an unsafe environment for using a liquid fueled chain saw?", options:["An open yard","A covered outdoor porch","Inside a garage with the doors and windows closed","A ventilated shop with the bay door open"], answer:2, note:"Sealing the space traps exhaust. Ventilate instead." },
+      { q:"Which is a safe tool use preparation action?", options:["Holding the work in one hand while cutting","Bracing the work against your knee","Resting the work on your lap","Using a clamp or vise to hold the work in place"], answer:3, note:"Both hands on the tool, none on the work." },
+      { q:"Why choose a power tool with a power interruption switch?", options:["It runs cooler","It uses less current","The tool stays off until you reset the switch","It extends the life of the motor"], answer:2, note:"Power comes back and the tool does not start on its own." },
+      { q:"Which power tool type needs precautions against flying components?", options:["Manually powered","Electric","Hydraulic","Pneumatic"], answer:3, note:"Fasteners and fittings leave at speed." },
+      { q:"How do you protect your lungs using a liquid fueled tool in poor ventilation?", options:["Use an atmosphere supplying respirator","Wear a dust mask","Take breaks every fifteen minutes","Open the tool's air filter"], answer:0, note:"A filtering mask does nothing against exhaust gas. You need supplied air." },
+      { q:"Which is NOT a safe condition when using an electrical tool?", options:["A grounded three prong plug","Removing the third prong to fit a two hole receptacle","An undamaged cord","A GFCI protected circuit"], answer:1, note:"Cutting the ground pin removes the fault path that protects you." },
+      { q:"Which power tool requires safety shoes, hearing protection, and anti vibration gloves?", options:["Jackhammer","Cordless drill","Soldering iron","Hand saw"], answer:0, note:"Weight, noise, and vibration all at once." }
+    ]
+  },
+  {
+    id: "ladders",
+    type: "sort",
+    title: "Ladder Dos and Don'ts",
+    blurb: "Sort each ladder practice into do or don't. Verified against the answer key.",
+    lede: "Tap a practice, then tap Do or Don't. Tap a placed item to send it back.",
+    categories: [
+      { id:"do", name:"Dos" },
+      { id:"dont", name:"Don'ts" }
+    ],
+    items: [
+      { t:"Dismount before moving a ladder.", cat:"do" },
+      { t:"Work slowly and cautiously.", cat:"do" },
+      { t:"Carry tools on your belt and use a hoist for materials.", cat:"do" },
+      { t:"Use barricades when using a ladder in high traffic areas.", cat:"do" },
+      { t:"Use a ladder as a walkway between two other ladders.", cat:"dont" },
+      { t:"Stand opposite another worker on a stepladder.", cat:"dont" },
+      { t:"Climb down a ladder facing away from it.", cat:"dont" },
+      { t:"Tie a straight ladder to the top of an extension ladder for more height.", cat:"dont" },
+      { t:"Lean outside of the ladder rails if you can't reach.", cat:"dont" }
+    ]
+  },
+  {
+    id: "ladderexam",
+    type: "cards",
+    title: "Ladders Exam",
+    blurb: "All 10 exam items with the real answer options from the course.",
+    cards: [
+      { q:"What is the best way to determine the weight bearing capabilities, or duty ratings, of a ladder?",
+        options:["Climb the ladder and see if it feels sturdy enough","Memorize the color coding for different duty ratings","Read the manufacturer's label on the ladder","It isn't necessary, because any ladder will hold you if your weight is under 300 pounds"],
+        answer:2, note:"The label is the only authoritative source. This is also why a missing or illegible label fails an inspection." },
+      { q:"Which of these ladder parts provides extra stability to a stepladder?",
+        options:["Spreader","Material rest","Rungs","Side rails"],
+        answer:0, note:"The spreader is what locks the A frame open. A stepladder with a bent or unlatched spreader is not usable." },
+      { q:"What type of ladder should you use when working near energized electrical conductors?",
+        options:["Electrically insulated, fiberglass ladder","Fiberglass ladder","Metal ladder","Wood ladder"],
+        answer:0, note:"Fiberglass alone is not the answer. It has to be rated as electrically insulated. Any other ladder becomes an electrocution hazard near a conductor, even without direct contact." },
+      { q:"Which of the following could result in a fall from a ladder?",
+        options:["The ladder is in a high traffic area where it could be bumped","The ladder is the wrong type for the job","The ladder is damaged or not working properly","All of the choices are correct"],
+        answer:3, note:"Placement, selection, and condition. All three." },
+      { q:"Which of the following describes a fall protection system for ladder use?",
+        options:["Anchor points on side rails to which you clip carabiners as you ascend and descend","A heavily padded platform at the base of the ladder to cushion your fall","A lifeline and harness that limits the distance you can fall from a work location","An additional railing that prevents you from falling off of a ladder while climbing"],
+        answer:2, note:"Fall protection limits the fall distance. It does not cushion a landing." },
+      { q:"How do you approximate the correct angle for a straight or extension ladder against a wall?",
+        options:["Stand with your feet just in front of the bottom rung, stretch your arms out parallel to the ground, and touch a rung with your fingers","Straddle your legs on either side of the ladder, stretch your arms out parallel to the ground, and touch a rung","Stand just in front of the bottom rung, stretch your arms up at a 45 degree angle, and touch a rung","Place your feet on the bottom rung, stretch your arms up at a 45 degree angle, and touch a rung"],
+        answer:0, note:"Toes at the base, arms straight out level, fingers just reach a rung. That geometry gives roughly the four to one ratio." },
+      { q:"Which items should you check for during a ladder inspection?",
+        options:["Damage to side rails, rungs, and supports, or corroded metal or cracked wood","Loose, missing, or broken rungs, steps, spreaders, and other locking devices","Legibility of manufacturer's label","All of the choices are correct"],
+        answer:3, note:"Structure, hardware, and the label all get checked." },
+      { q:"When should you inspect a ladder?",
+        options:["Before each work shift and if the ladder falls or is exposed to severe strain","Frequently","Weekly","Monthly"],
+        answer:0, note:"Every shift, plus any time the ladder takes a fall or a strain. A calendar interval is not enough." },
+      { q:"Which of the following is something you should never do when using a ladder?",
+        options:["Have a co-worker hold the base of the ladder when working in a busy area","Face a ladder and hold the side rails with at least one hand when climbing","Carry tools on a belt rather than in your hands, or use a hoist to lift them","Remove the top section of an extension ladder and use it as a standalone ladder"],
+        answer:3, note:"That section was never designed to stand on its own. Same family of mistake as splicing two ladders for height." },
+      { q:"Which of the following represents a good practice for working with ladders?",
+        options:["Use both hands to carry equipment up or down the ladder","Finish your work on the ladder even if you are starting to feel a little dizzy","Work as quickly as possible to minimize time spent on the ladder","Keep the top and bottom areas of the ladder clear of clutter"],
+        answer:3, note:"Hands stay free for the rails, dizziness means get down, and rushing is how people fall." },
+      { q:"How many points of contact should you keep on a ladder while climbing?",
+        options:["One","Two","Three","None, as long as you move quickly"],
+        answer:2, note:"Three points of contact. Two hands and a foot, or two feet and a hand, at all times." },
+      { q:"What does the rule against walking a ladder refer to?",
+        options:["Carrying a ladder horizontally across a site","Shifting a ladder sideways by rocking it while you are still on it","Stepping down each rung one at a time","Moving a ladder between two work areas"],
+        answer:1, note:"Jogging the ladder sideways instead of climbing down to reposition it is how people tip over. Dismount and move it." },
+      { q:"Why should the base of a ladder be placed on level footing?",
+        options:["To make the ladder easier to fold","An unlevel base lets the ladder shift or kick out under load","To protect the floor surface","Level footing is a preference, not a requirement"],
+        answer:1, note:"An uneven or soft base is the setup failure behind a large share of ladder falls." }
+    ]
+  },
+  {
+    id: "scaffoldexam",
+    type: "cards",
+    title: "Scaffold Safety Exam",
+    blurb: "Scaffold items written from OSHA fall prevention guidance. Public domain source, fresh wording.",
+    cards: [
+      { q:"Who must inspect a scaffold before it is used?",
+        options:["Any worker on the crew","A competent person","The equipment rental company","Only an outside inspector"],
+        answer:1, note:"A competent person, meaning someone with the training and authority to spot the hazard and have it corrected." },
+      { q:"What does it mean to fully plank a scaffold?",
+        options:["Cover the full work platform with decking, leaving no open gaps","Use at least two planks","Plank only the section you are standing on","Plank the access ladder"],
+        answer:0, note:"A partial deck leaves a hole to fall through. Fully planked means the whole platform is covered." },
+      { q:"Which of the following is an unsafe practice on a scaffold?",
+        options:["Completing all guardrails before use","Climbing over the cross braces to get up","Ensuring stable, level footing","Having a competent person inspect it first"],
+        answer:1, note:"Cross braces are not a ladder. Climbing them is how people fall during access." },
+      { q:"Why should you never stand on a scaffold guardrail to gain height?",
+        options:["It scratches the rail","The rail is the fall protection, not a work surface, and standing on it defeats its purpose","It is allowed if someone holds the scaffold","It voids the warranty"],
+        answer:1, note:"Standing on the thing that is supposed to stop your fall removes the protection and raises your center of gravity." },
+      { q:"Is it acceptable to set a ladder on top of a scaffold platform for extra reach?",
+        options:["Yes, if the ladder is tied off","Yes, on a wide platform","No, a ladder on a scaffold is an unsafe practice","Only for brief tasks"],
+        answer:2, note:"A ladder on a scaffold stacks one unstable base on another. Build the scaffold to the needed height instead." },
+      { q:"What are the key setup requirements before a scaffold is put into service?",
+        options:["Fully planked, all guardrails complete, stable footing, plumb and level","Painted and labeled","Signed out with the supervisor","Wrapped in warning tape"],
+        answer:0, note:"Decking, guardrails, footing, and plumb and level are the setup basics an inspection checks for." }
+    ]
+  },
+  {
+    id: "heatcold",
+    type: "cards",
+    title: "Heat and Cold Stress Exam",
+    blurb: "Heat and cold items written from OSHA and NIOSH guidance. Public domain source, fresh wording.",
+    cards: [
+      { q:"What are the three words at the center of OSHA's heat illness message?",
+        options:["Stop, drop, roll","Water, rest, shade","Lift, carry, lower","Plan, provide, train"],
+        answer:1, note:"Water, rest, shade. The whole campaign comes down to those three." },
+      { q:"How often should a worker drink water in hot conditions, even without feeling thirsty?",
+        options:["Once an hour","About every 15 minutes","Only at breaks","When thirst sets in"],
+        answer:1, note:"Thirst lags behind dehydration, so you drink on a schedule rather than waiting to feel it." },
+      { q:"Which is the most serious heat related illness and a medical emergency?",
+        options:["Heat rash","Heat cramps","Heat exhaustion","Heat stroke"],
+        answer:3, note:"Heat stroke. Confusion, collapse, and possibly no sweating. Call 911." },
+      { q:"A coworker is confused, unsteady, and has stopped sweating on a hot day. What does this suggest?",
+        options:["Normal response to heat","Heat exhaustion that will pass with rest","Possible heat stroke, a medical emergency","Simple dehydration"],
+        answer:2, note:"Stopped sweating plus confusion points to heat stroke. Cool the person aggressively and call for help now." },
+      { q:"Why are workers new to the heat, or returning from time off, at higher risk?",
+        options:["They work slower","Their bodies are not yet acclimatized to the heat load","They drink less on purpose","They wear more PPE"],
+        answer:1, note:"Acclimatization takes days to build and fades during a break. Many heat deaths are in the first days back." },
+      { q:"Which are symptoms of heat exhaustion?",
+        options:["Headache, dizziness, heavy sweating, nausea","Dry skin and a low temperature","Shivering and numbness","No symptoms at all"],
+        answer:0, note:"Heat exhaustion still sweats heavily. When sweating stops and confusion starts, it has progressed toward stroke." },
+      { q:"What is the first sign of cold stress progressing toward hypothermia?",
+        options:["Heavy sweating","Uncontrolled shivering","Flushed warm skin","Increased thirst"],
+        answer:1, note:"Shivering is the body working to make heat. When shivering stops but the person is still cold, that is a dangerous turn." },
+      { q:"What is a practical way to reduce cold stress while working outdoors?",
+        options:["A single heavy layer","Dressing in loose layers you can add or remove","Tight clothing to trap heat","Skipping breaks to keep moving"],
+        answer:1, note:"Layers let you manage heat and, importantly, keep sweat from soaking in and chilling you when you slow down." }
+    ]
+  },
+  {
+    id: "slipsresp",
+    type: "sort",
+    title: "Slips: Who Is Responsible?",
+    blurb: "Sort each action into your responsibility or your employer's.",
+    lede: "Tap a statement, then tap whose responsibility it is. Tap a placed item to send it back.",
+    categories: [
+      { id:"you", name:"Your Responsibility" },
+      { id:"employer", name:"Employer Responsibility" }
+    ],
+    items: [
+      { t:"Clean up or report debris and use signage to alert others to hazards.", cat:"you" },
+      { t:"Report poor lighting or damaged stairs or handrails.", cat:"you" },
+      { t:"Report any damaged flooring.", cat:"you" },
+      { t:"Maintain adequate lighting on stairways and walkways.", cat:"employer" },
+      { t:"Make necessary and prompt repairs to structures or safety devices.", cat:"employer" },
+      { t:"Make cleaning and safety supplies and products easily accessible.", cat:"employer" }
+    ]
+  },
+  {
+    id: "flooropening",
+    type: "scenario",
+    title: "Protect Others from Floor Openings",
+    blurb: "A hatchway cover is off and a guardrail is not available. Decide how to leave the area.",
+    panels: [
+      "Todd and Frank need to move tools through a hatchway in the floor that is normally kept covered. The cover has to come off for the work.",
+      "A guardrail is not available for the opening, so there is no permanent barrier they can put around it while the cover is off.",
+      "Todd gets orange cones to mark the hazard. The work will take several trips, and the opening will sit exposed between them."
+    ],
+    questions: [
+      { q:"What should Todd and Frank do to work safely?",
+        options:[
+          "Work as quickly as possible to minimize the time the hatchway is unprotected.",
+          "Split up so Todd can stay on the upper level to guard the opening until the work is complete and the cover is back in place.",
+          "Start moving the tools without a guardrail in place if no one is in the area.",
+          "Place orange cones on all exposed sides of the hatchway before leaving the area."
+        ],
+        answer:3,
+        note:"The hazard has to be marked on every exposed side before anyone walks away from it. Speed is not a control, an empty area now is not an empty area later, and posting a person as a human guardrail ties up a worker and fails the moment he looks away." }
+    ]
+  },
+  {
+    id: "slipsexam",
+    type: "cards",
+    title: "Slips, Trips, and Falls Exam",
+    blurb: "First 7 exam items with the real answer options. Questions 8 to 10 pending.",
+    cards: [
+      { q:"Which of the following is a behavioral hazard that can cause you to slip, trip, or fall?",
+        options:["Straightening out a folded mat","Rushing through your workplace","Reporting a dimly lit stairway","Calling home on your break"],
+        answer:1, note:"Behavioral means something you do. The other three are either good practice or unrelated." },
+      { q:"Which of the following is a physical hazard that can cause you to slip, trip, or fall?",
+        options:["Leaks or drips around machinery","Dust, powder, or metal shavings","Sudden changes in floor levels","All of the above"],
+        answer:3, note:"Wet, loose, and uneven surfaces all count." },
+      { q:"True or false? Your employer is not responsible for maintaining stairways so that they are free of hazards.",
+        options:["True","False"],
+        answer:1, note:"False. Maintaining walking and working surfaces is an employer responsibility. Reporting problems is yours." },
+      { q:"Which of the following actions is your responsibility?",
+        options:["Incorporating slip, trip, and fall awareness into routine safety training","Wearing slip resistant shoes or attaching a gripping device to the bottom of your footwear","Making repairs to structures or safety devices","Monitoring and maintaining safe walking surfaces"],
+        answer:1, note:"Your footwear is yours. Training programs, repairs, and surface maintenance belong to the employer." },
+      { q:"How can complacency contribute to your risk of experiencing a slip, trip, or fall?",
+        options:["It makes you blind to objects that you see everyday","It makes you stop recognizing potential hazards","It makes you notice when the floor is wet","A and B are both correct"],
+        answer:3, note:"Familiarity stops you seeing what is there. Option C is the opposite of complacency." },
+      { q:"Why is standing on a chair to reach a high place not a safe practice?",
+        options:["A chair is not designed to be used as a step ladder","You might get in trouble","The chair might be too short to reach a high place","You may get dizzy"],
+        answer:0, note:"Wrong tool for the job. A chair has no duty rating, no locking spreader, and often casters." },
+      { q:"As an employee, it is important for you to take time to:",
+        options:["Keep work areas clean by sweeping up debris or mopping up spills","Close all drawers and doors that protrude into walkways and aisles","Straighten upturned carpeting or rugs, especially near entryways","All of the above"],
+        answer:3, note:"Housekeeping is continuous and it belongs to everyone." },
+      { q:"What is the most effective way to control a spill hazard on a walking surface?",
+        options:["Walk around it and warn others verbally","Clean it up promptly, and mark it with a sign until it is dry","Wait for the end of shift cleanup","Spread absorbent and leave it in place"],
+        answer:1, note:"Clean it now, and the sign holds the hazard until the floor is actually dry. A warning alone leaves the hazard sitting there." },
+      { q:"Why should aisles and walkways be kept clear and unobstructed?",
+        options:["To make the area look tidy for inspections","So that materials can be stored there temporarily","Blocked paths force detours and hide trip hazards, and they slow an emergency exit","Clear aisles are a preference, not a safety issue"],
+        answer:2, note:"A walkway is also an escape route. Clutter in it costs you twice, once as a trip hazard and once when you need to get out fast." },
+      { q:"Where should trailing cords and hoses be routed across a walking area?",
+        options:["Straight across at the shortest distance","Along walls or overhead, or covered with a cord protector where they must cross","Left loose so they can be moved easily","Taped down flat with any tape on hand"],
+        answer:1, note:"Keep them out of the path entirely, and cover them where a crossing cannot be avoided. A loose cord across a walkway is a classic trip." }
+    ]
+  },
+  {
+    id: "ppecheck",
+    type: "sort",
+    title: "Check Your Understanding of PPE",
+    blurb: "Agree or disagree with each statement about PPE. Verified against the answer key.",
+    lede: "Tap a statement, then tap agree or disagree. Tap a placed item to send it back.",
+    categories: [
+      { id:"agree", name:"I agree." },
+      { id:"disagree", name:"I disagree." }
+    ],
+    items: [
+      { t:"Not using PPE, like Frank did, is a major cause of injury and sickness.", cat:"agree" },
+      { t:"Zayne can expect his employer to provide the right mask for his job.", cat:"agree" },
+      { t:"It's OK that Nicole's hardhat is a little bit too big.", cat:"disagree" },
+      { t:"It's OK that Mark wears his designer sunglasses instead of safety goggles.", cat:"disagree" },
+      { t:"Holly is correct in thinking that PPE can eliminate workplace hazards.", cat:"disagree" },
+      { t:"Highly experienced workers, like Hector, can skip using PPE.", cat:"disagree" }
+    ]
+  },
+  {
+    id: "ppeexam",
+    type: "cards",
+    title: "PPE Exam",
+    blurb: "All 10 exam items with the real answer options from the course.",
+    cards: [
+      { q:"What is PPE?",
+        options:["Protective clothing and equipment that replaces administrative controls","Equipment that is uncomfortable and hard to use, but that is better than nothing","Required protective clothing and equipment","Protective clothing and equipment that eliminates risk"],
+        answer:2, note:"Required, not optional. It does not replace other controls and it does not eliminate risk." },
+      { q:"Why is it important that you wear your PPE?",
+        options:["It helps prevent illness and injury","It supplements administrative and engineering controls","It provides an acceptable level of protection from hazards","All of the above"],
+        answer:3, note:"Note the word supplements. PPE sits on top of the other controls rather than replacing them." },
+      { q:"What are some common biological hazards in the workplace?",
+        options:["Insect stings","Poisonous plants","Blood","Sewage","All of the above"],
+        answer:4, note:"Anything living or once living that can make you sick." },
+      { q:"What are some common physical hazards in the workplace?",
+        options:["Sun","Noise","Electrical dangers","Falls","All of the above"],
+        answer:4, note:"Physical covers energy acting on the body, including sun and noise that people tend to overlook." },
+      { q:"Which of the following is not a basic characteristic of PPE?",
+        options:["Meets specific design and performance criteria","Part of a bigger safety picture that includes engineering and administrative controls","Designed to be effective and comfortable","Designed to work with all hazards and dangerous situations"],
+        answer:3, note:"PPE is hazard specific. A given piece protects against a given hazard and nothing else." },
+      { q:"What hazards does PPE like boots protect against?",
+        options:["Slipping","Heat and cold","Sharp or heavy objects","Electrical hazards","All of the above"],
+        answer:4, note:"One item can cover several hazards, which is why boot selection matters." },
+      { q:"True or false? Respirators must be carefully selected based on the conditions present.",
+        options:["True","False"],
+        answer:0, note:"True. A filtering mask against exhaust gas does nothing. The atmosphere determines the respirator." },
+      { q:"True or false? As long as they are appropriate to the type of work, gloves can be made of cotton, rubber, nitrile, leather, and metal mesh.",
+        options:["True","False"],
+        answer:0, note:"True. Material is chosen against the hazard, whether that is cut, chemical, or heat." },
+      { q:"Which of the following is not an employer responsibility regarding PPE?",
+        options:["Performing regular workplace hazard assessments","Providing PPE training","Reimbursing employees for special PPE purchases","Replacing PPE worn due to regular use"],
+        answer:2, note:"As the course grades it, the employer provides and replaces PPE rather than reimbursing purchases employees make on their own." },
+      { q:"Which of the following is an employee responsibility regarding PPE?",
+        options:["Use PPE occasionally","Rely on the employer to inspect and maintain PPE","Complete any work task, regardless of PPE","Take PPE training"],
+        answer:3, note:"Attend the training, use it every time, inspect your own gear, and stop if the right PPE is not available." }
+    ]
+  },
+  {
+    id: "headexam",
+    type: "cards",
+    title: "Head Protection Exam",
+    blurb: "All 8 exam items with the real answer options from the course.",
+    cards: [
+      { q:"A head injury refers to trauma to the head only when the trauma includes injury to the brain.",
+        options:["True","False"],
+        answer:1, note:"False. Trauma to the scalp, skull, or face counts as a head injury with or without brain involvement." },
+      { q:"A properly worn hard hat will guarantee complete protection in every situation where a head injury may occur.",
+        options:["True","False"],
+        answer:1, note:"False. Same rule as all PPE. It reduces severity, it does not guarantee protection." },
+      { q:"Which of the following is NOT an example of a workplace hazard that could cause a head injury?",
+        options:["Contact with a fixed object","Exposure to hazardous chemical vapor","Tools or other equipment falling from overhead","Contact with electrical hazards"],
+        answer:1, note:"Vapor is a respiratory hazard. A hard hat does nothing for it." },
+      { q:"Which of the following is NOT a requirement for all types of hard hats?",
+        options:["Resistant to penetration from sharp objects","Color coded for the type of work for which they are rated","Water and fire resistant","Printed instructions for suspension adjustment and replacement"],
+        answer:1, note:"Color coding is a site convention, not a standard requirement. Class markings are what carry the rating." },
+      { q:"A lineman works around high voltage wires. Which class of hard hat is his employer likely to provide?",
+        options:["Class E","Class G","Class C","Type 1"],
+        answer:0, note:"Class E is electrical, tested to 20,000 volts. G is general at 2,200 volts and C is conductive with no electrical protection at all." },
+      { q:"What clearance should a hard hat's suspension system maintain between the crown of your head and the outer shell?",
+        options:["A quarter inch","Half an inch","One to one and a quarter inches","There is no formal specification"],
+        answer:2, note:"That gap is the crumple zone. Wearing the suspension too loose removes the very thing that absorbs the blow." },
+      { q:"Why should you avoid applying decals to your hard hat?",
+        options:["Decal glue is mildly corrosive and tends to break down plastics over time","Decals may interfere with your employer's color coding system","Decals may hide the presence of a crack that compromises the hard hat's integrity","Decals may interfere with electrical protection afforded by some hard hats"],
+        answer:2, note:"You cannot inspect what you cannot see. A covered crack passes inspection and then fails under impact." },
+      { q:"A wrench fell from overhead and struck a worker's hard hat. It was jarring but the hat protected him. What should he do before returning to work?",
+        options:["Inform his supervisor that the suspension and headband need to be replaced","Continue to wear the hard hat as long as it doesn't show any damage","Carefully clean the area around the impact and reinforce any dented areas with duct tape","Inform his supervisor that he needs a replacement hard hat due to the impact"],
+        answer:3, note:"A hard hat is single impact. It spent its life absorbing that hit, and damage is often invisible from outside." }
+    ]
+  },
+  {
+    id: "eyeexam",
+    type: "cards",
+    title: "Eye and Face Protection Exam",
+    blurb: "All 8 exam items with the real answer options from the course.",
+    cards: [
+      { q:"What is the primary reason you should wear eye and face protection?",
+        options:["To prevent the occurrence of an accident","To minimize exposure to workplace hazards regarding the eyes and face","To comply with standards and regulations","To eliminate workplace hazards regarding the eyes and face"],
+        answer:1, note:"Minimize exposure. PPE does not prevent the accident and it does not eliminate the hazard." },
+      { q:"Which of the following poses a hazard to a worker's eyes and face?",
+        options:["Flying particles","Chemically or biologically contaminated materials transmitted through the mucous membranes","Caustic liquids or chemicals","All of the choices are correct"],
+        answer:3, note:"Impact, contamination, and chemical exposure all reach you through the face." },
+      { q:"Which of the following characteristics is required for all protective eyewear?",
+        options:["It must guard against the potential hazard","It should be comfortable and fit properly","It must provide unrestricted vision and movement","All of the above"],
+        answer:3, note:"Eyewear that blocks your vision creates a new hazard while solving another." },
+      { q:"Which face and eye protection is most effective against radiant energy burns, flying sparks, metal spatter, and slag chips?",
+        options:["Safety goggles","Welding helmet","Full face respirator","Face shield with side panels"],
+        answer:1, note:"Only the welding helmet handles radiant energy along with the physical debris." },
+      { q:"A worker's prescription glasses do not work well with her issued goggles, so she is considering contact lenses instead. What should she do?",
+        options:["Nothing, contact lenses provide ample eye protection","Ask her employer if wearing contact lenses is permitted","Wear a face shield with her glasses instead of the issued goggles","Wear her prescription glasses alone, assuming they provide ample protection"],
+        answer:1, note:"Contacts are not eye protection and some environments prohibit them outright. Ask before switching." },
+      { q:"A worker has to wear more than one kind of PPE for his job. What are the requirements in this case?",
+        options:["PPE should be the most expensive brand available","PPE should be brand new","PPE should be made by the same manufacturer","Must allow unrestricted functioning of other required PPE worn together"],
+        answer:3, note:"Pieces have to work together. Earmuffs that break a respirator seal are a real problem." },
+      { q:"Without manufacturer's instructions, what is the best way to clean eye protection lenses?",
+        options:["Place them in the break room dishwasher","Wash thoroughly with non abrasive soap and warm water","Wet them slightly and wipe on your clothing","None of the above"],
+        answer:1, note:"Wiping on your shirt grinds grit across the lens and scratches it, which is how good eyewear becomes unusable." },
+      { q:"Which of the following are key elements of PPE training?",
+        options:["How to properly put on PPE and take it off","What PPE is necessary and exactly how to use it","How to properly inspect, care for, and maintain eye and face protection","All of these choices are correct"],
+        answer:3, note:"Selection, donning and doffing, and maintenance are all part of it." }
+    ]
+  },
+  {
+    id: "hearexam",
+    type: "cards",
+    title: "Hearing Protection Exam",
+    blurb: "All 9 exam items with the real answer options from the course.",
+    cards: [
+      { q:"Why is wearing hearing protection important?",
+        options:["To protect the wearer from short term exposure to intense sounds","To protect the wearer from long term exposure to lower intensity noise","To help prevent permanent, irreversible hearing loss","All of the above"],
+        answer:3, note:"Both the sudden blast and the steady grind, and the damage does not come back." },
+      { q:"Which of the following represents a workplace noise hazard?",
+        options:["Machinery and equipment","Horns and warning signals","Communication devices","All of these are potential hazards"],
+        answer:3, note:"Including the devices meant to keep you safe. Warning signals are loud by design." },
+      { q:"What is an advantage of wearing ear inserts, or plugs?",
+        options:["They are easiest to put in and take out","They are lightweight","They protect the entire ear against dirt, grease, or chemical exposure","All of these choices are correct"],
+        answer:1, note:"Lightweight is the plug advantage. Easy on and off belongs to muffs, and whole ear coverage belongs to muffs too." },
+      { q:"Which type of hearing protector offers the lowest level of noise control?",
+        options:["Ear muffs","Canal caps","Ear inserts","All three offer the same level of protection"],
+        answer:1, note:"Canal caps seal at the opening rather than inside the canal, so they protect least." },
+      { q:"What is an advantage of ear muffs?",
+        options:["They are easy to put on and take off","They are lightweight","They do not interfere with glasses or headgear","They are disposable"],
+        answer:0, note:"Quick on and off. They are not lightweight, and they very much do interfere with glasses." },
+      { q:"Which of the following are best suited for use during brief periods of noise exposure only?",
+        options:["Ear muffs","Ear plugs","Canal caps","Stereo headphones"],
+        answer:2, note:"Lowest protection means shortest exposure. Stereo headphones are not hearing protection at all." },
+      { q:"What factors may impact the effectiveness of ear muffs?",
+        options:["Eyeglasses","Long hair","The seal made around the outer ear","All of the above"],
+        answer:3, note:"Anything crossing the cushion breaks the seal, and a broken seal is most of the protection gone." },
+      { q:"Which is a true statement regarding the use and care of silicone ear plugs?",
+        options:["They are designed for a one time use only","They are meant to be reused","Keep them in a storage case, if provided","Choices B and C"],
+        answer:3, note:"Silicone plugs are reusable, which is exactly why they need a case instead of a pocket." },
+      { q:"What action can your employer take to protect workers who have previous hearing loss?",
+        options:["Provide additional protection, such as shielding","Assign workers to low noise tasks","Reimburse workers for self purchased PPE","Choices A and B"],
+        answer:3, note:"Engineering controls and task assignment. Existing loss makes remaining hearing worth more, not less." }
+    ]
+  },
+  {
+    id: "respexam",
+    type: "cards",
+    title: "Respiratory Protection Exam",
+    blurb: "All 6 exam items with the real answer options from the course.",
+    cards: [
+      { q:"What types of respiratory hazards can possibly exist in a workplace?",
+        options:["Oxygen deficient air","Gases, vapors, or fumes","Dust or fibers","All of these choices are correct"],
+        answer:3, note:"Note the first one. Air can kill you by what it lacks, not just by what it contains." },
+      { q:"What type of respirator filters impurities from the breathing air using a filter element or cartridge?",
+        options:["Air purifying","Air supplying","Filtering facepiece","SCBA"],
+        answer:0, note:"Air purifying cleans the air that is there. It is useless if there is not enough oxygen to begin with." },
+      { q:"What type of respirator provides air to the employee from an outside source?",
+        options:["Gas mask","Air purifying","Combination mechanical and chemical cartridge","Air supplying"],
+        answer:3, note:"Supplied air is what you need for oxygen deficiency or an unknown atmosphere." },
+      { q:"The specific respirator an employee will wear must be personally fit tested to ensure a proper fit.",
+        options:["True","False"],
+        answer:0, note:"True. A respirator that leaks around the seal is providing no protection, and faces differ." },
+      { q:"Training and medical clearance are two requirements to use a respirator. What is the third?",
+        options:["Respirator fit testing","Confined space entry training","Aerobic fitness test","CPR certification"],
+        answer:0, note:"Training, medical clearance, and fit testing. All three before you wear one." },
+      { q:"What type of training must an employee receive prior to using a respirator?",
+        options:["Selection of a respirator","Use of a respirator","Care of a respirator","An employee must receive appropriate training on all these topics"],
+        answer:3, note:"Picking it, wearing it, and maintaining it." }
+    ]
+  },
+  {
+    id: "handexam",
+    type: "cards",
+    title: "Hand Protection Exam",
+    blurb: "All 10 exam items with the real answer options from the course.",
+    cards: [
+      { q:"Even a minor cut or skin puncture should receive medical attention in order to avoid:",
+        options:["Carpal tunnel syndrome","Bone fractures","Infection"],
+        answer:2, note:"Small wounds get ignored, and infection is what turns a scratch into lost time." },
+      { q:"What is the primary purpose of hand protection?",
+        options:["Improve grip and dexterity","Protect from cuts, abrasions, and other injuries","Prevent hands from getting caught in rotating machinery"],
+        answer:1, note:"Protection from injury. Gloves near rotating machinery make things worse, not better." },
+      { q:"Which of the following are examples of workplace hazards posed to your hands?",
+        options:["Dusts and fumes","Rotating, sharp edged, hot, or cold machinery","High noise levels","All of these choices are correct"],
+        answer:1, note:"Machinery hazards. Dust and noise reach you elsewhere, not through the hands." },
+      { q:"Under what circumstances might wearing gloves increase a hazard rather than offering protection?",
+        options:["Working with chemicals","Cleaning up broken glass","Working around machinery with moving parts"],
+        answer:2, note:"A glove caught in a rotating part takes your hand with it. Bare hands pull free." },
+      { q:"Which glove type is most often worn by those who work with knives to protect against cuts and punctures?",
+        options:["Heavy rubber","Metal mesh","Leather","Chrome tanned cowhide leather"],
+        answer:1, note:"Metal mesh is what stops a blade." },
+      { q:"Which kind of glove is best when working with hazardous chemicals?",
+        options:["Metal mesh","Cotton","Rubber"],
+        answer:2, note:"Rubber against chemicals. Cotton absorbs and holds them against your skin." },
+      { q:"Which glove type is most often worn by welders?",
+        options:["Waterproof","Heat resistant","Chrome tanned cowhide","Heavy rubber"],
+        answer:2, note:"Chrome tanned cowhide is the welding glove, chosen for heat and spatter resistance." },
+      { q:"Heavy leather gloves provide protection from what type of hand injury?",
+        options:["Cuts, punctures, and abrasions","Dermatitis","Repetitive motion disorder"],
+        answer:0, note:"Mechanical injury. Leather does nothing for chemical or ergonomic problems." },
+      { q:"What problems are associated with wearing gloves that do not fit properly?",
+        options:["Increased difficulty in handling objects","Hand fatigue","Choices A and B"],
+        answer:2, note:"A loose glove makes you grip harder, and gripping harder all day is its own injury." },
+      { q:"What is the preferred method for measuring the hand for glove sizing?",
+        options:["Measure the dominant hand around the knuckles","Measure from the heel of the palm to the tip of the index finger","Subtract 2 from your shoe size to determine your glove size"],
+        answer:0, note:"Around the knuckles of the dominant hand, since that hand is usually the larger one." }
+    ]
+  },
+  {
+    id: "footexam",
+    type: "cards",
+    title: "Foot Protection Exam",
+    blurb: "All 8 exam items with the real answer options from the course.",
+    cards: [
+      { q:"Along with protecting the foot itself, the other purpose of protective footwear is to protect other parts of the body.",
+        options:["True","False"],
+        answer:0, note:"True. The sole of an insulated boot is protecting your whole body from a path to ground." },
+      { q:"Which of the following poses a hazard to a worker's feet?",
+        options:["Slippery floor surfaces","Crushing from falling objects","Punctures from nails protruding from a surface","All of these choices are correct"],
+        answer:3, note:"Slip, crush, and puncture. Three different failure modes, three different features on the boot." },
+      { q:"Pieces of metal embedded in the soles of electrically insulated protective footwear could pose what hazard?",
+        options:["Puncture wound to the bottom of the foot","Burn due to heat transfer","Frostbite","Electrical hazard"],
+        answer:3, note:"Embedded metal bridges the insulation and gives current a path straight through the sole." },
+      { q:"A worker in a dusty grain elevator needs shoes that protect against a static spark causing an explosion. Which shoes?",
+        options:["Foundry shoes","Electrical hazard, safety toed shoes","Electrically conductive shoes","Non slip, rubber sole, safety shoes"],
+        answer:2, note:"Backwards from what instinct says. Conductive shoes bleed static off you continuously so it never builds into a spark." },
+      { q:"As long as the performance requirements are met, which of the following is the major factor regarding fit?",
+        options:["Waterproofing","Material","Comfort","None of the above"],
+        answer:2, note:"Uncomfortable footwear comes off, and PPE in a locker protects nobody." },
+      { q:"When a boot is required instead of a shoe, the boot must come up over the ankle to provide support.",
+        options:["True","False"],
+        answer:0, note:"True. That is the difference the boot is there to make." },
+      { q:"Before and during use, inspect your footwear for signs of:",
+        options:["Cracks or holes","Toe box deformities or loose toe boxes","Separation of materials","All of the above"],
+        answer:3, note:"A deformed toe box has already absorbed an impact and will not absorb another." },
+      { q:"A work boot used for electrical work has a hole in the heel area. What should the worker do?",
+        options:["Wear an additional layer of socks","Ignore it, only the sole and toe box matter","Repair it with electrical tape","Inform her supervisor"],
+        answer:3, note:"The insulation is compromised, and there is no field repair for that. It gets replaced." }
+    ]
+  },
+  {
+    id: "backexam",
+    type: "cards",
+    title: "Back Injury Prevention Exam",
+    blurb: "All 15 exam items with the real answer options from the course.",
+    cards: [
+      { q:"A correct standing posture includes all except:",
+        options:["Avoiding bending or leaning forward","Keeping work that requires great force or heavy objects at waist level","Performing lighter work slightly higher than waist level","Facing work straight on and avoiding twisting","A correct standing posture includes all of the above"],
+        answer:4, note:"All four are correct, so there is no exception. Heavy work low, light work high, no twisting." },
+      { q:"Correct posture and body mechanics protect you from back injuries because they will:",
+        options:["Lessen pressure on the discs","Lessen strain to muscles, ligaments and back joints","Both A and B are correct"],
+        answer:2, note:"Discs and soft tissue both. Different injuries, same protection." },
+      { q:"Which of the following is NOT a way to protect against back injuries while sitting?",
+        options:["Alternate tasks and postures","Maintain a neutral spine position","Remove articles from back pockets","Keep knees lower than hips","Avoid bending or leaning forward"],
+        answer:0, note:"As the course grades it, alternating tasks is the odd one out among the seated posture items." },
+      { q:"Which of the following is NOT a way in which you can maintain good posture?",
+        options:["Create a comfortable work area","Adjust work positions as needed","Incorporate adjustable furniture","Move your head close to your computer screen to see better","Adjust work surfaces to minimize bending, reaching, or awkward postures","Use ergonomic tools and equipment"],
+        answer:3, note:"Craning toward the screen is the neck posture problem itself. Bring the screen to you." },
+      { q:"A man is standing with his shoulders and head sloped toward the floor. Is this correct or incorrect posture?",
+        options:["Correct standing posture","Incorrect standing posture"],
+        answer:1, note:"Head and shoulders forward puts the whole weight of the head out on a lever arm against the spine." },
+      { q:"Typically, the more flexible you are, the more likely you are to suffer from back pain.",
+        options:["True","False"],
+        answer:1, note:"False, it runs the other way. Tight, short, stiff muscles are what cause pain and injury." },
+      { q:"Which of the following is NOT an example of a lifestyle related condition that could increase risk of back injury?",
+        options:["Cigarette smoking","A sedentary lifestyle","Being overweight","Daily meditation"],
+        answer:3, note:"Smoking reduces blood flow to the discs, which is why it is on this list at all." },
+      { q:"Which statement about building strength and flexibility is NOT true?",
+        options:["Leg strength and core strength help you maintain proper body mechanics when lifting","Stretching until you feel some mild pain assures that you are stretching effectively","Yoga and Pilates are effective for increasing flexibility and building core strength","Tight, short, stiff muscles can cause back pain and injury"],
+        answer:1, note:"Stretching into pain is how people injure themselves trying to prevent injury. Tension, not pain." },
+      { q:"Spending too long on one work task may increase your risk of back injury.",
+        options:["True","False"],
+        answer:0, note:"True. Static loading and repetition both accumulate. Change position and task." },
+      { q:"When working with heavy objects, keep them:",
+        options:["On the ground","At waist level","Above your head"],
+        answer:1, note:"Waist level is the power zone. Anything below means bending, anything above means reaching." },
+      { q:"Where is the best place to store frequently used or heavy loads?",
+        options:["At waist level","On the ground","Above your head"],
+        answer:0, note:"Same principle applied to storage. Design the shelf so the lift never has to be bad." },
+      { q:"What should you do if a load is too heavy?",
+        options:["Lift it anyway","Use a material handling device"],
+        answer:1, note:"Hand truck, hoist, or a second person. Willpower is not a lifting technique." },
+      { q:"Is it safe for a 130 pound person to lift and carry a 45 pound crate 30 yards from a delivery truck into a store?",
+        options:["Yes","No"],
+        answer:0, note:"Yes. Roughly a third of body weight over a moderate distance is within reasonable limits." },
+      { q:"How can you avoid bending and reaching to get closer to your work?",
+        options:["Use an adjustable height table","Minimize the distance between you and the load","Work without wearing shoes","Both A and B are correct","Both B and C are correct"],
+        answer:3, note:"Raise the work or close the distance. Removing your footwear solves nothing and creates a new hazard." },
+      { q:"Which is the best example of altering a load to reduce the manual effort required?",
+        options:["Using a hand truck to transport the load","Separating the load into two or more smaller loads","Using a portable hoist to pick up the load","Asking a coworker to help you lift and carry the load"],
+        answer:1, note:"Altering the load means changing the load itself. The others change the method, not the load." }
+    ]
+  },
+  {
+    id: "lifting",
+    type: "sort",
+    title: "Safe or Unsafe Lifting",
+    blurb: "Judge each lifting and carrying situation as safe or unsafe.",
+    lede: "Tap a situation, then tap Safe or Unsafe. Tap a placed item to send it back.",
+    categories: [
+      { id:"safe", name:"Safe" },
+      { id:"unsafe", name:"Unsafe" }
+    ],
+    items: [
+      { t:"An average size person lifting a 45 pound sack of potatoes off of a waist high shelf.", cat:"safe" },
+      { t:"Separating a 70 pound box of supplies into two 35 pound loads before carrying.", cat:"safe" },
+      { t:"A 95 pound person lifting a 50 pound bag of garden mulch using good body mechanics.", cat:"unsafe" },
+      { t:"A six foot tall person and a five foot tall person lifting a 100 pound piece of equipment together.", cat:"unsafe" },
+      { t:"Reaching over a pallet of building materials to lift a 30 pound paving stone off a high shelf.", cat:"unsafe" },
+      { t:"An average size person moving a 60 pound piece of equipment onto a hand truck for transport.", cat:"unsafe" }
+    ]
+  }
+];
+
+/* =======================================================================
+   RED PHONE: SHELL
+   ======================================================================= */
+var KEYS = ["A","B","C","D"];
+var stage = document.getElementById("stage");
+var topbar = document.getElementById("topbar");
+var bar = document.getElementById("bar");
+var barWrap = document.getElementById("barWrap");
+
+var app = { view:"home", mod:null };
+var q = {};   /* cards module state */
+var s = {};   /* sort module state */
+
+/* RED PHONE: progress store.
+   Tries the artifact storage bridge, then browser storage, then memory,
+   so the same file works in preview and on a real deploy. */
+var PASS = 80;
+var memState = { progress:[], unlockAll:false, mode:"career" };
+var progress = [];
+var unlockAll = false;
+var studyMode = "career";
+
+function normalize(v){
+  if (!v) return { progress:[], unlockAll:false };
+  if (Object.prototype.toString.call(v) === "[object Array]") return { progress:v, unlockAll:false };
+  return { progress: v.progress || [], unlockAll: !!v.unlockAll, mode: v.mode === "flash" ? "flash" : "career" };
+}
+
+var Store = {
+  load: function(cb){
+    try {
+      if (window.storage && window.storage.get){
+        window.storage.get("progress").then(function(r){
+          cb(normalize(r && r.value ? JSON.parse(r.value) : null));
+        }).catch(function(){ cb(Store.localLoad()); });
+        return;
+      }
+    } catch(e){}
+    cb(Store.localLoad());
+  },
+  localLoad: function(){
+    try {
+      var v = window.localStorage.getItem("fieldstudy.progress");
+      if (v) return normalize(JSON.parse(v));
+    } catch(e){}
+    return normalize(memState);
+  },
+  save: function(){
+    var payload = { progress: progress.slice(), unlockAll: unlockAll, mode: studyMode };
+    memState = payload;
+    try {
+      if (window.storage && window.storage.set){
+        window.storage.set("progress", JSON.stringify(payload)).catch(function(){});
+        return;
+      }
+    } catch(e){}
+    try { window.localStorage.setItem("fieldstudy.progress", JSON.stringify(payload)); } catch(e){}
+  }
+};
+
+function isDone(id){ return progress.indexOf(id) !== -1; }
+function isUnlocked(i){ return unlockAll || i === 0 || isDone(MODULES[i-1].id); }
+function modIndex(id){ for (var i=0;i<MODULES.length;i++) if (MODULES[i].id === id) return i; return -1; }
+
+/* RED PHONE: called from every results screen. Marks the set done at
+   the pass mark and hands back the next set if one just unlocked. */
+function completeIfPassed(pct){
+  if (pct < PASS) return null;
+  if (!isDone(app.mod.id)){
+    progress.push(app.mod.id);
+    Store.save();
+  }
+  var n = modIndex(app.mod.id) + 1;
+  return n < MODULES.length ? MODULES[n] : null;
+}
+
+function nextButton(nextMod){
+  if (!nextMod) return '';
+  return '<button class="btn primary btn-wide" id="goNext">Next set: ' + esc(nextMod.title) + '</button>';
+}
+function wireNext(nextMod){
+  if (!nextMod) return;
+  var b = document.getElementById("goNext");
+  if (b) b.onclick = function(){ openModule(nextMod.id); };
+}
+
+function esc(v){ return String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function shuffle(a){
+  for (var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; }
+  return a;
+}
+function seq(n){ var a=[]; for(var i=0;i<n;i++) a.push(i); return a; }
+function setBar(pct){ bar.style.width = pct + "%"; }
+
+/* RED PHONE: home */
+function goHome(){
+  app.view = "home"; app.mod = null;
+  barWrap.style.display = "none";
+  var flashMode = studyMode === "flash";
+  topbar.innerHTML = '<h1 class="top-title">Field Study</h1>' +
+                  '<span class="top-meta">' + (flashMode ? MODULES.length + ' decks' : progress.length + ' / ' + MODULES.length + ' done') + '</span>';
+  var h = '<div class="modes" id="modeSw">' +
+            '<button data-m="career" aria-pressed="' + !flashMode + '">Career</button>' +
+            '<button data-m="flash" aria-pressed="' + flashMode + '">Flashcards</button>' +
+          '</div>';
+  if (!flashMode) h += '<button class="toggle' + (unlockAll ? " on" : "") + '" id="unlock" aria-pressed="' + unlockAll + '">' +
+            '<span><strong>Unlock all sets</strong>' +
+              '<span class="sub">' + (unlockAll ? "Open. Every set is reachable for testing." : "Locked. Sets open in order as you pass them.") + '</span>' +
+            '</span><span class="switch">' + (unlockAll ? "On" : "Off") + '</span>' +
+          '</button>';
+  else h += '<p class="lede">Every deck is open. Tap one to flip through it, no scoring and no locks.</p>';
+  for (var i=0;i<MODULES.length;i++){
+    var m = MODULES[i];
+    var kind, count;
+    if (m.type === "cards"){ kind = "Flashcards and quiz"; count = m.cards.length + " questions"; }
+    else if (m.type === "sort"){ kind = "Sorting drill"; count = m.items.length + " items"; }
+    else if (m.type === "multi"){ kind = "Select all that apply"; count = m.questions.length + " questions"; }
+    else if (m.type === "order"){ kind = "Sequencing drill"; count = m.steps.length + " steps"; }
+    else if (m.type === "scenario"){ kind = "Scenario"; count = m.panels.length + " panels, " + m.questions.length + (m.questions.length === 1 ? " question" : " questions"); }
+    else if (m.type === "tf"){ kind = "True or false"; count = m.statements.length + " statements"; }
+    else { kind = "Matching drill"; count = m.pairs.length + " pairs"; }
+
+    var done = isDone(m.id), unlocked = flashMode || isUnlocked(i);
+    var gated = !flashMode && i > 0 && !isDone(MODULES[i-1].id);
+    var cls = "tile" + (done ? " done" : "") + (unlocked ? "" : " locked");
+    var badge = flashMode ? String(toCards(m).length) : (done ? "&#10003;" : (unlocked ? String(i+1) : "&#128274;"));
+
+    h += '<button class="' + cls + '"' + (unlocked ? ' data-mod="' + m.id + '"' : ' disabled') + '>' +
+           '<div class="head"><div>' +
+             '<span class="kind">' + kind + ' &middot; ' + count + '</span>' +
+             '<h2>' + esc(m.title) + '</h2>' +
+             '<p>' + esc(m.blurb) + '</p>' +
+             (gated && !unlocked ? '<span class="gate">Finish ' + esc(MODULES[i-1].title) + ' to unlock</span>' : '') +
+             (gated && unlocked ? '<span class="gate">Open by toggle</span>' : '') +
+             (done && !flashMode ? '<span class="gate">Passed</span>' : '') +
+           '</div><span class="badge">' + badge + '</span></div>' +
+         '</button>';
+  }
+  if (!flashMode) h += '<button class="reset-link" id="wipe">Clear progress</button>';
+  stage.innerHTML = h;
+
+  var tiles = stage.querySelectorAll("[data-mod]");
+  for (var t=0;t<tiles.length;t++){
+    tiles[t].onclick = function(){
+      var id = this.getAttribute("data-mod");
+      if (studyMode === "flash") openFlash(id); else openModule(id);
+    };
+  }
+  var sw = stage.querySelectorAll("[data-m]");
+  for (var w=0;w<sw.length;w++){
+    sw[w].onclick = function(){ studyMode = this.getAttribute("data-m"); Store.save(); goHome(); };
+  }
+  if (flashMode) return;
+  document.getElementById("unlock").onclick = function(){
+    unlockAll = !unlockAll;
+    Store.save();
+    goHome();
+  };
+  document.getElementById("wipe").onclick = function(){
+    progress = [];
+    Store.save();
+    goHome();
+  };
+}
+
+function openModule(id){
+  for (var i=0;i<MODULES.length;i++) if (MODULES[i].id === id) app.mod = MODULES[i];
+  app.view = app.mod.type;
+  barWrap.style.display = "";
+  if (app.mod.type === "cards") resetCards("flash");
+  else if (app.mod.type === "sort") resetSort();
+  else if (app.mod.type === "multi") resetMulti();
+  else if (app.mod.type === "order") resetOrder();
+  else if (app.mod.type === "scenario") resetScenario();
+  else if (app.mod.type === "tf") resetTF();
+  else resetMatch();
+}
+
+function header(metaText){
+  topbar.innerHTML = '<button class="back" id="back">Sets</button>' +
+                  '<h1 class="top-title">' + esc(app.mod.title) + '</h1>' +
+                  '<span class="top-meta">' + metaText + '</span>';
+  document.getElementById("back").onclick = goHome;
+}
+
+/* =======================================================================
+   RED PHONE: CARDS MODULE
+   ======================================================================= */
+function resetCards(mode){
+  var d = app.mod.cards;
+  q = { mode:mode, i:0, flipped:false, picked:null, right:0, missed:[], done:false,
+        order:shuffle(seq(d.length)) };
+  q.optOrder = shuffle(seq(d[q.order[0]].options.length));
+  renderCards();
+}
+function curCard(){ return app.mod.cards[q.order[q.i]]; }
+
+function renderCards(){
+  var total = app.mod.cards.length;
+  header(q.mode === "flash" ? "Flashcards" : "Quiz");
+  setBar(q.done ? 100 : (q.i/total)*100);
+
+  var modes =
+    '<div class="modes">' +
+      '<button id="mFlash" aria-pressed="' + (q.mode==="flash") + '">Flashcards</button>' +
+      '<button id="mQuiz" aria-pressed="' + (q.mode==="quiz") + '">Quiz</button>' +
+    '</div>';
+
+  stage.innerHTML = modes + '<div id="inner"></div>';
+  document.getElementById("mFlash").onclick = function(){ resetCards("flash"); };
+  document.getElementById("mQuiz").onclick = function(){ resetCards("quiz"); };
+
+  if (q.mode === "flash") renderFlash(); else renderQuiz();
+}
+
+function renderFlash(){
+  var c = curCard(), total = app.mod.cards.length;
+  var face = q.flipped
+    ? '<p class="q">' + esc(c.q) + '</p><p class="a-label">Answer</p><p class="a">' + esc(c.options[c.answer]) +
+      '</p><p class="hint" style="text-align:left;margin-top:10px">' + esc(c.note) + '</p>'
+    : '<p class="q">' + esc(c.q) + '</p>';
+
+  document.getElementById("inner").innerHTML =
+    '<div class="card flash" id="flashCard" role="button" tabindex="0">' +
+      '<div class="tag">Card ' + (q.i+1) + ' of ' + total + '</div>' + face +
+    '</div>' +
+    '<p class="hint">' + (q.flipped ? "Tap the card to hide the answer" : "Tap the card to reveal the answer") + '</p>' +
+    '<div class="row">' +
+      '<button class="btn" id="prev"' + (q.i===0?" disabled":"") + '>Back</button>' +
+      '<button class="btn primary" id="next">' + (q.i===total-1 ? "Shuffle again" : "Next") + '</button>' +
+    '</div>' +
+    '<button class="btn btn-wide" id="shuf">Shuffle deck</button>';
+
+  var fc = document.getElementById("flashCard");
+  fc.onclick = function(){ q.flipped = !q.flipped; renderCards(); };
+  fc.onkeydown = function(e){ if (e.key===" "||e.key==="Enter"){ e.preventDefault(); q.flipped=!q.flipped; renderCards(); } };
+  document.getElementById("prev").onclick = function(){ if(q.i>0){ q.i--; q.flipped=false; renderCards(); } };
+  document.getElementById("next").onclick = function(){
+    if (q.i === total-1){ resetCards("flash"); return; }
+    q.i++; q.flipped=false; renderCards();
+  };
+  document.getElementById("shuf").onclick = function(){ resetCards("flash"); };
+}
+
+function renderQuiz(){
+  if (q.done) return renderCardResults();
+  var c = curCard(), total = app.mod.cards.length;
+  var h = '<div class="card"><div class="tag">Question ' + (q.i+1) + ' of ' + total + '</div>' +
+          '<p style="font-size:19px;font-weight:600;margin:0;line-height:1.35">' + esc(c.q) + '</p><div class="opts">';
+
+  for (var n=0;n<q.optOrder.length;n++){
+    var idx = q.optOrder[n], cls = "opt";
+    if (q.picked !== null){
+      if (idx === c.answer) cls += " right";
+      else if (idx === q.picked) cls += " wrong";
+    }
+    h += '<button class="' + cls + '" data-i="' + idx + '"' + (q.picked!==null?" disabled":"") + '>' +
+           '<span class="k">' + KEYS[n] + '</span><span>' + esc(c.options[idx]) + '</span></button>';
+  }
+  h += '</div>';
+
+  if (q.picked !== null){
+    var ok = q.picked === c.answer;
+    h += '<p class="verdict ' + (ok?"ok":"no") + '">' + (ok?"Correct.":"Not quite.") + ' ' + esc(c.note) + '</p>';
+  }
+  h += '</div>';
+  if (q.picked !== null){
+    h += '<button class="btn primary btn-wide" id="adv">' + (q.i===total-1?"See results":"Next question") + '</button>';
+  }
+  h += '<p class="score">' + q.right + ' correct of ' + (q.picked!==null ? q.i+1 : q.i) + ' answered</p>';
+
+  var inner = document.getElementById("inner");
+  inner.innerHTML = h;
+
+  var opts = inner.querySelectorAll(".opt");
+  for (var b=0;b<opts.length;b++){
+    opts[b].onclick = function(){
+      if (q.picked !== null) return;
+      q.picked = parseInt(this.getAttribute("data-i"),10);
+      var cc = curCard();
+      if (q.picked === cc.answer) q.right++; else q.missed.push(q.order[q.i]);
+      renderCards();
+    };
+  }
+  var adv = document.getElementById("adv");
+  if (adv) adv.onclick = function(){
+    if (q.i === total-1){ q.done = true; renderCards(); return; }
+    q.i++; q.picked = null; q.optOrder = shuffle(seq(curCard().options.length)); renderCards();
+  };
+}
+
+function renderCardResults(){
+  var total = app.mod.cards.length;
+  var pct = Math.round((q.right/total)*100), pass = pct >= PASS;
+  var nextMod = completeIfPassed(pct);
+  var h = '<div class="card" style="text-align:center">' +
+            '<div class="tag" style="text-align:left">Result</div>' +
+            '<p class="big' + (pass?"":" low") + '">' + pct + '%</p>' +
+            '<p style="margin:6px 0 0;font-weight:600">' + q.right + ' of ' + total + ' correct</p>' +
+            '<p style="margin:6px 0 0;color:var(--ink-soft);font-size:15px">' +
+              (pass ? "Passed. This set is marked complete." : "Passing is 80 percent. Run it again.") + '</p>';
+  if (q.missed.length){
+    h += '<div class="miss" style="text-align:left"><h3>Review these</h3>';
+    for (var m=0;m<q.missed.length;m++){
+      var c = app.mod.cards[q.missed[m]];
+      h += '<div class="miss-item"><p>' + esc(c.q) + '</p><span>' + esc(c.options[c.answer]) + '</span></div>';
+    }
+    h += '</div>';
+  }
+  h += '</div>' + nextButton(nextMod) +
+       '<button class="btn primary btn-wide" id="again">Take it again</button>' +
+       '<button class="btn btn-wide" id="toFlash">Back to flashcards</button>';
+
+  document.getElementById("inner").innerHTML = h;
+  wireNext(nextMod);
+  document.getElementById("again").onclick = function(){ resetCards("quiz"); };
+  document.getElementById("toFlash").onclick = function(){ resetCards("flash"); };
+}
+
+/* =======================================================================
+   RED PHONE: SORT MODULE
+   ======================================================================= */
+function resetSort(){
+  var m = app.mod;
+  s = { placed:[], picked:null, checked:false, order:shuffle(seq(m.items.length)) };
+  for (var i=0;i<m.items.length;i++) s.placed.push(null);
+  renderSort();
+}
+function placedCount(){ var n=0; for(var i=0;i<s.placed.length;i++) if(s.placed[i]) n++; return n; }
+function catName(id){
+  var cs = app.mod.categories;
+  for (var i=0;i<cs.length;i++) if (cs[i].id === id) return cs[i].name;
+  return id;
+}
+
+function renderSort(){
+  var m = app.mod, total = m.items.length;
+  header(placedCount() + " / " + total);
+  setBar((placedCount()/total)*100);
+
+  var loose = s.order.filter(function(i){ return !s.placed[i]; });
+  var h = '<p class="lede">' + esc(m.lede) + '</p>' +
+          '<div class="tray"><div class="tray-label">Unplaced &middot; ' + loose.length + ' left</div>';
+  if (!loose.length){
+    h += '<div class="tray-empty">Everything is placed. Check your answers.</div>';
+  } else {
+    for (var n=0;n<loose.length;n++){
+      var i = loose[n];
+      h += '<button class="chip' + (s.picked===i?" picked":"") + '" data-item="' + i + '">' + esc(m.items[i].t) + '</button>';
+    }
+  }
+  h += '</div>';
+
+  var armed = s.picked !== null && !s.checked;
+  for (var c=0;c<m.categories.length;c++){
+    var cat = m.categories[c], mine = [];
+    for (var k=0;k<s.placed.length;k++) if (s.placed[k] === cat.id) mine.push(k);
+    h += '<div class="bin' + (armed?" open":"") + '">' +
+           '<button class="bin-head" data-cat="' + cat.id + '"><span>' + esc(cat.name) + '</span>' +
+           '<span class="cue">' + (armed ? "Tap to place" : mine.length + " here") + '</span></button>' +
+           '<div class="bin-body">';
+    if (!mine.length){
+      h += '<div class="bin-empty">Nothing here yet.</div>';
+    } else {
+      for (var p=0;p<mine.length;p++){
+        var idx = mine[p], cls = "chip", mark = "";
+        if (s.checked){
+          var ok = m.items[idx].cat === cat.id;
+          cls += ok ? " right" : " wrong";
+          mark = '<span class="mark">' + (ok ? "Correct" : "Belongs in " + esc(catName(m.items[idx].cat))) + '</span>';
+        }
+        h += '<button class="' + cls + '" data-placed="' + idx + '"' + (s.checked?" disabled":"") + '>' +
+               esc(m.items[idx].t) + mark + '</button>';
+      }
+    }
+    h += '</div></div>';
+  }
+
+  h += '<div class="actions">' +
+         '<button class="btn" id="sReset">Start over</button>' +
+         '<button class="btn primary" id="sCheck"' + ((s.checked || placedCount()<total) ? " disabled":"") + '>Check answers</button>' +
+       '</div><div id="sResult"></div>';
+
+  stage.innerHTML = h;
+
+  var chips = stage.querySelectorAll("[data-item]");
+  for (var a=0;a<chips.length;a++){
+    chips[a].onclick = function(){
+      var n = parseInt(this.getAttribute("data-item"),10);
+      s.picked = (s.picked === n) ? null : n;
+      renderSort();
+    };
+  }
+  var heads = stage.querySelectorAll("[data-cat]");
+  for (var d=0;d<heads.length;d++){
+    heads[d].onclick = function(){
+      if (s.picked === null || s.checked) return;
+      s.placed[s.picked] = this.getAttribute("data-cat");
+      s.picked = null;
+      renderSort();
+    };
+  }
+  var back = stage.querySelectorAll("[data-placed]");
+  for (var e=0;e<back.length;e++){
+    back[e].onclick = function(){
+      if (s.checked) return;
+      s.placed[parseInt(this.getAttribute("data-placed"),10)] = null;
+      renderSort();
+    };
+  }
+  document.getElementById("sReset").onclick = resetSort;
+  document.getElementById("sCheck").onclick = checkSort;
+
+  if (s.checked) paintSortResult();
+}
+
+function checkSort(){
+  s.checked = true; s.picked = null;
+  renderSort();
+}
+
+function paintSortResult(){
+  var m = app.mod, right = 0;
+  for (var i=0;i<m.items.length;i++) if (s.placed[i] === m.items[i].cat) right++;
+  var pct = Math.round((right/m.items.length)*100);
+  var nextMod = completeIfPassed(pct);
+  document.getElementById("sResult").innerHTML =
+    '<div class="result">' +
+      '<p class="big' + (pct>=PASS?"":" low") + '">' + pct + '%</p>' +
+      '<p style="font-weight:600">' + right + ' of ' + m.items.length + ' in the right category</p>' +
+      '<p style="color:var(--ink-soft);font-size:15px">' +
+        (pct>=PASS ? "Passed. This set is marked complete." : "Misses are marked with where they belong.") + '</p>' +
+    '</div>' + nextButton(nextMod) +
+    '<button class="btn primary btn-wide" id="sAgain">Run it again</button>';
+  wireNext(nextMod);
+  document.getElementById("sAgain").onclick = resetSort;
+}
+
+/* =======================================================================
+   RED PHONE: MATCH MODULE
+   One to one pairing. links[termIndex] holds the paired description index,
+   and a pair is correct when those two indexes are equal.
+   ======================================================================= */
+var mt = {};
+
+function resetMatch(){
+  var m = app.mod;
+  mt = { links:[], picked:null, checked:false,
+         leftOrder:shuffle(seq(m.pairs.length)), rightOrder:shuffle(seq(m.pairs.length)) };
+  for (var i=0;i<m.pairs.length;i++) mt.links.push(null);
+  renderMatch();
+}
+
+function linkedCount(){
+  var n=0; for (var i=0;i<mt.links.length;i++) if (mt.links[i] !== null) n++; return n;
+}
+
+function renderMatch(){
+  var m = app.mod, total = m.pairs.length;
+  header(linkedCount() + " / " + total);
+  setBar((linkedCount()/total)*100);
+
+  var taken = {};
+  for (var i=0;i<mt.links.length;i++) if (mt.links[i] !== null) taken[mt.links[i]] = true;
+
+  var h = '<p class="lede">' + esc(m.lede) + '</p>' +
+          '<div class="tray"><div class="tray-label">' + esc(m.leftLabel) + '</div>';
+
+  for (var L=0;L<mt.leftOrder.length;L++){
+    var t = mt.leftOrder[L], link = mt.links[t], cls = "chip", mark = "";
+    if (mt.checked && link !== null){
+      var ok = link === t;
+      cls += ok ? " right" : " wrong";
+      mark = '<span class="mark">' + (ok ? "Correct" : "Should be: " + esc(m.pairs[t].b)) + '</span>';
+    } else if (mt.picked === t){
+      cls += " picked";
+    }
+    h += '<button class="' + cls + '" data-term="' + t + '">' +
+           '<strong>' + esc(m.pairs[t].a) + '</strong>' +
+           '<span class="sub">' + (link === null ? "Tap to pick, then choose a description" : esc(m.pairs[link].b)) + '</span>' +
+           mark +
+         '</button>';
+  }
+  h += '</div>';
+
+  var armed = mt.picked !== null && !mt.checked;
+  var pool = mt.rightOrder.filter(function(r){ return !taken[r]; });
+  h += '<div class="bin' + (armed ? " open" : "") + '">' +
+         '<div class="bin-head" style="cursor:default"><span>' + esc(m.rightLabel) + '</span>' +
+         '<span class="cue">' + (armed ? "Tap one to pair" : pool.length + " left") + '</span></div>' +
+         '<div class="bin-body">';
+  if (!pool.length){
+    h += '<div class="bin-empty">All matched. Check your answers.</div>';
+  } else {
+    for (var R=0;R<pool.length;R++){
+      h += '<button class="chip" data-desc="' + pool[R] + '"' + (armed ? "" : " disabled") + '>' +
+             esc(m.pairs[pool[R]].b) + '</button>';
+    }
+  }
+  h += '</div></div>';
+
+  h += '<div class="actions">' +
+         '<button class="btn" id="mReset">Start over</button>' +
+         '<button class="btn primary" id="mCheck"' + ((mt.checked || linkedCount()<total) ? " disabled":"") + '>Check answers</button>' +
+       '</div><div id="mResult"></div>';
+
+  stage.innerHTML = h;
+
+  var terms = stage.querySelectorAll("[data-term]");
+  for (var a=0;a<terms.length;a++){
+    terms[a].onclick = function(){
+      if (mt.checked) return;
+      var n = parseInt(this.getAttribute("data-term"),10);
+      if (mt.links[n] !== null){ mt.links[n] = null; mt.picked = null; renderMatch(); return; }
+      mt.picked = (mt.picked === n) ? null : n;
+      renderMatch();
+    };
+  }
+  var descs = stage.querySelectorAll("[data-desc]");
+  for (var b=0;b<descs.length;b++){
+    descs[b].onclick = function(){
+      if (mt.picked === null || mt.checked) return;
+      mt.links[mt.picked] = parseInt(this.getAttribute("data-desc"),10);
+      mt.picked = null;
+      renderMatch();
+    };
+  }
+  document.getElementById("mReset").onclick = resetMatch;
+  document.getElementById("mCheck").onclick = function(){ mt.checked = true; mt.picked = null; renderMatch(); };
+
+  if (mt.checked) paintMatchResult();
+}
+
+function paintMatchResult(){
+  var m = app.mod, right = 0;
+  for (var i=0;i<m.pairs.length;i++) if (mt.links[i] === i) right++;
+  var pct = Math.round((right/m.pairs.length)*100);
+  var nextMod = completeIfPassed(pct);
+  document.getElementById("mResult").innerHTML =
+    '<div class="result">' +
+      '<p class="big' + (pct>=PASS?"":" low") + '">' + pct + '%</p>' +
+      '<p style="font-weight:600">' + right + ' of ' + m.pairs.length + ' matched correctly</p>' +
+      '<p style="color:var(--ink-soft);font-size:15px">' +
+        (pct>=PASS ? "Passed. This set is marked complete." : "Misses show the description that belongs there.") + '</p>' +
+    '</div>' + nextButton(nextMod) +
+    '<button class="btn primary btn-wide" id="mAgain">Run it again</button>';
+  wireNext(nextMod);
+  document.getElementById("mAgain").onclick = resetMatch;
+}
+
+/* =======================================================================
+   RED PHONE: MULTI SELECT MODULE
+   A question scores only when the chosen set matches the correct set
+   exactly, same as the LMS grades select all that apply.
+   ======================================================================= */
+var ms = {};
+
+function resetMulti(){
+  var d = app.mod.questions;
+  ms = { i:0, sel:[], checked:false, right:0, missed:[], done:false, order:shuffle(seq(d.length)) };
+  ms.optOrder = shuffle(seq(d[ms.order[0]].options.length));
+  renderMulti();
+}
+function curMulti(){ return app.mod.questions[ms.order[ms.i]]; }
+function isCorrect(list, want){
+  if (list.length !== want.length) return false;
+  for (var i=0;i<want.length;i++) if (list.indexOf(want[i]) === -1) return false;
+  return true;
+}
+
+function renderMulti(){
+  if (ms.done) return renderMultiResults();
+  var m = app.mod, c = curMulti(), total = m.questions.length;
+  header("Question " + (ms.i+1) + " / " + total);
+  setBar((ms.i/total)*100);
+
+  var h = '<p class="lede">' + esc(m.lede) + '</p><div class="card">' +
+          '<div class="tag">Question ' + (ms.i+1) + ' of ' + total + ' &middot; select all that apply</div>' +
+          '<p style="font-size:19px;font-weight:600;margin:0;line-height:1.35">' + esc(c.q) + '</p><div class="opts">';
+
+  for (var n=0;n<ms.optOrder.length;n++){
+    var idx = ms.optOrder[n];
+    var chosen = ms.sel.indexOf(idx) !== -1;
+    var want = c.correct.indexOf(idx) !== -1;
+    var cls = "opt", box = chosen ? "&#10003;" : "";
+    if (ms.checked){
+      if (want && chosen) cls += " right";
+      else if (!want && chosen) cls += " wrong";
+      else if (want && !chosen) cls += " right missed";
+    } else if (chosen){
+      cls += " chosen";
+    }
+    h += '<button class="' + cls + '" data-o="' + idx + '"' + (ms.checked?" disabled":"") + '>' +
+           '<span class="k">' + box + '</span><span>' + esc(c.options[idx]) +
+           (ms.checked && want && !chosen ? '<span class="mark" style="color:var(--accent)">Missed this one</span>' : '') +
+         '</span></button>';
+  }
+  h += '</div>';
+
+  if (ms.checked){
+    var ok = isCorrect(ms.sel, c.correct);
+    h += '<p class="verdict ' + (ok?"ok":"no") + '">' + (ok ? "Correct." : "Not the full set.") + ' ' + esc(c.note) + '</p>';
+  }
+  h += '</div>';
+
+  h += '<div class="actions">' +
+         '<button class="btn" id="msClear"' + (ms.checked?" disabled":"") + '>Clear picks</button>' +
+         (ms.checked
+           ? '<button class="btn primary" id="msNext">' + (ms.i===total-1 ? "See results" : "Next question") + '</button>'
+           : '<button class="btn primary" id="msCheck"' + (ms.sel.length ? "" : " disabled") + '>Check answers</button>') +
+       '</div>' +
+       '<p class="score">' + ms.right + ' of ' + (ms.checked ? ms.i+1 : ms.i) + ' answered fully correct</p>';
+
+  stage.innerHTML = h;
+
+  var opts = stage.querySelectorAll("[data-o]");
+  for (var b=0;b<opts.length;b++){
+    opts[b].onclick = function(){
+      if (ms.checked) return;
+      var v = parseInt(this.getAttribute("data-o"),10);
+      var at = ms.sel.indexOf(v);
+      if (at === -1) ms.sel.push(v); else ms.sel.splice(at,1);
+      renderMulti();
+    };
+  }
+  var clear = document.getElementById("msClear");
+  if (clear) clear.onclick = function(){ ms.sel = []; renderMulti(); };
+  var chk = document.getElementById("msCheck");
+  if (chk) chk.onclick = function(){
+    ms.checked = true;
+    if (isCorrect(ms.sel, curMulti().correct)) ms.right++; else ms.missed.push(ms.order[ms.i]);
+    renderMulti();
+  };
+  var nxt = document.getElementById("msNext");
+  if (nxt) nxt.onclick = function(){
+    if (ms.i === app.mod.questions.length-1){ ms.done = true; renderMulti(); return; }
+    ms.i++; ms.sel = []; ms.checked = false;
+    ms.optOrder = shuffle(seq(curMulti().options.length));
+    renderMulti();
+  };
+}
+
+function renderMultiResults(){
+  var m = app.mod, total = m.questions.length;
+  header("Result");
+  setBar(100);
+  var pct = Math.round((ms.right/total)*100), pass = pct >= PASS;
+  var nextMod = completeIfPassed(pct);
+  var h = '<div class="card" style="text-align:center">' +
+            '<div class="tag" style="text-align:left">Result</div>' +
+            '<p class="big' + (pass?"":" low") + '">' + pct + '%</p>' +
+            '<p style="margin:6px 0 0;font-weight:600">' + ms.right + ' of ' + total + ' fully correct</p>' +
+            '<p style="margin:6px 0 0;color:var(--ink-soft);font-size:15px">' +
+              (pass ? "Passed. This set is marked complete." : "A question only counts when the whole set is right.") + '</p>';
+  if (ms.missed.length){
+    h += '<div class="miss" style="text-align:left"><h3>Review these</h3>';
+    for (var k=0;k<ms.missed.length;k++){
+      var qq = m.questions[ms.missed[k]];
+      var full = [];
+      for (var c=0;c<qq.correct.length;c++) full.push(qq.options[qq.correct[c]]);
+      h += '<div class="miss-item"><p>' + esc(qq.q) + '</p><span>' + esc(full.join("  /  ")) + '</span></div>';
+    }
+    h += '</div>';
+  }
+  h += '</div>' + nextButton(nextMod) +
+       '<button class="btn primary btn-wide" id="msAgain">Run it again</button>';
+  stage.innerHTML = h;
+  wireNext(nextMod);
+  document.getElementById("msAgain").onclick = resetMulti;
+}
+
+/* =======================================================================
+   RED PHONE: ORDER MODULE
+   steps[] is stored in the correct sequence. slots[n] holds the index of
+   whichever step the user dropped into position n, so a slot is right
+   when slots[n] === n.
+   ======================================================================= */
+var od = {};
+
+function resetOrder(){
+  var m = app.mod;
+  od = { slots:[], checked:false, pool:shuffle(seq(m.steps.length)) };
+  for (var i=0;i<m.steps.length;i++) od.slots.push(null);
+  renderOrder();
+}
+function filledCount(){ var n=0; for(var i=0;i<od.slots.length;i++) if(od.slots[i]!==null) n++; return n; }
+function nextOpenSlot(){ for(var i=0;i<od.slots.length;i++) if(od.slots[i]===null) return i; return -1; }
+
+function renderOrder(){
+  var m = app.mod, total = m.steps.length;
+  header(filledCount() + " / " + total);
+  setBar((filledCount()/total)*100);
+
+  var used = {};
+  for (var i=0;i<od.slots.length;i++) if (od.slots[i] !== null) used[od.slots[i]] = true;
+  var pool = od.pool.filter(function(p){ return !used[p]; });
+
+  var h = '<p class="lede">' + esc(m.lede) + '</p>' +
+          '<div class="tray"><div class="tray-label">' + esc(m.poolLabel) + ' &middot; ' + pool.length + ' left</div>';
+  if (!pool.length){
+    h += '<div class="tray-empty">All placed. Check your answers.</div>';
+  } else {
+    for (var p=0;p<pool.length;p++){
+      h += '<button class="chip" data-step="' + pool[p] + '"' + (od.checked?" disabled":"") + '>' +
+             esc(m.steps[pool[p]]) + '</button>';
+    }
+  }
+  h += '</div>';
+
+  for (var n=0;n<total;n++){
+    var v = od.slots[n], cls = "chip", mark = "", label = "";
+    if (v === null){
+      label = '<span class="sub">Empty</span>';
+    } else {
+      label = '<strong>' + esc(m.steps[v]) + '</strong>';
+      if (od.checked){
+        var ok = v === n;
+        cls += ok ? " right" : " wrong";
+        mark = '<span class="mark">' + (ok ? "Correct" : "Should be: " + esc(m.steps[n])) + '</span>';
+      }
+    }
+    h += '<div class="bin' + (v === null ? " open" : "") + '" style="margin-bottom:10px">' +
+           '<div class="bin-head" style="cursor:default"><span>Step ' + (n+1) + '</span>' +
+             '<span class="cue">' + (v === null ? (n === nextOpenSlot() ? "Next to fill" : "Waiting") : "Placed") + '</span>' +
+           '</div>' +
+           '<div class="bin-body">' +
+             (v === null
+               ? '<div class="bin-empty">Nothing here yet.</div>'
+               : '<button class="' + cls + '" data-slot="' + n + '"' + (od.checked?" disabled":"") + '>' + label + mark + '</button>') +
+           '</div></div>';
+  }
+
+  h += '<div class="actions">' +
+         '<button class="btn" id="oReset">Start over</button>' +
+         '<button class="btn primary" id="oCheck"' + ((od.checked || filledCount()<total) ? " disabled":"") + '>Check answers</button>' +
+       '</div><div id="oResult"></div>';
+
+  stage.innerHTML = h;
+
+  var chips = stage.querySelectorAll("[data-step]");
+  for (var a=0;a<chips.length;a++){
+    chips[a].onclick = function(){
+      if (od.checked) return;
+      var slot = nextOpenSlot();
+      if (slot === -1) return;
+      od.slots[slot] = parseInt(this.getAttribute("data-step"),10);
+      renderOrder();
+    };
+  }
+  var placed = stage.querySelectorAll("[data-slot]");
+  for (var b=0;b<placed.length;b++){
+    placed[b].onclick = function(){
+      if (od.checked) return;
+      od.slots[parseInt(this.getAttribute("data-slot"),10)] = null;
+      renderOrder();
+    };
+  }
+  document.getElementById("oReset").onclick = resetOrder;
+  document.getElementById("oCheck").onclick = function(){ od.checked = true; renderOrder(); };
+
+  if (od.checked) paintOrderResult();
+}
+
+function paintOrderResult(){
+  var m = app.mod, right = 0;
+  for (var i=0;i<m.steps.length;i++) if (od.slots[i] === i) right++;
+  var pct = Math.round((right/m.steps.length)*100);
+  var nextMod = completeIfPassed(pct);
+  document.getElementById("oResult").innerHTML =
+    '<div class="result">' +
+      '<p class="big' + (pct>=PASS?"":" low") + '">' + pct + '%</p>' +
+      '<p style="font-weight:600">' + right + ' of ' + m.steps.length + ' in the right position</p>' +
+      '<p style="color:var(--ink-soft);font-size:15px">' + esc(m.note) + '</p>' +
+    '</div>' + nextButton(nextMod) +
+    '<button class="btn primary btn-wide" id="oAgain">Run it again</button>';
+  wireNext(nextMod);
+  document.getElementById("oAgain").onclick = resetOrder;
+}
+
+/* =======================================================================
+   RED PHONE: SCENARIO MODULE
+   Read the panels one at a time, then answer. Panels stay reachable
+   with Back so the details can be checked while answering.
+   ======================================================================= */
+var sc = {};
+
+function resetScenario(){
+  var m = app.mod;
+  sc = { panel:0, reading:true, i:0, picked:null, right:0, missed:[], done:false,
+         optOrder:shuffle(seq(m.questions[0].options.length)) };
+  renderScenario();
+}
+
+function renderScenario(){
+  var m = app.mod;
+  if (sc.done) return renderScenarioResults();
+
+  if (sc.reading){
+    header("Panel " + (sc.panel+1) + " / " + m.panels.length);
+    setBar(((sc.panel+1)/(m.panels.length + m.questions.length))*100);
+    stage.innerHTML =
+      '<div class="card">' +
+        '<div class="tag">Setup ' + (sc.panel+1) + ' of ' + m.panels.length + '</div>' +
+        '<p style="font-size:17px;line-height:1.5;margin:0">' + esc(m.panels[sc.panel]) + '</p>' +
+      '</div>' +
+      '<div class="row">' +
+        '<button class="btn" id="pPrev"' + (sc.panel===0?" disabled":"") + '>Back</button>' +
+        '<button class="btn primary" id="pNext">' + (sc.panel === m.panels.length-1 ? "Start questions" : "Next") + '</button>' +
+      '</div>';
+    document.getElementById("pPrev").onclick = function(){ if (sc.panel>0){ sc.panel--; renderScenario(); } };
+    document.getElementById("pNext").onclick = function(){
+      if (sc.panel === m.panels.length-1){ sc.reading = false; renderScenario(); return; }
+      sc.panel++; renderScenario();
+    };
+    return;
+  }
+
+  var c = m.questions[sc.i], total = m.questions.length;
+  header("Question " + (sc.i+1) + " / " + total);
+  setBar(((m.panels.length + sc.i)/(m.panels.length + total))*100);
+
+  var h = '<div class="card">' +
+            '<div class="tag">Question ' + (sc.i+1) + ' of ' + total + '</div>' +
+            '<p style="font-size:19px;font-weight:600;margin:0;line-height:1.35">' + esc(c.q) + '</p><div class="opts">';
+  for (var n=0;n<sc.optOrder.length;n++){
+    var idx = sc.optOrder[n], cls = "opt";
+    if (sc.picked !== null){
+      if (idx === c.answer) cls += " right";
+      else if (idx === sc.picked) cls += " wrong";
+    }
+    h += '<button class="' + cls + '" data-o="' + idx + '"' + (sc.picked!==null?" disabled":"") + '>' +
+           '<span class="k">' + KEYS[n] + '</span><span>' + esc(c.options[idx]) + '</span></button>';
+  }
+  h += '</div>';
+  if (sc.picked !== null){
+    var ok = sc.picked === c.answer;
+    h += '<p class="verdict ' + (ok?"ok":"no") + '">' + (ok?"Correct.":"Not quite.") + ' ' + esc(c.note) + '</p>';
+  }
+  h += '</div>';
+  h += '<div class="row">' +
+         '<button class="btn" id="reread">Reread setup</button>' +
+         (sc.picked !== null
+           ? '<button class="btn primary" id="qNext">' + (sc.i===total-1 ? "See result" : "Next question") + '</button>'
+           : '<button class="btn primary" disabled>Pick an answer</button>') +
+       '</div>';
+
+  stage.innerHTML = h;
+
+  var opts = stage.querySelectorAll("[data-o]");
+  for (var b=0;b<opts.length;b++){
+    opts[b].onclick = function(){
+      if (sc.picked !== null) return;
+      sc.picked = parseInt(this.getAttribute("data-o"),10);
+      if (sc.picked === c.answer) sc.right++; else sc.missed.push(sc.i);
+      renderScenario();
+    };
+  }
+  document.getElementById("reread").onclick = function(){ sc.reading = true; sc.panel = 0; renderScenario(); };
+  var nx = document.getElementById("qNext");
+  if (nx) nx.onclick = function(){
+    if (sc.i === total-1){ sc.done = true; renderScenario(); return; }
+    sc.i++; sc.picked = null;
+    sc.optOrder = shuffle(seq(m.questions[sc.i].options.length));
+    renderScenario();
+  };
+}
+
+function renderScenarioResults(){
+  var m = app.mod, total = m.questions.length;
+  header("Result");
+  setBar(100);
+  var pct = Math.round((sc.right/total)*100), pass = pct >= PASS;
+  var nextMod = completeIfPassed(pct);
+  var h = '<div class="card" style="text-align:center">' +
+            '<div class="tag" style="text-align:left">Result</div>' +
+            '<p class="big' + (pass?"":" low") + '">' + pct + '%</p>' +
+            '<p style="margin:6px 0 0;font-weight:600">' + sc.right + ' of ' + total + ' correct</p>' +
+            '<p style="margin:6px 0 0;color:var(--ink-soft);font-size:15px">' +
+              (pass ? "Passed. This set is marked complete." : "Read the setup again and rerun it.") + '</p>';
+  if (sc.missed.length){
+    h += '<div class="miss" style="text-align:left"><h3>Review these</h3>';
+    for (var k=0;k<sc.missed.length;k++){
+      var qq = m.questions[sc.missed[k]];
+      h += '<div class="miss-item"><p>' + esc(qq.q) + '</p><span>' + esc(qq.options[qq.answer]) + '</span></div>';
+    }
+    h += '</div>';
+  }
+  h += '</div>' + nextButton(nextMod) +
+       '<button class="btn primary btn-wide" id="scAgain">Run it again</button>';
+  stage.innerHTML = h;
+  wireNext(nextMod);
+  document.getElementById("scAgain").onclick = resetScenario;
+}
+
+/* =======================================================================
+   RED PHONE: TRUE OR FALSE MODULE
+   One row per statement with both buttons in reach, so it is a single
+   tap per row instead of the two tap place pattern.
+   ======================================================================= */
+var tf = {};
+
+function resetTF(){
+  var m = app.mod;
+  tf = { picks:[], checked:false, order:shuffle(seq(m.statements.length)) };
+  for (var i=0;i<m.statements.length;i++) tf.picks.push(null);
+  renderTF();
+}
+function tfAnswered(){ var n=0; for(var i=0;i<tf.picks.length;i++) if(tf.picks[i]!==null) n++; return n; }
+
+function renderTF(){
+  var m = app.mod, total = m.statements.length;
+  header(tfAnswered() + " / " + total);
+  setBar((tfAnswered()/total)*100);
+
+  var h = '<p class="lede">' + esc(m.lede) + '</p>';
+
+  for (var r=0;r<tf.order.length;r++){
+    var idx = tf.order[r], st = m.statements[idx], pick = tf.picks[idx];
+    var rowCls = "tfrow";
+    if (tf.checked && pick !== null) rowCls += (pick === st.a) ? " right" : " wrong";
+
+    h += '<div class="' + rowCls + '">' +
+           '<p class="tftext">' + esc(st.t) + '</p>' +
+           '<div class="tfbtns">' +
+             '<button class="tfb' + (pick === true ? " on" : "") + '" data-tf="' + idx + '" data-v="1"' + (tf.checked?" disabled":"") + '>True</button>' +
+             '<button class="tfb' + (pick === false ? " on" : "") + '" data-tf="' + idx + '" data-v="0"' + (tf.checked?" disabled":"") + '>False</button>' +
+           '</div>';
+    if (tf.checked){
+      h += '<p class="tfnote">' + (pick === st.a ? "Correct. " : "Answer is " + (st.a ? "true" : "false") + ". ") + esc(st.note) + '</p>';
+    }
+    h += '</div>';
+  }
+
+  h += '<div class="actions">' +
+         '<button class="btn" id="tfReset">Start over</button>' +
+         '<button class="btn primary" id="tfCheck"' + ((tf.checked || tfAnswered()<total) ? " disabled":"") + '>Check answers</button>' +
+       '</div><div id="tfResult"></div>';
+
+  stage.innerHTML = h;
+
+  var btns = stage.querySelectorAll("[data-tf]");
+  for (var b=0;b<btns.length;b++){
+    btns[b].onclick = function(){
+      if (tf.checked) return;
+      var i = parseInt(this.getAttribute("data-tf"),10);
+      var v = this.getAttribute("data-v") === "1";
+      tf.picks[i] = (tf.picks[i] === v) ? null : v;
+      renderTF();
+    };
+  }
+  document.getElementById("tfReset").onclick = resetTF;
+  document.getElementById("tfCheck").onclick = function(){ tf.checked = true; renderTF(); };
+
+  if (tf.checked) paintTFResult();
+}
+
+function paintTFResult(){
+  var m = app.mod, right = 0;
+  for (var i=0;i<m.statements.length;i++) if (tf.picks[i] === m.statements[i].a) right++;
+  var pct = Math.round((right/m.statements.length)*100);
+  var nextMod = completeIfPassed(pct);
+  document.getElementById("tfResult").innerHTML =
+    '<div class="result">' +
+      '<p class="big' + (pct>=PASS?"":" low") + '">' + pct + '%</p>' +
+      '<p style="font-weight:600">' + right + ' of ' + m.statements.length + ' correct</p>' +
+      '<p style="color:var(--ink-soft);font-size:15px">' +
+        (pct>=PASS ? "Passed. This set is marked complete." : "Each row shows the right answer and why.") + '</p>' +
+    '</div>' + nextButton(nextMod) +
+    '<button class="btn primary btn-wide" id="tfAgain">Run it again</button>';
+  wireNext(nextMod);
+  document.getElementById("tfAgain").onclick = resetTF;
+}
+
+/* =======================================================================
+   RED PHONE: FLASHCARD MODE
+   toCards turns any set type into {f front, b back, n note, c context}.
+   No scoring, no gates, no progress writes.
+   ======================================================================= */
+var fd = {};
+
+function toCards(m){
+  var out = [], i, j;
+  if (m.type === "cards"){
+    for (i=0;i<m.cards.length;i++) out.push({ f:m.cards[i].q, b:m.cards[i].options[m.cards[i].answer], n:m.cards[i].note });
+  } else if (m.type === "sort"){
+    var names = {};
+    for (j=0;j<m.categories.length;j++) names[m.categories[j].id] = m.categories[j].name;
+    for (i=0;i<m.items.length;i++) out.push({ f:m.items[i].t, b:names[m.items[i].cat] });
+  } else if (m.type === "match"){
+    for (i=0;i<m.pairs.length;i++) out.push({ f:m.pairs[i].a, b:m.pairs[i].b });
+  } else if (m.type === "multi"){
+    for (i=0;i<m.questions.length;i++){
+      var qq = m.questions[i], picks = [];
+      for (j=0;j<qq.correct.length;j++) picks.push(qq.options[qq.correct[j]]);
+      out.push({ f:qq.q + " (select all that apply)", b:picks.join("  /  "), n:qq.note });
+    }
+  } else if (m.type === "order"){
+    for (i=0;i<m.steps.length;i++) out.push({ f:"Step " + (i+1) + " of " + m.steps.length + "?", b:m.steps[i], n:m.note });
+  } else if (m.type === "tf"){
+    for (i=0;i<m.statements.length;i++) out.push({ f:"True or false: " + m.statements[i].t, b:m.statements[i].a ? "True" : "False", n:m.statements[i].note });
+  } else if (m.type === "scenario"){
+    for (i=0;i<m.questions.length;i++) out.push({ f:m.questions[i].q, b:m.questions[i].options[m.questions[i].answer], n:m.questions[i].note, c:m.panels.join(" ") });
+  }
+  return out;
+}
+
+function openFlash(id){
+  for (var i=0;i<MODULES.length;i++) if (MODULES[i].id === id) app.mod = MODULES[i];
+  app.view = "flashdeck";
+  barWrap.style.display = "";
+  var list = toCards(app.mod);
+  fd = { list:list, order:shuffle(seq(list.length)), i:0, flipped:false };
+  renderFlashDeck();
+}
+
+function renderFlashDeck(){
+  var total = fd.list.length, card = fd.list[fd.order[fd.i]];
+  header("Card " + (fd.i+1) + " / " + total);
+  setBar(((fd.i+1)/total)*100);
+  var face = (card.c ? '<p class="ctx">' + esc(card.c) + '</p>' : '') + '<p class="q">' + esc(card.f) + '</p>';
+  if (fd.flipped){
+    face += '<p class="a-label">Answer</p><p class="a">' + esc(card.b) + '</p>' +
+            (card.n ? '<p class="hint" style="text-align:left;margin-top:10px">' + esc(card.n) + '</p>' : '');
+  }
+  stage.innerHTML =
+    '<div class="card flash" id="deckCard" role="button" tabindex="0">' +
+      '<div class="tag">' + esc(app.mod.title) + '</div>' + face +
+    '</div>' +
+    '<p class="hint">' + (fd.flipped ? "Tap the card to hide the answer" : "Tap the card to flip it") + '</p>' +
+    '<div class="row">' +
+      '<button class="btn" id="fdPrev"' + (fd.i===0 ? " disabled" : "") + '>Back</button>' +
+      '<button class="btn primary" id="fdNext">' + (fd.i===total-1 ? "Shuffle again" : "Next") + '</button>' +
+    '</div>';
+  var dc = document.getElementById("deckCard");
+  dc.onclick = function(){ fd.flipped = !fd.flipped; renderFlashDeck(); };
+  dc.onkeydown = function(e){ if (e.key===" "||e.key==="Enter"){ e.preventDefault(); fd.flipped=!fd.flipped; renderFlashDeck(); } };
+  document.getElementById("fdPrev").onclick = function(){ if (fd.i>0){ fd.i--; fd.flipped=false; renderFlashDeck(); } };
+  document.getElementById("fdNext").onclick = function(){
+    if (fd.i === total-1){ fd.order = shuffle(seq(total)); fd.i = 0; }
+    else fd.i++;
+    fd.flipped = false; renderFlashDeck();
+  };
+}
+
+/* RED PHONE: boot. Progress loads first so the gates are right on paint. */
+Store.load(function(st){
+  progress = st.progress || [];
+  unlockAll = !!st.unlockAll;
+  studyMode = st.mode === "flash" ? "flash" : "career";
+  goHome();
+});
+</script>
+</body>
+</html>

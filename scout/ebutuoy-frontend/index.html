@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#f5f1ea">
+<title>ebutuoy</title>
+
+<!--
+=============================================================================
+  EBUTUOY :: frontend
+=============================================================================
+  Anti-popularity YouTube discovery. 30 second samples of videos under 1000
+  views from channels under 1000 subs. SKIP moves on, KEEP WATCHING plays
+  the whole video, and when any video ends the next one starts.
+
+  Layout, top to bottom:
+    top bar     mode pill + MENU (sits above the video, never on top of it)
+    video area  two stacked YouTube players, A and B
+    action bar  SKIP + KEEP WATCHING
+    info strip  title, channel, views, subs
+
+  How the two players work:
+    One player is "front" (visible, playing). The other is "back". While the
+    front plays, the next video is loaded into the back player, muted, and
+    paused as soon as it starts buffering. On advance the slots swap and the
+    back player is already warm, so the switch is quick instead of a black
+    screen while the next video loads.
+
+  Bug hunt fixes in this revision:
+    - player errors (embedding off, removed, private) auto skip
+    - any video that ends advances, not only in keep watching mode
+    - video area stops above the buttons so YouTube's own controls show
+    - one advance at a time: fast SKIP taps no longer double swap
+    - the 30 second clock starts when playback starts, not when loading starts
+    - progress bar fills over the real 30 seconds
+    - next video preloads into the back player again
+    - waits for BOTH players to be ready before starting
+    - seen log POST uses keepalive so it survives switching apps
+    - only one search runs at a time (saves YouTube quota)
+    - Topic and Local mode page through results instead of repeating them
+    - quota exhausted shows a plain message
+    - leaving the app pauses playback and the clock; coming back resumes
+    - stale searches from a previous session are thrown away after MENU
+
+  Authorship log (most recent first):
+    [ORANGE]  bug hunt pass (see list above), top bar, frontend moved to GitHub
+    [ORANGE]  remove right wheel + clip bar; add keep-watching full playback
+    [ORANGE]  split-row wheel: tag half + clip half per row
+    [ORANGE]  clip marking bar with draggable in/out handles
+    [ORANGE]  rebuild player core on IFrame API with proper autoplay unlock
+    [ORANGE]  playlists tab, language filter alignment, dup-replay fix
+    [ORANGE]  add right-column wheel UI + revisit playback integration
+    [ORANGE]  rewrite without IFrame API to fix mobile autoplay
+    [ORANGE]  initial frontend with three modes + dual-buffer player
+=============================================================================
+-->
+
+<style>
+  :root {
+    --bg:      #f5f1ea;   /* warm off-white */
+    --ink:     #1a1a1a;   /* near-black text */
+    --rule:    #d4cec3;   /* hairlines */
+    --accent:  #e36a1f;   /* orange */
+    --soft:    #ebe3d6;   /* selected fill */
+    --top-h:    44px;     /* top bar height */
+    --action-h: 46px;     /* SKIP / KEEP WATCHING bar height */
+    --info-h:   58px;     /* info strip height */
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--bg); color: var(--ink);
+    font-family: -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+  }
+  .btn {
+    border: 2px solid var(--ink); background: var(--bg); color: var(--ink);
+    font-size: 18px; font-weight: 600; padding: 14px 22px;
+    cursor: pointer; border-radius: 0;
+  }
+  .btn:active   { background: var(--ink); color: var(--bg); }
+  .btn.accent   { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.accent:active { background: var(--ink); border-color: var(--ink); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ----- launch screen ------------------------------------------------- */
+  #launch {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    padding: 28px 24px; gap: 20px; overflow-y: auto;
+  }
+  #launch h1 { margin: 0; font-size: 44px; letter-spacing: -1px; line-height: 1; }
+  #launch h1 .dot { color: var(--accent); }
+  #launch .tag-line { margin: 0; font-size: 14px; color: #555; line-height: 1.4; }
+
+  .modes { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+  .mode  { border: 2px solid var(--rule); background: #fff; padding: 16px; cursor: pointer; }
+  .mode.selected { border-color: var(--accent); background: var(--soft); }
+  .mode .name { font-size: 20px; font-weight: 700; }
+  .mode .desc { font-size: 13px; color: #555; margin-top: 4px; }
+
+  #topicWrap { display: none; }
+  #topicWrap.show { display: block; }
+  #topicInput {
+    width: 100%; border: 2px solid var(--ink); background: #fff;
+    font-size: 18px; padding: 12px; font-family: inherit;
+  }
+
+  /* ----- player screen ------------------------------------------------- */
+  #player { position: absolute; inset: 0; display: none; background: var(--bg); }
+  #player.show { display: block; }
+
+  /* top bar: mode pill on the left, MENU on the right */
+  #topBar {
+    position: absolute; top: 0; left: 0; right: 0; height: var(--top-h);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 10px; border-bottom: 2px solid var(--ink); background: var(--bg);
+    z-index: 5;
+  }
+  #modePill {
+    border: 2px solid var(--ink); padding: 3px 10px;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  #menuBtnTop {
+    border: 2px solid var(--ink); background: var(--bg); color: var(--ink);
+    font-weight: 700; padding: 4px 12px; font-size: 11px; cursor: pointer;
+  }
+
+  /* progress bar rides the bottom edge of the top bar */
+  #progress { position: absolute; left: 0; right: 0; bottom: -2px; height: 3px; }
+  #progress .bar { height: 100%; width: 0%; background: var(--accent); }
+
+  /* the video area stops ABOVE the action bar, so YouTube's own control bar
+     (volume, scrubber, fullscreen) is never covered by our buttons */
+  .videoArea {
+    position: absolute;
+    top: var(--top-h); left: 0; right: 0;
+    bottom: calc(var(--action-h) + var(--info-h));
+    background: #000;
+  }
+  .slot { position: absolute; inset: 0; transition: opacity 240ms ease; }
+  .slot.front { opacity: 1; z-index: 2; }
+  .slot.back  { opacity: 0; z-index: 1; pointer-events: none; }
+  .slot iframe, .slot > div { width: 100%; height: 100%; border: 0; display: block; }
+
+  #actionBar {
+    position: absolute; left: 0; right: 0;
+    bottom: var(--info-h); height: var(--action-h);
+    display: flex; z-index: 6;
+    border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink);
+  }
+  #actionBar button {
+    flex: 1; border: 0; font-size: 14px; font-weight: 800;
+    letter-spacing: 1.5px; cursor: pointer; text-transform: uppercase;
+  }
+  #skipBtn { background: var(--bg); color: var(--ink); border-right: 2px solid var(--ink); }
+  #skipBtn:active { background: var(--ink); color: var(--bg); }
+  #keepBtn { background: var(--accent); color: #fff; }
+  #keepBtn:active { background: var(--ink); }
+  #keepBtn.active { background: var(--ink); color: var(--accent); }
+
+  #info {
+    position: absolute; left: 0; right: 0; bottom: 0; height: var(--info-h);
+    background: var(--bg); color: var(--ink);
+    padding: 7px 14px; z-index: 4; font-size: 13px; overflow: hidden;
+  }
+  #info .title {
+    font-weight: 700; font-size: 14px; margin-bottom: 3px; line-height: 1.2;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #info .meta  { color: #444; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #info .badge {
+    display: inline-block; background: var(--accent); color: #fff;
+    padding: 1px 6px; font-size: 10px; font-weight: 700; margin-left: 6px; letter-spacing: 0.5px;
+  }
+
+  #message {
+    position: absolute; inset: 0; z-index: 20; display: none;
+    align-items: center; justify-content: center; text-align: center;
+    color: var(--ink); background: rgba(245,241,234,0.96); padding: 24px; font-size: 18px;
+  }
+  #message.show { display: flex; flex-direction: column; gap: 14px; }
+</style>
+</head>
+<body>
+
+<!-- ===================================================================
+     LAUNCH SCREEN
+=================================================================== -->
+<div id="launch">
+  <h1>ebutuoy<span class="dot">.</span></h1>
+  <p class="tag-line">
+    The algorithm thinks it knows what you want. This does not pretend to.
+    Pick a mode. 30 second samples. Only videos under 1000 views from channels under 1000 subs.
+    Never the same video twice.
+  </p>
+  <div class="modes">
+    <div class="mode" data-mode="topic"><div class="name">Topic</div><div class="desc">You type something specific. It searches.</div></div>
+    <div class="mode" data-mode="local"><div class="name">Local</div><div class="desc">Uses your phone's location. Obscure stuff filmed near you.</div></div>
+    <div class="mode" data-mode="roulette"><div class="name">Roulette</div><div class="desc">Random spot on Earth. You go where the dice say.</div></div>
+  </div>
+  <div id="topicWrap"><input id="topicInput" type="text" placeholder="e.g. metal detecting backyard"></div>
+  <button class="btn accent" id="startBtn" disabled>Start</button>
+</div>
+
+<!-- ===================================================================
+     PLAYER SCREEN
+=================================================================== -->
+<div id="player">
+  <div id="topBar">
+    <div id="modePill">mode</div>
+    <button id="menuBtnTop">MENU</button>
+    <div id="progress"><div class="bar"></div></div>
+  </div>
+
+  <div class="videoArea">
+    <div class="slot front" id="slotA"><div id="frameA"></div></div>
+    <div class="slot back"  id="slotB"><div id="frameB"></div></div>
+  </div>
+
+  <div id="actionBar">
+    <button id="skipBtn">SKIP</button>
+    <button id="keepBtn">KEEP WATCHING</button>
+  </div>
+
+  <div id="info">
+    <div class="title">
+      <span id="infoTitleText">loading</span>
+      <span id="fullBadge" class="badge" style="display:none">FULL</span>
+    </div>
+    <div class="meta" id="infoMeta">&nbsp;</div>
+  </div>
+
+  <div id="message">
+    <div id="messageText">No fresh videos right now.</div>
+    <button class="btn accent" id="messageBackBtn">Back to menu</button>
+  </div>
+</div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+/* ============================================================================
+   CONFIG
+============================================================================ */
+const API_BASE         = 'https://ebutuoy-production.up.railway.app';
+const SAMPLE_MS        = 30 * 1000;   // length of each sample
+const LOAD_TIMEOUT_MS  = 15 * 1000;   // a video that never starts gets skipped
+const PRELOAD_DELAY_MS = 2500;        // let the current video start before warming the next
+const REFILL_THRESHOLD = 3;           // keep at least this many videos queued
+const EMPTY_RETRIES    = 3;           // empty searches in a row before giving up
+
+// YouTube player states we care about
+const YT_ENDED   = 0;
+const YT_PLAYING = 1;
+
+/* ============================================================================
+   STATE
+============================================================================ */
+const session = { mode: null, q: null, lat: null, lng: null };
+
+// sessionId goes up every time a session starts or ends. Async work (a search,
+// a timer) remembers the id it started under and quietly drops its result if
+// the id has moved on, so nothing from an old session leaks into a new one.
+let sessionId = 0;
+
+let queue       = [];          // videos waiting to play
+let nowPlaying  = null;        // the video on screen
+let localSeen   = new Set();   // every id played or queued this session
+let pageToken   = null;        // next results page for Topic / Local
+let exhausted   = false;       // Topic / Local has no more pages
+let quotaOut    = false;       // backend said the YouTube quota is used up
+
+let playerA = null, playerB = null;
+let readyCount = 0;
+let frontSlot = 'A';
+
+let advancing      = false;    // lock: only one advance at a time
+let refillPromise  = null;     // lock: only one search at a time
+let keepWatching   = false;    // full video mode for the current video
+
+// sample clock
+let sampleArmed    = false;    // waiting for the front player to start playing
+let sampleDeadline = null;     // ms timestamp when the sample ends
+let pausedLeft     = null;     // ms left on the clock when the app was hidden
+let loadTimer      = null;     // fires if the front video never starts
+
+// preload bookkeeping: which video sits warm in the back player
+let preload        = null;     // { slot, videoId, offset }
+let preloadPausePending = false;
+let preloadTimer   = null;
+
+/* ============================================================================
+   YOUTUBE PLAYERS
+============================================================================ */
+function makePlayer(elId) {
+  return new YT.Player(elId, {
+    height: '100%', width: '100%',
+    playerVars: {
+      controls: 1, modestbranding: 1, rel: 0, playsinline: 1, fs: 1,
+      origin: location.origin
+    },
+    events: {
+      onReady:       () => { readyCount++; },
+      onStateChange: onPlayerStateChange,
+      onError:       onPlayerError
+    }
+  });
+}
+
+function onYouTubeIframeAPIReady() {
+  playerA = makePlayer('frameA');
+  playerB = makePlayer('frameB');
+}
+
+function getPlayer(slot)  { return slot === 'A' ? playerA : playerB; }
+function otherSlot(slot)  { return slot === 'A' ? 'B' : 'A'; }
+function frontPlayer()    { return getPlayer(frontSlot); }
+function isFront(target)  { return target === frontPlayer(); }
+
+function onPlayerStateChange(ev) {
+  if (isFront(ev.target)) {
+    // start the 30 second clock the moment real playback begins
+    if (ev.data === YT_PLAYING && sampleArmed) {
+      sampleArmed = false;
+      clearTimeout(loadTimer);
+      sampleDeadline = Date.now() + SAMPLE_MS;
+    }
+    // any video that finishes moves on. Short videos used to sit on the
+    // YouTube end screen until the 30 seconds ran out.
+    if (ev.data === YT_ENDED) advance();
+    return;
+  }
+  // back player: once the preload starts playing, pause it. It has buffered
+  // the opening seconds and waits there for its turn.
+  if (ev.data === YT_PLAYING && preloadPausePending) {
+    preloadPausePending = false;
+    try { ev.target.pauseVideo(); } catch (e) {}
+  }
+}
+
+// Error codes 2 (bad id), 5 (html5 error), 100 (removed or private),
+// 101 and 150 (owner blocked embedding). All of them mean: this one will
+// never play here, move on.
+function onPlayerError(ev) {
+  if (isFront(ev.target)) {
+    advance();
+  } else if (preload) {
+    // the warm video is broken: drop it from the front of the queue
+    if (queue.length && queue[0].id === preload.videoId) queue.shift();
+    preload = null;
+    preloadPausePending = false;
+  }
+}
+
+function waitForPlayers() {
+  return new Promise(resolve => {
+    if (readyCount >= 2) return resolve();
+    const iv = setInterval(() => { if (readyCount >= 2) { clearInterval(iv); resolve(); } }, 100);
+  });
+}
+
+/* ============================================================================
+   LAUNCH SCREEN
+============================================================================ */
+document.querySelectorAll('.mode').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.mode').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    session.mode = card.dataset.mode;
+    document.getElementById('topicWrap').classList.toggle('show', session.mode === 'topic');
+    refreshStartButton();
+  });
+});
+document.getElementById('topicInput').addEventListener('input', refreshStartButton);
+
+function refreshStartButton() {
+  let ready = false;
+  if (session.mode === 'topic')    ready = document.getElementById('topicInput').value.trim().length > 0;
+  if (session.mode === 'local')    ready = true;
+  if (session.mode === 'roulette') ready = true;
+  document.getElementById('startBtn').disabled = !ready;
+}
+
+document.getElementById('startBtn').addEventListener('click', startSession);
+
+async function startSession() {
+  const btn = document.getElementById('startBtn');
+  if (btn.disabled) return;
+  btn.disabled = true;               // no double starts
+
+  const myId = ++sessionId;
+  if (session.mode === 'topic') session.q = document.getElementById('topicInput').value.trim();
+  if (session.mode === 'local') {
+    try {
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 8000 });
+      });
+      session.lat = pos.coords.latitude.toFixed(4);
+      session.lng = pos.coords.longitude.toFixed(4);
+    } catch (err) {
+      alert("Couldn't get your location. Falling back to Roulette.");
+      session.mode = 'roulette';
+    }
+  }
+
+  queue = []; localSeen = new Set(); pageToken = null; exhausted = false; quotaOut = false;
+  document.getElementById('launch').style.display = 'none';
+  document.getElementById('player').classList.add('show');
+  document.getElementById('modePill').textContent = session.mode;
+  document.getElementById('infoTitleText').textContent = 'loading';
+  document.getElementById('infoMeta').innerHTML = '&nbsp;';
+
+  await waitForPlayers();
+  // The Start tap is the user gesture that lets later programmatic playback
+  // run without the browser blocking it.
+  try { playerA.mute(); playerB.mute(); } catch (e) {}
+
+  await refillQueue(myId);
+  if (myId !== sessionId) return;
+  if (queue.length === 0) { showEmptyMessage(); return; }
+  advance();
+}
+
+/* ============================================================================
+   SEARCH + SEEN LOG
+============================================================================ */
+function buildSearchUrl() {
+  const u = new URL(API_BASE + '/search');
+  if (session.mode === 'topic')    u.searchParams.set('q', session.q);
+  if (session.mode === 'local')  { u.searchParams.set('lat', session.lat); u.searchParams.set('lng', session.lng); u.searchParams.set('radius', '50km'); }
+  if (session.mode === 'roulette') u.searchParams.set('random', 'true');
+  if (pageToken && session.mode !== 'roulette') u.searchParams.set('pageToken', pageToken);
+  return u;
+}
+
+// refillQueue(myId)
+// Only one refill runs at a time. A second caller waits on the first one
+// instead of firing another search, because each search costs YouTube quota.
+function refillQueue(myId) {
+  if (refillPromise) return refillPromise;
+  refillPromise = doRefill(myId).finally(() => { refillPromise = null; });
+  return refillPromise;
+}
+
+async function doRefill(myId) {
+  let empties = 0;
+  while (queue.length < REFILL_THRESHOLD && empties < EMPTY_RETRIES && !exhausted && !quotaOut) {
+    let data;
+    try {
+      const resp = await fetch(buildSearchUrl());
+      if (myId !== sessionId) return;
+      if (resp.status === 429) { quotaOut = true; return; }
+      data = await resp.json();
+      if (!resp.ok) { empties++; continue; }
+    } catch (err) {
+      empties++;
+      continue;
+    }
+    if (myId !== sessionId) return;
+
+    // remember where the next page starts; no next page means this search is used up
+    if (session.mode !== 'roulette') {
+      pageToken = data.next_page_token || null;
+      if (!pageToken) exhausted = true;
+    }
+
+    const fresh = (data.videos || []).filter(v => !localSeen.has(v.id));
+    fresh.forEach(v => { localSeen.add(v.id); v._offset = pickStartOffset(isoToSeconds(v.duration)); });
+    if (fresh.length > 0) { queue.push(...fresh); empties = 0; }
+    else empties++;
+  }
+}
+
+// recordSeen(video)
+// keepalive lets the request finish even if the user switches apps right
+// after. Without it Android was dropping these, and seen videos came back.
+function recordSeen(video) {
+  fetch(API_BASE + '/seen', {
+    method: 'POST', keepalive: true,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ video_id: video.id, title: video.title, channel: video.channel })
+  }).catch(() => {});
+}
+
+/* ============================================================================
+   HELPERS
+============================================================================ */
+function isoToSeconds(iso) {
+  const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(iso || '');
+  if (!m) return 0;
+  return (parseInt(m[1] || 0, 10) * 3600) + (parseInt(m[2] || 0, 10) * 60) + parseInt(m[3] || 0, 10);
+}
+
+// a random start point inside the middle 80% of the video
+function pickStartOffset(durationSec) {
+  const sampleSec = SAMPLE_MS / 1000;
+  if (!durationSec || durationSec <= sampleSec) return 0;
+  const low  = Math.floor(durationSec * 0.10);
+  const high = Math.floor(durationSec * 0.90) - sampleSec;
+  if (high <= low) return low;
+  return low + Math.floor(Math.random() * (high - low));
+}
+
+/* ============================================================================
+   PLAY LOOP
+============================================================================ */
+
+// advance()
+// The single way to move to the next video. SKIP, the 30 second clock, a
+// finished video, a player error and the load timeout all come through here.
+// The advancing lock makes extra calls during a switch do nothing.
+async function advance() {
+  if (advancing) return;
+  advancing = true;
+  const myId = sessionId;
+  try {
+    clearClock();
+    keepWatching = false;
+    setKeepUi(false);
+    try { frontPlayer().pauseVideo(); frontPlayer().mute(); } catch (e) {}
+
+    if (queue.length === 0) await refillQueue(myId);
+    if (myId !== sessionId) return;
+    if (queue.length === 0) { showEmptyMessage(); return; }
+
+    const video = queue.shift();
+    showVideo(video);
+    if (queue.length < REFILL_THRESHOLD) refillQueue(myId);
+  } finally {
+    advancing = false;
+  }
+}
+
+// showVideo(video)
+// Swaps to the other slot and plays the video there. If that slot already
+// holds this video warm from the preload, it only seeks and plays.
+function showVideo(video) {
+  hideMessage();
+  nowPlaying = video;
+  updateInfo(video);
+  recordSeen(video);
+
+  frontSlot = otherSlot(frontSlot);
+  document.getElementById('slotA').className = 'slot ' + (frontSlot === 'A' ? 'front' : 'back');
+  document.getElementById('slotB').className = 'slot ' + (frontSlot === 'B' ? 'front' : 'back');
+
+  const player = frontPlayer();
+  const warm = preload && preload.slot === frontSlot && preload.videoId === video.id;
+  preload = null;
+  preloadPausePending = false;
+
+  try {
+    if (warm) {
+      player.seekTo(video._offset, true);
+      player.playVideo();
+    } else {
+      player.loadVideoById({ videoId: video.id, startSeconds: video._offset });
+    }
+    setTimeout(() => { try { player.unMute(); player.setVolume(100); } catch (e) {} }, 350);
+  } catch (e) {}
+
+  // arm the clock; it starts on the first PLAYING event
+  sampleArmed = true;
+  sampleDeadline = null;
+  pausedLeft = null;
+  setBar(0);
+  const myId = sessionId;
+  loadTimer = setTimeout(() => { if (myId === sessionId && sampleArmed) advance(); }, LOAD_TIMEOUT_MS);
+
+  // warm the next video once this one has had a moment to start
+  clearTimeout(preloadTimer);
+  preloadTimer = setTimeout(() => { if (myId === sessionId) preloadNext(); }, PRELOAD_DELAY_MS);
+}
+
+// preloadNext()
+// Loads queue[0] into the back player muted. onPlayerStateChange pauses it
+// as soon as it starts, so it buffers without being heard or seen.
+function preloadNext() {
+  if (!queue.length) return;
+  const next = queue[0];
+  const slot = otherSlot(frontSlot);
+  const p = getPlayer(slot);
+  try {
+    p.mute();
+    preloadPausePending = true;
+    p.loadVideoById({ videoId: next.id, startSeconds: next._offset });
+    preload = { slot, videoId: next.id };
+  } catch (e) {
+    preload = null;
+    preloadPausePending = false;
+  }
+}
+
+function clearClock() {
+  sampleArmed = false;
+  sampleDeadline = null;
+  pausedLeft = null;
+  clearTimeout(loadTimer);
+  clearTimeout(preloadTimer);
+}
+
+/* ============================================================================
+   CLOCK + PROGRESS BAR
+   One ticker drives both. In sample mode the bar shows the 30 seconds. In
+   keep watching mode it shows position through the whole video.
+============================================================================ */
+function setBar(frac) {
+  document.querySelector('#progress .bar').style.width = (Math.max(0, Math.min(1, frac)) * 100) + '%';
+}
+
+setInterval(() => {
+  if (!nowPlaying || advancing) return;
+  if (keepWatching) {
+    try {
+      const p = frontPlayer();
+      const dur = p.getDuration();
+      if (dur > 0) setBar(p.getCurrentTime() / dur);
+    } catch (e) {}
+    return;
+  }
+  if (sampleDeadline) {
+    const left = sampleDeadline - Date.now();
+    setBar(1 - left / SAMPLE_MS);
+    if (left <= 0) advance();
+  }
+}, 250);
+
+/* ============================================================================
+   BUTTONS
+============================================================================ */
+document.getElementById('skipBtn').addEventListener('click', () => advance());
+
+// KEEP WATCHING: stop the 30 second clock and play the whole video from the
+// start. When it ends, the ENDED event advances to the next stumble.
+document.getElementById('keepBtn').addEventListener('click', () => {
+  if (!nowPlaying || keepWatching) return;
+  keepWatching = true;
+  sampleArmed = false;
+  sampleDeadline = null;
+  pausedLeft = null;
+  clearTimeout(loadTimer);
+  setKeepUi(true);
+  try { const p = frontPlayer(); p.seekTo(0, true); p.playVideo(); } catch (e) {}
+});
+
+function setKeepUi(on) {
+  document.getElementById('keepBtn').classList.toggle('active', on);
+  document.getElementById('fullBadge').style.display = on ? 'inline-block' : 'none';
+}
+
+document.getElementById('menuBtnTop').addEventListener('click', backToMenu);
+document.getElementById('messageBackBtn').addEventListener('click', backToMenu);
+
+function backToMenu() {
+  sessionId++;                       // orphan any search or timer still running
+  clearClock();
+  keepWatching = false;
+  setKeepUi(false);
+  preload = null; preloadPausePending = false;
+  try { playerA.stopVideo(); playerB.stopVideo(); } catch (e) {}
+  hideMessage();
+  document.getElementById('player').classList.remove('show');
+  document.getElementById('launch').style.display = 'flex';
+  session.mode = null; session.q = null; session.lat = null; session.lng = null;
+  queue = []; nowPlaying = null; localSeen = new Set(); pageToken = null; exhausted = false;
+  setBar(0);
+  document.querySelectorAll('.mode').forEach(c => c.classList.remove('selected'));
+  document.getElementById('topicWrap').classList.remove('show');
+  document.getElementById('topicInput').value = '';
+  refreshStartButton();
+}
+
+// Leaving the app pauses the video and freezes the clock. Coming back picks
+// up where it left off. Before, the clock kept running in the background and
+// skipped through videos you never saw.
+document.addEventListener('visibilitychange', () => {
+  if (!nowPlaying) return;
+  const p = frontPlayer();
+  if (document.visibilityState === 'hidden') {
+    if (sampleDeadline) { pausedLeft = Math.max(0, sampleDeadline - Date.now()); sampleDeadline = null; }
+    clearTimeout(loadTimer);        // do not skip a loading video while away
+    try { p.pauseVideo(); } catch (e) {}
+  } else {
+    if (pausedLeft !== null) { sampleDeadline = Date.now() + pausedLeft; pausedLeft = null; }
+    if (sampleArmed) {
+      const myId = sessionId;
+      loadTimer = setTimeout(() => { if (myId === sessionId && sampleArmed) advance(); }, LOAD_TIMEOUT_MS);
+    }
+    try { p.playVideo(); } catch (e) {}
+  }
+});
+
+/* ============================================================================
+   INFO + MESSAGES
+============================================================================ */
+function updateInfo(video) {
+  document.getElementById('infoTitleText').textContent = video.title;
+  const subs = video.subs === 'hidden' ? 'subs hidden' : video.subs + ' subs';
+  document.getElementById('infoMeta').textContent = [video.channel, video.views + ' views', subs].join(' · ');
+}
+
+function showEmptyMessage() {
+  if (quotaOut) showMessage('YouTube daily limit used up. It resets at midnight Pacific.');
+  else if (exhausted) showMessage('That search is tapped out. Try another topic or mode.');
+  else showMessage('No fresh videos right now. Try a different mode or topic.');
+}
+function showMessage(text) {
+  document.getElementById('messageText').textContent = text;
+  document.getElementById('message').classList.add('show');
+}
+function hideMessage() { document.getElementById('message').classList.remove('show'); }
+</script>
+</body>
+</html>

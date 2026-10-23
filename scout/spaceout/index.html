@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>SPACEOUT</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+  :root{--neon-cyan:#00ffe7;--neon-magenta:#ff00aa;--neon-yellow:#ffe600;--neon-orange:#ff6a00;--dark:#0a0a12;--panel:#f0f0f0;--chrome:#d0d0d8}
+  *{box-sizing:border-box;margin:0;padding:0;touch-action:none}
+  body{background:var(--panel);font-family:'Orbitron',monospace;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:12px 8px 20px;overflow:hidden}
+  .cabinet-top{width:100%;max-width:420px;background:var(--dark);border-radius:12px 12px 0 0;border:3px solid #333;border-bottom:none;padding:10px 16px 8px;display:flex;align-items:center;justify-content:space-between;position:relative;overflow:hidden}
+  .cabinet-top::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(255,255,255,0.02) 3px,rgba(255,255,255,0.02) 4px);pointer-events:none}
+  .title{font-size:22px;font-weight:900;letter-spacing:4px;color:var(--neon-cyan);text-shadow:0 0 8px var(--neon-cyan),0 0 20px var(--neon-cyan)}
+  .title span{color:var(--neon-magenta);text-shadow:0 0 8px var(--neon-magenta),0 0 20px var(--neon-magenta)}
+  .score-display{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--neon-yellow);text-shadow:0 0 6px var(--neon-yellow);text-align:right;line-height:1.6}
+  .screen-bezel{width:100%;max-width:420px;background:#1a1a2a;border:3px solid #333;border-top:none;border-bottom:none;padding:4px;position:relative}
+  canvas{display:block;width:100%;image-rendering:pixelated;background:var(--dark);position:relative}
+  .scanlines{position:absolute;inset:4px;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.15) 2px,rgba(0,0,0,0.15) 4px);pointer-events:none;z-index:10}
+  .cabinet-bottom{width:100%;max-width:420px;background:var(--chrome);border:3px solid #333;border-top:2px solid #aaa;border-radius:0 0 12px 12px;padding:10px 16px;display:flex;flex-direction:column;gap:10px}
+  .stats-row{display:flex;justify-content:space-between;align-items:center}
+  .stat-block{background:var(--dark);border:2px solid #444;border-radius:6px;padding:4px 10px;text-align:center;flex:1;margin:0 3px}
+  .stat-label{font-size:7px;color:#888;letter-spacing:2px;font-family:'Share Tech Mono',monospace}
+  .stat-value{font-size:14px;font-weight:700;color:var(--neon-cyan);text-shadow:0 0 6px var(--neon-cyan);font-family:'Share Tech Mono',monospace}
+  .controls{display:flex;gap:8px;align-items:center;justify-content:center}
+  .btn{background:var(--dark);border:2px solid #555;border-radius:8px;color:var(--neon-cyan);font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:2px;padding:8px 16px;cursor:pointer;text-shadow:0 0 6px var(--neon-cyan);box-shadow:0 0 8px rgba(0,255,231,0.2);transition:all 0.1s;user-select:none;-webkit-user-select:none}
+  .btn:active{background:#0a2a28;border-color:var(--neon-cyan);box-shadow:0 0 16px rgba(0,255,231,0.5)}
+  .btn-fire{color:var(--neon-magenta);border-color:#553;text-shadow:0 0 6px var(--neon-magenta);box-shadow:0 0 8px rgba(255,0,170,0.2);flex:2}
+  .btn-fire:active{background:#1a0a1a;border-color:var(--neon-magenta)}
+  .touch-hint{font-size:8px;color:#888;letter-spacing:1px;text-align:center;font-family:'Share Tech Mono',monospace}
+  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,0,0,0.85);z-index:20;gap:14px;padding:20px}
+  .overlay.hidden{display:none}
+  .overlay-title{font-size:28px;font-weight:900;color:var(--neon-cyan);text-shadow:0 0 12px var(--neon-cyan);letter-spacing:6px;text-align:center}
+  .overlay-sub{font-size:10px;color:var(--neon-yellow);letter-spacing:3px;text-shadow:0 0 6px var(--neon-yellow);text-align:center;font-family:'Share Tech Mono',monospace}
+  .overlay-score{font-size:32px;color:var(--neon-magenta);text-shadow:0 0 12px var(--neon-magenta);font-family:'Share Tech Mono',monospace}
+  .press-start{font-size:11px;color:var(--neon-cyan);letter-spacing:2px;text-shadow:0 0 8px var(--neon-cyan);animation:blink 1s step-end infinite;font-family:'Share Tech Mono',monospace}
+  @keyframes blink{50%{opacity:0}}
+  .lives-row{display:flex;gap:6px;align-items:center}
+  .life-dot{width:10px;height:10px;border-radius:50%;background:var(--neon-magenta);box-shadow:0 0 6px var(--neon-magenta)}
+  .life-dot.dead{background:#333;box-shadow:none}
+</style>
+</head>
+<body>
+<div class="cabinet-top">
+  <div class="title">SPACE<span>OUT</span></div>
+  <div class="score-display"><div>HI-SCORE</div><div id="hiscore">000000</div></div>
+</div>
+<div class="screen-bezel">
+  <div class="scanlines"></div>
+  <canvas id="gameCanvas"></canvas>
+  <div class="overlay" id="startScreen">
+    <div class="overlay-title">SPACEOUT</div>
+    <div class="overlay-sub">FROM THE VIVA MEDIA COLLECTION · 2007</div>
+    <div class="overlay-sub" style="margin-top:8px;color:#aaa;">SWIPE OR USE BUTTONS TO MOVE<br>TAP FIRE TO LAUNCH BALL</div>
+    <div class="press-start" style="margin-top:16px;">TAP TO START</div>
+  </div>
+  <div class="overlay hidden" id="gameoverScreen">
+    <div class="overlay-title">GAME<br>OVER</div>
+    <div class="overlay-score" id="finalScore">000000</div>
+    <div class="overlay-sub">WAVE REACHED: <span id="finalWave">1</span></div>
+    <div class="press-start" style="margin-top:16px;">TAP TO RETRY</div>
+  </div>
+  <div class="overlay hidden" id="winScreen">
+    <div class="overlay-title" style="color:var(--neon-yellow);text-shadow:0 0 12px var(--neon-yellow);">STAGE<br>CLEAR</div>
+    <div class="overlay-score" id="waveScore">000000</div>
+    <div class="press-start" style="margin-top:16px;">TAP FOR NEXT WAVE</div>
+  </div>
+</div>
+<div class="cabinet-bottom">
+  <div class="stats-row">
+    <div class="stat-block"><div class="stat-label">SCORE</div><div class="stat-value" id="scoreDisplay">000000</div></div>
+    <div class="stat-block"><div class="stat-label">WAVE</div><div class="stat-value" id="waveDisplay">1</div></div>
+    <div class="stat-block"><div class="stat-label">LIVES</div><div class="lives-row" id="livesRow"><div class="life-dot"></div><div class="life-dot"></div><div class="life-dot"></div></div></div>
+  </div>
+  <div class="controls">
+    <button class="btn" id="btnLeft" ontouchstart="startMove(-1)" ontouchend="stopMove()" onmousedown="startMove(-1)" onmouseup="stopMove()">◀ LEFT</button>
+    <button class="btn btn-fire" id="btnFire" ontouchstart="fireBall()" onmousedown="fireBall()">● FIRE</button>
+    <button class="btn" id="btnRight" ontouchstart="startMove(1)" ontouchend="stopMove()" onmousedown="startMove(1)" onmouseup="stopMove()">RIGHT ▶</button>
+  </div>
+  <div class="touch-hint">DRAG FINGER ACROSS SCREEN TO CONTROL PADDLE</div>
+</div>
+<script>
+const canvas=document.getElementById('gameCanvas');const ctx=canvas.getContext('2d');function resize(){const maxW=Math.min(window.innerWidth-16,420);canvas.width=maxW-8;canvas.height=Math.round(canvas.width*1.1);canvas.style.width=(maxW-8)+'px';canvas.style.height=Math.round(canvas.width*1.1)+'px';if(game)game.resize()}const WAVE_PALETTES=[['#ff004d','#ff6a00','#ffe600'],['#00ffe7','#00aaff','#aa00ff'],['#ff00aa','#ff004d','#ff6a00'],['#aaff00','#00ff6a','#00ffe7'],['#ffe600','#ff6a00','#ff004d']];const BRICK_ROWS=6;const BRICK_COLS=8;const MAX_LIVES=3;class Game{constructor(){this.W=canvas.width;this.H=canvas.height;this.state='start';this.score=0;this.hiScore=parseInt(localStorage.getItem('spaceout_hi')||'0');this.wave=1;this.lives=MAX_LIVES;this.paddleDir=0;this.initPaddle();this.initBall();this.initBricks();this.particles=[];this.flashFrames=0;this.updateUI();this.updateHiScore()}resize(){this.W=canvas.width;this.H=canvas.height;this.initPaddle();this.initBall();this.initBricks()}initPaddle(){this.paddleW=this.W*0.22;this.paddleH=this.H*0.025;this.paddleX=this.W/2-this.paddleW/2;this.paddleY=this.H*0.88;this.paddleSpeed=this.W*0.012}initBall(){this.ballR=this.W*0.022;this.ballX=this.W/2;this.ballY=this.paddleY-this.ballR-2;const spd=this.W*0.008+this.wave*this.W*0.001;this.ballVX=spd*(Math.random()>0.5?1:-1);this.ballVY=-spd*1.1;this.ballLaunched=false}initBricks(){this.bricks=[];const palette=WAVE_PALETTES[(this.wave-1)%WAVE_PALETTES.length];const margin=this.W*0.03;const gap=this.W*0.015;const bw=(this.W-margin*2-gap*(BRICK_COLS-1))/BRICK_COLS;const bh=this.H*0.038;const startY=this.H*0.08;for(let r=0;r<BRICK_ROWS;r++){for(let c=0;c<BRICK_COLS;c++){const hp=(this.wave>=3&&r<2)?2:1;this.bricks.push({x:margin+c*(bw+gap),y:startY+r*(bh+gap),w:bw,h:bh,hp,maxHp:hp,color:palette[r%palette.length],alive:true})}}}get bricksLeft(){return this.bricks.filter(b=>b.alive).length}fire(){if(!this.ballLaunched)this.ballLaunched=true}movePaddle(dir){this.paddleDir=dir}stopPaddle(){this.paddleDir=0}spawnParticles(x,y,color,count=8){for(let i=0;i<count;i++){const angle=(Math.PI*2/count)*i+Math.random()*0.5;const spd=(Math.random()*3+1)*(this.W/400);this.particles.push({x,y,vx:Math.cos(angle)*spd,vy:Math.sin(angle)*spd,life:1,decay:0.04+Math.random()*0.04,color,r:Math.random()*4+2})}}update(){if(this.state!=='playing')return;this.paddleX+=this.paddleDir*this.paddleSpeed;this.paddleX=Math.max(0,Math.min(this.W-this.paddleW,this.paddleX));if(!this.ballLaunched){this.ballX=this.paddleX+this.paddleW/2;this.ballY=this.paddleY-this.ballR-2;return}this.ballX+=this.ballVX;this.ballY+=this.ballVY;if(this.ballX-this.ballR<0){this.ballX=this.ballR;this.ballVX=Math.abs(this.ballVX)}if(this.ballX+this.ballR>this.W){this.ballX=this.W-this.ballR;this.ballVX=-Math.abs(this.ballVX)}if(this.ballY-this.ballR<0){this.ballY=this.ballR;this.ballVY=Math.abs(this.ballVY)}if(this.ballY+this.ballR>=this.paddleY&&this.ballY-this.ballR<=this.paddleY+this.paddleH&&this.ballX>=this.paddleX-this.ballR&&this.ballX<=this.paddleX+this.paddleW+this.ballR&&this.ballVY>0){const hit=(this.ballX-this.paddleX)/this.paddleW;const angle=(hit-0.5)*Math.PI*0.7;const spd=Math.sqrt(this.ballVX**2+this.ballVY**2);this.ballVX=Math.sin(angle)*spd;this.ballVY=-Math.abs(Math.cos(angle)*spd);this.ballY=this.paddleY-this.ballR-1;this.spawnParticles(this.ballX,this.paddleY,'#00ffe7',4)}if(this.ballY-this.ballR>this.H){this.lives--;this.updateUI();this.flashFrames=20;if(this.lives<=0){this.state='gameover';this.showGameOver()}else{this.state='dead';this.initBall();setTimeout(()=>{this.state='playing'},800)}return}for(const b of this.bricks){if(!b.alive)continue;if(this.ballX+this.ballR>b.x&&this.ballX-this.ballR<b.x+b.w&&this.ballY+this.ballR>b.y&&this.ballY-this.ballR<b.y+b.h){b.hp--;if(b.hp<=0){b.alive=false;this.score+=10*this.wave;this.spawnParticles(b.x+b.w/2,b.y+b.h/2,b.color,10)}else{this.spawnParticles(b.x+b.w/2,b.y+b.h/2,'#ffffff',4)}this.updateUI();const overlapLeft=this.ballX+this.ballR-b.x;const overlapRight=b.x+b.w-(this.ballX-this.ballR);const overlapTop=this.ballY+this.ballR-b.y;const overlapBottom=b.y+b.h-(this.ballY-this.ballR);const minOverlapH=Math.min(overlapLeft,overlapRight);const minOverlapV=Math.min(overlapTop,overlapBottom);if(minOverlapH<minOverlapV){this.ballVX*=-1}else{this.ballVY*=-1}break}}if(this.bricksLeft===0){this.state='win';this.showWin()}this.particles=this.particles.filter(p=>p.life>0);for(const p of this.particles){p.x+=p.vx;p.y+=p.vy;p.life-=p.decay}if(this.flashFrames>0)this.flashFrames--}draw(){ctx.clearRect(0,0,this.W,this.H);ctx.fillStyle='#0a0a12';ctx.fillRect(0,0,this.W,this.H);ctx.fillStyle='rgba(255,255,255,0.4)';for(let i=0;i<40;i++){const sx=((i*137.5+this.wave*7)%this.W);const sy=((i*93.7+this.wave*13)%this.H);ctx.fillRect(sx,sy,1,1)}if(this.flashFrames>0){ctx.fillStyle=`rgba(255,0,0,${this.flashFrames/40})`;ctx.fillRect(0,0,this.W,this.H)}for(const b of this.bricks){if(!b.alive)continue;const dim=b.hp<b.maxHp?0.5:1;ctx.save();ctx.globalAlpha=dim;ctx.shadowColor=b.color;ctx.shadowBlur=8;ctx.fillStyle=b.color;ctx.fillRect(b.x,b.y,b.w,b.h);ctx.fillStyle='rgba(255,255,255,0.25)';ctx.fillRect(b.x,b.y,b.w,b.h*0.3);ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=1;ctx.strokeRect(b.x+0.5,b.y+0.5,b.w-1,b.h-1);ctx.restore()}for(const p of this.particles){ctx.save();ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=6;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();ctx.restore()}ctx.save();ctx.shadowColor='#00ffe7';ctx.shadowBlur=12;const grad=ctx.createLinearGradient(this.paddleX,this.paddleY,this.paddleX,this.paddleY+this.paddleH);grad.addColorStop(0,'#00ffe7');grad.addColorStop(1,'#0077aa');ctx.fillStyle=grad;ctx.beginPath();ctx.roundRect(this.paddleX,this.paddleY,this.paddleW,this.paddleH,4);ctx.fill();ctx.restore();ctx.save();ctx.shadowColor='#ffffff';ctx.shadowBlur=16;const bgrad=ctx.createRadialGradient(this.ballX-this.ballR*0.3,this.ballY-this.ballR*0.3,0,this.ballX,this.ballY,this.ballR);bgrad.addColorStop(0,'#ffffff');bgrad.addColorStop(1,'#00ffe7');ctx.fillStyle=bgrad;ctx.beginPath();ctx.arc(this.ballX,this.ballY,this.ballR,0,Math.PI*2);ctx.fill();ctx.restore();if(!this.ballLaunched&&this.state==='playing'){ctx.fillStyle='rgba(0,255,231,0.6)';ctx.font=`${this.W*0.028}px 'Share Tech Mono'`;ctx.textAlign='center';ctx.fillText('TAP FIRE TO LAUNCH',this.W/2,this.paddleY-this.ballR*3)}}updateUI(){document.getElementById('scoreDisplay').textContent=String(this.score).padStart(6,'0');document.getElementById('waveDisplay').textContent=this.wave;if(this.score>this.hiScore){this.hiScore=this.score;localStorage.setItem('spaceout_hi',this.hiScore);this.updateHiScore()}const dots=document.querySelectorAll('.life-dot');dots.forEach((d,i)=>{d.className='life-dot'+(i<this.lives?'':' dead')})}updateHiScore(){document.getElementById('hiscore').textContent=String(this.hiScore).padStart(6,'0')}showGameOver(){document.getElementById('finalScore').textContent=String(this.score).padStart(6,'0');document.getElementById('finalWave').textContent=this.wave;document.getElementById('gameoverScreen').classList.remove('hidden')}showWin(){document.getElementById('waveScore').textContent=String(this.score).padStart(6,'0');document.getElementById('winScreen').classList.remove('hidden')}nextWave(){this.wave++;this.initPaddle();this.initBall();this.initBricks();this.state='playing'}}
+let game=null;let animId=null;function loop(){if(game){game.update();game.draw()}animId=requestAnimationFrame(loop)}function startGame(){document.getElementById('startScreen').classList.add('hidden');document.getElementById('gameoverScreen').classList.add('hidden');document.getElementById('winScreen').classList.add('hidden');game=new Game();game.state='playing';if(!animId)loop()}function restartGame(){document.getElementById('gameoverScreen').classList.add('hidden');game=new Game();game.state='playing'}function nextWave(){document.getElementById('winScreen').classList.add('hidden');game.nextWave()}canvas.addEventListener('click',()=>{if(!game||game.state==='start'){startGame();return}if(game.state==='gameover'){restartGame();return}if(game.state==='win'){nextWave();return}});document.getElementById('startScreen').addEventListener('click',startGame);document.getElementById('gameoverScreen').addEventListener('click',restartGame);document.getElementById('winScreen').addEventListener('click',nextWave);function startMove(dir){if(game)game.movePaddle(dir)}function stopMove(){if(game)game.stopPaddle()}function fireBall(){if(!game){startGame();return}if(game.state==='gameover'){restartGame();return}if(game.state==='win'){nextWave();return}if(game.state==='playing')game.fire()}document.addEventListener('keydown',e=>{if(e.key==='ArrowLeft')startMove(-1);if(e.key==='ArrowRight')startMove(1);if(e.key===' '){e.preventDefault();fireBall()}});document.addEventListener('keyup',e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight')stopMove()});let lastTouchX=null;canvas.addEventListener('touchstart',e=>{lastTouchX=e.touches[0].clientX;if(!game||game.state!=='playing'){if(!game||game.state==='start')startGame();else if(game.state==='gameover')restartGame();else if(game.state==='win')nextWave()}},{passive:true});canvas.addEventListener('touchmove',e=>{if(!game||!lastTouchX)return;const dx=e.touches[0].clientX-lastTouchX;lastTouchX=e.touches[0].clientX;game.paddleX+=dx*1.5;game.paddleX=Math.max(0,Math.min(game.W-game.paddleW,game.paddleX))},{passive:true});canvas.addEventListener('touchend',()=>{lastTouchX=null;if(game)game.stopPaddle()});resize();window.addEventListener('resize',resize);loop();
+</script>
+</body>
+</html>

@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>THREAT POLLER</title>
+<style>
+  :root {
+    --paper: #FAF8F3;
+    --card: #FFFFFF;
+    --ink: #1C1B18;
+    --faded: #8A857B;
+    --rule: #DDD8CE;
+    --high: #C0361F;
+    --medium: #B07A1F;
+    --quiet: #3E6B4F;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { background: var(--paper); }
+  body {
+    font-family: ui-monospace, "Cascadia Mono", "Roboto Mono", Menlo, Consolas, monospace;
+    color: var(--ink);
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 28px 18px 80px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  header {
+    border-bottom: 3px solid var(--ink);
+    padding-bottom: 14px;
+  }
+  h1 {
+    font-size: 26px;
+    letter-spacing: 0.22em;
+    font-weight: 700;
+  }
+  .sub {
+    color: var(--faded);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    margin-top: 4px;
+  }
+  .tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 18px;
+  }
+  .tabs button {
+    font: inherit;
+    font-size: 13px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    color: var(--faded);
+    padding: 12px 18px 9px;
+    cursor: pointer;
+  }
+  .tabs button.on {
+    color: var(--ink);
+    font-weight: 700;
+    border-bottom-color: var(--ink);
+  }
+  .tabs button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .view { display: none; }
+  .view.on { display: block; }
+  .statusline {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 12px;
+    color: var(--faded);
+    padding: 8px 0;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 18px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .statusline .live { color: var(--ink); }
+  .filters {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 22px;
+    flex-wrap: wrap;
+  }
+  .filters button, .demobtn {
+    font: inherit;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: none;
+    border: 1px solid var(--rule);
+    color: var(--faded);
+    padding: 5px 12px;
+    cursor: pointer;
+  }
+  .filters button:focus-visible, .demobtn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .filters button.on {
+    border-color: var(--ink);
+    color: var(--ink);
+    font-weight: 700;
+  }
+  .demobtn { font-size: 11px; padding: 3px 10px; }
+  .demobtn.on {
+    border-color: var(--medium);
+    color: var(--medium);
+    font-weight: 700;
+  }
+  .dayhead, .wlhead {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--faded);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .dayhead { margin: 26px 0 8px; }
+  .dayhead::after { content: ""; flex: 1; border-top: 1px solid var(--rule); }
+  .wlhead { margin: 44px 0 10px; }
+  .wlhead::after { content: ""; flex: 1; border-top: 2px solid var(--ink); }
+  .alert {
+    display: flex;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .bar { flex: 0 0 8px; border-radius: 1px; }
+  .bar.high { background: var(--high); }
+  .bar.medium { background: var(--medium); flex-basis: 4px; margin-left: 2px; margin-right: 2px; }
+  .meta {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    flex-wrap: wrap;
+    font-size: 11px;
+    margin-bottom: 2px;
+  }
+  .time { color: var(--faded); }
+  .cat {
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+  .cat.high { color: var(--high); }
+  .cat.medium { color: var(--medium); }
+  .repo { font-weight: 700; font-size: 14px; }
+  .msg { color: var(--ink); font-size: 13px; margin-top: 1px; overflow-wrap: anywhere; }
+  .flatline {
+    margin: 60px 0;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    color: var(--quiet);
+  }
+  .flatline::before, .flatline::after { content: ""; flex: 1; border-top: 2px solid var(--quiet); }
+  .flatline span {
+    font-size: 12px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .notice {
+    margin: 60px 0;
+    padding: 18px;
+    border: 1px dashed var(--faded);
+    color: var(--faded);
+    font-size: 13px;
+  }
+  .notice strong { color: var(--ink); display: block; margin-bottom: 6px; letter-spacing: 0.08em; }
+  .err { border-color: var(--high); }
+  .err strong { color: var(--high); }
+  .wlrow {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: 13px;
+  }
+  .wlrow .repo { flex: 1; }
+  .wlcat {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--faded);
+  }
+  .smallbtn {
+    font: inherit;
+    font-size: 11px;
+    background: none;
+    border: 1px solid var(--rule);
+    color: var(--faded);
+    padding: 2px 8px;
+    cursor: pointer;
+  }
+  .wlrow .smallbtn:hover { border-color: var(--high); color: var(--high); }
+  .formrow {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  input, select {
+    font: inherit;
+    font-size: 13px;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    padding: 6px 10px;
+  }
+  input:focus, select:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .grow { flex: 1; min-width: 160px; }
+  .primary {
+    font: inherit;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+    background: var(--ink);
+    border: 1px solid var(--ink);
+    color: var(--paper);
+    padding: 6px 16px;
+    cursor: pointer;
+  }
+  .primary:disabled { opacity: 0.5; }
+  .formmsg { font-size: 12px; margin-top: 8px; min-height: 18px; }
+  .formmsg.bad { color: var(--high); }
+  .formmsg.good { color: var(--quiet); }
+  .panel {
+    border: 1px solid var(--rule);
+    background: var(--card);
+    padding: 14px;
+    margin-bottom: 16px;
+  }
+  .panel .lbl {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--faded);
+    margin-bottom: 4px;
+  }
+  .panel .formrow { margin-top: 0; margin-bottom: 10px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .chip {
+    font-size: 12px;
+    padding: 6px 10px;
+    border: 1px solid var(--ink);
+    background: var(--card);
+    cursor: pointer;
+    line-height: 1.3;
+  }
+  .chip:active { background: var(--ink); color: var(--paper); }
+  .rcount { font-size: 11px; color: var(--faded); margin-bottom: 10px; }
+  .card {
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--ink);
+    background: var(--card);
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+  .card.watched { border-left-color: var(--quiet); }
+  .cardname { font-size: 15px; font-weight: 700; overflow-wrap: anywhere; }
+  .cardname a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--ink); }
+  .carddesc { font-size: 13px; margin: 6px 0; }
+  .cardmeta {
+    font-size: 11px;
+    color: var(--faded);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: baseline;
+    margin-top: 8px;
+    border-top: 1px dashed var(--rule);
+    padding-top: 8px;
+  }
+  .stars { color: var(--quiet); font-weight: 700; }
+  .cardmeta .smallbtn:first-of-type { margin-left: auto; }
+  .cardmeta .smallbtn.done { border-color: var(--quiet); color: var(--quiet); }
+  footer {
+    margin-top: 60px;
+    font-size: 11px;
+    color: var(--faded);
+    letter-spacing: 0.06em;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>THREAT POLLER</h1>
+  <div class="sub">watching critical open source infrastructure</div>
+</header>
+<div class="tabs">
+  <button data-view="alerts" class="on">Alerts</button>
+  <button data-view="find">Find</button>
+  <button data-view="list">My List</button>
+</div>
+
+<div class="view on" id="view-alerts">
+  <div class="statusline">
+    <span id="count">loading</span>
+    <span>checked <span class="live" id="checked">never</span></span>
+    <button class="demobtn" id="demoBtn">view demo</button>
+  </div>
+  <div class="filters" id="filters">
+    <button data-cat="all" class="on">All</button>
+    <button data-cat="critical">Critical</button>
+    <button data-cat="high">Activity</button>
+    <button data-cat="dormant">Dormant</button>
+  </div>
+  <main id="log"></main>
+  <section>
+    <div class="wlhead">Watchlist</div>
+    <div id="wllist"></div>
+    <div class="formrow">
+      <input class="grow" id="wlrepo" placeholder="owner/repo" autocapitalize="none" autocorrect="off">
+      <select id="wlcat">
+        <option value="critical">Critical, any commit or release</option>
+        <option value="high">Activity, volume spike</option>
+        <option value="dormant">Dormant, reactivation</option>
+      </select>
+      <input class="grow" id="wlkey" type="password" placeholder="admin key">
+      <button class="primary" id="wladd">Watch</button>
+    </div>
+    <div class="formmsg" id="wlmsg"></div>
+  </section>
+</div>
+
+<div class="view" id="view-find">
+  <div class="panel">
+    <span class="lbl">search github</span>
+    <div class="formrow">
+      <input class="grow" id="q" placeholder="e.g. terminal visualizer, hex grid, cli tool" autocapitalize="none">
+    </div>
+    <div class="formrow">
+      <select id="lang" class="grow">
+        <option value="">any language</option>
+        <option>JavaScript</option>
+        <option>TypeScript</option>
+        <option>Python</option>
+        <option>HTML</option>
+        <option>Java</option>
+        <option>Kotlin</option>
+        <option>Go</option>
+        <option>Rust</option>
+        <option>Shell</option>
+        <option>C</option>
+        <option>C++</option>
+      </select>
+      <input id="minstars" type="number" value="0" min="0" title="min stars" style="width:90px">
+      <select id="sort" class="grow">
+        <option value="stars">most stars</option>
+        <option value="updated">recently updated</option>
+        <option value="forks">most forks</option>
+        <option value="best-match">best match</option>
+      </select>
+      <select id="pushed" class="grow">
+        <option value="">any age</option>
+        <option value="1">updated past month</option>
+        <option value="3">past 3 months</option>
+        <option value="12">past year</option>
+      </select>
+    </div>
+    <div class="formrow">
+      <button class="primary grow" id="go">Search</button>
+    </div>
+    <div class="formmsg" id="status"></div>
+  </div>
+  <div class="panel">
+    <span class="lbl">search term generator</span>
+    <div class="formrow">
+      <input class="grow" id="idea" placeholder="describe what you're after">
+      <button class="primary" id="genbtn">Generate</button>
+    </div>
+    <div class="formmsg" id="genstatus"></div>
+    <div id="chips" class="chips"></div>
+  </div>
+  <div class="panel">
+    <span class="lbl">watch settings for results</span>
+    <div class="formrow">
+      <select id="fcat" class="grow">
+        <option value="critical">Critical, any commit or release</option>
+        <option value="high">Activity, volume spike</option>
+        <option value="dormant">Dormant, reactivation</option>
+      </select>
+      <input class="grow" id="fkey" type="password" placeholder="admin key">
+    </div>
+  </div>
+  <div class="rcount" id="rcount"></div>
+  <div id="results"></div>
+</div>
+
+<div class="view" id="view-list">
+  <div class="statusline">
+    <span id="mycount">empty</span>
+    <span>private to this device, no key needed</span>
+  </div>
+  <div id="mylist"></div>
+  <div class="formrow">
+    <input class="grow" id="myrepo" placeholder="owner/repo" autocapitalize="none" autocorrect="off">
+    <select id="mycat">
+      <option value="critical">Critical, any commit or release</option>
+      <option value="high">Activity, volume spike</option>
+      <option value="dormant">Dormant, reactivation</option>
+    </select>
+    <button class="primary" id="myadd">Add</button>
+  </div>
+  <div class="formmsg" id="mymsg"></div>
+  <div class="wlhead">Export</div>
+  <div class="formrow">
+    <button class="primary grow" id="expjson">JSON</button>
+    <button class="primary grow" id="expcsv">CSV</button>
+    <button class="primary grow" id="expcopy">Copy</button>
+  </div>
+  <div class="formmsg" id="expmsg"></div>
+</div>
+
+<footer>refreshes every 60 seconds</footer>
+<script>
+var BACKEND = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+var alerts = [];
+var filter = "all";
+var demo = false;
+var watchlist = [];
+var watchedSet = {};
+
+function el(tag, cls, text) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text) e.textContent = text;
+  return e;
+}
+
+function ago(mins) {
+  return new Date(Date.now() - mins * 60000).toISOString();
+}
+
+var CATNAMES = { critical: "critical", high: "activity", dormant: "dormant" };
+
+var myList = [];
+function loadMyList() {
+  try {
+    var raw = localStorage.getItem("mylist");
+    if (raw) myList = JSON.parse(raw);
+  } catch (e) { myList = myList || []; }
+}
+function saveMyList() {
+  try { localStorage.setItem("mylist", JSON.stringify(myList)); } catch (e) {}
+}
+
+var DEMO_DATA = [
+  { category: "critical", repo: "curl/curl", severity: "high", message: "new commit on curl/curl", created_at: ago(14) },
+  { category: "high", repo: "torvalds/linux", severity: "medium", message: "commit volume 3.4x above 14 sample baseline on torvalds/linux", created_at: ago(41) },
+  { category: "critical", repo: "openssl/openssl", severity: "high", message: "new release on openssl/openssl, tag openssl-3.6.1", created_at: ago(88) },
+  { category: "critical", repo: "systemd/systemd", severity: "high", message: "new commit on systemd/systemd", created_at: ago(112) },
+  { category: "dormant", repo: "kennethreitz/requests", severity: "high", message: "push detected on dormant repo kennethreitz/requests after 212 quiet days", created_at: ago(150) },
+  { category: "critical", repo: "openssh/openssh-portable", severity: "high", message: "new commit on openssh/openssh-portable", created_at: ago(200) },
+  { category: "high", repo: "nodejs/node", severity: "medium", message: "commit volume 2.8x above 14 sample baseline on nodejs/node", created_at: ago(260) },
+  { category: "critical", repo: "git/git", severity: "high", message: "new release on git/git, tag v2.52.0", created_at: ago(60 * 22) },
+  { category: "dormant", repo: "tukaani-project/xz", severity: "high", message: "push detected on dormant repo tukaani-project/xz after 148 quiet days", created_at: ago(60 * 25) },
+  { category: "critical", repo: "sqlite/sqlite", severity: "high", message: "new commit on sqlite/sqlite", created_at: ago(60 * 27) },
+  { category: "high", repo: "kubernetes/kubernetes", severity: "medium", message: "commit volume 4.6x above 14 sample baseline on kubernetes/kubernetes", created_at: ago(60 * 30) },
+  { category: "critical", repo: "nginx/nginx", severity: "high", message: "new release on nginx/nginx, tag release-1.29.2", created_at: ago(60 * 33) },
+  { category: "critical", repo: "python/cpython", severity: "high", message: "new commit on python/cpython", created_at: ago(60 * 36) },
+  { category: "dormant", repo: "libexpat/libexpat", severity: "high", message: "push detected on dormant repo libexpat/libexpat after 96 quiet days", created_at: ago(60 * 55) },
+  { category: "critical", repo: "openzfs/zfs", severity: "high", message: "new commit on openzfs/zfs", created_at: ago(60 * 58) },
+  { category: "high", repo: "rust-lang/rust", severity: "medium", message: "commit volume 3.1x above 14 sample baseline on rust-lang/rust", created_at: ago(60 * 61) },
+  { category: "critical", repo: "curl/curl", severity: "high", message: "new release on curl/curl, tag curl-8_16_0", created_at: ago(60 * 78) },
+  { category: "dormant", repo: "madler/zlib", severity: "high", message: "push detected on dormant repo madler/zlib after 301 quiet days", created_at: ago(60 * 81) },
+  { category: "critical", repo: "apache/httpd", severity: "high", message: "new commit on apache/httpd", created_at: ago(60 * 84) },
+  { category: "high", repo: "postgres/postgres", severity: "medium", message: "commit volume 2.5x above 14 sample baseline on postgres/postgres", created_at: ago(60 * 100) }
+];
+
+var DEMO_WATCHLIST = [
+  { repo: "apache/httpd", category: "critical" },
+  { repo: "curl/curl", category: "critical" },
+  { repo: "git/git", category: "critical" },
+  { repo: "kennethreitz/requests", category: "dormant" },
+  { repo: "kubernetes/kubernetes", category: "high" },
+  { repo: "libexpat/libexpat", category: "dormant" },
+  { repo: "madler/zlib", category: "dormant" },
+  { repo: "nginx/nginx", category: "critical" },
+  { repo: "nodejs/node", category: "high" },
+  { repo: "openssh/openssh-portable", category: "critical" },
+  { repo: "openssl/openssl", category: "critical" },
+  { repo: "openzfs/zfs", category: "critical" },
+  { repo: "postgres/postgres", category: "high" },
+  { repo: "python/cpython", category: "critical" },
+  { repo: "rust-lang/rust", category: "high" },
+  { repo: "sqlite/sqlite", category: "critical" },
+  { repo: "systemd/systemd", category: "critical" },
+  { repo: "torvalds/linux", category: "high" },
+  { repo: "tukaani-project/xz", category: "dormant" }
+];
+
+document.querySelectorAll(".tabs button").forEach(function (b) {
+  b.addEventListener("click", function () {
+    document.querySelectorAll(".tabs button").forEach(function (x) { x.classList.remove("on"); });
+    b.classList.add("on");
+    document.querySelectorAll(".view").forEach(function (v) { v.classList.remove("on"); });
+    document.getElementById("view-" + b.dataset.view).classList.add("on");
+  });
+});
+
+function fmtTime(iso) {
+  var d = new Date(iso);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtDay(iso) {
+  var d = new Date(iso);
+  var today = new Date();
+  var yest = new Date(Date.now() - 86400000);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === yest.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { month: "long", day: "numeric" });
+}
+
+function render() {
+  var log = document.getElementById("log");
+  log.textContent = "";
+
+  if (!demo && !BACKEND.startsWith("http")) {
+    var n = el("div", "notice");
+    n.appendChild(el("strong", "", "BACKEND NOT WIRED"));
+    n.appendChild(el("div", "", "This dashboard has no data source yet. Set the BACKEND value in index.html to the alert API address and redeploy, or tap view demo above to preview the layout with sample alerts."));
+    log.appendChild(n);
+    document.getElementById("count").textContent = "offline";
+    return;
+  }
+
+  var source = demo ? DEMO_DATA : alerts;
+  var rows = source.filter(function (a) { return filter === "all" || a.category === filter; });
+  document.getElementById("count").textContent = rows.length + (rows.length === 1 ? " alert" : " alerts") + (demo ? ", demo data" : "");
+
+  if (rows.length === 0) {
+    var f = el("div", "flatline");
+    f.appendChild(el("span", "", "all quiet"));
+    log.appendChild(f);
+    return;
+  }
+
+  var lastDay = "";
+  rows.forEach(function (a) {
+    var day = fmtDay(a.created_at);
+    if (day !== lastDay) {
+      log.appendChild(el("div", "dayhead", day));
+      lastDay = day;
+    }
+    var row = el("div", "alert");
+    row.appendChild(el("div", "bar " + a.severity));
+    var body = el("div");
+    var meta = el("div", "meta");
+    meta.appendChild(el("span", "time", fmtTime(a.created_at)));
+    meta.appendChild(el("span", "cat " + a.severity, a.category));
+    meta.appendChild(el("span", "repo", a.repo));
+    body.appendChild(meta);
+    body.appendChild(el("div", "msg", a.message));
+    row.appendChild(body);
+    log.appendChild(row);
+  });
+}
+
+function showError(msg) {
+  var log = document.getElementById("log");
+  log.textContent = "";
+  var n = el("div", "notice err");
+  n.appendChild(el("strong", "", "FEED UNREACHABLE"));
+  n.appendChild(el("div", "", msg));
+  log.appendChild(n);
+  document.getElementById("count").textContent = "error";
+}
+
+function load() {
+  if (demo) { render(); return; }
+  if (!BACKEND.startsWith("http")) { render(); return; }
+  fetch(BACKEND)
+    .then(function (r) {
+      if (!r.ok) throw new Error("API answered " + r.status);
+      return r.json();
+    })
+    .then(function (data) {
+      alerts = data;
+      document.getElementById("checked").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      render();
+    })
+    .catch(function (e) {
+      showError("Could not read the alert feed. " + e.message + ". The API service may be down or the BACKEND address may be wrong.");
+    });
+}
+
+function syncWatchedSet() {
+  watchedSet = {};
+  var rows = demo ? DEMO_WATCHLIST : watchlist;
+  rows.forEach(function (w) { watchedSet[w.repo.toLowerCase()] = true; });
+}
+
+function renderWatchlist() {
+  var box = document.getElementById("wllist");
+  box.textContent = "";
+  var rows = demo ? DEMO_WATCHLIST : watchlist;
+  syncWatchedSet();
+  if (rows.length === 0) {
+    box.appendChild(el("div", "wlcat", demo || BACKEND.startsWith("http") ? "nothing watched yet" : "connects when the backend is wired"));
+    return;
+  }
+  rows.forEach(function (w) {
+    var row = el("div", "wlrow");
+    row.appendChild(el("span", "repo", w.repo));
+    row.appendChild(el("span", "wlcat", CATNAMES[w.category] || w.category));
+    var rm = el("button", "smallbtn", "unwatch");
+    rm.addEventListener("click", function () { removeRepo(w.repo); });
+    row.appendChild(rm);
+    box.appendChild(row);
+  });
+}
+
+function wlSay(text, good) {
+  var m = document.getElementById("wlmsg");
+  m.textContent = text;
+  m.className = "formmsg " + (good ? "good" : "bad");
+}
+
+function loadWatchlist() {
+  if (demo || !BACKEND.startsWith("http")) { renderWatchlist(); return; }
+  fetch(BACKEND + "/watchlist")
+    .then(function (r) { if (!r.ok) throw new Error("API answered " + r.status); return r.json(); })
+    .then(function (data) { watchlist = data; renderWatchlist(); })
+    .catch(function () { renderWatchlist(); });
+}
+
+function postWatch(repo, category, key) {
+  return fetch(BACKEND + "/watchlist", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo: repo, category: category, key: key })
+  }).then(function (r) {
+    if (r.status === 401) throw new Error("Wrong admin key");
+    if (!r.ok) throw new Error("API answered " + r.status);
+    return r.json();
+  });
+}
+
+function addRepo() {
+  if (demo) { wlSay("Demo mode is read only. Exit demo to edit the real watchlist.", false); return; }
+  if (!BACKEND.startsWith("http")) { wlSay("Backend not wired yet.", false); return; }
+  var repo = document.getElementById("wlrepo").value.trim();
+  var key = document.getElementById("wlkey").value;
+  var category = document.getElementById("wlcat").value;
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { wlSay("Repo must look like owner/repo.", false); return; }
+  if (!key) { wlSay("Admin key required to change the watchlist.", false); return; }
+  postWatch(repo, category, key)
+    .then(function () {
+      wlSay("Now watching " + repo + ".", true);
+      document.getElementById("wlrepo").value = "";
+      loadWatchlist();
+    })
+    .catch(function (e) { wlSay(e.message + ".", false); });
+}
+
+function removeRepo(repo) {
+  if (demo) { wlSay("Demo mode is read only. Exit demo to edit the real watchlist.", false); return; }
+  var key = document.getElementById("wlkey").value || document.getElementById("fkey").value;
+  if (!key) { wlSay("Enter the admin key first, then tap unwatch.", false); return; }
+  fetch(BACKEND + "/watchlist/remove", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repo: repo, key: key })
+  })
+    .then(function (r) { if (r.status === 401) throw new Error("Wrong admin key"); if (!r.ok) throw new Error("API answered " + r.status); return r.json(); })
+    .then(function () {
+      wlSay("Stopped watching " + repo + ".", true);
+      loadWatchlist();
+    })
+    .catch(function (e) { wlSay(e.message + ".", false); });
+}
+
+document.getElementById("wladd").addEventListener("click", addRepo);
+
+document.getElementById("demoBtn").addEventListener("click", function () {
+  demo = !demo;
+  var b = document.getElementById("demoBtn");
+  b.textContent = demo ? "exit demo" : "view demo";
+  b.classList.toggle("on", demo);
+  if (demo) { render(); renderWatchlist(); } else { load(); loadWatchlist(); }
+});
+
+function mySay(text, good) {
+  var m = document.getElementById("mymsg");
+  m.textContent = text;
+  m.className = "formmsg " + (good ? "good" : "bad");
+}
+
+function inMyList(repo) {
+  return myList.some(function (x) { return x.repo.toLowerCase() === repo.toLowerCase(); });
+}
+
+function renderMyList() {
+  var box = document.getElementById("mylist");
+  box.textContent = "";
+  document.getElementById("mycount").textContent = myList.length === 0 ? "empty" : myList.length + (myList.length === 1 ? " repo" : " repos");
+  if (myList.length === 0) {
+    box.appendChild(el("div", "notice", "Nothing here yet. Add repos below, or tap the list button on any search result in the Find tab. This list lives on your device only and exports without any key."));
+    return;
+  }
+  myList.forEach(function (w) {
+    var row = el("div", "wlrow");
+    row.appendChild(el("span", "repo", w.repo));
+    row.appendChild(el("span", "wlcat", CATNAMES[w.category] || w.category));
+    var rm = el("button", "smallbtn", "remove");
+    rm.addEventListener("click", function () {
+      myList = myList.filter(function (x) { return x.repo !== w.repo; });
+      saveMyList();
+      renderMyList();
+      mySay("Removed " + w.repo + ".", true);
+    });
+    row.appendChild(rm);
+    box.appendChild(row);
+  });
+}
+
+function addToMyList(repo, category) {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { mySay("Repo must look like owner/repo.", false); return false; }
+  if (inMyList(repo)) { mySay(repo + " is already on the list.", false); return false; }
+  myList.push({ repo: repo, category: category, added: new Date().toISOString() });
+  saveMyList();
+  renderMyList();
+  mySay("Added " + repo + ".", true);
+  return true;
+}
+
+document.getElementById("myadd").addEventListener("click", function () {
+  var repo = document.getElementById("myrepo").value.trim();
+  if (addToMyList(repo, document.getElementById("mycat").value)) {
+    document.getElementById("myrepo").value = "";
+  }
+});
+
+function expSay(text, good) {
+  var m = document.getElementById("expmsg");
+  m.textContent = text;
+  m.className = "formmsg " + (good ? "good" : "bad");
+}
+
+function stamp() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function downloadFile(name, mime, content) {
+  var blob = new Blob([content], { type: mime });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+}
+
+function exportJson() {
+  if (myList.length === 0) { expSay("List is empty, nothing to export.", false); return; }
+  var out = {
+    exported: new Date().toISOString(),
+    source: "threat poller",
+    count: myList.length,
+    watchlist: myList
+  };
+  downloadFile("threat-watchlist-" + stamp() + ".json", "application/json", JSON.stringify(out, null, 2));
+  expSay("Exported " + myList.length + " repos as JSON.", true);
+}
+
+function csvCell(v) {
+  v = String(v);
+  if (v.indexOf(",") >= 0 || v.indexOf("\"") >= 0) {
+    return "\"" + v.replace(/"/g, "\"\"") + "\"";
+  }
+  return v;
+}
+
+function exportCsv() {
+  if (myList.length === 0) { expSay("List is empty, nothing to export.", false); return; }
+  var lines = ["repo,category,added"];
+  myList.forEach(function (w) {
+    lines.push([csvCell(w.repo), csvCell(w.category), csvCell(w.added)].join(","));
+  });
+  downloadFile("threat-watchlist-" + stamp() + ".csv", "text/csv", lines.join("\n") + "\n");
+  expSay("Exported " + myList.length + " repos as CSV.", true);
+}
+
+function exportCopy() {
+  if (myList.length === 0) { expSay("List is empty, nothing to copy.", false); return; }
+  var text = myList.map(function (w) { return w.repo + " " + (CATNAMES[w.category] || w.category); }).join("\n");
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(function () { expSay("Copied " + myList.length + " repos to clipboard.", true); })
+      .catch(function () { expSay("Clipboard blocked by the browser, use JSON or CSV instead.", false); });
+  } else {
+    expSay("Clipboard unavailable in this browser, use JSON or CSV instead.", false);
+  }
+}
+
+document.getElementById("expjson").addEventListener("click", exportJson);
+document.getElementById("expcsv").addEventListener("click", exportCsv);
+document.getElementById("expcopy").addEventListener("click", exportCopy);
+
+var q = document.getElementById("q");
+var statusEl = document.getElementById("status");
+var rcountEl = document.getElementById("rcount");
+var resultsEl = document.getElementById("results");
+var goBtn = document.getElementById("go");
+
+function findSay(text, good) {
+  statusEl.textContent = text;
+  statusEl.className = "formmsg " + (good ? "good" : "bad");
+}
+
+function buildQuery() {
+  var parts = [];
+  var term = q.value.trim();
+  if (term) parts.push(term);
+  var lang = document.getElementById("lang").value;
+  if (lang) parts.push("language:" + lang);
+  var stars = parseInt(document.getElementById("minstars").value, 10);
+  if (stars > 0) parts.push("stars:>=" + stars);
+  var pushed = document.getElementById("pushed").value;
+  if (pushed) {
+    var d = new Date();
+    d.setMonth(d.getMonth() - parseInt(pushed, 10));
+    parts.push("pushed:>=" + d.toISOString().split("T")[0]);
+  }
+  return parts.join(" ");
+}
+
+function fmtNumber(n) {
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  return String(n);
+}
+
+function watchFromCard(fullName, btn) {
+  if (!BACKEND.startsWith("http")) { findSay("Backend not wired yet, watching is disabled.", false); return; }
+  var key = document.getElementById("fkey").value || document.getElementById("wlkey").value;
+  if (!key) { findSay("Enter the admin key in watch settings first.", false); return; }
+  var category = document.getElementById("fcat").value;
+  btn.disabled = true;
+  postWatch(fullName, category, key)
+    .then(function () {
+      btn.textContent = "watching";
+      btn.classList.add("done");
+      btn.closest(".card").classList.add("watched");
+      findSay("Now watching " + fullName + " as " + CATNAMES[category] + ".", true);
+      loadWatchlist();
+    })
+    .catch(function (e) {
+      btn.disabled = false;
+      findSay(e.message + ".", false);
+    });
+}
+
+function runSearch() {
+  var term = q.value.trim();
+  if (!term) { findSay("Enter search terms first.", false); return; }
+  goBtn.disabled = true;
+  findSay("Searching.", true);
+  resultsEl.textContent = "";
+  rcountEl.textContent = "";
+
+  var url = "https://api.github.com/search/repositories?q=" + encodeURIComponent(buildQuery()) + "&sort=" + document.getElementById("sort").value + "&order=desc&per_page=25";
+
+  fetch(url, { headers: { "Accept": "application/vnd.github+json" } })
+    .then(function (res) {
+      if (res.status === 403) throw new Error("Rate limited by the GitHub API, wait a minute and retry");
+      if (!res.ok) throw new Error("GitHub answered " + res.status);
+      return res.json();
+    })
+    .then(function (data) {
+      var items = data.items || [];
+      goBtn.disabled = false;
+      if (items.length === 0) {
+        resultsEl.appendChild(el("div", "notice", "No repos matched that search."));
+        findSay("Done.", true);
+        return;
+      }
+      rcountEl.textContent = fmtNumber(data.total_count) + " total matches, showing top " + items.length;
+      syncWatchedSet();
+      items.forEach(function (repo) {
+        var card = el("div", "card");
+        var name = el("div", "cardname");
+        var a = el("a", "", repo.full_name);
+        a.href = repo.html_url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        name.appendChild(a);
+        card.appendChild(name);
+        card.appendChild(el("div", "carddesc", repo.description || "no description provided"));
+        var meta = el("div", "cardmeta");
+        meta.appendChild(el("span", "stars", "star " + fmtNumber(repo.stargazers_count)));
+        meta.appendChild(el("span", "", "fork " + fmtNumber(repo.forks_count)));
+        meta.appendChild(el("span", "", repo.language || "n/a"));
+        meta.appendChild(el("span", "", "updated " + repo.pushed_at.split("T")[0]));
+        var lb = el("button", "smallbtn", inMyList(repo.full_name) ? "listed" : "+ list");
+        if (inMyList(repo.full_name)) {
+          lb.classList.add("done");
+          lb.disabled = true;
+        } else {
+          lb.addEventListener("click", function () {
+            if (addToMyList(repo.full_name, document.getElementById("fcat").value)) {
+              lb.textContent = "listed";
+              lb.classList.add("done");
+              lb.disabled = true;
+              findSay("Added " + repo.full_name + " to your list, no key needed.", true);
+            }
+          });
+        }
+        meta.appendChild(lb);
+        var wb = el("button", "smallbtn", "watch");
+        if (watchedSet[repo.full_name.toLowerCase()]) {
+          wb.textContent = "watching";
+          wb.classList.add("done");
+          wb.disabled = true;
+          card.classList.add("watched");
+        } else {
+          wb.addEventListener("click", function () { watchFromCard(repo.full_name, wb); });
+        }
+        meta.appendChild(wb);
+        card.appendChild(meta);
+        resultsEl.appendChild(card);
+      });
+      findSay("Done.", true);
+    })
+    .catch(function (e) {
+      goBtn.disabled = false;
+      findSay(e.message + ".", false);
+    });
+}
+
+goBtn.addEventListener("click", runSearch);
+q.addEventListener("keydown", function (e) { if (e.key === "Enter") runSearch(); });
+
+var STOPWORDS = ["a", "an", "the", "for", "with", "and", "of", "to", "in", "that", "my", "on", "is", "it", "this", "some", "kind", "type", "thing", "things", "want", "need", "looking"];
+var MODIFIERS = ["tool", "cli", "generator", "visualizer", "simulator", "tracker", "engine", "kit", "library", "dashboard", "sdk", "framework", "app"];
+var SYNONYMS = {
+  audio: ["sound", "music", "waveform"],
+  visual: ["visualizer", "graphics", "render"],
+  terminal: ["cli", "console", "shell"],
+  hex: ["hexagon", "honeycomb", "grid"],
+  grid: ["tile", "hex", "map"],
+  game: ["sim", "simulator", "arcade"],
+  music: ["audio", "sound", "beat"],
+  crt: ["retro", "vintage", "scanline"],
+  retro: ["vintage", "crt", "pixel"],
+  note: ["notes", "notebook", "journal"],
+  map: ["terrain", "geo", "territory"],
+  physics: ["engine", "simulation", "sim"],
+  sensor: ["telemetry", "iot", "hardware"],
+  circuit: ["pcb", "electronics", "schematic"],
+  tracker: ["logger", "monitor", "dashboard"],
+  counter: ["counting", "tally", "binary"],
+  admin: ["dashboard", "panel", "console"],
+  security: ["auth", "lockout", "honeypot"],
+  finance: ["cost", "expense", "budget"],
+  vehicle: ["car", "mileage", "fuel"],
+  video: ["youtube", "media", "stream"],
+  discovery: ["search", "explorer", "finder"],
+  chart: ["graph", "plot", "visualization"],
+  builder: ["generator", "constructor", "creator"],
+  puzzle: ["game", "tile", "solver"],
+  monitor: ["watcher", "poller", "sentinel"],
+  supply: ["dependency", "vendor", "chain"],
+  threat: ["security", "vulnerability", "cve"]
+};
+
+function tokenize(text) {
+  return text.toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(function (w) { return w.length > 1 && STOPWORDS.indexOf(w) === -1; });
+}
+
+function uniq(arr) {
+  var seen = {};
+  var out = [];
+  arr.forEach(function (x) {
+    var k = x.toLowerCase();
+    if (!seen[k]) { seen[k] = true; out.push(x); }
+  });
+  return out;
+}
+
+function generateTerms(idea) {
+  var words = tokenize(idea);
+  if (words.length === 0) return [];
+  var base = words.join(" ");
+  var results = [base];
+  MODIFIERS.forEach(function (mod) {
+    if (words.indexOf(mod) === -1) results.push(base + " " + mod);
+  });
+  words.forEach(function (w) {
+    if (SYNONYMS[w]) {
+      SYNONYMS[w].forEach(function (syn) {
+        results.push(words.map(function (x) { return x === w ? syn : x; }).join(" "));
+      });
+    }
+  });
+  if (words.length > 1) {
+    words.forEach(function (w) {
+      if (SYNONYMS[w]) results.push(SYNONYMS[w][0] + " " + w);
+    });
+  }
+  return uniq(results).slice(0, 12);
+}
+
+var ideaInput = document.getElementById("idea");
+var genstatus = document.getElementById("genstatus");
+var chipsEl = document.getElementById("chips");
+
+function renderChips(terms) {
+  chipsEl.textContent = "";
+  if (terms.length === 0) {
+    genstatus.textContent = "Type a short description first.";
+    genstatus.className = "formmsg bad";
+    return;
+  }
+  terms.forEach(function (t) {
+    var chip = el("div", "chip", t);
+    chip.addEventListener("click", function () {
+      q.value = t;
+      q.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    chipsEl.appendChild(chip);
+  });
+  genstatus.textContent = terms.length + " terms generated, tap one to load it into search.";
+  genstatus.className = "formmsg good";
+}
+
+document.getElementById("genbtn").addEventListener("click", function () { renderChips(generateTerms(ideaInput.value)); });
+ideaInput.addEventListener("keydown", function (e) { if (e.key === "Enter") renderChips(generateTerms(ideaInput.value)); });
+
+loadMyList();
+renderMyList();
+load();
+loadWatchlist();
+setInterval(load, 60000);
+</script>
+</body>
+</html>

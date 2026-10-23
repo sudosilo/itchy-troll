@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<!-- Source device: Blue Phone (Termux/Android). Blue accent palette, light theme only. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hackercons Roulette</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f7f0e6; --panel:#fffdf8; --ink:#1a1a1a; --muted:#6f6857;
+    --accent:#2563eb; --accent-dark:#1f5fd0; --accent-soft:#9bb8f2;
+    --track:#e7e0d1; --line:#ddd4c2; --good:#1f8a4c; --bad:#c2410c;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:'IBM Plex Mono',ui-monospace,monospace;
+    -webkit-font-smoothing:antialiased;padding:16px;display:flex;justify-content:center}
+  .wrap{width:100%;max-width:640px}
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:12px}
+  h1{font-family:'Bebas Neue',Impact,sans-serif;font-weight:400;font-size:40px;letter-spacing:2px;
+    margin:0;color:var(--accent);line-height:.9}
+  .modes{display:flex;border:2px solid var(--accent);border-radius:8px;overflow:hidden}
+  .modes button{border:0;border-radius:0;padding:8px 12px;font-size:11px;background:var(--panel);color:var(--accent);flex:none}
+  .modes button.on{background:var(--accent);color:#fff}
+  .stage{position:relative;width:100%;aspect-ratio:16/9;background:#000;border:2px solid var(--line);border-radius:10px;overflow:hidden}
+  .stage video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;transition:opacity .25s ease}
+  .stage video.standby{opacity:0;pointer-events:none}
+  .overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;
+    color:#fff;font-size:13px;letter-spacing:.5px;padding:24px;background:rgba(0,0,0,.55);cursor:pointer}
+  .overlay.show{display:flex}
+  .controls{display:flex;gap:8px;margin-top:12px}
+  button{font-family:inherit;font-size:13px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;
+    padding:14px 8px;border-radius:8px;border:2px solid var(--accent);cursor:pointer;flex:1}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-primary:active{background:var(--accent-dark)}
+  .btn-ghost{background:var(--panel);color:var(--accent)}
+  .btn-ghost:active{background:#eef3ff}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button:focus-visible{outline:3px solid var(--accent-soft);outline-offset:2px}
+  .bars{margin-top:14px}
+  .barrow{margin-bottom:10px}
+  .barlabel{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+  .track{height:8px;background:var(--track);border-radius:6px;overflow:hidden}
+  .fill{height:100%;width:0;background:var(--accent);transition:width .12s linear}
+  .fill.buffer{background:var(--accent-soft)}
+  .card{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .title-now{font-family:'Bebas Neue',Impact,sans-serif;font-size:24px;letter-spacing:1px;line-height:1.05;margin:0 0 10px}
+  .meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;font-size:13px}
+  .meta .k{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px}
+  .meta b{font-weight:600;word-break:break-word}
+  .status{margin-top:12px;font-size:11px;color:var(--muted);min-height:14px}
+  .quiz{display:none}
+  .quiz.show{display:block}
+  .qhead{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+  .choices{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .choices button{background:var(--panel);color:var(--ink);border-color:var(--line);font-size:12px;padding:12px 6px;word-break:break-word}
+  .choices button.right{background:var(--good);border-color:var(--good);color:#fff}
+  .choices button.wrong{background:var(--bad);border-color:var(--bad);color:#fff}
+  .kept{list-style:none;margin:0;padding:0;font-size:12px}
+  .kept li{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+  .kept li:first-child{border-top:0}
+  .kept .addr{color:var(--muted);font-size:10px;word-break:break-all;user-select:all}
+  .kept .rm{flex:none;padding:4px 8px;font-size:10px;border-color:var(--line);color:var(--muted);background:var(--panel)}
+  .empty{font-size:12px;color:var(--muted)}
+  h2{font-family:'Bebas Neue',Impact,sans-serif;font-weight:400;font-size:20px;letter-spacing:1px;margin:0 0 8px;color:var(--accent)}
+  footer{margin-top:14px;font-size:10px;color:var(--muted);text-align:center;letter-spacing:.5px}
+  @media (prefers-reduced-motion: reduce){ .fill,.stage video{transition:none} }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Hackercons<br>Roulette</h1>
+      <div class="modes" role="tablist">
+        <button id="modeStumble" class="on">Stumble</button>
+        <button id="modeQuiz">Guess</button>
+      </div>
+    </header>
+
+    <div class="stage">
+      <video id="v0" playsinline preload="auto"></video>
+      <video id="v1" playsinline preload="auto" class="standby"></video>
+      <div class="overlay show" id="overlay"><div id="overlayText">Connecting to the catalog</div></div>
+    </div>
+
+    <div class="controls">
+      <button class="btn-primary" id="playBtn" disabled>Loading</button>
+      <button class="btn-ghost" id="skipBtn" disabled>Skip</button>
+      <button class="btn-ghost" id="pauseBtn" disabled>Pause</button>
+      <button class="btn-ghost" id="keepBtn" disabled>Keep</button>
+    </div>
+
+    <div class="bars">
+      <div class="barrow">
+        <div class="barlabel"><span>Clip</span><span id="clipTime">0 / 30s</span></div>
+        <div class="track"><div class="fill" id="clipFill"></div></div>
+      </div>
+      <div class="barrow">
+        <div class="barlabel"><span>Next clip buffer</span><span id="bufPct">0%</span></div>
+        <div class="track"><div class="fill buffer" id="bufFill"></div></div>
+      </div>
+    </div>
+
+    <div class="card quiz" id="quizCard">
+      <div class="qhead"><span>Which conference?</span><span>Streak <b id="streak">0</b> / Best <b id="best">0</b></span></div>
+      <div class="choices" id="choices"></div>
+    </div>
+
+    <div class="card">
+      <div class="title-now" id="nowTitle">Ready when you are</div>
+      <div class="meta">
+        <div><span class="k">Conference</span><b id="mConf">-</b></div>
+        <div><span class="k">Year</span><b id="mYear">-</b></div>
+        <div><span class="k">Source</span><b id="mSrc">-</b></div>
+        <div><span class="k">Clip start</span><b id="mStart">-</b></div>
+        <div><span class="k">Talk length</span><b id="mDur">-</b></div>
+        <div><span class="k">Clips played</span><b id="mCount">0</b></div>
+      </div>
+      <div class="status" id="status">Connecting to the catalog.</div>
+    </div>
+
+    <div class="card">
+      <h2>Kept talks</h2>
+      <ul class="kept" id="keptList"></ul>
+      <div class="empty" id="keptEmpty">Tap Keep during a clip to save the full talk here.</div>
+    </div>
+
+    <footer>Talks from archive.org, media.ccc.de and PeerTube</footer>
+  </div>
+
+<script>
+(function(){
+  'use strict';
+
+  var API = 'https://hackercons-roulette-api-production.up.railway.app';
+  var CLIP_MS = 30000;
+
+  var mode = 'stumble';
+  var slots = [
+    { vid:document.getElementById('v0'), rec:null, choices:null, start:0, dur:0, ready:false, token:0 },
+    { vid:document.getElementById('v1'), rec:null, choices:null, start:0, dur:0, ready:false, token:0 }
+  ];
+  var active = 0, clipCount = 0, waiting = false, started = false, paused = false;
+  var clipStartT = 0, pausedElapsed = 0, ticker = null;
+  var streak = 0, best = 0, answered = false;
+  var recent = [];
+
+  function $(id){ return document.getElementById(id); }
+  var elOverlay = $('overlay'), elOverlayText = $('overlayText');
+  var elPlay = $('playBtn'), elSkip = $('skipBtn'), elPause = $('pauseBtn'), elKeep = $('keepBtn');
+
+  function status(t){ $('status').textContent = t; }
+  function overlay(t){
+    if(t){ elOverlayText.textContent = t; elOverlay.classList.add('show'); }
+    else elOverlay.classList.remove('show');
+  }
+  function randInt(max){
+    if(max <= 0) return 0;
+    var b = new Uint32Array(1); crypto.getRandomValues(b); return b[0] % max;
+  }
+  function fmt(sec){
+    sec = Math.max(0, Math.floor(sec || 0));
+    var h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60;
+    return (h ? h + ':' + (m<10?'0':'') : '') + m + ':' + (s<10?'0':'') + s;
+  }
+  function store(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function load(k, d){ try{ var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } }
+
+  best = load('hcr_best', 0);
+  $('best').textContent = best;
+
+  function getJson(path){
+    return fetch(API + path).then(function(r){
+      if(!r.ok) throw new Error('catalog answered ' + r.status);
+      return r.json();
+    });
+  }
+  function reportDead(id){
+    fetch(API + '/api/dead', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ id:id }) }).catch(function(){});
+  }
+
+  function fetchNext(){
+    if(mode === 'quiz'){
+      return getJson('/api/quiz').then(function(j){ return { rec:j.clip, choices:j.choices }; });
+    }
+    return getJson('/api/random').then(function(r){ return { rec:r, choices:null }; });
+  }
+
+  function loadIntoSlot(idx, attempt, onReady){
+    attempt = attempt || 0;
+    var slot = slots[idx];
+    slot.ready = false; slot.rec = null; slot.choices = null;
+    var token = ++slot.token;
+    if(attempt > 8){ status('Several talks in a row would not play. Tap Skip to try again.'); return; }
+
+    fetchNext().then(function(n){
+      if(token !== slot.token) return;
+      if(!n.rec || !n.rec.mp4 || recent.indexOf(n.rec.id) !== -1){
+        return loadIntoSlot(idx, attempt + 1, onReady);
+      }
+      slot.rec = n.rec; slot.choices = n.choices;
+      var v = slot.vid, seekRequested = false, seekDone = false;
+      v.oncanplay = null; v.onseeked = null; v.onerror = null;
+
+      var retry = function(){
+        if(token !== slot.token) return;
+        reportDead(n.rec.id);
+        loadIntoSlot(idx, attempt + 1, onReady);
+      };
+      var watchdog = setTimeout(function(){ if(!seekDone){ v.onerror = null; retry(); } }, 15000);
+      v.onerror = function(){ clearTimeout(watchdog); retry(); };
+
+      v.oncanplay = function(){
+        if(seekRequested || seekDone || token !== slot.token) return;
+        seekRequested = true;
+        var d = v.duration;
+        slot.dur = isFinite(d) ? d : (n.rec.duration || 0);
+        if(slot.dur < 45) slot.start = 0;
+        else slot.start = 10 + randInt(Math.max(1, Math.floor(slot.dur - 35) - 10));
+        try{ v.currentTime = slot.start; }catch(e){}
+      };
+      v.onseeked = function(){
+        if(seekDone || token !== slot.token) return;
+        seekDone = true; clearTimeout(watchdog);
+        slot.ready = true;
+        if(onReady){ onReady(); return; }
+        if(idx !== active && waiting) doSwap();
+      };
+      v.src = n.rec.mp4;
+      v.load();
+    }).catch(function(err){
+      if(token !== slot.token) return;
+      status('Catalog not ready yet: ' + err.message + '. Retrying.');
+      setTimeout(function(){ loadIntoSlot(idx, attempt + 1, onReady); }, 4000);
+    });
+  }
+
+  function playActive(){
+    var pr = slots[active].vid.play();
+    if(pr && pr.catch){
+      pr.catch(function(){
+        overlay('Tap to start');
+        var onTap = function(){
+          elOverlay.removeEventListener('click', onTap);
+          slots[active].vid.play(); overlay(null);
+        };
+        elOverlay.addEventListener('click', onTap);
+      });
+    }
+  }
+
+  function startTimer(){
+    clipStartT = performance.now(); pausedElapsed = 0; paused = false;
+    elPause.textContent = 'Pause';
+    if(ticker) clearInterval(ticker);
+    ticker = setInterval(tick, 100);
+  }
+  function tick(){
+    if(paused) return;
+    var e = Math.min(CLIP_MS, performance.now() - clipStartT);
+    $('clipFill').style.width = (e / CLIP_MS * 100).toFixed(1) + '%';
+    $('clipTime').textContent = Math.floor(e/1000) + ' / 30s';
+    if(e >= CLIP_MS) advance();
+  }
+  function advance(){
+    var s = slots[active === 0 ? 1 : 0];
+    if(s.ready) doSwap();
+    else if(!waiting){ waiting = true; overlay('Buffering next clip'); status('Waiting for the next clip to buffer.'); }
+  }
+
+  function doSwap(){
+    var prev = active;
+    active = active === 0 ? 1 : 0;
+    waiting = false;
+    var a = slots[active], p = slots[prev];
+    a.vid.classList.remove('standby');
+    p.vid.classList.add('standby');
+    p.vid.pause();
+    overlay(null);
+    recent.push(a.rec.id); if(recent.length > 30) recent.shift();
+    clipCount++;
+    showClip();
+    startTimer();
+    playActive();
+    loadIntoSlot(prev);
+  }
+
+  function showClip(){
+    var a = slots[active], r = a.rec || {};
+    var hide = mode === 'quiz' && !answered;
+    $('nowTitle').textContent = hide ? 'Mystery talk' : (r.title || '-');
+    $('mConf').textContent = hide ? '???' : (r.conference || '-');
+    $('mYear').textContent = hide ? '???' : (r.year || '-');
+    $('mSrc').textContent = r.source || '-';
+    $('mStart').textContent = fmt(a.start);
+    $('mDur').textContent = a.dur ? fmt(a.dur) : 'unknown';
+    $('mCount').textContent = String(clipCount);
+    status(mode === 'quiz' ? (answered ? 'Next clip at the 30 second mark.' : 'Pick the conference.') : 'Playing.');
+    if(mode === 'quiz' && answered === false) renderChoices();
+  }
+
+  function renderChoices(){
+    var box = $('choices'), a = slots[active];
+    box.innerHTML = '';
+    (a.choices || []).forEach(function(c){
+      var b = document.createElement('button');
+      b.textContent = c;
+      b.addEventListener('click', function(){ answer(c); });
+      box.appendChild(b);
+    });
+  }
+  function answer(choice){
+    if(answered) return;
+    answered = true;
+    var right = slots[active].rec.conference;
+    Array.prototype.forEach.call($('choices').children, function(b){
+      b.disabled = true;
+      if(b.textContent === right) b.classList.add('right');
+      else if(b.textContent === choice) b.classList.add('wrong');
+    });
+    if(choice === right){ streak++; if(streak > best){ best = streak; store('hcr_best', best); } }
+    else streak = 0;
+    $('streak').textContent = streak; $('best').textContent = best;
+    showClip();
+  }
+
+  function skip(){
+    if(!started) return;
+    var si = active === 0 ? 1 : 0;
+    var s = slots[si];
+    if(s.ready){ doSwapFresh(); return; }
+    s.vid.pause();
+    overlay('Loading a fresh clip');
+    status('Loading a different talk.');
+    waiting = true;
+    loadIntoSlot(si);
+  }
+  function doSwapFresh(){ answered = false; doSwap(); }
+
+  function togglePause(){
+    if(!started) return;
+    if(!paused){
+      paused = true; pausedElapsed = performance.now() - clipStartT;
+      slots[active].vid.pause(); elPause.textContent = 'Resume'; status('Paused.');
+    } else {
+      paused = false; clipStartT = performance.now() - pausedElapsed;
+      slots[active].vid.play(); elPause.textContent = 'Pause'; status('Playing.');
+    }
+  }
+
+  var kept = load('hcr_kept', []);
+  function renderKept(){
+    var ul = $('keptList'); ul.innerHTML = '';
+    $('keptEmpty').style.display = kept.length ? 'none' : 'block';
+    kept.forEach(function(k, i){
+      var li = document.createElement('li');
+      var left = document.createElement('div');
+      var t = document.createElement('div'); t.textContent = k.title + (k.conference ? '  (' + k.conference + (k.year ? ' ' + k.year : '') + ')' : '');
+      var a = document.createElement('div'); a.className = 'addr'; a.textContent = k.page || '';
+      left.appendChild(t); left.appendChild(a);
+      var rm = document.createElement('button'); rm.className = 'rm'; rm.textContent = 'Remove';
+      rm.addEventListener('click', function(){ kept.splice(i, 1); store('hcr_kept', kept); renderKept(); });
+      li.appendChild(left); li.appendChild(rm); ul.appendChild(li);
+    });
+  }
+  function keep(){
+    var r = slots[active].rec;
+    if(!r) return;
+    if(kept.some(function(k){ return k.id === r.id; })){ status('Already kept.'); return; }
+    kept.unshift({ id:r.id, title:r.title, conference:r.conference, year:r.year, page:r.page });
+    store('hcr_kept', kept); renderKept();
+    status('Kept. The full talk address is in the list below.');
+  }
+
+  function setMode(m){
+    if(m === mode) return;
+    mode = m;
+    $('modeStumble').classList.toggle('on', m === 'stumble');
+    $('modeQuiz').classList.toggle('on', m === 'quiz');
+    $('quizCard').classList.toggle('show', m === 'quiz');
+    streak = 0; $('streak').textContent = 0; $('choices').innerHTML = '';
+    answered = false;
+    if(started){
+      var si = active === 0 ? 1 : 0;
+      slots[si].vid.pause();
+      waiting = true;
+      overlay('Switching mode');
+      loadIntoSlot(si);
+    }
+  }
+
+  function start(){
+    if(started){ skip(); return; }
+    elPlay.disabled = true;
+    overlay('Loading first talk');
+    status('Loading the first talk.');
+    loadIntoSlot(active, 0, function(){
+      started = true;
+      elPlay.disabled = false; elPlay.textContent = 'New clip';
+      elSkip.disabled = false; elPause.disabled = false; elKeep.disabled = false;
+      overlay(null);
+      recent.push(slots[active].rec.id);
+      clipCount++;
+      showClip();
+      startTimer();
+      playActive();
+      loadIntoSlot(active === 0 ? 1 : 0);
+    });
+  }
+
+  function updateBuffer(){
+    if(!started) return;
+    var s = slots[active === 0 ? 1 : 0], v = s.vid, need = 30, got = 0;
+    try{
+      for(var i=0;i<v.buffered.length;i++){
+        var lo = Math.max(v.buffered.start(i), s.start), hi = Math.min(v.buffered.end(i), s.start + need);
+        if(hi > lo) got += hi - lo;
+      }
+    }catch(e){}
+    var pct = Math.min(100, got / need * 100);
+    if(s.ready && pct < 2) pct = 100;
+    $('bufFill').style.width = pct.toFixed(0) + '%';
+    $('bufPct').textContent = pct.toFixed(0) + '%';
+  }
+
+  // answered resets whenever a new clip becomes active
+  var baseSwap = doSwap;
+  doSwap = function(){ answered = false; baseSwap(); };
+
+  elPlay.addEventListener('click', start);
+  elSkip.addEventListener('click', skip);
+  elPause.addEventListener('click', togglePause);
+  elKeep.addEventListener('click', keep);
+  $('modeStumble').addEventListener('click', function(){ setMode('stumble'); });
+  $('modeQuiz').addEventListener('click', function(){ setMode('quiz'); });
+  setInterval(updateBuffer, 400);
+  renderKept();
+
+  function ping(){
+    getJson('/api/health').then(function(h){
+      if(h.items > 0){
+        overlay(null);
+        status(h.items + ' talks in the catalog. Tap Play.');
+        elPlay.disabled = false; elPlay.textContent = 'Play';
+      } else {
+        overlay('The catalog is filling up. This page checks again on its own.');
+        status('Catalog is empty so far. Checking again in 10 seconds.');
+        setTimeout(ping, 10000);
+      }
+    }).catch(function(){
+      overlay('The catalog server is not answering yet. This page checks again on its own.');
+      status('Catalog server not reachable. Checking again in 10 seconds.');
+      setTimeout(ping, 10000);
+    });
+  }
+  ping();
+})();
+</script>
+</body>
+</html>

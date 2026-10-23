@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>67-press-proccessor</title>
+<style>
+:root{color-scheme:light}
+*{box-sizing:border-box}
+html,body{margin:0;background:#faf7f0;color:#222;font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{padding:14px 16px 6px;max-width:980px;margin:0 auto}
+h1{font-size:20px;margin:0;letter-spacing:.02em}
+.sub{color:#6b655a;font-size:13px;margin-top:2px}
+nav{display:flex;gap:6px;padding:8px 16px;max-width:980px;margin:0 auto}
+nav button{flex:1;padding:10px 6px;border:1px solid #d9d1bd;background:#fff;border-radius:8px;font:inherit;font-weight:600;color:#444}
+nav button.on{background:#e8590c;border-color:#e8590c;color:#fff}
+main{max-width:980px;margin:0 auto;padding:0 16px 40px}
+.tab{display:none}
+.tab.on{display:block}
+.card{background:#fff;border:1px solid #e3dcc9;border-radius:10px;padding:14px;margin:10px 0}
+.card h2{font-size:15px;margin:0 0 10px}
+.card p{margin:6px 0;font-size:13px;color:#6b655a}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+label{display:block;font-size:12px;color:#6b655a;margin-bottom:3px}
+input[type=number],input[type=text],input[type=password],select,textarea{width:100%;padding:9px;border:1px solid #d3cab3;border-radius:7px;font:inherit;background:#fff;color:#222}
+textarea{min-height:110px;resize:vertical}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.chk{display:flex;gap:8px;align-items:center;font-size:13px;color:#444;margin-top:10px}
+.chk input{width:auto}
+.btn{padding:10px 14px;border-radius:8px;border:1px solid #d3cab3;background:#fff;font:inherit;font-weight:600;color:#333}
+.btn.pri{background:#e8590c;border-color:#e8590c;color:#fff}
+.btn:disabled{opacity:.5}
+.msg{font-size:13px;margin-top:8px;color:#6b655a;min-height:18px}
+.warn{color:#b3261e}
+#flatView{background:#fff;border:1px solid #e3dcc9;border-radius:10px;padding:6px}
+#flatView svg{display:block;width:100%;height:auto;max-height:70vh}
+.bar{display:flex;gap:14px;flex-wrap:wrap;align-items:center;padding:8px 0;font-size:13px}
+.bar label{display:flex;gap:6px;align-items:center;margin:0;font-size:13px;color:#444}
+.bar input[type=range]{width:110px}
+.stat{font-variant-numeric:tabular-nums;font-weight:700}
+#roll{height:calc(100vh - 230px);min-height:320px;overflow-y:auto;background:#e6e1d3;border:1px solid #d3cab3;border-radius:10px;-webkit-overflow-scrolling:touch}
+#rollInner{margin:0 auto;box-shadow:0 0 0 1px #c9c0a8,0 0 22px rgba(0,0,0,.18);background:#fff}
+#rollInner svg{display:block}
+#defsHost{position:absolute;width:0;height:0;overflow:hidden}
+#printSheet{display:none}
+@media print{
+  body>*:not(#printSheet):not(#defsHost){display:none!important}
+  #printSheet{display:flex!important;align-items:center;justify-content:center}
+  html,body{background:#fff!important}
+}
+</style>
+<style id="pageStyle"></style>
+</head>
+<body>
+<div id="defsHost"></div>
+<header>
+  <h1>67-press-proccessor</h1>
+  <div class="sub">Box dielines, AI artwork, and a live view of the roll feeding the press.</div>
+</header>
+<nav>
+  <button data-tab="design" class="on">Design</button>
+  <button data-tab="flat">Flat</button>
+  <button data-tab="roll">Roll</button>
+</nav>
+<main>
+
+<section id="t-design" class="tab on">
+  <div class="card">
+    <h2>Box (straight tuck end, inches)</h2>
+    <div class="grid">
+      <div><label for="bw">Width</label><input type="number" id="bw" value="2.5" step="0.125" min="0.5"></div>
+      <div><label for="bd">Depth</label><input type="number" id="bd" value="1.5" step="0.125" min="0.5"></div>
+      <div><label for="bh">Height</label><input type="number" id="bh" value="3.5" step="0.125" min="0.5"></div>
+      <div><label for="bg">Glue tab</label><input type="number" id="bg" value="0.5" step="0.0625" min="0.125"></div>
+      <div><label for="bt">Tuck flap</label><input type="number" id="bt" value="0.6" step="0.0625" min="0.25"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Artwork by Claude</h2>
+    <label for="prompt">Describe the box</label>
+    <textarea id="prompt" placeholder="Example: retro tea tin look, cream and teal, big title on the front, small ingredient list on the back"></textarea>
+    <div class="grid" style="margin-top:10px">
+      <div><label for="akey">Anthropic key</label><input type="password" id="akey" placeholder="xxxxxxxxxxxxxxxxxxxx" autocomplete="off"></div>
+      <div><label for="amodel">Model</label><input type="text" id="amodel" value="claude-sonnet-5-5"></div>
+    </div>
+    <div class="chk"><input type="checkbox" id="arem"><label for="arem" style="margin:0">Remember the key on this device</label></div>
+    <p>The key stays in this browser and is sent only to the Anthropic API.</p>
+    <div class="row">
+      <button class="btn pri" id="bgen">Generate new</button>
+      <button class="btn" id="brev">Revise current</button>
+      <button class="btn" id="bsample">Reset to sample</button>
+    </div>
+    <div class="msg" id="amsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>Press (inches)</h2>
+    <div class="grid">
+      <div><label for="pweb">Web width</label><input type="number" id="pweb" value="22" step="0.5" min="4"></div>
+      <div><label for="pmar">Side margin</label><input type="number" id="pmar" value="1.5" step="0.25" min="0.25"></div>
+      <div><label for="pgap">Gap between</label><input type="number" id="pgap" value="0.5" step="0.125" min="0.125"></div>
+      <div><label for="pspit">Spit plate height</label><input type="number" id="pspit" value="3" step="0.5" min="1"></div>
+      <div><label for="pcal">Calibration square</label><input type="number" id="pcal" value="3" step="0.5" min="1"></div>
+      <div><label for="psheet">Print sheet</label>
+        <select id="psheet">
+          <option value="letterL">Letter landscape</option>
+          <option value="letterP">Letter portrait</option>
+          <option value="tabloidL">Tabloid landscape</option>
+          <option value="a4L">A4 landscape</option>
+        </select></div>
+    </div>
+    <div class="chk"><input type="checkbox" id="prot"><label for="prot" style="margin:0">Turn boxes 90 degrees on the web</label></div>
+    <div class="msg warn" id="pwarn"></div>
+  </div>
+</section>
+
+<section id="t-flat" class="tab">
+  <div class="row" style="margin-top:6px">
+    <button class="btn pri" id="bprint">Print flat</button>
+    <button class="btn" id="bsvg">Download SVG</button>
+    <button class="btn" id="bsave">Save design</button>
+    <button class="btn" id="bload">Load design</button>
+    <input type="file" id="fload" accept=".json,application/json" style="display:none">
+  </div>
+  <div class="msg" id="finfo"></div>
+  <div id="flatView"></div>
+  <p class="msg">Solid lines are cuts. Dashed lines are folds. Print at 100 percent, not fit to page.</p>
+</section>
+
+<section id="t-roll" class="tab">
+  <div class="bar">
+    <button class="btn pri" id="brun">RUN</button>
+    <label>Speed <input type="range" id="rspeed" min="10" max="600" value="120"> <span id="rspeedv" class="stat">120</span> ft/min</label>
+    <label>Zoom <input type="range" id="rzoom" min="4" max="40" value="14"></label>
+  </div>
+  <div class="bar">
+    <span>Footage <span class="stat" id="sft">0</span> ft</span>
+    <span>Boxes <span class="stat" id="sbox">0</span></span>
+    <span>Per 72 in <span class="stat" id="sper">0</span></span>
+  </div>
+  <div id="roll"><div id="rollInner"></div></div>
+</section>
+
+</main>
+<div id="printSheet"></div>
+
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id);};
+var K=72;
+var SHEETS={letterL:[11,8.5],letterP:[8.5,11],tabloidL:[17,11],a4L:[11.69,8.27]};
+var PKEYS=['front','back','left','right','top','bottom'];
+var design=null, rollDirty=true, ppi=14, running=false, pos=0, lastT=0, rollN=0, lay=null, curG=null, curP=null, curB=null, activeTab='design', deb=null;
+
+function num(id,d){var v=parseFloat($(id).value);return isFinite(v)&&v>0?v:d;}
+function readBox(){return {w:num('bw',2.5),d:num('bd',1.5),h:num('bh',3.5),glue:num('bg',0.5),tuck:num('bt',0.6)};}
+function readPress(){return {web:num('pweb',22),margin:num('pmar',1.5),gap:num('pgap',0.5),spit:num('pspit',3),cal:num('pcal',3),rot:$('prot').checked,sheet:$('psheet').value};}
+function r4(n){return Math.round(n*10000)/10000;}
+
+/* geometry, all inches, y down */
+function geom(b){
+  var g={G:b.glue,W:b.w,D:b.d,H:b.h,T:b.tuck};
+  g.xf=g.G; g.xs1=g.G+g.W; g.xb=g.G+g.W+g.D; g.xs2=g.G+2*g.W+g.D; g.xe=g.G+2*g.W+2*g.D;
+  g.y0=g.T+g.D; g.y1=g.T+g.D+g.H;
+  g.fw=g.xe; g.fh=g.H+2*g.D+2*g.T;
+  return g;
+}
+function panelPt(key,dm){
+  if(key==='front'||key==='back') return [dm.w*K,dm.h*K];
+  if(key==='left'||key==='right') return [dm.d*K,dm.h*K];
+  return [dm.w*K,dm.d*K];
+}
+
+/* svg sanitizer for AI artwork */
+var OK={g:1,defs:1,rect:1,circle:1,ellipse:1,line:1,polyline:1,polygon:1,path:1,text:1,tspan:1,lineargradient:1,radialgradient:1,stop:1,pattern:1,clippath:1,mask:1,use:1,title:1,desc:1};
+function walk(node){
+  Array.prototype.slice.call(node.children).forEach(function(ch){
+    var n=ch.localName.toLowerCase();
+    if(!OK[n]){ch.remove();return;}
+    Array.prototype.slice.call(ch.attributes).forEach(function(a){
+      var an=a.name.toLowerCase(), v=a.value;
+      if(an.indexOf('on')===0){ch.removeAttribute(a.name);return;}
+      if(an==='href'||an==='xlink:href'){ if(!/^\s*#/.test(v)) ch.removeAttribute(a.name); return; }
+      if(/javascript:|expression\(|@import/i.test(v)||/url\(\s*(?!['"]?#)/i.test(v)) ch.removeAttribute(a.name);
+    });
+    walk(ch);
+  });
+}
+function clean(inner,prefix){
+  var doc;
+  try{doc=new DOMParser().parseFromString('<svg xmlns="http://www.w3.org/2000/svg">'+inner+'</svg>','image/svg+xml');}catch(e){return '';}
+  if(doc.getElementsByTagName('parsererror').length) return '';
+  var root=doc.documentElement; walk(root);
+  var ser=new XMLSerializer(), out='';
+  Array.prototype.slice.call(root.childNodes).forEach(function(c){out+=ser.serializeToString(c);});
+  out=out.replace(/ xmlns="http:\/\/www\.w3\.org\/2000\/svg"/g,'');
+  out=out.replace(/\bid="([^"]*)"/g,function(m,a){return 'id="'+prefix+'_'+a+'"';})
+         .replace(/url\(#([^)'"]*)\)/g,function(m,a){return 'url(#'+prefix+'_'+a+')';})
+         .replace(/href="#([^"]*)"/g,function(m,a){return 'href="#'+prefix+'_'+a+'"';});
+  return out;
+}
+function ensureClean(d){
+  d._c={};
+  PKEYS.forEach(function(k){d._c[k]=clean(String((d.panels&&d.panels[k])||''),'p'+k);});
+}
+
+/* sample artwork, generic */
+function starterDesign(b){
+  var dm={w:b.w,d:b.d,h:b.h}, P={}, f=function(n){return Math.round(n*10)/10;};
+  function face(key){
+    var s=panelPt(key,dm), pw=s[0], ph=s[1], cx=f(pw/2);
+    return "<rect width='"+f(pw)+"' height='"+f(ph)+"' fill='#ffe8a3'/>"+
+      "<rect width='"+f(pw)+"' height='"+f(ph*.16)+"' fill='#ff7a45'/>"+
+      "<rect y='"+f(ph*.84)+"' width='"+f(pw)+"' height='"+f(ph*.16)+"' fill='#2ec4b6'/>"+
+      "<text x='"+cx+"' y='"+f(ph*.40)+"' text-anchor='middle' font-family='Arial Black, Arial, sans-serif' font-size='"+f(pw*.17)+"' fill='#222'>SAMPLE</text>"+
+      "<text x='"+cx+"' y='"+f(ph*.60)+"' text-anchor='middle' font-family='Arial Black, Arial, sans-serif' font-size='"+f(pw*.34)+"' fill='#e8590c' stroke='#222' stroke-width='2'>BOX</text>"+
+      "<circle cx='"+f(pw*.22)+"' cy='"+f(ph*.72)+"' r='"+f(pw*.06)+"' fill='#2ec4b6' stroke='#222' stroke-width='1.5'/>"+
+      "<circle cx='"+f(pw*.5)+"' cy='"+f(ph*.72)+"' r='"+f(pw*.06)+"' fill='#ff7a45' stroke='#222' stroke-width='1.5'/>"+
+      "<circle cx='"+f(pw*.78)+"' cy='"+f(ph*.72)+"' r='"+f(pw*.06)+"' fill='#8e5cf7' stroke='#222' stroke-width='1.5'/>";
+  }
+  function side(key){
+    var s=panelPt(key,dm), pw=s[0], ph=s[1], fs=f(Math.min(pw*.45,ph*.14));
+    return "<rect width='"+f(pw)+"' height='"+f(ph)+"' fill='#2ec4b6'/>"+
+      "<text transform='translate("+f(pw/2)+" "+f(ph/2)+") rotate(-90)' text-anchor='middle' dominant-baseline='middle' font-family='Arial Black, Arial, sans-serif' font-size='"+fs+"' fill='#fff' stroke='#222' stroke-width='1.5'>SAMPLE</text>";
+  }
+  function lid(key,col){
+    var s=panelPt(key,dm), pw=s[0], ph=s[1], i, out="<rect width='"+f(pw)+"' height='"+f(ph)+"' fill='"+col+"'/>", sz=f(Math.min(pw*.2,ph*.5));
+    for(i=0;i<3;i++){
+      out+="<rect x='"+f(pw*(.2+i*.3)-sz/2)+"' y='"+f(ph/2-sz/2)+"' width='"+sz+"' height='"+sz+"' rx='"+f(sz*.2)+"' fill='"+['#ffe8a3','#fff','#8e5cf7'][i]+"' stroke='#222' stroke-width='1.5'/>";
+    }
+    return out;
+  }
+  P.front=face('front'); P.back=face('back'); P.left=side('left'); P.right=side('right');
+  P.top=lid('top','#ff7a45'); P.bottom=lid('bottom','#2ec4b6');
+  var d={title:'Sample box',panels:P,dims:dm,starter:true};
+  ensureClean(d); return d;
+}
+
+/* flat dieline markup */
+function flatMarkup(b,d){
+  var g=geom(b), G=g.G,W=g.W,D=g.D,H=g.H,T=g.T,xf=g.xf,xs1=g.xs1,xb=g.xb,xs2=g.xs2,xe=g.xe,y0=g.y0,y1=g.y1;
+  var ins=Math.min(0.15,H*0.1), df=D*0.85, paper='#f3eee2';
+  var pts=function(a){return a.map(function(p){return r4(p[0])+','+r4(p[1]);}).join(' ');};
+  var polys=[], cuts=[], folds=[];
+  polys.push([[xf,y0],[0,y0+ins],[0,y1-ins],[xf,y1]]);
+  polys.push([[xb,T],[xb+.1,0],[xs2-.1,0],[xs2,T]]);
+  polys.push([[xf,y1+D],[xf+.1,y1+D+T],[xs1-.1,y1+D+T],[xs1,y1+D]]);
+  cuts.push([[xf,y0],[0,y0+ins],[0,y1-ins],[xf,y1]]);
+  cuts.push([[xe,y0],[xe,y1]]);
+  cuts.push([[xb,y0],[xb,T],[xb+.1,0],[xs2-.1,0],[xs2,T],[xs2,y0]]);
+  cuts.push([[xf,y1],[xf,y1+D],[xf+.1,y1+D+T],[xs1-.1,y1+D+T],[xs1,y1+D],[xs1,y1]]);
+  cuts.push([[xf,y0],[xs1,y0]]);
+  cuts.push([[xb,y1],[xs2,y1]]);
+  [xs1,xs2].forEach(function(xs){
+    var top=[[xs,y0],[xs,y0-df*.4],[xs+D*.35,y0-df],[xs+D,y0-df],[xs+D,y0]];
+    var bot=[[xs,y1],[xs,y1+df*.4],[xs+D*.35,y1+df],[xs+D,y1+df],[xs+D,y1]];
+    polys.push(top); polys.push(bot); cuts.push(top); cuts.push(bot);
+    folds.push([xs,y0,xs+D,y0]); folds.push([xs,y1,xs+D,y1]);
+  });
+  [xf,xs1,xb,xs2].forEach(function(x){folds.push([x,y0,x,y1]);});
+  folds.push([xb,T,xs2,T]); folds.push([xb,y0,xs2,y0]);
+  folds.push([xf,y1,xs1,y1]); folds.push([xf,y1+D,xs1,y1+D]);
+
+  function art(key,x,y,w,h,rot){
+    var dm=d.dims, s=panelPt(key,dm), pw=r4(s[0]), ph=r4(s[1]), inner=(d._c&&d._c[key])||'';
+    var svg='<svg x="'+r4(x)+'" y="'+r4(y)+'" width="'+r4(w)+'" height="'+r4(h)+'" viewBox="0 0 '+pw+' '+ph+'" preserveAspectRatio="xMidYMid slice"><rect width="'+pw+'" height="'+ph+'" fill="#fff"/>'+inner+'</svg>';
+    return rot?'<g transform="rotate(180 '+r4(x+w/2)+' '+r4(y+h/2)+')">'+svg+'</g>':svg;
+  }
+  var s='<g id="flat">';
+  polys.forEach(function(p){s+='<polygon points="'+pts(p)+'" fill="'+paper+'"/>';});
+  s+=art('front',xf,y0,W,H)+art('left',xs1,y0,D,H)+art('back',xb,y0,W,H)+art('right',xs2,y0,D,H)+art('top',xb,T,W,D,true)+art('bottom',xf,y1,W,D);
+  folds.forEach(function(l){s+='<line x1="'+r4(l[0])+'" y1="'+r4(l[1])+'" x2="'+r4(l[2])+'" y2="'+r4(l[3])+'" stroke="#222" stroke-opacity=".6" stroke-width="1" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>';});
+  cuts.forEach(function(p){s+='<polyline points="'+pts(p)+'" fill="none" stroke="#000" stroke-width="1.4" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>';});
+  s+='</g>';
+  return s;
+}
+
+var PATTERNS='<pattern id="hz" width=".7" height=".7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width=".7" height=".7" fill="#ffd400"/><rect width=".35" height=".7" fill="#111"/></pattern>'+
+ '<pattern id="ln-c" width=".16" height=".5" patternUnits="userSpaceOnUse"><rect width=".09" height=".5" fill="#00aeef"/></pattern>'+
+ '<pattern id="ln-m" width=".16" height=".5" patternUnits="userSpaceOnUse"><rect width=".09" height=".5" fill="#ec008c"/></pattern>'+
+ '<pattern id="ln-y" width=".16" height=".5" patternUnits="userSpaceOnUse"><rect width=".09" height=".5" fill="#ffd400"/></pattern>'+
+ '<pattern id="ln-k" width=".16" height=".5" patternUnits="userSpaceOnUse"><rect width=".09" height=".5" fill="#111"/></pattern>';
+
+/* roll pieces */
+function layout(p,g){
+  var fw=p.rot?g.fh:g.fw, fh=p.rot?g.fw:g.fh;
+  var printW=p.web-2*p.margin;
+  var across=Math.max(0,Math.floor((printW+p.gap)/(fw+p.gap)));
+  var head=p.cal+0.6;
+  var avail=72-head-p.spit-p.gap;
+  var rows=Math.max(0,Math.floor((avail+p.gap)/(fh+p.gap)));
+  return {fw:fw,fh:fh,printW:printW,across:across,head:head,rows:rows};
+}
+function calMarkup(sz){
+  var u=sz/3, s='<g transform="scale('+r4(u)+')">', i, cols=['#00aeef','#ec008c','#ffe600','#111'];
+  s+='<rect x="0" y="0" width="3" height="3" fill="#fff" stroke="#111" stroke-width=".06"/>';
+  for(i=0;i<4;i++) s+='<rect x="'+(.15+i*.7)+'" y=".15" width=".65" height=".65" fill="'+cols[i]+'"/>';
+  for(i=0;i<8;i++){var v=Math.round(255-i*255/7); s+='<rect x="'+r4(.15+i*.34)+'" y="2.2" width=".34" height=".65" fill="rgb('+v+','+v+','+v+')" stroke="#999" stroke-width=".01"/>';}
+  s+='<circle cx="1.5" cy="1.5" r=".5" fill="none" stroke="#111" stroke-width=".06"/><circle cx="1.5" cy="1.5" r=".22" fill="none" stroke="#e00" stroke-width=".05"/>'+
+     '<line x1=".7" y1="1.5" x2="2.3" y2="1.5" stroke="#111" stroke-width=".05"/><line x1="1.5" y1=".95" x2="1.5" y2="2.05" stroke="#111" stroke-width=".05"/>'+
+     '<text x="2.55" y="1.62" font-size=".3" font-family="Arial, sans-serif" font-weight="700" text-anchor="middle" fill="#111">CAL</text>';
+  return s+'</g>';
+}
+function spitMarkup(p,y){
+  var S=p.spit, m=p.margin, pw=p.web-2*m, x=m, s='', i;
+  s+='<rect x="0" y="'+r4(y)+'" width="'+p.web+'" height="'+S+'" fill="#fff"/>';
+  s+='<rect x="0" y="'+r4(y)+'" width="'+p.web+'" height="'+r4(S*.14)+'" fill="url(#hz)"/>';
+  s+='<rect x="0" y="'+r4(y+S*.86)+'" width="'+p.web+'" height="'+r4(S*.14)+'" fill="url(#hz)"/>';
+  ['c','m','y','k'].forEach(function(c,k){s+='<rect x="0" y="'+r4(y+S*(.14+k*.14))+'" width="'+p.web+'" height="'+r4(S*.14)+'" fill="url(#ln-'+c+')"/>';});
+  var sy=y+S*.70, sh=S*.16;
+  for(i=0;i<24;i++){var w=pw/24; s+='<rect x="'+r4(x+i*w)+'" y="'+r4(sy+(i%4)*sh*.2)+'" width="'+r4(w*.7)+'" height="'+r4(sh*.4)+'" fill="#111"/>';}
+  s+='<text x="'+r4(p.web/2)+'" y="'+r4(y+S*.5)+'" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="'+r4(S*.45)+'" fill="#111" stroke="#fff" stroke-width="'+r4(S*.09)+'" paint-order="stroke">SPIT PLATE</text>';
+  return s;
+}
+function segMarkup(n,p,g,L){
+  var web=p.web, S=72, m=p.margin, i, s='';
+  s+='<rect x="0" y="0" width="'+web+'" height="'+S+'" fill="#fff"/>';
+  s+='<rect x="0" y="0" width="'+m+'" height="'+S+'" fill="#f1ede2"/><rect x="'+r4(web-m)+'" y="0" width="'+m+'" height="'+S+'" fill="#f1ede2"/>';
+  s+='<line x1="'+m+'" y1="0" x2="'+m+'" y2="'+S+'" stroke="#b9b09a" stroke-width=".04" stroke-dasharray=".4 .3"/><line x1="'+r4(web-m)+'" y1="0" x2="'+r4(web-m)+'" y2="'+S+'" stroke="#b9b09a" stroke-width=".04" stroke-dasharray=".4 .3"/>';
+  for(i=0;i<S;i++){
+    var abs=n*S+i, major=abs%12===0, mid=abs%6===0, len=major?.6:(mid?.45:.3), sw=major?.07:.035;
+    s+='<line x1="0" y1="'+i+'" x2="'+len+'" y2="'+i+'" stroke="#8a826e" stroke-width="'+sw+'"/><line x1="'+r4(web-len)+'" y1="'+i+'" x2="'+web+'" y2="'+i+'" stroke="#8a826e" stroke-width="'+sw+'"/>';
+    if(major) s+='<text x="'+r4(m-.12)+'" y="'+r4(i+.5)+'" text-anchor="end" font-family="Arial, sans-serif" font-size=".45" fill="#6b6454">'+(abs/12)+'\'</text>';
+  }
+  var cs=p.cal;
+  s+='<g transform="translate(.3 .3)">'+calMarkup(cs)+'</g>';
+  var tx=.3+cs+.5, pad=('0000'+n).slice(-4);
+  s+='<text x="'+r4(tx)+'" y="'+r4(.3+cs*.42)+'" font-family="Arial Black, Arial, sans-serif" font-size="'+r4(Math.min(1.3,cs*.45))+'" fill="#111">67 PRESS</text>';
+  s+='<text x="'+r4(tx)+'" y="'+r4(.3+cs*.78)+'" font-family="Arial, sans-serif" font-weight="700" font-size="'+r4(Math.min(.6,cs*.2))+'" fill="#555">SEG '+pad+'   '+(n*6)+' TO '+(n*6+6)+' FT   WEB '+web+' IN</text>';
+  if(L.across>0&&L.rows>0){
+    var x0=m+(L.printW-(L.across*L.fw+(L.across-1)*p.gap))/2, r, c;
+    for(r=0;r<L.rows;r++) for(c=0;c<L.across;c++){
+      var x=x0+c*(L.fw+p.gap), y=L.head+p.gap+r*(L.fh+p.gap);
+      s+=p.rot?'<use href="#flat" transform="translate('+r4(x+L.fw)+' '+r4(y)+') rotate(90)"/>':'<use href="#flat" transform="translate('+r4(x)+' '+r4(y)+')"/>';
+    }
+  }
+  s+=spitMarkup(p,S-p.spit);
+  s+='<line x1="0" y1="71.97" x2="'+web+'" y2="71.97" stroke="#e00" stroke-width=".06" stroke-dasharray=".5 .3"/>';
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+web+' '+S+'" width="'+r4(web*ppi)+'" height="'+r4(S*ppi)+'">'+s+'</svg>';
+}
+
+/* views */
+function buildDefs(){
+  curB=readBox(); curP=readPress(); curG=geom(curB);
+  if(!design) design=starterDesign(curB);
+  else if(design.starter) design=starterDesign(curB);
+  else if(!design._c) ensureClean(design);
+  var fm=flatMarkup(curB,design);
+  $('defsHost').innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0"><defs>'+PATTERNS+fm+'</defs></svg>';
+  lay=layout(curP,curG);
+  var w='';
+  if(lay.across===0) w='This box is wider than the printable web. Widen the web, shrink the margin, or turn the boxes 90 degrees.';
+  else if(lay.rows===0) w='This box is taller than one 72 inch segment allows. Turn the boxes 90 degrees or shrink the spit plate.';
+  $('pwarn').textContent=w;
+  $('sper').textContent=(lay.across*lay.rows);
+}
+function drawFlat(){
+  var g=curG, sh=SHEETS[curP.sheet], fits=(g.fw<=sh[0]-0.3&&g.fh<=sh[1]-0.3);
+  $('flatView').innerHTML='<svg xmlns="http://www.w3.org/2000/svg" viewBox="-0.3 -0.3 '+r4(g.fw+0.6)+' '+r4(g.fh+0.6)+'"><rect x="-0.3" y="-0.3" width="'+r4(g.fw+0.6)+'" height="'+r4(g.fh+0.6)+'" fill="#fff"/><use href="#flat"/></svg>';
+  var fi=$('finfo');
+  fi.textContent='Flat size '+r4(g.fw)+' x '+r4(g.fh)+' in. '+(fits?'Fits the selected sheet.':'Too big for the selected sheet, pick a bigger one.')+' Design: '+(design.title||'untitled')+'.';
+  fi.className='msg'+(fits?'':' warn');
+}
+function refresh(){
+  buildDefs(); drawFlat(); rollDirty=true;
+  if(activeTab==='roll') resetRoll();
+}
+
+/* roll */
+function addSeg(){
+  var inner=$('rollInner');
+  inner.insertAdjacentHTML('beforeend',segMarkup(rollN,curP,curG,lay));
+  rollN++;
+}
+function fillRoll(){
+  var sc=$('roll'), inner=$('rollInner'), guard=0;
+  if(!sc.clientHeight) return;
+  while(inner.scrollHeight<sc.scrollTop+sc.clientHeight*3&&guard<60){addSeg();guard++;}
+}
+function resetRoll(){
+  var sc=$('roll'), inner=$('rollInner');
+  inner.innerHTML=''; rollN=0;
+  inner.style.width=r4(curP.web*ppi)+'px';
+  sc.scrollTop=0; pos=0;
+  fillRoll(); rollDirty=false; stats();
+}
+function stats(){
+  var sc=$('roll'), inches=sc.scrollTop/ppi, per=lay?lay.across*lay.rows:0;
+  $('sft').textContent=Math.floor(inches/12);
+  $('sbox').textContent=Math.floor(inches/72*per);
+}
+function tick(t){
+  if(!running) return;
+  var sc=$('roll'), dt=lastT?Math.min(0.1,(t-lastT)/1000):0;
+  lastT=t;
+  pos+=dt*(parseFloat($('rspeed').value)*12*ppi/60);
+  sc.scrollTop=pos;
+  fillRoll(); stats();
+  requestAnimationFrame(tick);
+}
+function setRun(on){
+  running=on; $('brun').textContent=on?'STOP':'RUN';
+  if(on){pos=$('roll').scrollTop; lastT=0; requestAnimationFrame(tick);}
+}
+
+/* export */
+function standalone(){
+  var g=curG;
+  return '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="'+r4(g.fw)+'in" height="'+r4(g.fh)+'in" viewBox="0 0 '+r4(g.fw)+' '+r4(g.fh)+'">'+flatMarkup(curB,design).replace('<g id="flat">','<g>')+'</svg>';
+}
+function download(name,text,type){
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([text],{type:type}));
+  a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){URL.revokeObjectURL(a.href);},2000);
+}
+function stamp(){var d=new Date();return d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2)+'-'+('0'+d.getHours()).slice(-2)+('0'+d.getMinutes()).slice(-2)+('0'+d.getSeconds()).slice(-2);}
+function slug(){return String(design.title||'box').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'box';}
+function doPrint(){
+  var sh=SHEETS[curP.sheet], g=curG;
+  $('pageStyle').textContent='@page{size:'+sh[0]+'in '+sh[1]+'in;margin:0}';
+  var ps=$('printSheet');
+  ps.style.width=sh[0]+'in'; ps.style.height=sh[1]+'in';
+  ps.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="'+r4(g.fw)+'in" height="'+r4(g.fh)+'in" viewBox="0 0 '+r4(g.fw)+' '+r4(g.fh)+'"><use href="#flat"/></svg>';
+  setTimeout(function(){window.print();},50);
+}
+
+/* Claude */
+var SYS="You are a packaging graphic designer who draws print-ready vector artwork as SVG for box panels. Reply with one JSON object and nothing else, no code fences. Shape: {\"title\":\"short name\",\"panels\":{\"front\":\"...\",\"back\":\"...\",\"left\":\"...\",\"right\":\"...\",\"top\":\"...\",\"bottom\":\"...\"}}. Each panel value is SVG inner markup only, with no outer svg tag, drawn in a coordinate space of 0 0 W H points where W and H are given for that panel. Rules: use single quotes for every SVG attribute and never put a double quote character inside a value, so the JSON stays valid. Allowed elements: g defs rect circle ellipse line polyline polygon path text tspan linearGradient radialGradient stop pattern clipPath mask use. Never use style tags, images, scripts, filters, or external references. Fill the full panel rectangle with a background color so there is no white edge. Keep all text and key shapes at least 14 points inside the panel edges. Text must be real, correctly spelled words: only the wording the brief asks for plus short plain filler such as net weight or an ingredients line. Never invent fake fine print or gibberish. Use only these font families: Impact, Arial Black, Arial, Helvetica, Georgia, Courier New, sans-serif. Size text so it fits inside the panel with room to spare and use text-anchor middle for centered text. The left and right panels are the narrow sides and should match the front in style. The top and bottom panels are the lids, simple and bold. Use strokes of at least 0.75 points. Do not use em dashes.";
+function amsg(t,bad){var m=$('amsg');m.textContent=t;m.className='msg'+(bad?' warn':'');}
+async function ask(revise){
+  var key=$('akey').value.trim(), prompt=$('prompt').value.trim();
+  if(!key){amsg('Paste your Anthropic key first.',true);return;}
+  if(!prompt){amsg('Describe the box first.',true);return;}
+  try{ if($('arem').checked) localStorage.setItem('pp67_key',key); else localStorage.removeItem('pp67_key'); localStorage.setItem('pp67_model',$('amodel').value); }catch(e){}
+  var b=readBox();
+  var dm=(revise&&design&&design.dims)?design.dims:{w:b.w,d:b.d,h:b.h};
+  var sizes=PKEYS.map(function(k){var s=panelPt(k,dm);return k+': '+r4(s[0])+' x '+r4(s[1])+' points';}).join('\n');
+  var msg='Box: straight tuck end, '+dm.w+' x '+dm.d+' x '+dm.h+' inches.\nPanel sizes (use each as the viewBox):\n'+sizes+'\n\nBrief: '+prompt;
+  if(revise&&design){msg+='\n\nCurrent artwork JSON to revise:\n'+JSON.stringify({title:design.title,panels:design.panels})+'\nReturn the complete updated JSON.';}
+  ['bgen','brev','bsample'].forEach(function(i){$(i).disabled=true;});
+  amsg('Claude is drawing. This can take a minute.');
+  try{
+    var res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:$('amodel').value.trim()||'claude-sonnet-5-5',max_tokens:16000,system:SYS,messages:[{role:'user',content:msg}]})
+    });
+    var data=await res.json();
+    if(!res.ok){throw new Error((data&&data.error&&data.error.message)||('HTTP '+res.status));}
+    var txt=(data.content||[]).filter(function(c){return c.type==='text';}).map(function(c){return c.text;}).join('');
+    var a=txt.indexOf('{'), z=txt.lastIndexOf('}');
+    if(a<0||z<a) throw new Error('The reply had no JSON.');
+    var obj=JSON.parse(txt.slice(a,z+1));
+    if(!obj.panels) throw new Error('The reply had no panels.');
+    design={title:obj.title||'untitled',panels:obj.panels,dims:dm,starter:false};
+    ensureClean(design);
+    refresh();
+    amsg('Done. '+(design.title||'')+' is on the Flat tab.');
+    setTab('flat');
+  }catch(e){
+    amsg('Failed: '+e.message,true);
+  }
+  ['bgen','brev','bsample'].forEach(function(i){$(i).disabled=false;});
+}
+
+/* tabs and wiring */
+function setTab(t){
+  activeTab=t;
+  Array.prototype.forEach.call(document.querySelectorAll('nav button'),function(b){b.classList.toggle('on',b.getAttribute('data-tab')===t);});
+  ['design','flat','roll'].forEach(function(k){$('t-'+k).classList.toggle('on',k===t);});
+  if(t!=='roll') setRun(false);
+  if(t==='roll'){
+    if(!userZoom){ppi=Math.max(4,Math.min(24,Math.floor(($('roll').clientWidth-4)/curP.web))); $('rzoom').value=ppi;}
+    resetRoll();
+  }
+}
+var userZoom=false;
+function later(){clearTimeout(deb);deb=setTimeout(refresh,150);}
+
+document.querySelectorAll('nav button').forEach(function(b){b.addEventListener('click',function(){setTab(b.getAttribute('data-tab'));});});
+['bw','bd','bh','bg','bt','pweb','pmar','pgap','pspit','pcal','prot','psheet'].forEach(function(id){$(id).addEventListener('input',later);$(id).addEventListener('change',later);});
+$('bgen').addEventListener('click',function(){ask(false);});
+$('brev').addEventListener('click',function(){ask(true);});
+$('bsample').addEventListener('click',function(){design=null;refresh();amsg('Sample restored.');});
+$('bprint').addEventListener('click',doPrint);
+$('bsvg').addEventListener('click',function(){download(slug()+'-flat-'+stamp()+'.svg',standalone(),'image/svg+xml');});
+$('bsave').addEventListener('click',function(){
+  download(slug()+'-design-'+stamp()+'.json',JSON.stringify({version:1,box:readBox(),press:readPress(),design:{title:design.title,panels:design.panels,dims:design.dims,starter:!!design.starter}}),'application/json');
+});
+$('bload').addEventListener('click',function(){$('fload').click();});
+$('fload').addEventListener('change',function(ev){
+  var f=ev.target.files[0]; if(!f) return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    try{
+      var o=JSON.parse(rd.result);
+      var m={bw:'w',bd:'d',bh:'h',bg:'glue',bt:'tuck'};
+      Object.keys(m).forEach(function(k){if(o.box&&o.box[m[k]]) $(k).value=o.box[m[k]];});
+      var pm={pweb:'web',pmar:'margin',pgap:'gap',pspit:'spit',pcal:'cal'};
+      Object.keys(pm).forEach(function(k){if(o.press&&o.press[pm[k]]) $(k).value=o.press[pm[k]];});
+      if(o.press){$('prot').checked=!!o.press.rot; if(o.press.sheet) $('psheet').value=o.press.sheet;}
+      design=null;
+      if(o.design&&o.design.panels&&!o.design.starter){
+        design={title:o.design.title||'untitled',panels:o.design.panels,dims:o.design.dims||{w:num('bw',2.5),d:num('bd',1.5),h:num('bh',3.5)},starter:false};
+        ensureClean(design);
+      }
+      refresh(); setTab('flat');
+    }catch(e){$('finfo').textContent='Could not read that file.';$('finfo').className='msg warn';}
+    ev.target.value='';
+  };
+  rd.readAsText(f);
+});
+$('brun').addEventListener('click',function(){setRun(!running);});
+$('roll').addEventListener('touchstart',function(){if(running)setRun(false);},{passive:true});
+$('roll').addEventListener('scroll',function(){ if(!running) pos=$('roll').scrollTop; fillRoll(); stats(); });
+$('rspeed').addEventListener('input',function(){$('rspeedv').textContent=$('rspeed').value;});
+$('rzoom').addEventListener('input',function(){
+  var sc=$('roll'), ft=sc.scrollTop/ppi;
+  ppi=parseFloat($('rzoom').value); userZoom=true;
+  var was=running; resetRoll(); sc.scrollTop=ft*ppi; pos=sc.scrollTop; fillRoll(); stats();
+  if(was&&!running) setRun(true);
+});
+
+try{
+  var k=localStorage.getItem('pp67_key'); if(k){$('akey').value=k;$('arem').checked=true;}
+  var mo=localStorage.getItem('pp67_model'); if(mo) $('amodel').value=mo;
+}catch(e){}
+refresh();
+})();
+</script>
+</body>
+</html>

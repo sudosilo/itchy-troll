@@ -1,0 +1,1611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f1f4f7">
+<title>Stackloom</title>
+<style>
+  :root {
+    --page: #f1f4f7;
+    --surface: #ffffff;
+    --edge: #d5dde6;
+    --ink: #1c2833;
+    --muted: #5d6b78;
+    --accent: #2463b0;
+    --pressed: #dbe7f5;
+    --good: #2e7d4f;
+    --warn: #b24a2a;
+    --toast: #fffbe6;
+    --toast-edge: #e8dca8;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    height: 100dvh;
+    overflow: hidden;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button { font-family: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  .app { height: 100dvh; display: flex; flex-direction: column; }
+
+  /* Company status bar */
+  .hud {
+    background: var(--surface);
+    padding: calc(env(safe-area-inset-top) + 10px) 16px 0;
+  }
+  .hud-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .money { font-size: 28px; font-weight: 750; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .money.negative { color: var(--warn); }
+  .hud-facts { display: flex; gap: 12px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hud-office { font-size: 13px; color: var(--muted); margin-top: 1px; }
+  .daybar { height: 3px; background: var(--edge); margin: 10px -16px 0; }
+  .daybar i { display: block; height: 100%; width: 0; background: var(--accent); }
+
+  /* Tabs sit at the top, under the status bar */
+  .tabs {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    background: var(--surface); border-bottom: 1px solid var(--edge);
+  }
+  .tabs button { position: relative; background: none; border: none; padding: 12px 0 13px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .tabs button.on { color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
+  .badge {
+    position: absolute; top: 3px; left: 50%; margin-left: 16px;
+    min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px;
+    background: var(--warn); color: #ffffff; font-size: 11px; line-height: 18px;
+  }
+  .badge[hidden] { display: none; }
+
+  .view { flex: 1; overflow-y: auto; padding: 14px 14px calc(env(safe-area-inset-bottom) + 28px); }
+
+  .section-title { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; margin: 6px 2px 10px; }
+  .spaced { margin-top: 24px; }
+  .note { font-size: 14px; color: var(--muted); line-height: 1.45; margin: 0 2px 12px; max-width: 60ch; }
+  .empty {
+    font-size: 14px; color: var(--muted); line-height: 1.45;
+    margin: 0 0 18px; padding: 14px; border: 1px dashed var(--edge); border-radius: 12px;
+  }
+  .quiet { font-size: 13px; color: var(--muted); line-height: 1.4; }
+
+  /* Order tickets: the strip on top is the palette the customer ordered */
+  .order { background: var(--surface); border: 1px solid var(--edge); border-radius: 14px; overflow: hidden; margin-bottom: 12px; }
+  .strip { display: flex; height: 10px; }
+  .strip i { flex: 1; }
+  .order-body { padding: 12px 14px 14px; }
+  .order-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .customer { font-size: 16px; font-weight: 650; }
+  .spec { font-size: 14px; color: var(--muted); line-height: 1.35; margin-top: 2px; }
+  .motifs { font-size: 20px; letter-spacing: 4px; margin-top: 6px; }
+  .pay { font-size: 18px; font-weight: 700; color: var(--good); font-variant-numeric: tabular-nums; }
+  .meta { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--muted); margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .late { color: var(--warn); font-weight: 600; }
+  .status { font-size: 14px; margin-top: 10px; line-height: 1.4; }
+  .status.warn { color: var(--warn); }
+  .bar { height: 8px; background: var(--page); border: 1px solid var(--edge); border-radius: 99px; overflow: hidden; margin-top: 8px; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width 0.25s linear; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+  .btn {
+    background: var(--surface); border: 1px solid var(--edge); border-radius: 10px;
+    padding: 10px 14px; min-height: 44px; font-size: 15px; font-weight: 600;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #ffffff; }
+  .btn:disabled { opacity: 0.55; }
+  .btn.wide { width: 100%; }
+
+  /* Rows for terminals, staff, offices, upgrades */
+  .row { background: var(--surface); border: 1px solid var(--edge); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
+  .row-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .row-name { font-size: 15px; font-weight: 650; }
+  .row-state { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .row-state.busy { color: var(--accent); font-weight: 600; }
+  .row-state.done { color: var(--good); font-weight: 600; }
+  .row-sub { font-size: 14px; color: var(--muted); line-height: 1.4; margin-top: 3px; }
+  .buy { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 8px; }
+
+  .log { list-style: none; }
+  .log li { font-size: 13px; color: var(--muted); line-height: 1.4; padding: 8px 2px; border-bottom: 1px solid var(--edge); }
+
+  .toast {
+    position: fixed; left: 12px; right: 12px; z-index: 40;
+    bottom: calc(env(safe-area-inset-bottom) + 16px);
+    background: var(--toast); border: 1px solid var(--toast-edge); border-radius: 12px;
+    padding: 12px 14px; font-size: 14px; line-height: 1.4;
+    box-shadow: 0 6px 20px rgba(28, 40, 51, 0.12);
+  }
+  .toast[hidden] { display: none; }
+
+  /* Theme file viewer */
+  .sheet { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; background: rgba(28, 40, 51, 0.25); }
+  .sheet[hidden] { display: none; }
+  .sheet-card {
+    width: 100%; max-height: 86dvh; display: flex; flex-direction: column; gap: 10px;
+    background: var(--surface); border-radius: 18px 18px 0 0;
+    padding: 16px 16px calc(env(safe-area-inset-bottom) + 16px);
+  }
+  .sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .sheet pre {
+    flex: 1; overflow: auto; background: var(--page); border: 1px solid var(--edge); border-radius: 10px;
+    padding: 12px; font-size: 12px; line-height: 1.45; font-family: ui-monospace, "Roboto Mono", monospace;
+    user-select: text; -webkit-user-select: text;
+  }
+
+  /* Play test screen: the engine that every product runs on */
+  .play { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--page); user-select: none; -webkit-user-select: none; }
+  .play[hidden] { display: none; }
+  .play-top { display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 10px) 12px 6px; background: var(--surface); border-bottom: 1px solid var(--edge); }
+  .play-title { flex: 1; min-width: 0; }
+  .play-title div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat { display: flex; flex-direction: column; min-width: 44px; }
+  .label { font-size: 12px; color: var(--muted); }
+  .value { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  #playNext { display: block; width: 44px; height: 44px; }
+
+  .stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 8px; }
+  .board-wrap { position: relative; }
+  #playBoard { display: block; border-radius: 6px; box-shadow: 0 0 0 1px var(--edge); }
+  .overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; padding: 16px; text-align: center; border-radius: 6px; background: rgba(255, 255, 255, 0.93);
+  }
+  .overlay[hidden] { display: none; }
+  .overlay h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; }
+  .overlay p { font-size: 15px; color: var(--muted); line-height: 1.45; max-width: 24ch; }
+
+  .pad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; padding: 6px 12px calc(env(safe-area-inset-bottom) + 14px); }
+  .pad button {
+    height: 62px; border-radius: 14px; background: var(--surface); border: 1px solid var(--edge); color: var(--ink);
+    display: flex; align-items: center; justify-content: center; touch-action: none;
+  }
+  .pad button.pressed { background: var(--pressed); }
+  .pad svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="hud">
+    <div class="hud-row">
+      <div id="hudMoney" class="money">$0</div>
+      <div class="hud-facts"><span id="hudRep">Reputation 50</span><span id="hudDay">Day 1</span></div>
+    </div>
+    <div id="hudOffice" class="hud-office">Garage</div>
+    <div class="daybar"><i id="hudDayFill"></i></div>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="orders" class="on">Orders<span id="badge" class="badge" hidden>0</span></button>
+    <button data-tab="terminals">Terminals</button>
+    <button data-tab="team">Team</button>
+    <button data-tab="office">Office</button>
+    <button data-tab="games">Games</button>
+  </nav>
+
+  <main id="view" class="view"></main>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-card">
+    <div class="sheet-head">
+      <div id="sheetTitle" class="row-name"></div>
+      <button id="sheetClose" class="btn">Close</button>
+    </div>
+    <p class="quiet">This file is the whole product. The engine reads it and turns into this game.</p>
+    <pre id="sheetBody"></pre>
+  </div>
+</div>
+
+<div id="play" class="play" hidden>
+  <header class="play-top">
+    <div class="play-title">
+      <div id="playName" class="row-name"></div>
+      <div id="playFor" class="quiet"></div>
+    </div>
+    <div class="stat"><span class="label">Score</span><span id="playScore" class="value">0</span></div>
+    <div class="stat"><span class="label">Lines</span><span id="playLines" class="value">0</span></div>
+    <canvas id="playNext"></canvas>
+    <button id="playClose" class="btn">Done</button>
+  </header>
+
+  <main id="playStage" class="stage">
+    <div id="playWrap" class="board-wrap">
+      <canvas id="playBoard"></canvas>
+      <div id="playOverlay" class="overlay">
+        <h1 id="playOverlayTitle"></h1>
+        <p id="playOverlayText"></p>
+        <button id="playOverlayButton" class="btn primary">Start</button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="pad">
+    <button data-action="left" aria-label="Move left"><svg viewBox="0 0 24 24"><path d="M15 5 L8 12 L15 19"/></svg></button>
+    <button data-action="down" aria-label="Move down"><svg viewBox="0 0 24 24"><path d="M5 9 L12 16 L19 9"/></svg></button>
+    <button data-action="right" aria-label="Move right"><svg viewBox="0 0 24 24"><path d="M9 5 L16 12 L9 19"/></svg></button>
+    <button data-action="rotate" aria-label="Rotate"><svg viewBox="0 0 24 24"><path d="M19 12 A7 7 0 1 1 16.95 7.05"/><path d="M18 3 V8 H13"/></svg></button>
+    <button data-action="drop" aria-label="Drop"><svg viewBox="0 0 24 24"><path d="M6 4 L12 10 L18 4"/><path d="M6 11 L12 17 L18 11"/><path d="M5 21 H19"/></svg></button>
+  </footer>
+</div>
+
+<script>
+// ------------------------------------------------------------------
+// STACKLOOM v1
+// A game about running a studio that manufactures falling block games.
+// Every game the studio sells is the same engine plus a different theme
+// file. The data blocks at the top are the whole catalog of parts.
+// ------------------------------------------------------------------
+const VERSION = "stackloom-meta v1";
+
+// Rules shared by every game the studio makes. This is the engine.
+const ENGINE = {
+  rows: 20,
+  lineScores: [0, 100, 300, 500, 800],
+  linesPerLevel: 10,
+  dropMsPerLevel: 70,
+  fastestDropMs: 80,
+  softDropMs: 40,
+  lockDelayMs: 450,
+  maxLockResets: 15,
+  repeatDelayMs: 170,
+  repeatRateMs: 55
+};
+
+// Every shape a customer can order. A 1 is a filled cell.
+const SHAPES = {
+  I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+  O: [[1,1],[1,1]],
+  T: [[0,1,0],[1,1,1],[0,0,0]],
+  S: [[0,1,1],[1,1,0],[0,0,0]],
+  Z: [[1,1,0],[0,1,1],[0,0,0]],
+  J: [[1,0,0],[1,1,1],[0,0,0]],
+  L: [[0,0,1],[1,1,1],[0,0,0]],
+  Plus: [[0,1,0],[1,1,1],[0,1,0]],
+  U: [[1,0,1],[1,1,1],[0,0,0]],
+  Corner: [[1,0,0],[1,0,0],[1,1,1]],
+  Dot: [[1]],
+  Pair: [[1,1],[0,0]],
+  Bend: [[1,0],[1,1]],
+  Three: [[0,0,0],[1,1,1],[0,0,0]]
+};
+
+// Options on an order form. "work" is how much building each option adds.
+const PIECE_SETS = {
+  standard: { label: "standard pieces", work: 0, shapes: ["I", "O", "T", "S", "Z", "J", "L"] },
+  big: { label: "big pieces", work: 12, shapes: ["I", "O", "T", "S", "Z", "J", "L", "Plus", "U", "Corner"] },
+  tiny: { label: "tiny pieces", work: 8, shapes: ["I", "O", "T", "S", "Z", "J", "L", "Dot", "Pair", "Bend", "Three"] }
+};
+
+const BOARDS = {
+  standard: { label: "standard board", columns: 10, work: 0 },
+  narrow: { label: "narrow board", columns: 8, work: 5 },
+  wide: { label: "wide board", columns: 12, work: 5 }
+};
+
+const SPEEDS = {
+  normal: { label: "normal speed", startDropMs: 800, work: 0 },
+  chill: { label: "chill speed", startDropMs: 1050, work: 3 },
+  turbo: { label: "turbo speed", startDropMs: 480, work: 3 }
+};
+
+// The looks customers can order. Add a new block here and customers
+// start ordering it, with no engine changes at all.
+const THEMES = {
+  classic: { label: "Classic", work: 14, board: "#fbfdfc", grid: "#e1eae6", glow: false, motifs: [],
+    colors: ["#3a8fb7", "#e2a93b", "#8a5cb8", "#4fa36c", "#d0584f", "#3f5fbf", "#e07b39"] },
+  neon: { label: "Neon", work: 20, board: "#ffffff", grid: "#efe9f8", glow: true, motifs: [],
+    colors: ["#ff2fd6", "#00c8f0", "#29d614", "#ffc400", "#ff6a00", "#a526ff", "#ff2e63"] },
+  dog: { label: "Dog", work: 24, board: "#fffaf2", grid: "#f0e3d0", glow: false, motifs: ["🐶", "🦴", "🐾"],
+    colors: ["#c68a52", "#e2b07a", "#9a6843", "#e9c9a3", "#b8683c", "#d49a5e", "#8a5a38"] },
+  ninja: { label: "Ninja", work: 26, board: "#f8f8fa", grid: "#e5e5ec", glow: false, motifs: ["🥷", "⭐", "🎋"],
+    colors: ["#4a4f6e", "#c0392b", "#6a7ba2", "#8e44ad", "#2c7a7b", "#b8860b", "#7a5548"] },
+  ocean: { label: "Ocean", work: 22, board: "#f3fbfd", grid: "#d9eef3", glow: false, motifs: ["🐟", "🐚", "🐙"],
+    colors: ["#2a7fbf", "#39b3c6", "#f2a65a", "#5ac8a8", "#e76f6f", "#3d5a99", "#f5d06f"] },
+  space: { label: "Space", work: 28, board: "#f6f6ff", grid: "#e4e4f7", glow: true, motifs: ["🚀", "🪐", "⭐"],
+    colors: ["#5b4bdb", "#8f6ee8", "#2fb4e6", "#e85fb3", "#f0a830", "#4a6fe3", "#b05ce0"] },
+  candy: { label: "Candy", work: 22, board: "#fff7fb", grid: "#f6e1ec", glow: false, motifs: ["🍬", "🍭", "🧁"],
+    colors: ["#ff7eb6", "#ffb86b", "#8be0c9", "#b49cff", "#ff6b81", "#7cc6ff", "#ffd45e"] },
+  dino: { label: "Dinosaur", work: 24, board: "#f8fbf1", grid: "#e3ecd3", glow: false, motifs: ["🦖", "🦕", "🥚"],
+    colors: ["#6a9f3a", "#a3c45a", "#d98c3a", "#4f7d4a", "#c2b25a", "#8b6b3d", "#5fae8a"] },
+  garden: { label: "Garden", work: 22, board: "#fbfcf4", grid: "#e8edd6", glow: false, motifs: ["🌻", "🌷", "🍓"],
+    colors: ["#f2c230", "#e8657a", "#6bb34a", "#d9534f", "#9b72cf", "#f39c4a", "#4aa38c"] },
+  robot: { label: "Robot", work: 26, board: "#f6f8fa", grid: "#e1e6eb", glow: false, motifs: ["🤖", "⚙️", "🔋"],
+    colors: ["#7f8c9a", "#3a8fb7", "#e0a33a", "#5a6b7d", "#d0584f", "#4fa36c", "#9aa9b8"] }
+};
+
+const CUSTOMERS = [
+  "Tiny Moon Toys", "Cobalt Kite Cafe", "Brambleton Library", "Snack Wizard Truck",
+  "Glowbug Skate Rink", "Paw Parlor Grooming", "Quiet Owl Bookshop", "Rocket Sock Club",
+  "Maple Hollow Camp", "Pebble Street Arcade", "Sunny Fern Daycare", "Thunder Turnip Gym",
+  "Velvet Moose Pizza", "Lantern Bay Aquarium"
+];
+
+// ------------------------------------------------------------------
+// Company rules
+// ------------------------------------------------------------------
+const DAY_SECONDS = 45;
+const SAVE_KEY = "stackloom-company-1";
+
+const PRICES = { agent: 500, agentSalary: 60, dev: 1500, devSalary: 150, terminalUpkeep: 10 };
+
+const OFFICES = [
+  { name: "Garage", terminals: 2, agents: 1, devs: 0, rent: 0, cost: 0 },
+  { name: "Shared studio", terminals: 6, agents: 2, devs: 1, rent: 60, cost: 2000 },
+  { name: "Office floor", terminals: 12, agents: 4, devs: 2, rent: 180, cost: 7000 },
+  { name: "Campus", terminals: 24, agents: 8, devs: 3, rent: 450, cost: 20000 }
+];
+
+const UPGRADES = [
+  { key: "schema", name: "Theme schema", cost: 800,
+    text: "A written rule for what a valid theme file must contain. Terminals write fewer bugs." },
+  { key: "tests", name: "Test suite", cost: 1600,
+    text: "Automatic checks run the moment a build finishes and catch most bugs before anyone plays the game." },
+  { key: "engine", name: "Shared engine", cost: 3000,
+    text: "Every game runs on one engine and only the theme file changes, so nothing gets copied. Builds go faster." },
+  { key: "generator", name: "Theme generator", cost: 6000,
+    text: "Terminals write theme files from a short description instead of by hand. Builds go faster and customers pay more." }
+];
+
+const AGENT_NAMES = ["Pim", "Rook", "Juno", "Tock", "Nib", "Orla", "Fen", "Wren"];
+const DEV_NAMES = ["Marlo", "Kestrel", "Ines"];
+
+// ------------------------------------------------------------------
+// Small helpers
+// ------------------------------------------------------------------
+function pick(list) { return list[Math.floor(Math.random() * list.length)]; }
+function clamp(n, low, high) { return Math.max(low, Math.min(high, n)); }
+function plural(n, word) { return n === 1 ? word : word + "s"; }
+function cash(n) { return (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString("en-US"); }
+
+// ------------------------------------------------------------------
+// Saving and loading the company
+// ------------------------------------------------------------------
+function newCompany() {
+  return {
+    money: 600, reputation: 50, day: 1, dayTimer: 0, time: 0, officeLevel: 0,
+    terminals: [{ job: null }], agents: [], devs: [], upgrades: {},
+    orders: [], catalog: [], nextId: 1, offerTimer: 2,
+    shipped: 0, bugsShipped: 0, log: []
+  };
+}
+
+function loadCompany() {
+  try {
+    const saved = localStorage.getItem(SAVE_KEY);
+    if (saved) return Object.assign(newCompany(), JSON.parse(saved));
+  } catch (error) { /* broken or blocked save, start fresh */ }
+  return newCompany();
+}
+
+function saveCompany() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(company)); }
+  catch (error) { /* storage unavailable, skip */ }
+}
+
+let company = loadCompany();
+let dirty = true;
+let currentTab = "orders";
+let resetArmedUntil = 0;
+
+// ------------------------------------------------------------------
+// Who runs what. Agents take terminals three at a time, in order.
+// Devs take agents three at a time, in order.
+// ------------------------------------------------------------------
+function findOrder(id) { return company.orders.find(o => o.id === id); }
+function office() { return OFFICES[company.officeLevel]; }
+function isManaged(i) { return i >= 0 && i < company.agents.length * 3; }
+function isBoosted(i) { return i >= 0 && Math.floor(i / 3) < Math.min(company.agents.length, company.devs.length * 3); }
+function agentFor(i) { return company.agents[Math.floor(i / 3)]; }
+function devFor(i) { return company.devs[Math.floor(Math.floor(i / 3) / 3)]; }
+
+function terminalSpeed(i) {
+  let speed = 1;
+  if (company.upgrades.engine) speed *= 1.3;
+  if (company.upgrades.generator) speed *= 1.2;
+  if (isBoosted(i)) speed *= 1.25;
+  return speed;
+}
+
+function bugChance(i) {
+  let chance = 0.35;
+  if (company.upgrades.schema) chance -= 0.15;
+  if (isBoosted(i)) chance -= 0.1;
+  return Math.max(0.04, chance);
+}
+
+function offerInterval() { return Math.max(2.5, (22 - company.reputation * 0.12) / Math.sqrt(company.terminals.length)); }
+function maxOffers() { return Math.min(10, 3 + Math.floor(company.terminals.length / 2)); }
+function terminalPrice() { return 350 + 150 * (company.terminals.length - 1); }
+
+// ------------------------------------------------------------------
+// Manufacturing: an order becomes a theme file
+// ------------------------------------------------------------------
+function orderSpec(order) {
+  const parts = [THEMES[order.theme].label + " theme"];
+  if (order.pieceSet !== "standard") parts.push(PIECE_SETS[order.pieceSet].label);
+  if (order.board !== "standard") parts.push(BOARDS[order.board].label);
+  if (order.speed !== "normal") parts.push(SPEEDS[order.speed].label);
+  return parts.join(", ");
+}
+
+function buildThemeFile(order) {
+  const look = THEMES[order.theme];
+  return {
+    themeName: look.label,
+    customer: order.customer,
+    columns: BOARDS[order.board].columns,
+    rows: ENGINE.rows,
+    startDropMs: SPEEDS[order.speed].startDropMs,
+    board: look.board,
+    grid: look.grid,
+    glow: look.glow,
+    pieces: PIECE_SETS[order.pieceSet].shapes.map((shapeName, i) => ({
+      name: shapeName,
+      color: look.colors[i % look.colors.length],
+      motif: look.motifs.length ? look.motifs[i % look.motifs.length] : "",
+      cells: SHAPES[shapeName]
+    }))
+  };
+}
+
+// A bug in this studio is one piece that lost its color and picture.
+function withBug(file, bug) {
+  if (!bug) return file;
+  const copy = JSON.parse(JSON.stringify(file));
+  copy.pieces[bug.pieceIndex].color = "#c3c8ca";
+  copy.pieces[bug.pieceIndex].motif = "";
+  return copy;
+}
+
+function formatFile(file) {
+  let text = JSON.stringify(file, null, 2);
+  text = text.replace(/\[\s+([\d,\s]+?)\s+\]/g, (match, inner) => "[" + inner.replace(/\s+/g, "") + "]");
+  text = text.replace(/\[\s+((?:\[[\d,]+\],?\s*)+)\]/g, (match, inner) => "[" + inner.replace(/\s+/g, "") + "]");
+  return text;
+}
+
+const HOUSE_GAME = {
+  id: "house",
+  customer: "the studio",
+  spec: "Classic theme, the sample every new studio starts with",
+  day: 0,
+  bug: false,
+  file: buildThemeFile({ customer: "The studio", theme: "classic", pieceSet: "standard", board: "standard", speed: "normal" })
+};
+
+// ------------------------------------------------------------------
+// Orders moving through the studio:
+// offer, then queued, then building, then ready, then shipped
+// ------------------------------------------------------------------
+function makeOffer() {
+  const order = {
+    id: company.nextId++,
+    customer: pick(CUSTOMERS),
+    theme: pick(Object.keys(THEMES)),
+    pieceSet: pick(["standard", "standard", "big", "tiny"]),
+    board: pick(["standard", "standard", "narrow", "wide"]),
+    speed: pick(["normal", "normal", "chill", "turbo"]),
+    status: "offer", progress: 0, terminal: -1, builtBy: -1, bug: null, tested: false,
+    expiresAt: company.time + 40, deadline: 0, readyAt: 0
+  };
+  order.work = THEMES[order.theme].work + PIECE_SETS[order.pieceSet].work + BOARDS[order.board].work + SPEEDS[order.speed].work;
+  let pay = order.work * 10 + Math.floor(Math.random() * 13) * 5;
+  pay *= 1 + company.reputation / 200;
+  if (company.upgrades.generator) pay *= 1.25;
+  order.pay = Math.round(pay / 5) * 5;
+  return order;
+}
+
+function acceptOrder(order) {
+  order.status = "queued";
+  order.deadline = company.time + order.work * 2.5 + 45;
+  dirty = true;
+}
+
+function idleTerminal() {
+  const terminals = company.terminals;
+  for (let i = terminals.length - 1; i >= 0; i--) {
+    if (terminals[i].job == null && !isManaged(i)) return i;
+  }
+  return terminals.findIndex(t => t.job == null);
+}
+
+function startBuild(order, i) {
+  order.status = "building";
+  order.terminal = i;
+  order.progress = 0;
+  company.terminals[i].job = order.id;
+  dirty = true;
+}
+
+function finishBuild(order, i) {
+  company.terminals[i].job = null;
+  order.status = "ready";
+  order.progress = order.work;
+  order.builtBy = i;
+  order.terminal = -1;
+  order.readyAt = company.time;
+
+  if (Math.random() < bugChance(i)) {
+    order.bug = { pieceIndex: Math.floor(Math.random() * PIECE_SETS[order.pieceSet].shapes.length) };
+    if (company.upgrades.tests && Math.random() < 0.7) {
+      order.bug = null;
+      notify("The test suite caught a bug in the " + THEMES[order.theme].label + " game for " + order.customer + " and it was fixed.");
+    }
+  }
+  dirty = true;
+}
+
+function shipOrder(order) {
+  const c = company;
+  const label = THEMES[order.theme].label;
+  let pay = order.pay;
+  let repChange = 3;
+  let message = "Shipped the " + label + " game to " + order.customer + " for " + cash(order.pay) + ".";
+
+  if (order.bug) {
+    pay = Math.round(order.pay * 0.5);
+    repChange = -6;
+    c.bugsShipped++;
+    message = order.customer + " found a bug in their " + label + " game and kept half the payment. You got " + cash(pay) + ".";
+  } else if (c.time > order.deadline) {
+    pay = Math.round(order.pay * 0.6);
+    repChange = -3;
+    message = order.customer + " got their " + label + " game late and paid " + cash(pay) + " instead of " + cash(order.pay) + ".";
+  }
+
+  c.money += pay;
+  c.reputation = clamp(c.reputation + repChange, 0, 100);
+  c.shipped++;
+  c.catalog.unshift({
+    id: order.id, customer: order.customer, spec: orderSpec(order), day: c.day,
+    bug: !!order.bug, file: withBug(buildThemeFile(order), order.bug)
+  });
+  if (c.catalog.length > 30) c.catalog.length = 30;
+  order.status = "shipped";
+  notify(message, !isManaged(order.builtBy) || !!order.bug);
+}
+
+function cleanup() {
+  const before = company.orders.length;
+  company.orders = company.orders.filter(o => o.status !== "gone" && o.status !== "shipped");
+  if (company.orders.length !== before) dirty = true;
+}
+
+// ------------------------------------------------------------------
+// Staff behavior
+// ------------------------------------------------------------------
+function runAgents() {
+  const c = company;
+  const managedCount = Math.min(c.terminals.length, c.agents.length * 3);
+
+  for (let i = 0; i < managedCount; i++) {
+    if (c.terminals[i].job != null) continue;
+    let order = c.orders.find(o => o.status === "queued");
+    if (!order) {
+      order = c.orders.find(o => o.status === "offer");
+      if (order) {
+        acceptOrder(order);
+        notify("Agent " + agentFor(i) + " accepted an order from " + order.customer + ".");
+      }
+    }
+    if (order) startBuild(order, i);
+  }
+
+  c.orders.forEach(order => {
+    if (order.status !== "ready" || !isManaged(order.builtBy) || c.time - order.readyAt < 8) return;
+    if (order.bug && isBoosted(order.builtBy) && Math.random() < 0.5) {
+      order.bug = null;
+      notify("Dev " + devFor(order.builtBy) + " reviewed the " + THEMES[order.theme].label + " game and fixed a bug before it shipped.");
+    }
+    shipOrder(order);
+  });
+}
+
+function payBills() {
+  const c = company;
+  const bill = office().rent + c.agents.length * PRICES.agentSalary + c.devs.length * PRICES.devSalary + c.terminals.length * PRICES.terminalUpkeep;
+  c.money -= bill;
+  notify("Day " + (c.day - 1) + " ended. Rent, salaries, and upkeep cost " + cash(bill) + ".");
+}
+
+// ------------------------------------------------------------------
+// One step of company time
+// ------------------------------------------------------------------
+function simulate(dt) {
+  const c = company;
+  c.time += dt;
+
+  c.dayTimer += dt;
+  if (c.dayTimer >= DAY_SECONDS) {
+    c.dayTimer -= DAY_SECONDS;
+    c.day++;
+    payBills();
+  }
+
+  c.offerTimer -= dt;
+  if (c.offerTimer <= 0) {
+    if (c.orders.filter(o => o.status === "offer").length < maxOffers()) {
+      c.orders.push(makeOffer());
+      dirty = true;
+    }
+    c.offerTimer = offerInterval();
+  }
+
+  c.orders.forEach(order => {
+    if (order.status === "offer" && c.time >= order.expiresAt) {
+      order.status = "gone";
+      notify(order.customer + " stopped waiting and left.");
+    }
+    const inProgress = order.status === "queued" || order.status === "building" || order.status === "ready";
+    if (inProgress && c.time > order.deadline + 60) {
+      if (order.status === "building") c.terminals[order.terminal].job = null;
+      order.status = "gone";
+      c.reputation = clamp(c.reputation - 5, 0, 100);
+      notify(order.customer + " canceled their " + THEMES[order.theme].label + " order after waiting too long.", true);
+    }
+  });
+
+  c.terminals.forEach((terminal, i) => {
+    if (terminal.job == null) return;
+    const order = findOrder(terminal.job);
+    if (!order || order.status !== "building") { terminal.job = null; return; }
+    order.progress += dt * terminalSpeed(i);
+    if (order.progress >= order.work) finishBuild(order, i);
+  });
+
+  runAgents();
+  cleanup();
+}
+
+// ------------------------------------------------------------------
+// Messages
+// ------------------------------------------------------------------
+const toastEl = document.getElementById("toast");
+let toastTimer = null;
+
+function showToast(message) {
+  toastEl.textContent = message;
+  toastEl.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.hidden = true; }, 3600);
+}
+
+function notify(message, toast) {
+  company.log.unshift("Day " + company.day + ". " + message);
+  if (company.log.length > 15) company.log.length = 15;
+  if (toast) showToast(message);
+  dirty = true;
+}
+
+function spend(amount) {
+  if (company.money < amount) {
+    showToast("Not enough money yet. That costs " + cash(amount) + ".");
+    return false;
+  }
+  company.money -= amount;
+  return true;
+}
+
+// ------------------------------------------------------------------
+// Screens
+// ------------------------------------------------------------------
+const view = document.getElementById("view");
+
+function strip(colors) {
+  return `<div class="strip">${colors.map(color => `<i style="background:${color}"></i>`).join("")}</div>`;
+}
+
+function motifLine(themeKey) {
+  const motifs = THEMES[themeKey].motifs;
+  return motifs.length ? `<div class="motifs">${motifs.join(" ")}</div>` : "";
+}
+
+function renderOrders() {
+  const offers = company.orders.filter(o => o.status === "offer");
+  const active = company.orders.filter(o => o.status !== "offer");
+  let html = `<h2 class="section-title">Customers waiting</h2>`;
+
+  if (!offers.length) {
+    html += `<p class="empty">No one is waiting. New customers show up every few seconds, and more often when your reputation is high.</p>`;
+  }
+
+  offers.forEach(order => {
+    html += `
+      <article class="order">
+        ${strip(THEMES[order.theme].colors)}
+        <div class="order-body">
+          <div class="order-top">
+            <div>
+              <div class="customer">${order.customer}</div>
+              <div class="spec">${orderSpec(order)}</div>
+            </div>
+            <div class="pay">${cash(order.pay)}</div>
+          </div>
+          ${motifLine(order.theme)}
+          <div class="meta"><span>${order.work} work</span><span data-count="${order.id}" data-kind="offer"></span></div>
+          <div class="actions">
+            <button class="btn primary" data-do="accept" data-id="${order.id}">Accept</button>
+            <button class="btn" data-do="decline" data-id="${order.id}">Decline</button>
+          </div>
+        </div>
+      </article>`;
+  });
+
+  html += `<h2 class="section-title spaced">In production</h2>`;
+  if (!active.length) {
+    html += `<p class="empty">Accepted orders wait here until a terminal builds them.</p>`;
+  }
+
+  active.forEach(order => {
+    let status = "";
+    let buttons = "";
+    let bar = "";
+
+    if (order.status === "queued") {
+      status = "Waiting for a terminal";
+      buttons = `<button class="btn primary" data-do="assign" data-id="${order.id}">Assign to a terminal</button>`;
+    } else if (order.status === "building") {
+      status = "Building on Terminal " + (order.terminal + 1);
+      bar = `<div class="bar"><i data-progress="${order.id}"></i></div>`;
+    } else if (order.status === "ready") {
+      if (isManaged(order.builtBy)) status = "Built. Agent " + agentFor(order.builtBy) + " ships it in a few seconds.";
+      else status = order.tested ? "Built and play tested" : "Built, not play tested yet";
+      bar = `<div class="bar"><i data-progress="${order.id}"></i></div>`;
+      buttons = `
+        <button class="btn primary" data-do="ship" data-id="${order.id}">Ship</button>
+        <button class="btn" data-do="test" data-id="${order.id}">Play test</button>
+        <button class="btn" data-do="file" data-id="${order.id}">View file</button>`;
+    }
+
+    html += `
+      <article class="order">
+        ${strip(THEMES[order.theme].colors)}
+        <div class="order-body">
+          <div class="order-top">
+            <div>
+              <div class="customer">${order.customer}</div>
+              <div class="spec">${orderSpec(order)}</div>
+            </div>
+            <div class="pay">${cash(order.pay)}</div>
+          </div>
+          <div class="status">${status}</div>
+          ${bar}
+          <div class="meta"><span>${order.work} work</span><span data-count="${order.id}" data-kind="due"></span></div>
+          ${buttons ? `<div class="actions">${buttons}</div>` : ""}
+        </div>
+      </article>`;
+  });
+
+  return html;
+}
+
+function renderTerminals() {
+  const c = company;
+  const room = office();
+  let html = `<p class="note">Terminals build the games. Each one works on a single order at a time. A terminal with no agent only works when you assign it an order.</p>`;
+
+  c.terminals.forEach((terminal, i) => {
+    const order = terminal.job != null ? findOrder(terminal.job) : null;
+    let runner = isManaged(i) ? "Run by Agent " + agentFor(i) : "No agent, you assign its orders";
+    if (isBoosted(i)) runner += ", supervised by Dev " + devFor(i);
+    html += `
+      <div class="row">
+        <div class="row-top">
+          <div class="row-name">Terminal ${i + 1}</div>
+          <div class="row-state ${order ? "busy" : ""}">${order ? "Building" : "Idle"}</div>
+        </div>
+        <div class="row-sub">${order ? THEMES[order.theme].label + " game for " + order.customer : "Nothing to build"}</div>
+        ${order ? `<div class="bar"><i data-progress="${order.id}"></i></div>` : ""}
+        <div class="row-sub">${runner}</div>
+      </div>`;
+  });
+
+  const full = c.terminals.length >= room.terminals;
+  html += `<div class="buy">
+    ${full
+      ? `<button class="btn wide" disabled>No free desks. Move to a bigger office.</button>`
+      : `<button class="btn primary wide" data-do="buyTerminal">Buy a terminal for ${cash(terminalPrice())}</button>`}
+    <p class="quiet">${c.terminals.length} of ${room.terminals} desks used. Each terminal costs ${cash(PRICES.terminalUpkeep)} a day to run.</p>
+  </div>`;
+  return html;
+}
+
+function renderTeam() {
+  const c = company;
+  const room = office();
+
+  let html = `<h2 class="section-title">Agents</h2>
+    <p class="note">An agent runs up to three terminals by itself. It accepts orders, starts builds, and ships finished games. Agents never play test, so bugs go straight to customers.</p>`;
+
+  if (!c.agents.length) html += `<p class="empty">No agents yet. For now you run every terminal by hand.</p>`;
+
+  c.agents.forEach((name, a) => {
+    const first = a * 3;
+    const last = Math.min(first + 3, c.terminals.length);
+    let runs;
+    if (first >= c.terminals.length) runs = "No terminals to run yet. Buy more terminals.";
+    else if (last - first === 1) runs = "Runs Terminal " + (first + 1);
+    else runs = "Runs Terminals " + (first + 1) + " to " + last;
+    const boss = a < c.devs.length * 3 ? ". Supervised by Dev " + c.devs[Math.floor(a / 3)] : "";
+    html += `
+      <div class="row">
+        <div class="row-top"><div class="row-name">Agent ${name}</div><div class="row-state">${cash(PRICES.agentSalary)} a day</div></div>
+        <div class="row-sub">${runs}${boss}</div>
+      </div>`;
+  });
+
+  html += `<div class="buy">
+    ${c.agents.length >= room.agents
+      ? `<button class="btn wide" disabled>No free agent seats. Move to a bigger office.</button>`
+      : `<button class="btn primary wide" data-do="hireAgent">Hire an agent for ${cash(PRICES.agent)}</button>`}
+    <p class="quiet">${c.agents.length} of ${room.agents} agent ${plural(room.agents, "seat")} used.</p>
+  </div>`;
+
+  html += `<h2 class="section-title spaced">Devs</h2>
+    <p class="note">A dev supervises up to three agents. Terminals under those agents build faster and write fewer bugs, and the dev fixes about half the bugs an agent would have shipped.</p>`;
+
+  if (!c.devs.length) html += `<p class="empty">No devs yet.</p>`;
+
+  c.devs.forEach((name, d) => {
+    const team = c.agents.slice(d * 3, d * 3 + 3).map(agent => "Agent " + agent);
+    const text = team.length ? "Supervises " + team.join(", ") : "No agents to supervise yet. Hire more agents.";
+    html += `
+      <div class="row">
+        <div class="row-top"><div class="row-name">Dev ${name}</div><div class="row-state">${cash(PRICES.devSalary)} a day</div></div>
+        <div class="row-sub">${text}</div>
+      </div>`;
+  });
+
+  html += `<div class="buy">`;
+  if (room.devs === 0) html += `<button class="btn wide" disabled>The garage has no room for a dev</button>`;
+  else if (c.devs.length >= room.devs) html += `<button class="btn wide" disabled>No free dev seats. Move to a bigger office.</button>`;
+  else html += `<button class="btn primary wide" data-do="hireDev">Hire a dev for ${cash(PRICES.dev)}</button>`;
+  html += `<p class="quiet">${c.devs.length} of ${room.devs} dev ${plural(room.devs, "seat")} used.</p></div>`;
+
+  html += `<h2 class="section-title spaced">Recent activity</h2>
+    <ul class="log">${c.log.length ? c.log.map(line => `<li>${line}</li>`).join("") : "<li>Nothing has happened yet.</li>"}</ul>`;
+
+  return html;
+}
+
+function renderOffice() {
+  const c = company;
+  const room = office();
+  const next = OFFICES[c.officeLevel + 1];
+
+  let html = `<h2 class="section-title">${room.name}</h2>
+    <p class="note">Room for ${room.terminals} terminals, ${room.agents} ${plural(room.agents, "agent")}, and ${room.devs} ${plural(room.devs, "dev")}. Rent is ${cash(room.rent)} a day.</p>`;
+
+  if (next) {
+    html += `
+      <div class="row">
+        <div class="row-top"><div class="row-name">${next.name}</div><div class="row-state">${cash(next.rent)} a day</div></div>
+        <div class="row-sub">Room for ${next.terminals} terminals, ${next.agents} agents, and ${next.devs} ${plural(next.devs, "dev")}.</div>
+        <div class="actions"><button class="btn primary" data-do="moveOffice">Move in for ${cash(next.cost)}</button></div>
+      </div>`;
+  } else {
+    html += `<p class="empty">This is the biggest office there is.</p>`;
+  }
+
+  html += `<h2 class="section-title spaced">Studio upgrades</h2>
+    <p class="note">An upgrade changes how every terminal works at once, the same way fixing a shared engine fixes every game built on it.</p>`;
+
+  UPGRADES.forEach(upgrade => {
+    const owned = c.upgrades[upgrade.key];
+    html += `
+      <div class="row">
+        <div class="row-top"><div class="row-name">${upgrade.name}</div><div class="row-state ${owned ? "done" : ""}">${owned ? "Installed" : cash(upgrade.cost)}</div></div>
+        <div class="row-sub">${upgrade.text}</div>
+        ${owned ? "" : `<div class="actions"><button class="btn" data-do="upgrade" data-id="${upgrade.key}">Buy for ${cash(upgrade.cost)}</button></div>`}
+      </div>`;
+  });
+
+  html += `<h2 class="section-title spaced">Record</h2>
+    <p class="note">${c.shipped} ${plural(c.shipped, "game")} shipped, ${c.bugsShipped} of them with a bug. Reputation is ${Math.round(c.reputation)} out of 100.</p>
+    <button class="btn wide" data-do="reset">${Date.now() < resetArmedUntil ? "Tap again to erase this company" : "Start a new company"}</button>
+    <p class="quiet" style="margin-top:12px">${VERSION}</p>`;
+
+  return html;
+}
+
+function renderGames() {
+  let html = `<p class="note">Every game here runs on the same engine. The only difference between them is the theme file. Tap View file to see one.</p>`;
+  [HOUSE_GAME, ...company.catalog].forEach(game => {
+    html += `
+      <article class="order">
+        ${strip(game.file.pieces.slice(0, 7).map(piece => piece.color))}
+        <div class="order-body">
+          <div class="customer">${game.file.themeName} for ${game.customer}</div>
+          <div class="spec">${game.spec}${game.day ? ". Shipped on day " + game.day : ""}</div>
+          ${game.bug ? `<div class="status warn">Shipped with a bug</div>` : ""}
+          <div class="actions">
+            <button class="btn primary" data-do="play" data-id="${game.id}">Play</button>
+            <button class="btn" data-do="gamefile" data-id="${game.id}">View file</button>
+          </div>
+        </div>
+      </article>`;
+  });
+  return html;
+}
+
+const RENDERERS = { orders: renderOrders, terminals: renderTerminals, team: renderTeam, office: renderOffice, games: renderGames };
+
+function render() {
+  const scroll = view.scrollTop;
+  view.innerHTML = RENDERERS[currentTab]();
+  view.scrollTop = scroll;
+  document.querySelectorAll(".tabs button").forEach(tab => tab.classList.toggle("on", tab.dataset.tab === currentTab));
+  dirty = false;
+  refreshLive();
+}
+
+// Fast updates that do not rebuild the screen, so taps never get lost.
+const hudMoney = document.getElementById("hudMoney");
+const hudRep = document.getElementById("hudRep");
+const hudDay = document.getElementById("hudDay");
+const hudOffice = document.getElementById("hudOffice");
+const hudDayFill = document.getElementById("hudDayFill");
+const badge = document.getElementById("badge");
+
+function refreshLive() {
+  const c = company;
+  hudMoney.textContent = cash(c.money);
+  hudMoney.classList.toggle("negative", c.money < 0);
+  hudRep.textContent = "Reputation " + Math.round(c.reputation);
+  hudDay.textContent = "Day " + c.day;
+  hudOffice.textContent = office().name + ", " + c.terminals.length + " " + plural(c.terminals.length, "terminal");
+  hudDayFill.style.width = (c.dayTimer / DAY_SECONDS * 100) + "%";
+
+  const offerCount = c.orders.filter(o => o.status === "offer").length;
+  badge.hidden = offerCount === 0;
+  badge.textContent = offerCount;
+
+  view.querySelectorAll("[data-progress]").forEach(el => {
+    const order = findOrder(Number(el.dataset.progress));
+    if (order) el.style.width = Math.min(100, order.progress / order.work * 100) + "%";
+  });
+
+  view.querySelectorAll("[data-count]").forEach(el => {
+    const order = findOrder(Number(el.dataset.count));
+    if (!order) return;
+    if (el.dataset.kind === "offer") {
+      el.textContent = "Leaves in " + Math.max(0, Math.ceil(order.expiresAt - c.time)) + "s";
+    } else {
+      const left = Math.ceil(order.deadline - c.time);
+      el.textContent = left >= 0 ? "Due in " + left + "s" : "Late by " + (-left) + "s";
+      el.classList.toggle("late", left < 0);
+    }
+  });
+}
+
+// ------------------------------------------------------------------
+// Taps on the management screens
+// ------------------------------------------------------------------
+function gameById(id) {
+  return id === "house" ? HOUSE_GAME : company.catalog.find(game => game.id === id);
+}
+
+function doAction(action, id) {
+  const c = company;
+  const order = typeof id === "number" ? findOrder(id) : null;
+
+  switch (action) {
+    case "accept":
+      if (order && order.status === "offer") acceptOrder(order);
+      break;
+    case "decline":
+      if (order && order.status === "offer") { order.status = "gone"; cleanup(); }
+      break;
+    case "assign":
+      if (order && order.status === "queued") {
+        const i = idleTerminal();
+        if (i === -1) showToast("Every terminal is busy. Wait for one to finish or buy another.");
+        else startBuild(order, i);
+      }
+      break;
+    case "test":
+      if (order && order.status === "ready") openPlay(withBug(buildThemeFile(order), order.bug), { orderId: order.id });
+      break;
+    case "file":
+      if (order) openSheet(THEMES[order.theme].label + " theme file", withBug(buildThemeFile(order), order.bug));
+      break;
+    case "ship":
+      if (order && order.status === "ready") { shipOrder(order); cleanup(); }
+      break;
+    case "play": {
+      const game = gameById(id);
+      if (game) openPlay(game.file, {});
+      break;
+    }
+    case "gamefile": {
+      const game = gameById(id);
+      if (game) openSheet(game.file.themeName + " theme file", game.file);
+      break;
+    }
+    case "buyTerminal":
+      if (c.terminals.length >= office().terminals) showToast("No free desks. Move to a bigger office.");
+      else if (spend(terminalPrice())) { c.terminals.push({ job: null }); notify("Bought Terminal " + c.terminals.length + "."); }
+      break;
+    case "hireAgent":
+      if (c.agents.length >= office().agents) showToast("No free agent seats. Move to a bigger office.");
+      else if (spend(PRICES.agent)) {
+        const name = AGENT_NAMES[c.agents.length % AGENT_NAMES.length];
+        c.agents.push(name);
+        notify("Hired Agent " + name + ".", true);
+      }
+      break;
+    case "hireDev":
+      if (c.devs.length >= office().devs) showToast("No free dev seats. Move to a bigger office.");
+      else if (spend(PRICES.dev)) {
+        const name = DEV_NAMES[c.devs.length % DEV_NAMES.length];
+        c.devs.push(name);
+        notify("Hired Dev " + name + ".", true);
+      }
+      break;
+    case "moveOffice": {
+      const next = OFFICES[c.officeLevel + 1];
+      if (next && spend(next.cost)) { c.officeLevel++; notify("Moved into the " + next.name.toLowerCase() + ".", true); }
+      break;
+    }
+    case "upgrade": {
+      const upgrade = UPGRADES.find(u => u.key === id);
+      if (upgrade && !c.upgrades[upgrade.key] && spend(upgrade.cost)) {
+        c.upgrades[upgrade.key] = true;
+        notify("Installed the " + upgrade.name.toLowerCase() + ".", true);
+      }
+      break;
+    }
+    case "reset":
+      if (Date.now() < resetArmedUntil) {
+        company = newCompany();
+        resetArmedUntil = 0;
+        currentTab = "orders";
+        saveCompany();
+      } else {
+        resetArmedUntil = Date.now() + 4000;
+      }
+      break;
+  }
+  render();
+}
+
+view.addEventListener("click", event => {
+  const button = event.target.closest("[data-do]");
+  if (!button || button.disabled) return;
+  const raw = button.dataset.id;
+  const id = raw == null ? null : (/^\d+$/.test(raw) ? Number(raw) : raw);
+  doAction(button.dataset.do, id);
+});
+
+document.querySelectorAll(".tabs button").forEach(tab => {
+  tab.addEventListener("click", () => {
+    currentTab = tab.dataset.tab;
+    render();
+    view.scrollTop = 0;
+  });
+});
+
+// Hold off on rebuilding a screen while a finger is on it.
+let pointerIsDown = false;
+let lastPointerUp = 0;
+view.addEventListener("pointerdown", () => { pointerIsDown = true; });
+window.addEventListener("pointerup", () => { pointerIsDown = false; lastPointerUp = performance.now(); });
+window.addEventListener("pointercancel", () => { pointerIsDown = false; lastPointerUp = performance.now(); });
+
+// ------------------------------------------------------------------
+// Theme file viewer
+// ------------------------------------------------------------------
+const sheet = document.getElementById("sheet");
+document.getElementById("sheetClose").addEventListener("click", () => { sheet.hidden = true; });
+sheet.addEventListener("click", event => { if (event.target === sheet) sheet.hidden = true; });
+
+function openSheet(title, file) {
+  document.getElementById("sheetTitle").textContent = title;
+  document.getElementById("sheetBody").textContent = formatFile(file);
+  sheet.hidden = false;
+}
+
+// ------------------------------------------------------------------
+// THE ENGINE
+// This part never changes between products. It reads whatever theme
+// file it is handed and becomes that game.
+// ------------------------------------------------------------------
+const playRoot = document.getElementById("play");
+const playStage = document.getElementById("playStage");
+const playWrap = document.getElementById("playWrap");
+const boardCanvas = document.getElementById("playBoard");
+const boardContext = boardCanvas.getContext("2d");
+const nextCanvas = document.getElementById("playNext");
+const nextContext = nextCanvas.getContext("2d");
+const playOverlay = document.getElementById("playOverlay");
+const playOverlayTitle = document.getElementById("playOverlayTitle");
+const playOverlayText = document.getElementById("playOverlayText");
+const playOverlayButton = document.getElementById("playOverlayButton");
+const playScore = document.getElementById("playScore");
+const playLines = document.getElementById("playLines");
+
+let theme = null;
+let playContext = {};
+let playOpen = false;
+
+let grid = [];
+let bag = [];
+let piece = null;
+let nextIndex = 0;
+let score = 0;
+let lines = 0;
+let gameState = "ready"; // ready, playing, paused, over
+let dropTimer = 0;
+let lockTimer = 0;
+let lockResets = 0;
+let softDropping = false;
+let cellSize = 20;
+let lastFrame = 0;
+
+function emptyGrid() {
+  return Array.from({ length: theme.rows }, () => Array(theme.columns).fill(null));
+}
+
+function nextFromBag() {
+  if (bag.length === 0) {
+    bag = theme.pieces.map((unused, i) => i);
+    for (let i = bag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [bag[i], bag[j]] = [bag[j], bag[i]];
+    }
+  }
+  return bag.pop();
+}
+
+function firstFilledRow(cells) {
+  for (let r = 0; r < cells.length; r++) if (cells[r].some(Boolean)) return r;
+  return 0;
+}
+
+function makePiece(index) {
+  const definition = theme.pieces[index];
+  const cells = definition.cells.map(row => row.slice());
+  return {
+    cells,
+    color: definition.color,
+    motif: definition.motif,
+    x: Math.floor((theme.columns - cells[0].length) / 2),
+    y: -firstFilledRow(cells)
+  };
+}
+
+// Each column, read bottom to top, becomes a new row.
+function rotateClockwise(cells) {
+  return cells[0].map((unused, c) => cells.map(row => row[c]).reverse());
+}
+
+function collides(cells, x, y) {
+  for (let r = 0; r < cells.length; r++) {
+    for (let c = 0; c < cells[r].length; c++) {
+      if (!cells[r][c]) continue;
+      const gx = x + c;
+      const gy = y + r;
+      if (gx < 0 || gx >= theme.columns || gy >= theme.rows) return true;
+      if (gy >= 0 && grid[gy][gx]) return true;
+    }
+  }
+  return false;
+}
+
+function isGrounded() { return collides(piece.cells, piece.x, piece.y + 1); }
+function level() { return Math.floor(lines / ENGINE.linesPerLevel) + 1; }
+function dropInterval() { return Math.max(ENGINE.fastestDropMs, theme.startDropMs - (level() - 1) * ENGINE.dropMsPerLevel); }
+
+function afterSuccessfulMove() {
+  if (isGrounded() && lockResets < ENGINE.maxLockResets) { lockTimer = 0; lockResets++; }
+}
+
+function move(dx) {
+  if (!collides(piece.cells, piece.x + dx, piece.y)) { piece.x += dx; afterSuccessfulMove(); }
+}
+
+function rotate() {
+  const turned = rotateClockwise(piece.cells);
+  const nudges = [[0, 0], [-1, 0], [1, 0], [-2, 0], [2, 0], [0, -1]];
+  for (const [nx, ny] of nudges) {
+    if (!collides(turned, piece.x + nx, piece.y + ny)) {
+      piece.cells = turned;
+      piece.x += nx;
+      piece.y += ny;
+      afterSuccessfulMove();
+      return;
+    }
+  }
+}
+
+function stepDown() {
+  if (!isGrounded()) { piece.y++; score += 1; }
+}
+
+function hardDrop() {
+  let distance = 0;
+  while (!isGrounded()) { piece.y++; distance++; }
+  score += distance * 2;
+  lockPiece();
+}
+
+function lockPiece() {
+  let stuckAboveTop = false;
+  piece.cells.forEach((row, r) => row.forEach((filled, c) => {
+    if (!filled) return;
+    const gy = piece.y + r;
+    if (gy < 0) { stuckAboveTop = true; return; }
+    grid[gy][piece.x + c] = { color: piece.color, motif: piece.motif };
+  }));
+  if (stuckAboveTop) { endGame(); return; }
+
+  const cleared = clearLines();
+  if (cleared > 0) {
+    score += ENGINE.lineScores[Math.min(cleared, 4)] * level();
+    lines += cleared;
+  }
+  spawn();
+}
+
+function clearLines() {
+  let cleared = 0;
+  for (let r = theme.rows - 1; r >= 0; r--) {
+    if (grid[r].every(Boolean)) {
+      grid.splice(r, 1);
+      grid.unshift(Array(theme.columns).fill(null));
+      cleared++;
+      r++;
+    }
+  }
+  return cleared;
+}
+
+function spawn() {
+  piece = makePiece(nextIndex);
+  nextIndex = nextFromBag();
+  dropTimer = 0;
+  lockTimer = 0;
+  lockResets = 0;
+  if (collides(piece.cells, piece.x, piece.y)) endGame();
+}
+
+function startGame() {
+  grid = emptyGrid();
+  bag = [];
+  score = 0;
+  lines = 0;
+  softDropping = false;
+  nextIndex = nextFromBag();
+  spawn();
+  gameState = "playing";
+  playOverlay.hidden = true;
+}
+
+function endGame() {
+  gameState = "over";
+  softDropping = false;
+  showPlayOverlay("Game over", "Score " + score + ". Lines " + lines + ".", "Play again");
+}
+
+function pauseGame() {
+  if (gameState !== "playing") return;
+  gameState = "paused";
+  softDropping = false;
+  showPlayOverlay("Paused", "The board waits here until you come back.", "Resume");
+}
+
+function showPlayOverlay(title, text, buttonLabel) {
+  playOverlayTitle.textContent = title;
+  playOverlayText.textContent = text;
+  playOverlayButton.textContent = buttonLabel;
+  playOverlay.hidden = false;
+}
+
+playOverlayButton.addEventListener("click", () => {
+  if (gameState === "paused") { gameState = "playing"; playOverlay.hidden = true; }
+  else startGame();
+});
+
+function update(dt) {
+  const interval = softDropping ? Math.min(ENGINE.softDropMs, dropInterval()) : dropInterval();
+  dropTimer += dt;
+  while (dropTimer >= interval && !isGrounded()) {
+    dropTimer -= interval;
+    piece.y++;
+    if (softDropping) score += 1;
+  }
+  if (isGrounded()) {
+    dropTimer = 0;
+    lockTimer += dt;
+    if (lockTimer >= ENGINE.lockDelayMs) lockPiece();
+  } else {
+    lockTimer = 0;
+  }
+}
+
+function frame(time) {
+  if (!playOpen) return;
+  const dt = lastFrame ? Math.min(time - lastFrame, 100) : 0;
+  lastFrame = time;
+  if (gameState === "playing") update(dt);
+  draw();
+  playScore.textContent = score;
+  playLines.textContent = lines;
+  requestAnimationFrame(frame);
+}
+
+function drawCell(context, x, y, size, color, motif) {
+  if (theme.glow) { context.shadowColor = color; context.shadowBlur = Math.max(4, size * 0.45); }
+  context.fillStyle = color;
+  context.fillRect(x + 1, y + 1, size - 2, size - 2);
+  context.shadowBlur = 0;
+  context.shadowColor = "transparent";
+  context.fillStyle = "rgba(255, 255, 255, 0.3)";
+  context.fillRect(x + 1, y + 1, size - 2, Math.max(2, Math.round(size * 0.18)));
+  if (motif && size >= 12) {
+    context.font = Math.floor(size * 0.62) + "px system-ui, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(motif, x + size / 2, y + size / 2 + 1);
+  }
+}
+
+function drawGhostCell(context, x, y, size, color) {
+  context.globalAlpha = 0.45;
+  context.strokeStyle = color;
+  context.lineWidth = 2;
+  context.strokeRect(x + 2, y + 2, size - 4, size - 4);
+  context.globalAlpha = 1;
+}
+
+function draw() {
+  const context = boardContext;
+  const width = cellSize * theme.columns;
+  const height = cellSize * theme.rows;
+
+  context.fillStyle = theme.board;
+  context.fillRect(0, 0, width, height);
+
+  context.strokeStyle = theme.grid;
+  context.lineWidth = 1;
+  context.beginPath();
+  for (let c = 1; c < theme.columns; c++) {
+    context.moveTo(c * cellSize + 0.5, 0);
+    context.lineTo(c * cellSize + 0.5, height);
+  }
+  for (let r = 1; r < theme.rows; r++) {
+    context.moveTo(0, r * cellSize + 0.5);
+    context.lineTo(width, r * cellSize + 0.5);
+  }
+  context.stroke();
+
+  for (let r = 0; r < theme.rows; r++) {
+    for (let c = 0; c < theme.columns; c++) {
+      const cell = grid[r] && grid[r][c];
+      if (cell) drawCell(context, c * cellSize, r * cellSize, cellSize, cell.color, cell.motif);
+    }
+  }
+
+  if (piece && (gameState === "playing" || gameState === "paused")) {
+    let ghostY = piece.y;
+    while (!collides(piece.cells, piece.x, ghostY + 1)) ghostY++;
+    piece.cells.forEach((row, r) => row.forEach((filled, c) => {
+      if (filled && ghostY + r >= 0) drawGhostCell(context, (piece.x + c) * cellSize, (ghostY + r) * cellSize, cellSize, piece.color);
+    }));
+    piece.cells.forEach((row, r) => row.forEach((filled, c) => {
+      if (filled && piece.y + r >= 0) drawCell(context, (piece.x + c) * cellSize, (piece.y + r) * cellSize, cellSize, piece.color, piece.motif);
+    }));
+  }
+
+  drawNext();
+}
+
+function drawNext() {
+  const size = 44;
+  const context = nextContext;
+  context.clearRect(0, 0, size, size);
+  if (gameState === "ready") return;
+
+  const definition = theme.pieces[nextIndex];
+  let minR = Infinity, maxR = -1, minC = Infinity, maxC = -1;
+  definition.cells.forEach((row, r) => row.forEach((filled, c) => {
+    if (!filled) return;
+    minR = Math.min(minR, r); maxR = Math.max(maxR, r);
+    minC = Math.min(minC, c); maxC = Math.max(maxC, c);
+  }));
+
+  const cell = 10;
+  const offsetX = (size - (maxC - minC + 1) * cell) / 2;
+  const offsetY = (size - (maxR - minR + 1) * cell) / 2;
+  definition.cells.forEach((row, r) => row.forEach((filled, c) => {
+    if (filled) drawCell(context, offsetX + (c - minC) * cell, offsetY + (r - minR) * cell, cell, definition.color, "");
+  }));
+}
+
+function resizeBoard() {
+  if (!playOpen) return;
+  const availableWidth = playStage.clientWidth - 16;
+  const availableHeight = playStage.clientHeight - 16;
+  cellSize = Math.max(8, Math.floor(Math.min(availableWidth / theme.columns, availableHeight / theme.rows)));
+
+  const width = cellSize * theme.columns;
+  const height = cellSize * theme.rows;
+  const density = window.devicePixelRatio || 1;
+
+  playWrap.style.width = width + "px";
+  playWrap.style.height = height + "px";
+  boardCanvas.style.width = width + "px";
+  boardCanvas.style.height = height + "px";
+  boardCanvas.width = Math.round(width * density);
+  boardCanvas.height = Math.round(height * density);
+  boardContext.setTransform(density, 0, 0, density, 0, 0);
+
+  nextCanvas.width = Math.round(44 * density);
+  nextCanvas.height = Math.round(44 * density);
+  nextContext.setTransform(density, 0, 0, density, 0, 0);
+
+  draw();
+}
+
+function openPlay(file, context) {
+  theme = file;
+  playContext = context || {};
+  playOpen = true;
+  grid = emptyGrid();
+  bag = [];
+  piece = null;
+  score = 0;
+  lines = 0;
+  gameState = "ready";
+  document.getElementById("playName").textContent = file.themeName + " theme";
+  document.getElementById("playFor").textContent = "For " + file.customer;
+  showPlayOverlay(
+    file.themeName,
+    playContext.orderId != null
+      ? "Play this build the way the customer will. If a piece looks wrong, that is a bug."
+      : "This is a shipped game running on the studio engine.",
+    "Start"
+  );
+  playRoot.hidden = false;
+  requestAnimationFrame(() => {
+    resizeBoard();
+    lastFrame = 0;
+    requestAnimationFrame(frame);
+  });
+}
+
+function closePlay() {
+  playOpen = false;
+  playRoot.hidden = true;
+  gameState = "ready";
+  softDropping = false;
+
+  if (playContext.orderId != null) {
+    const order = findOrder(playContext.orderId);
+    if (order) {
+      order.tested = true;
+      if (order.bug) {
+        const pieceName = PIECE_SETS[order.pieceSet].shapes[order.bug.pieceIndex];
+        order.bug = null;
+        notify("Play test found a bug. The " + pieceName + " piece had lost its color and picture. Fixed before shipping.", true);
+      } else {
+        notify("Play test passed on the " + THEMES[order.theme].label + " game for " + order.customer + ".", true);
+      }
+    }
+  }
+  lastTick = performance.now();
+  render();
+}
+
+document.getElementById("playClose").addEventListener("click", closePlay);
+
+// Touch controls for the engine
+function runAction(action) {
+  if (gameState !== "playing") return;
+  if (action === "left") move(-1);
+  else if (action === "right") move(1);
+  else if (action === "rotate") rotate();
+  else if (action === "drop") hardDrop();
+}
+
+document.querySelectorAll("#play .pad button").forEach(button => {
+  const action = button.dataset.action;
+  let delayTimer = null;
+  let repeatTimer = null;
+
+  const release = () => {
+    clearTimeout(delayTimer);
+    clearInterval(repeatTimer);
+    if (action === "down") softDropping = false;
+    button.classList.remove("pressed");
+  };
+
+  button.addEventListener("pointerdown", event => {
+    event.preventDefault();
+    button.setPointerCapture(event.pointerId);
+    button.classList.add("pressed");
+    if (gameState !== "playing") return;
+    if (action === "down") { softDropping = true; stepDown(); return; }
+    runAction(action);
+    if (action === "left" || action === "right") {
+      delayTimer = setTimeout(() => {
+        repeatTimer = setInterval(() => runAction(action), ENGINE.repeatRateMs);
+      }, ENGINE.repeatDelayMs);
+    }
+  });
+
+  button.addEventListener("pointerup", release);
+  button.addEventListener("pointercancel", release);
+  button.addEventListener("lostpointercapture", release);
+});
+
+document.addEventListener("keydown", event => {
+  if (!playOpen) return;
+  if (event.key === "Escape") { closePlay(); return; }
+  if (event.key === "p" || event.key === "P") { pauseGame(); return; }
+  if (gameState !== "playing") return;
+  switch (event.key) {
+    case "ArrowLeft": move(-1); break;
+    case "ArrowRight": move(1); break;
+    case "ArrowUp": rotate(); break;
+    case "ArrowDown": if (!softDropping) { softDropping = true; stepDown(); } break;
+    case " ": if (!event.repeat) hardDrop(); break;
+    default: return;
+  }
+  event.preventDefault();
+});
+
+document.addEventListener("keyup", event => {
+  if (event.key === "ArrowDown") softDropping = false;
+});
+
+window.addEventListener("resize", resizeBoard);
+
+// ------------------------------------------------------------------
+// The studio clock. Company time stops while you play test.
+// ------------------------------------------------------------------
+let lastTick = performance.now();
+let saveClock = 0;
+
+setInterval(() => {
+  const now = performance.now();
+  const dt = Math.min(1, (now - lastTick) / 1000);
+  lastTick = now;
+
+  if (!playOpen && !document.hidden) {
+    simulate(dt);
+    saveClock += dt;
+  }
+  if (saveClock >= 5) { saveClock = 0; saveCompany(); }
+
+  if (!playOpen) {
+    if (dirty && !pointerIsDown && now - lastPointerUp > 350) render();
+    else refreshLive();
+  }
+}, 250);
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    saveCompany();
+    pauseGame();
+  } else {
+    lastTick = performance.now();
+  }
+});
+
+render();
+</script>
+</body>
+</html>

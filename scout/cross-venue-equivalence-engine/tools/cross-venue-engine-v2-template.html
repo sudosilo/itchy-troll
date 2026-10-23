@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<!-- Blue Phone -->
+<!-- ================================================================
+  [ qsr equivalents engine ]  v2  -  single-file web front end
+  Project directory: ~/cross-venue-equivalence-engine/ (Termux, Blue phone)
+  Deploy: copy this file to deploy/index.html, run vercel --prod there.
+  Live: equivalence-engine.vercel.app
+  Creator: Mohave Technology Group (seal block at bottom of file).
+
+  WHAT THIS FILE IS
+  One self-contained HTML file: CSS, JS and the full dataset embedded
+  as const EMBEDDED. Only network use is Google Fonts; the app works
+  without them (system font fallback).
+
+  DATA SHAPE (const EMBEDDED)
+  { venues: [ { id, name, short,
+                inventory: [ {name, category, subcategory, gf} ],
+                recipes:   [ {name, ingredients:[{name,category,subcategory,gf}]} ] } ],
+    secret_items: [ {name, venue, description,
+                     components:[{name,category,subcategory,gf}]} ] }
+  gf is a heuristic flag (wheat bread, flour tortillas, battered items
+  are false). It is not an allergen or cross-contact claim.
+
+  SCORING (mirrors score_engine.py weights)
+  exact name 1.0, same subcategory 0.85, same category 0.4, gap 0.
+  Item score = mean over its components. Mixable sauces (MIXABLES) add
+  virtual pantry items when a venue stocks every base. Builder can
+  exclude avoided ingredients and non GF items from substitution.
+
+  SCREENS (hash routes)
+  #                         home: hero, stats, search, kitchen grid, waitlist
+  #secret[/venue]           every secret item, filter by chain, scorable, GF
+  #venue/<name>[/tab]       kitchen page: menu, secret, pantry, makeable
+  #chain/<name>             chain with secret items but no pantry data yet
+  #item/secret/<id>         order ticket + who can make it
+  #item/official/<v>/<i>    same, for an official menu item
+  #build                    construct an item from ingredients, want/avoid
+  #kitchens[/a/b]           pantry overlap heat grid + head to head compare
+
+  HOUSE RULES
+  Light theme only, blue accent, harsh ink borders, mobile portrait first,
+  no hover animations. Navigation uses data-go attributes and event
+  delegation (no inline onclick strings), so names with apostrophes are safe.
+================================================================ -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#F7F9FC">
+<title>[ qsr equivalents engine ]</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F7F9FC; --card:#FFFFFF; --ink:#0F1B2A; --ink-2:#4B5B6E; --ink-3:#8593A3;
+    --hair:#DCE3EB; --blue:#1D5FD6; --blue-2:#EAF1FD; --blue-deep:#123F8C;
+    --exact:#16834A; --near:#7DB343; --partial:#D98A0B; --gap:#CDD5DE;
+    --avoid:#C2362B; --avoid-2:#FCECEA;
+    --display:'Bricolage Grotesque',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,'Roboto Mono',monospace;
+    --body:system-ui,Roboto,'Segoe UI',sans-serif;
+    --shadow:3px 3px 0 var(--ink);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html{font-size:14px}
+  body{background:var(--paper);color:var(--ink);font-family:var(--body);line-height:1.5;padding-bottom:84px;min-height:100vh}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  input,select{font:inherit;color:inherit}
+  .wrap{max-width:640px;margin:0 auto;padding:0 16px}
+  :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+
+  /* ---------- header + bottom bar ---------- */
+  header.top{position:sticky;top:0;z-index:20;background:rgba(247,249,252,.94);backdrop-filter:blur(8px);border-bottom:2px solid var(--ink)}
+  header.top .wrap{display:flex;align-items:center;gap:10px;height:54px}
+  .back{display:none;width:36px;height:36px;border:2px solid var(--ink);border-radius:10px;background:var(--card);font-size:1.1rem;line-height:1}
+  body.deep .back{display:grid;place-items:center}
+  .mark{font-family:var(--mono);font-weight:600;font-size:.95rem;letter-spacing:-.01em;white-space:nowrap}
+  .mark b{color:var(--blue);font-weight:600}
+  .mark .br{color:var(--ink-3)}
+  nav.bar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--card);border-top:2px solid var(--ink);padding-bottom:env(safe-area-inset-bottom)}
+  nav.bar .wrap{display:grid;grid-template-columns:repeat(4,1fr);height:62px}
+  nav.bar button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:.72rem;font-weight:600;color:var(--ink-3)}
+  nav.bar button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  nav.bar button[aria-current="page"]{color:var(--blue)}
+  nav.bar button[aria-current="page"] span{border-bottom:2px solid var(--blue)}
+
+  /* ---------- type ---------- */
+  h1,h2,h3{font-family:var(--display);letter-spacing:-.02em;line-height:1.1}
+  h1{font-size:1.9rem;font-weight:800}
+  h2{font-size:1.2rem;font-weight:800}
+  h3{font-size:1.02rem;font-weight:800}
+  .eyebrow{font-family:var(--mono);font-size:.7rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2)}
+  .sub{color:var(--ink-2);font-size:.92rem}
+  .num{font-family:var(--mono);font-weight:600}
+  section{margin-top:28px}
+  section > .eyebrow{display:block;margin-bottom:10px}
+
+  /* ---------- primitives ---------- */
+  .box{background:var(--card);border:2px solid var(--ink);border-radius:14px;box-shadow:var(--shadow)}
+  .press:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 16px;border:2px solid var(--ink);border-radius:12px;background:var(--card);box-shadow:var(--shadow);font-weight:700;font-size:.92rem}
+  .btn.primary{background:var(--blue);color:#fff}
+  .btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+  .chip{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:0 12px;border:1.5px solid var(--hair);border-radius:999px;background:var(--card);font-size:.84rem;white-space:nowrap}
+  .chip[aria-pressed="true"]{border-color:var(--blue);background:var(--blue-2);color:var(--blue-deep);font-weight:700}
+  .chip.avoid{border-color:var(--avoid);background:var(--avoid-2);color:var(--avoid);text-decoration:line-through;font-weight:700}
+  .chip .x{opacity:.55;margin-left:2px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px}
+  .scroller{display:flex;gap:6px;overflow-x:auto;padding:2px 2px 6px;margin:0 -16px;padding-left:16px;padding-right:16px;scrollbar-width:none}
+  .scroller::-webkit-scrollbar{display:none}
+  .sw{display:inline-block;width:9px;height:9px;border-radius:3px;flex:none}
+  .gf{font-family:var(--mono);font-size:.62rem;font-weight:600;color:var(--exact);border:1.5px solid var(--exact);border-radius:4px;padding:0 3px;line-height:1.35}
+  .vdot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none;border:1.5px solid var(--ink)}
+  .empty{color:var(--ink-2);padding:20px 0;font-size:.92rem}
+  .note{background:var(--blue-2);border-radius:12px;padding:12px 14px;font-size:.88rem;color:var(--blue-deep)}
+
+  /* ---------- search ---------- */
+  .field{display:flex;align-items:center;gap:8px;height:48px;padding:0 14px;background:var(--card);border:2px solid var(--ink);border-radius:12px}
+  .field svg{width:18px;height:18px;stroke:var(--ink-3);fill:none;stroke-width:2.2;stroke-linecap:round;flex:none}
+  .field input{flex:1;border:0;outline:0;background:transparent;font-size:1rem;min-width:0}
+
+  /* ---------- home ---------- */
+  .hero{padding-top:24px}
+  .hero h1{margin:8px 0 8px;font-size:2.15rem}
+  .hero h1 em{font-style:normal;color:var(--blue)}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);margin-top:18px;border:2px solid var(--ink);border-radius:14px;background:var(--card);overflow:hidden}
+  .stats div{padding:10px 8px;border-right:1.5px solid var(--hair)}
+  .stats div:last-child{border-right:0}
+  .stats .num{display:block;font-size:1.15rem;color:var(--blue-deep)}
+  .stats small{font-size:.68rem;color:var(--ink-2);line-height:1.2;display:block}
+  .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .vcard{position:relative;overflow:hidden;padding:24px 12px 12px;text-align:left;min-height:118px;display:flex;flex-direction:column}
+  .vcard::before{content:"";position:absolute;inset:0 0 auto 0;height:12px;background:var(--vbar,var(--blue));border-bottom:2px solid var(--ink)}
+  .vcard h3{margin-bottom:auto}
+  .vcard .meta{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:12px;font-size:.68rem;color:var(--ink-2);line-height:1.2}
+  .vcard .meta .num{display:block;color:var(--ink);font-size:.95rem}
+  .vcard .twin{margin-top:6px;font-size:.72rem;color:var(--ink-3)}
+  @media (min-width:560px){.grid{grid-template-columns:repeat(3,1fr)}}
+
+  /* ---------- lists ---------- */
+  .list{display:flex;flex-direction:column;gap:10px}
+  .row{display:flex;gap:12px;align-items:center;padding:12px 14px;text-align:left;width:100%}
+  .row .main{flex:1;min-width:0}
+  .row .t{font-weight:700;font-size:.97rem;line-height:1.25}
+  .row .s{font-size:.8rem;color:var(--ink-2);margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+  .row .s span{display:inline-flex;align-items:center;gap:5px}
+  .score{flex:none;text-align:right;font-family:var(--mono);font-weight:600;font-size:1rem;color:var(--blue-deep);line-height:1.1}
+  .score small{display:block;font-family:var(--body);font-weight:500;font-size:.66rem;color:var(--ink-3);max-width:92px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* ---------- venue header ---------- */
+  .vhead{margin-top:18px;overflow:hidden}
+  .vhead .stripe{height:22px;background:var(--vbar,var(--blue));border-bottom:2px solid var(--ink)}
+  .vhead .in{padding:14px 16px 16px}
+  .vhead h1{margin:4px 0 6px}
+  .tabs{display:flex;gap:6px;margin-top:18px}
+  .tabs .chip{flex:1;justify-content:center}
+  .pgroup{margin-top:16px}
+  .pgroup .eyebrow{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+
+  /* ---------- ticket (signature) ---------- */
+  .ticket{position:relative;margin-top:18px;background:var(--card);border:2px solid var(--ink);border-bottom:0;border-radius:14px 14px 0 0;font-family:var(--mono);
+    filter:drop-shadow(3px 3px 0 var(--ink))}
+  .ticket::after{content:"";position:absolute;left:-2px;right:-2px;bottom:-12px;height:12px;
+    background:linear-gradient(-45deg,transparent 8px,var(--ink) 8px,var(--ink) 10px,transparent 10px) 0 0/16px 12px,
+               linear-gradient(45deg,transparent 8px,var(--ink) 8px,var(--ink) 10px,transparent 10px) 0 0/16px 12px,
+               linear-gradient(-45deg,transparent 8px,var(--card) 8px) 0 0/16px 12px,
+               linear-gradient(45deg,transparent 8px,var(--card) 8px) 0 0/16px 12px}
+  .ticket .stripe{height:10px;background:var(--vbar,var(--blue));border-bottom:2px solid var(--ink);border-radius:12px 12px 0 0}
+  .ticket .in{padding:14px 16px 18px}
+  .ticket .hd{display:flex;justify-content:space-between;font-size:.72rem;color:var(--ink-2);text-transform:uppercase;letter-spacing:.08em}
+  .ticket h1{font-family:var(--display);font-size:1.75rem;margin:10px 0 4px}
+  .ticket .dash{border-top:2px dashed var(--hair);margin:12px 0}
+  .ticket .line{display:flex;align-items:center;gap:10px;font-size:.86rem;padding:4px 0}
+  .ticket .line .n{flex:1}
+  .ticket .line .c{font-size:.68rem;color:var(--ink-3);text-transform:uppercase}
+  .ticket .foot{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:.78rem;color:var(--ink-2)}
+  .ticket .desc{font-family:var(--body);font-size:.86rem;color:var(--ink-2);line-height:1.5}
+  .ticket .tbtns{display:flex;gap:8px;margin-top:14px}
+  .ticket .tbtns .btn{flex:1;min-height:40px;font-family:var(--body);font-size:.84rem}
+  .gfbadge{display:inline-flex;align-items:center;gap:6px;font-size:.74rem;font-weight:600;color:var(--exact);border:1.5px solid var(--exact);border-radius:999px;padding:2px 10px;background:#EAF6EF}
+
+  /* ---------- podium + ladder ---------- */
+  .podium{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:6px}
+  .pod{position:relative;overflow:hidden;padding:20px 8px 10px;text-align:center}
+  .pod::before{content:"";position:absolute;inset:0 0 auto 0;height:8px;background:var(--vbar,var(--blue));border-bottom:2px solid var(--ink)}
+  .pod .rk{font-family:var(--mono);font-size:.7rem;color:var(--ink-3)}
+  .pod .p{font-family:var(--mono);font-weight:600;font-size:1.35rem;color:var(--blue-deep);line-height:1.2}
+  .pod .v{font-weight:700;font-size:.8rem;line-height:1.2;margin-top:2px}
+  .pod.first .p{font-size:1.6rem}
+  .lrow{padding:12px 14px;text-align:left;width:100%}
+  .lrow .top{display:flex;align-items:center;gap:10px}
+  .lrow .rk{font-family:var(--mono);font-size:.75rem;color:var(--ink-3);width:22px}
+  .lrow .vn{flex:1;font-weight:700}
+  .lrow .pct{font-family:var(--mono);font-weight:600;color:var(--blue-deep)}
+  .segbar{display:flex;gap:2px;margin-top:9px;height:9px}
+  .seg{flex:1;border-radius:3px}
+  .exact{background:var(--exact)} .near{background:var(--near)} .partial{background:var(--partial)} .gapc{background:var(--gap)}
+  .bd{display:none;margin-top:12px;border-top:1.5px dashed var(--hair);padding-top:8px}
+  .lrow[aria-expanded="true"] .bd{display:block}
+  .brow{display:flex;gap:9px;align-items:center;padding:4px 0;font-size:.85rem}
+  .brow .dot{width:9px;height:9px;border-radius:50%;flex:none}
+  .brow .w{flex:1}
+  .brow .g{color:var(--ink-2);font-size:.8rem;text-align:right}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.74rem;color:var(--ink-2);margin:12px 0 2px}
+  .legend span{display:inline-flex;align-items:center;gap:5px}
+  .legend i{width:9px;height:9px;border-radius:50%;display:inline-block}
+
+  /* ---------- builder ---------- */
+  .tray{position:sticky;top:56px;z-index:10;margin:14px -16px 0;padding:10px 16px;background:rgba(247,249,252,.96);backdrop-filter:blur(8px);border-bottom:1.5px solid var(--hair)}
+  .tray .chips{min-height:34px}
+  .seg2{display:grid;grid-template-columns:1fr 1fr;border:2px solid var(--ink);border-radius:12px;overflow:hidden;margin-top:14px}
+  .seg2 button{min-height:42px;font-weight:700;font-size:.86rem;color:var(--ink-2)}
+  .seg2 button[aria-pressed="true"]{background:var(--ink);color:#fff}
+  select.pick{width:100%;height:46px;margin-top:10px;padding:0 12px;border:2px solid var(--ink);border-radius:12px;background:var(--card)}
+  .toggles{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .howto{font-size:.8rem;color:var(--ink-2);margin-top:8px}
+  details.cat{border-bottom:1.5px solid var(--hair);padding:10px 0}
+  details.cat summary{list-style:none;display:flex;align-items:center;gap:8px;font-weight:700;font-size:.9rem;cursor:pointer}
+  details.cat summary::-webkit-details-marker{display:none}
+  details.cat summary .cnt{margin-left:auto;font-family:var(--mono);font-size:.74rem;color:var(--ink-3)}
+  details.cat .chips{margin-top:10px}
+
+  /* ---------- kitchens heat grid ---------- */
+  .heat{margin-top:12px;overflow-x:auto;padding:4px 0}
+  .heat table{border-collapse:separate;border-spacing:2px;margin:0 auto}
+  .heat th{font-family:var(--mono);font-size:.56rem;font-weight:600;color:var(--ink-2);padding:0 2px}
+  .heat thead th{height:34px;vertical-align:bottom}
+  .heat thead th span{display:inline-block;writing-mode:vertical-rl;transform:rotate(180deg)}
+  .heat tbody th{text-align:right;padding-right:4px;white-space:nowrap}
+  .heat td{width:14px;height:14px;border-radius:3px;cursor:pointer;padding:0}
+  .heat td.self{background:repeating-linear-gradient(45deg,var(--hair) 0 2px,transparent 2px 5px)}
+  .heat td.on{outline:2px solid var(--ink);outline-offset:1px}
+  .scale{display:flex;align-items:center;gap:6px;justify-content:center;font-size:.72rem;color:var(--ink-2);margin-top:8px}
+  .scale i{width:22px;height:10px;border-radius:2px;display:inline-block}
+  .h2h{margin-top:16px;padding:14px 16px;scroll-margin-top:70px}
+  .h2h details{border-top:1.5px dashed var(--hair);padding-top:10px}
+  .h2h summary{list-style:none;cursor:pointer}
+  .h2h summary::-webkit-details-marker{display:none}
+  .tray .best{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:.84rem}
+  .tray .best .num{color:var(--blue-deep)}
+  .tray .best button{margin-left:auto;font-weight:700;color:var(--blue);font-size:.82rem}
+  .h2h .vs{display:flex;align-items:center;gap:10px}
+  .h2h .vs .p{margin-left:auto;font-family:var(--mono);font-size:1.5rem;font-weight:600;color:var(--blue-deep)}
+  .h2h .cols{display:grid;grid-template-columns:1fr;gap:12px;margin-top:12px}
+
+  /* ---------- seal spacing above bottom bar ---------- */
+  .mtg-seal{margin-top:40px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <button class="back" aria-label="Back" data-back>&#8592;</button>
+  <div class="mark" data-go=""><span class="br">[</span> qsr <b>equivalents</b> engine <span class="br">]</span></div>
+</div></header>
+
+<main class="wrap" id="app"></main>
+
+<nav class="bar" aria-label="Sections"><div class="wrap">
+  <button data-go="" data-tab="home"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Kitchens</span></button>
+  <button data-go="secret" data-tab="secret"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/><circle cx="19" cy="17" r="2"/></svg><span>Secret</span></button>
+  <button data-go="build" data-tab="build"><svg viewBox="0 0 24 24"><path d="M4 9c0-3 3.6-5 8-5s8 2 8 5H4z"/><path d="M3 13h18M4 17h16"/><path d="M5 17v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1"/></svg><span>Build</span></button>
+  <button data-go="kitchens" data-tab="kitchens"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="5" rx="1"/><rect x="10" y="3" width="5" height="5" rx="1"/><rect x="17" y="3" width="4" height="5" rx="1"/><rect x="3" y="10" width="5" height="5" rx="1"/><rect x="10" y="10" width="5" height="5" rx="1"/><rect x="3" y="17" width="5" height="4" rx="1"/></svg><span>Overlap</span></button>
+</div></nav>
+
+<script>
+/* =================================================================
+   DATA
+   ================================================================= */
+const EMBEDDED = __DATA__;
+let DATA = null;
+
+function norm(s){return (s||"").toLowerCase().replace(/\s+/g," ").trim().replace(/s$/,"");}
+function tagIng(x){
+  if(typeof x==="string") return {name:x,category:"",subcategory:"",gf:undefined};
+  return {name:x.name||"",category:x.category||"",subcategory:x.subcategory||"",gf:x.gf};
+}
+function loadData(){
+  DATA = {
+    venues: EMBEDDED.venues.map(v=>({
+      id:v.id, name:v.name, short:(v.short||v.name.slice(0,3)).toUpperCase(),
+      ingredients:(v.inventory||[]).map(tagIng),
+      recipes:(v.recipes||[]).map(r=>({name:r.name, ingredients:(r.ingredients||[]).map(tagIng)}))
+    })),
+    secret_items: EMBEDDED.secret_items.map((s,ix)=>({
+      id:ix, name:s.name, venue:s.venue, description:s.description||"",
+      components:(s.components||[]).map(tagIng)
+    }))
+  };
+  buildIndex();
+}
+
+/* =================================================================
+   INDEXES + SCORING
+   ================================================================= */
+let ING_LOOKUP = {};
+const MIXABLES = [
+  {name:"Fry Sauce",      category:"Sauce/Condiment", subcategory:"Thousand Island Style", bases:["Ketchup","Mayonnaise"]},
+  {name:"Cocktail Sauce", category:"Sauce/Condiment", subcategory:"Horseradish/Cocktail",  bases:["Ketchup","Horseradish"]},
+  {name:"Thousand Island",category:"Sauce/Condiment", subcategory:"Thousand Island Style", bases:["Ketchup","Mayonnaise","Relish"]},
+  {name:"Spicy Mayo",     category:"Sauce/Condiment", subcategory:"Pepper Mayo",           bases:["Mayonnaise","Sriracha Sauce"]},
+];
+function buildIndex(){
+  ING_LOOKUP = {};
+  DATA.venues.forEach(v=>{
+    const have = new Set(v.ingredients.map(i=>norm(i.name)));
+    MIXABLES.forEach(m=>{
+      if(!have.has(norm(m.name)) && m.bases.every(b=>have.has(norm(b))))
+        v.ingredients.push({name:m.name,category:m.category,subcategory:m.subcategory,gf:true,mix:m.bases.join(" + ")});
+    });
+    v.ingredients.forEach(i=>{ const k=norm(i.name); if(!ING_LOOKUP[k]) ING_LOOKUP[k]=i; });
+    v.realCount = v.ingredients.filter(i=>!i.mix).length;
+  });
+  DATA.venues.forEach(v=>v.recipes.forEach(r=>r.ingredients.forEach(fillTag)));
+  DATA.secret_items.forEach(s=>s.components.forEach(fillTag));
+  VENUE_BY = {}; DATA.venues.forEach(v=>VENUE_BY[norm(v.name)]=v);
+}
+function fillTag(i){ if(!i.category){ const t=ING_LOOKUP[norm(i.name)]; if(t){i.category=t.category;i.subcategory=t.subcategory;if(i.gf===undefined)i.gf=t.gf;} } }
+let VENUE_BY = {};
+function venueOf(name){ return VENUE_BY[norm(name)]; }
+function tagOf(name){ return ING_LOOKUP[norm(name)] || {name,category:"",subcategory:""}; }
+
+/* opts.exclude: Set of normalized names the substitute may not be.
+   opts.gfOnly: substitutes must be gf===true. */
+function matchIngredient(want, venue, opts){
+  const w = typeof want==="string" ? tagOf(want) : want;
+  const wn = norm(w.name);
+  const ex = opts && opts.exclude, gfOnly = opts && opts.gfOnly;
+  let best = {status:"gap",score:0,got:null};
+  for(const inv of venue.ingredients){
+    const iname = norm(inv.name);
+    if(ex && ex.has(iname)) continue;
+    if(gfOnly && inv.gf!==true) continue;
+    const label = inv.mix ? inv.name+" (mix "+inv.mix+")" : inv.name;
+    if(iname===wn) return {status:"exact",score:1,got:label};
+    if(w.subcategory && inv.subcategory===w.subcategory && best.score<0.85) best={status:"near",score:0.85,got:label};
+    else if(w.category && inv.category===w.category && best.score<0.4) best={status:"partial",score:0.4,got:label};
+  }
+  return best;
+}
+function scoreItem(components, venue, opts){
+  if(!components.length) return null;
+  const rows = components.map(c=>Object.assign({want:(typeof c==="string"?c:c.name)}, matchIngredient(c, venue, opts)));
+  const total = rows.reduce((a,r)=>a+r.score,0)/components.length;
+  return {pct:Math.round(total*1000)/10, rows};
+}
+function rankVenues(components, opts, skipVenue){
+  return DATA.venues.filter(v=>!skipVenue || norm(v.name)!==norm(skipVenue))
+    .map(v=>({v, s:scoreItem(components, v, opts)})).filter(x=>x.s)
+    .sort((a,b)=>b.s.pct-a.s.pct || a.v.name.localeCompare(b.v.name));
+}
+function allItems(){
+  const out=[];
+  DATA.venues.forEach(v=>v.recipes.forEach((r,i)=>{ if(r.ingredients.length) out.push({name:r.name,venue:v.name,components:r.ingredients,kind:"official",idx:i}); }));
+  DATA.secret_items.forEach(s=>{ if(s.components.length) out.push({name:s.name,venue:s.venue,components:s.components,kind:"secret",id:s.id}); });
+  return out;
+}
+function itemHref(it){ return it.kind==="secret" ? "item/secret/"+it.id : "item/official/"+encodeURIComponent(it.venue)+"/"+it.idx; }
+
+/* best outside kitchen per secret item, cached */
+const BEST = {};
+function bestElsewhere(s){
+  if(s.id in BEST) return BEST[s.id];
+  const r = s.components.length ? rankVenues(s.components, null, s.venue)[0] : null;
+  return BEST[s.id] = r;
+}
+
+/* pantry overlap: how well B's pantry covers A's, averaged both ways */
+const SIM = {};
+function coverage(a,b){
+  const real=a.ingredients.filter(i=>!i.mix);
+  if(!real.length) return 0;
+  return real.reduce((t,i)=>t+matchIngredient(i,b).score,0)/real.length;
+}
+function similarity(a,b){
+  const k = a.name<b.name ? a.name+"|"+b.name : b.name+"|"+a.name;
+  if(k in SIM) return SIM[k];
+  return SIM[k] = Math.round((coverage(a,b)+coverage(b,a))/2*1000)/10;
+}
+function twins(v,n){
+  return DATA.venues.filter(o=>o!==v).map(o=>({o,p:similarity(v,o)})).sort((a,b)=>b.p-a.p).slice(0,n);
+}
+
+/* =================================================================
+   COLOR LANGUAGE
+   Approximate brand palettes as abstract stripes. Never logos.
+   ================================================================= */
+const BRAND_COLOR = {
+  "McDonald's":"#DA291C","Burger King":"#4A2C17","Wendy's":"#E2231A","In-N-Out":"#D2232A",
+  "Five Guys":"#E4002B","Shake Shack":"#5A8F29","Jack in the Box":"#E4002B","Whataburger":"#FF6900",
+  "Chipotle":"#A81612","Taco Bell":"#702F8A","Del Taco":"#ED1C24","El Pollo Loco":"#EE3124",
+  "Burgerville":"#2E7D32","Wienerschnitzel":"#8B4513","Harvey's":"#DA291C","Farmer Boys":"#4C7A32",
+  "Starbucks":"#00704A","Dutch Bros":"#005DAA","The Human Bean":"#6F4E37",
+  "Arby's":"#D2232A","Carl's Jr.":"#FDB913","Chick-fil-A":"#DD0031","Dairy Queen":"#EE3E42",
+  "Jamba Juice":"#F15A29","KFC":"#A3080C","Panera Bread":"#4F6B2A","Sonic":"#0072CE","Subway":"#008C15","Jack In The Box":"#E4002B"
+};
+const BRAND_PATTERN = {
+  "McDonald's":"linear-gradient(90deg,#DA291C 0 18%,#FFC72C 18% 32%,#DA291C 32% 68%,#FFC72C 68% 82%,#DA291C 82% 100%)",
+  "Burger King":"linear-gradient(90deg,#4A2C17 0 12%,#F4C430 12% 20%,#3E8E41 20% 28%,#D2232A 28% 38%,#4A2C17 38% 50%,#F4C430 50% 58%,#D2232A 58% 68%,#4A2C17 68% 80%,#F4C430 80% 88%,#4A2C17 88% 100%)",
+  "Wendy's":"linear-gradient(90deg,#E2231A 0 34%,#fff 34% 66%,#00A0DF 66% 100%)",
+  "In-N-Out":"linear-gradient(90deg,#D2232A 0 50%,#FDB515 50% 100%)",
+  "Five Guys":"repeating-linear-gradient(45deg,#E4002B 0 9px,#fff 9px 18px)",
+  "Shake Shack":"linear-gradient(90deg,#355E1A 0 50%,#6DBE45 50% 100%)",
+  "Jack in the Box":"linear-gradient(90deg,#E4002B 0 34%,#fff 34% 66%,#FFC72C 66% 100%)",
+  "Whataburger":"repeating-linear-gradient(45deg,#FF6900 0 11px,#000 11px 13px,#fff 13px 24px)",
+  "Chipotle":"linear-gradient(90deg,#A81612 0 40%,#5C7A29 40% 55%,#A81612 55% 100%)",
+  "Taco Bell":"linear-gradient(90deg,#702F8A 0 34%,#E91E8C 34% 67%,#00B2A9 67% 100%)",
+  "Del Taco":"linear-gradient(90deg,#ED1C24 0 50%,#005DAA 50% 100%)",
+  "El Pollo Loco":"linear-gradient(90deg,#EE3124 0 25%,#FDB913 25% 50%,#EE3124 50% 75%,#FDB913 75% 100%)",
+  "Burgerville":"linear-gradient(90deg,#2E7D32 0 62%,#C9A66B 62% 100%)",
+  "Wienerschnitzel":"linear-gradient(90deg,#D9A441 0 14%,#FFCB05 14% 30%,#8B4513 30% 70%,#FFCB05 70% 86%,#D9A441 86% 100%)",
+  "Harvey's":"linear-gradient(90deg,#DA291C 0 50%,#8B1410 50% 100%)",
+  "Farmer Boys":"linear-gradient(90deg,#4C7A32 0 50%,#F7941D 50% 100%)",
+  "Starbucks":"linear-gradient(90deg,#00704A 0 50%,#0D4C33 50% 100%)",
+  "Dutch Bros":"linear-gradient(90deg,#005DAA 0 50%,#F7941D 50% 100%)",
+  "The Human Bean":"linear-gradient(90deg,#6F4E37 0 50%,#D9B382 50% 100%)"
+};
+function brandStyle(name){
+  const c=BRAND_COLOR[name], p=BRAND_PATTERN[name]||c;
+  return p ? ` style="--vbar:${p}"` : "";
+}
+function brandDot(name){ return `<span class="vdot" style="background:${BRAND_COLOR[name]||"#1D5FD6"}"></span>`; }
+
+const CATEGORY_COLOR = {
+  "Bun/Bread":"#C68642","Tortilla/Shell":"#D8B26E","Cheese":"#F4C430","Sauce/Condiment":"#E4572E",
+  "Produce":"#3E8E41","Fruit":"#E64980","Side":"#D9A441","Dairy/Frozen":"#7FC4E0","Fountain":"#1E6FD9",
+  "Coffee/Tea":"#6F4E37","Syrup/Flavoring":"#8E44AD","Juice":"#F39C12"
+};
+function catColor(c){ return (c&&c.indexOf("Protein")===0) ? "#A0522D" : (CATEGORY_COLOR[c]||"#B7C0C9"); }
+function catLabel(c){ return (c||"Other").replace("Protein/","Protein: "); }
+function sw(c){ return `<span class="sw" style="background:${catColor(c)}"></span>`; }
+const GF_SHOW = c => c==="Bun/Bread"||c==="Tortilla/Shell"||c==="Side"||(c||"").indexOf("Protein")===0;
+function gfTag(i){ return (i && i.gf===true && GF_SHOW(i.category)) ? ` <span class="gf">GF</span>` : ""; }
+function isGF(comps){ return comps.length>=3 && comps.every(c=>c.gf===true); }
+
+/* =================================================================
+   HELPERS
+   ================================================================= */
+const app = document.getElementById("app");
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function hash(...parts){ return parts.map(p=>encodeURIComponent(p)).join("/"); }
+function go(h){ location.hash = h; }
+function pctTxt(p){ return (p%1===0? p.toFixed(0) : p.toFixed(1))+"%"; }
+function statusClass(s){ return s==="gap" ? "gapc" : s; }
+function segbar(rows){ return `<div class="segbar">${rows.map(r=>`<div class="seg ${statusClass(r.status)}"></div>`).join("")}</div>`; }
+function breakdown(rows){
+  return `<div class="bd">${rows.map(r=>`<div class="brow"><span class="dot ${statusClass(r.status)}"></span><span class="w">${esc(r.want)}</span>
+    <span class="g">${r.status==="exact"?"exact":r.got?"&rarr; "+esc(r.got):"no substitute"}</span></div>`).join("")}</div>`;
+}
+const LEGEND = `<div class="legend"><span><i class="exact"></i>exact</span><span><i class="near"></i>close swap</span><span><i class="partial"></i>loose swap</span><span><i class="gapc"></i>missing</span></div>`;
+function ladderRow(x, rank){
+  return `<button class="lrow box" aria-expanded="false" data-toggle>
+    <div class="top"><span class="rk">${rank}</span>${brandDot(x.v.name)}<span class="vn">${esc(x.v.name)}</span><span class="pct">${pctTxt(x.s.pct)}</span></div>
+    ${segbar(x.s.rows)}${breakdown(x.s.rows)}</button>`;
+}
+function podium(ranked){
+  const top = ranked.slice(0,3);
+  if(!top.length) return "";
+  return `<div class="podium">${top.map((x,i)=>`<button class="pod box press${i===0?" first":""}"${brandStyle(x.v.name)} data-go="${hash("venue",x.v.name)}">
+    <div class="rk">#${i+1}</div><div class="p">${pctTxt(x.s.pct)}</div><div class="v">${esc(x.v.name)}</div></button>`).join("")}</div>`;
+}
+function setDeep(deep, tab){
+  document.body.classList.toggle("deep", !!deep);
+  document.querySelectorAll("nav.bar button").forEach(b=>b.setAttribute("aria-current", b.dataset.tab===tab?"page":"false"));
+}
+
+/* =================================================================
+   HOME
+   ================================================================= */
+function orphanChains(){
+  const m={};
+  DATA.secret_items.forEach(s=>{ if(!venueOf(s.venue)) m[s.venue]=(m[s.venue]||0)+1; });
+  return Object.entries(m).map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count);
+}
+function viewHome(){
+  setDeep(false,"home");
+  const nItems = DATA.secret_items.length + DATA.venues.reduce((t,v)=>t+v.recipes.length,0);
+  const vocab = new Set(); DATA.venues.forEach(v=>v.ingredients.forEach(i=>vocab.add(norm(i.name))));
+  const scorable = allItems().length;
+  const cards = DATA.venues.map(v=>{
+    const sec = DATA.secret_items.filter(s=>norm(s.venue)===norm(v.name)).length;
+    const t = twins(v,1)[0];
+    return `<button class="vcard box press"${brandStyle(v.name)} data-go="${hash("venue",v.name)}">
+      <h3>${esc(v.name)}</h3>
+      <div class="meta"><span><span class="num">${v.recipes.length}</span>menu</span><span><span class="num">${sec}</span>secret</span><span><span class="num">${v.realCount}</span>pantry</span></div>
+      ${t?`<div class="twin">closest: ${esc(t.o.name)}</div>`:""}
+    </button>`;
+  }).join("");
+  const orphans = orphanChains();
+  app.innerHTML = `
+    <div class="hero">
+      <span class="eyebrow">secret menus, decoded</span>
+      <h1>Every menu is the same pantry, <em>remixed.</em></h1>
+      <p class="sub">Pick any item, official or secret, and see which kitchens could make it from their own stock, swap by swap.</p>
+      <div class="stats">
+        <div><span class="num">${DATA.venues.length}</span><small>kitchens</small></div>
+        <div><span class="num">${nItems}</span><small>menu items</small></div>
+        <div><span class="num">${vocab.size}</span><small>ingredients</small></div>
+        <div><span class="num">${(scorable*DATA.venues.length).toLocaleString()}</span><small>matchups</small></div>
+      </div>
+      <div style="margin-top:14px" class="field"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+        <input id="q" type="search" placeholder="Search items, ingredients, chains" autocomplete="off" aria-label="Search"></div>
+      <div class="actions">
+        <button class="btn primary" data-surprise>Surprise me</button>
+        <button class="btn" data-go="build">Build your own</button>
+      </div>
+    </div>
+    <div id="sr"></div>
+    <div id="home-body">
+      <section><span class="eyebrow">Kitchens with pantry data</span><div class="grid">${cards}</div></section>
+      ${orphans.length?`<section><span class="eyebrow">Secret menus waiting on pantry data</span>
+        <div class="chips">${orphans.map(o=>`<button class="chip" data-go="${hash("chain",o.name)}">${brandDot(o.name)}${esc(o.name)} <span class="num" style="color:var(--ink-3)">${o.count}</span></button>`).join("")}</div></section>`:""}
+    </div>`;
+  const q = document.getElementById("q");
+  q.addEventListener("input", ()=>doSearch(q.value));
+}
+
+/* =================================================================
+   SEARCH
+   ================================================================= */
+function doSearch(raw){
+  const sr=document.getElementById("sr"), body=document.getElementById("home-body");
+  const q=norm(raw);
+  if(q.length<2){ sr.innerHTML=""; body.style.display=""; return; }
+  body.style.display="none";
+  const rank=(name,extra)=>{ const n=norm(name); return n===q?0:n.startsWith(q)?1:n.includes(q)?2:(extra&&norm(extra).includes(q))?3:-1; };
+  const venues = DATA.venues.filter(v=>rank(v.name)>=0);
+  const secret = DATA.secret_items.map(s=>({s,r:rank(s.name,s.description)})).filter(x=>x.r>=0).sort((a,b)=>a.r-b.r).slice(0,30);
+  const official=[]; DATA.venues.forEach(v=>v.recipes.forEach((rec,i)=>{ const r=rank(rec.name); if(r>=0) official.push({v,rec,i,r}); }));
+  official.sort((a,b)=>a.r-b.r);
+  const ing={}; DATA.venues.forEach(v=>v.ingredients.forEach(i=>{ if(rank(i.name)>=0)(ing[i.name]=ing[i.name]||{i,vs:[]}).vs.push(v.name); }));
+  const ings=Object.values(ing).slice(0,20);
+  const group=(label,html)=>`<section><span class="eyebrow">${label}</span><div class="list">${html}</div></section>`;
+  let out="";
+  if(venues.length) out+=group("Kitchens",venues.map(v=>`<button class="row box press" data-go="${hash("venue",v.name)}">${brandDot(v.name)}<div class="main"><div class="t">${esc(v.name)}</div></div></button>`).join(""));
+  if(secret.length) out+=group("Secret items",secret.map(x=>`<button class="row box press" data-go="item/secret/${x.s.id}">${brandDot(x.s.venue)}<div class="main"><div class="t">${esc(x.s.name)}</div><div class="s">${esc(x.s.venue)}</div></div></button>`).join(""));
+  if(official.length) out+=group("Menu items",official.slice(0,30).map(x=>`<button class="row box press" data-go="${hash("item","official",x.v.name,x.i)}">${brandDot(x.v.name)}<div class="main"><div class="t">${esc(x.rec.name)}</div><div class="s">${esc(x.v.name)}</div></div></button>`).join(""));
+  if(ings.length) out+=group("Ingredients",ings.map(x=>`<button class="row box press" data-go="${hash("venue",x.vs[0],"pantry")}">${sw(x.i.category)}<div class="main"><div class="t">${esc(x.i.name)}${gfTag(x.i)}</div><div class="s">${x.vs.length} kitchen${x.vs.length>1?"s":""}: ${esc(x.vs.join(", "))}</div></div></button>`).join(""));
+  sr.innerHTML = out || `<div class="empty">Nothing matches "${esc(raw)}". Try an ingredient like pickles or a chain like Sonic.</div>`;
+}
+
+/* =================================================================
+   SECRET MENU (all chains)
+   ================================================================= */
+let SF = {chain:"", scorable:false, gf:false};
+function viewSecret(chain){
+  setDeep(false,"secret");
+  if(chain!==undefined) SF.chain = chain;
+  const chains = {}; DATA.secret_items.forEach(s=>chains[s.venue]=(chains[s.venue]||0)+1);
+  const names = Object.keys(chains).sort((a,b)=>chains[b]-chains[a]);
+  app.innerHTML = `
+    <div class="hero" style="padding-top:20px"><span class="eyebrow">the whole secret menu</span><h1>Off menu, on file.</h1>
+      <p class="sub">Every documented secret item, fullest recipes first. The score is the best match at a different kitchen.</p></div>
+    <div class="scroller" style="margin-top:14px">
+      <button class="chip" aria-pressed="${!SF.chain}" data-chain="">All chains</button>
+      ${names.map(n=>`<button class="chip" aria-pressed="${SF.chain===n}" data-chain="${esc(n)}">${brandDot(n)}${esc(n)} <span class="num" style="color:var(--ink-3)">${chains[n]}</span></button>`).join("")}
+    </div>
+    <div class="toggles">
+      <button class="chip" aria-pressed="${SF.scorable}" data-sf="scorable">Has a recipe</button>
+      <button class="chip" aria-pressed="${SF.gf}" data-sf="gf"><span class="gf">GF</span> friendly</button>
+    </div>
+    <div id="slist" class="list" style="margin-top:14px"></div>`;
+  renderSecretList();
+}
+function secretRow(s){
+  const b = bestElsewhere(s);
+  return `<button class="row box press" data-go="item/secret/${s.id}">${brandDot(s.venue)}
+    <div class="main"><div class="t">${esc(s.name)}</div>
+    <div class="s">${s.components.length ? s.components.slice(0,5).map(c=>`<span>${sw(c.category)}${esc(c.name)}</span>`).join("")+(s.components.length>5?`<span>+${s.components.length-5}</span>`:"") : "recipe not on file yet"}</div></div>
+    ${b?(s.components.length<3?`<div class="score" style="color:var(--ink-3)">${pctTxt(b.s.pct)}<small>thin recipe</small></div>`:`<div class="score">${pctTxt(b.s.pct)}<small>${esc(b.v.name)}</small></div>`):""}</button>`;
+}
+function renderSecretList(){
+  let list = DATA.secret_items;
+  if(SF.chain) list = list.filter(s=>s.venue===SF.chain);
+  if(SF.scorable) list = list.filter(s=>s.components.length);
+  if(SF.gf) list = list.filter(s=>isGF(s.components));
+  list = list.slice().sort((x,y)=>Math.min(y.components.length,4)-Math.min(x.components.length,4) || x.name.localeCompare(y.name));
+  const el = document.getElementById("slist");
+  const show = list.slice(0,60);
+  el.innerHTML = show.length ? show.map(secretRow).join("") + (list.length>60?`<button class="btn" data-more style="margin-top:4px">Show all ${list.length}</button>`:"") : `<div class="empty">No secret items match these filters.</div>`;
+  el._list = list;
+}
+
+/* =================================================================
+   VENUE
+   ================================================================= */
+function viewVenue(name, tab){
+  setDeep(true,"home");
+  const v = venueOf(name);
+  if(!v){ return viewChain(name); }
+  tab = tab || "menu";
+  const secrets = DATA.secret_items.filter(s=>norm(s.venue)===norm(v.name));
+  const tw = twins(v,3);
+  const tabs = [["menu","Menu"],["secret","Secret"],["pantry","Pantry"],["makeable","Could make"]]
+    .map(([k,l])=>`<button class="chip" aria-pressed="${tab===k}" data-go="${hash("venue",v.name,k)}">${l}</button>`).join("");
+  let body = "";
+  if(tab==="menu"){
+    body = v.recipes.length ? v.recipes.map((r,i)=>`<button class="row box press" data-go="${hash("item","official",v.name,i)}">
+      <div class="main"><div class="t">${esc(r.name)}${isGF(r.ingredients)?' <span class="gf">GF</span>':""}</div>
+      <div class="s">${r.ingredients.map(c=>`<span>${sw(c.category)}${esc(c.name)}</span>`).join("")}</div></div></button>`).join("") : `<div class="empty">No menu items on file.</div>`;
+  } else if(tab==="secret"){
+    body = secrets.length ? secrets.map(secretRow).join("") : `<div class="empty">No secret items documented for ${esc(v.name)} yet.</div>`;
+  } else if(tab==="pantry"){
+    const g={}; v.ingredients.forEach(i=>(g[i.category||"Other"]=g[i.category||"Other"]||[]).push(i));
+    body = Object.keys(g).sort().map(c=>`<div class="pgroup"><div class="eyebrow">${sw(c)}${esc(catLabel(c))} <span style="color:var(--ink-3)">${g[c].length}</span></div>
+      <div class="chips">${g[c].map(i=>`<span class="chip">${esc(i.name)}${i.mix?' <span title="mixable from '+esc(i.mix)+'">&#9878;</span>':""}${gfTag(i)}</span>`).join("")}</div></div>`).join("")
+      + `<p class="howto" style="margin-top:14px">&#9878; marks a sauce this kitchen can mix from what it already stocks.</p>`;
+  } else if(tab==="makeable"){
+    const own = new Set(v.recipes.map(r=>norm(r.name)).concat(secrets.map(s=>norm(s.name))));
+    const c = allItems().filter(it=>norm(it.venue)!==norm(v.name) && !own.has(norm(it.name)))
+      .map(it=>Object.assign({s:scoreItem(it.components,v)},it)).filter(it=>it.s.pct>=70)
+      .sort((a,b)=>b.s.pct-a.s.pct).slice(0,40);
+    body = `<div class="note">Items from other kitchens that ${esc(v.name)} could build from its own pantry. None of these are on its menu.</div>`
+      + (c.length ? c.map(it=>`<button class="row box press" data-go="${itemHref(it)}">${brandDot(it.venue)}<div class="main"><div class="t">${esc(it.name)}</div>
+        <div class="s">${it.kind} at ${esc(it.venue)}</div>${segbar(it.s.rows)}</div><div class="score">${pctTxt(it.s.pct)}</div></button>`).join("") : `<div class="empty">Nothing scores high enough yet.</div>`);
+  }
+  app.innerHTML = `
+    <div class="vhead box"${brandStyle(v.name)}><div class="stripe"></div><div class="in">
+      <span class="eyebrow">kitchen</span><h1>${esc(v.name)}</h1>
+      <div class="sub"><span class="num">${v.recipes.length}</span> menu &middot; <span class="num">${secrets.length}</span> secret &middot; <span class="num">${v.realCount}</span> pantry items</div>
+      ${tw.length?`<div class="chips" style="margin-top:12px"><span class="eyebrow" style="align-self:center;margin-right:2px">closest pantries</span>${tw.map(t=>`<button class="chip" data-go="${hash("kitchens",v.name,t.o.name)}">${brandDot(t.o.name)}${esc(t.o.name)} <span class="num">${pctTxt(t.p)}</span></button>`).join("")}</div>`:""}
+    </div></div>
+    <div class="tabs">${tabs}</div>
+    <div class="list" style="margin-top:14px">${body}</div>`;
+}
+function viewChain(name){
+  setDeep(true,"secret");
+  const items = DATA.secret_items.filter(s=>s.venue===name);
+  app.innerHTML = `
+    <div class="vhead box" style="--vbar:${BRAND_COLOR[name]||"var(--blue)"}"><div class="stripe"></div><div class="in">
+      <span class="eyebrow">secret menu only</span><h1>${esc(name)}</h1>
+      <div class="sub"><span class="num">${items.length}</span> secret items. No pantry on file yet, so ${esc(name)} cannot be scored as a kitchen. Its items still score everywhere else.</div>
+    </div></div>
+    <div class="list" style="margin-top:16px">${items.map(secretRow).join("")||`<div class="empty">Nothing documented.</div>`}</div>`;
+}
+
+/* =================================================================
+   ITEM (order ticket + who can make it)
+   ================================================================= */
+function viewItem(kind,a,b){
+  setDeep(true, kind==="secret"?"secret":"home");
+  let it=null;
+  if(kind==="secret"){ const s=DATA.secret_items[+a]; if(s) it={name:s.name,venue:s.venue,components:s.components,description:s.description,kind:"secret",ref:"#"+s.id}; }
+  else { const v=venueOf(a); const r=v&&v.recipes[+b]; if(r) it={name:r.name,venue:v.name,components:r.ingredients,description:"",kind:"official",ref:"M"+(+b+1)}; }
+  if(!it){ app.innerHTML=`<div class="empty">That item is not on file.</div>`; return; }
+  const home = venueOf(it.venue);
+  const homeScore = home && it.components.length ? scoreItem(it.components, home) : null;
+  const ranked = it.components.length ? rankVenues(it.components, null, it.venue) : [];
+  const gf = isGF(it.components);
+  app.innerHTML = `
+    <div class="ticket"${brandStyle(it.venue)}><div class="stripe"></div><div class="in">
+      <div class="hd"><span>${it.kind} &middot; ${esc(it.venue)}</span><span>ticket ${esc(it.ref)}</span></div>
+      <h1>${esc(it.name)}</h1>
+      ${gf?`<span class="gfbadge">GF by ingredient, confirm at counter</span>`:""}
+      <div class="dash"></div>
+      ${it.components.length ? it.components.map(c=>`<div class="line">${sw(c.category)}<span class="n">${esc(c.name)}${gfTag(c)}</span><span class="c">${esc(catLabel(c.category).split(": ").pop())}</span></div>`).join("")
+        : `<div class="desc">The write-up for this item doesn't name its ingredients, so it can't be matched yet.</div>`}
+      ${it.description?`<div class="dash"></div><div class="desc">${esc(it.description.slice(0,320))}${it.description.length>320?"&hellip;":""}</div>`:""}
+      <div class="dash"></div>
+      <div class="foot"><span>${it.components.length} item${it.components.length===1?"":"s"}</span>
+        <span>${homeScore?`at home ${pctTxt(homeScore.pct)}`:home?"":"no home pantry"}</span></div>
+      <div class="tbtns">
+        <button class="btn" data-share>Share</button>
+        ${it.components.length?`<button class="btn" data-remix>Remix in builder</button>`:""}
+      </div>
+    </div></div>
+    ${ranked.length?`
+      <section style="margin-top:34px"><span class="eyebrow">who can make it</span>${podium(ranked)}</section>
+      <section style="margin-top:18px"><span class="eyebrow">every kitchen, tap for swaps</span>${LEGEND}
+        <div class="list" style="margin-top:8px">${ranked.map((x,i)=>ladderRow(x,i+1)).join("")}</div></section>`:""}`;
+  app._item = it;
+}
+
+/* =================================================================
+   BUILDER
+   picks: Map name -> "want" | "avoid". Tap cycles off, want, avoid.
+   Avoided names are never used as substitutes. GF only limits
+   substitutes to gf===true pantry items.
+   ================================================================= */
+const BUILD = {mode:"any", venue:"", picks:new Map(), gfOnly:false, q:"", open:new Set(["Bun/Bread","Protein/Beef Patty"])};
+const PRESETS = [
+  {name:"Classic cheeseburger", items:["Brioche Bun","Single Beef Patty","American Cheese","Shredded Lettuce","Sliced Tomato","Pickle Slices","Ketchup"]},
+  {name:"Burrito bowl", items:["Grilled Chicken","Cilantro-Lime White Rice","Black Beans","Pico de Gallo","Guacamole","Sour Cream"]},
+  {name:"Mocha frappe", items:["Frappuccino Base","Mocha Sauce","Milk","Ice","Whipped Cream"]},
+  {name:"Chili cheese dog", items:["Hot Dog Bun","All-Beef Hot Dog","Chili","Cheddar Cheese","Diced Onion"]},
+];
+function poolNames(){
+  const set=new Map();
+  const src = BUILD.mode==="venue" && BUILD.venue ? [venueOf(BUILD.venue)] : DATA.venues;
+  src.forEach(v=>v&&v.ingredients.forEach(i=>{ if(!set.has(i.name)) set.set(i.name,i); }));
+  return [...set.values()].sort((a,b)=>a.name.localeCompare(b.name));
+}
+function viewBuild(){
+  setDeep(false,"build");
+  app.innerHTML = `
+    <div class="hero" style="padding-top:20px"><span class="eyebrow">build an item</span><h1>Order it your way.</h1>
+      <p class="sub">Tap once to want an ingredient, twice to avoid it. Then see which kitchen gets closest without using anything you avoided.</p></div>
+    <div class="seg2" role="group">
+      <button aria-pressed="${BUILD.mode==="any"}" data-mode="any">Every kitchen</button>
+      <button aria-pressed="${BUILD.mode==="venue"}" data-mode="venue">One kitchen's pantry</button>
+    </div>
+    ${BUILD.mode==="venue"?`<select class="pick" id="bvenue" aria-label="Kitchen"><option value="">Choose a kitchen</option>${DATA.venues.map(v=>`<option ${BUILD.venue===v.name?"selected":""}>${esc(v.name)}</option>`).join("")}</select>`:""}
+    <div class="toggles"><span class="eyebrow" style="align-self:center;margin-right:4px">start from</span>${PRESETS.map((p,i)=>`<button class="chip" data-preset="${i}">${esc(p.name)}</button>`).join("")}</div>
+    <div class="tray"><div class="chips" id="tray"></div><div class="best" id="best"></div></div>
+    <div class="toggles">
+      <button class="chip" aria-pressed="${BUILD.gfOnly}" data-gfonly><span class="gf">GF</span> swaps only</button>
+      <button class="chip" data-clear>Clear all</button>
+    </div>
+    <div class="field" style="margin-top:12px"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input id="bq" type="search" placeholder="Find an ingredient" autocomplete="off" value="${esc(BUILD.q)}" aria-label="Find an ingredient"></div>
+    <div id="cats" style="margin-top:6px"></div>
+    <section id="bres"></section>`;
+  const bq=document.getElementById("bq");
+  bq.addEventListener("input",()=>{ BUILD.q=bq.value; renderCats(); });
+  const sel=document.getElementById("bvenue");
+  if(sel) sel.addEventListener("change",()=>{ BUILD.venue=sel.value; renderCats(); renderBuildResults(); });
+  renderCats(); renderTray(); renderBuildResults();
+}
+function pickState(n){ return BUILD.picks.get(n)||""; }
+function renderTray(){
+  const el=document.getElementById("tray"); if(!el) return;
+  el.innerHTML = BUILD.picks.size ? [...BUILD.picks].map(([n,st])=>`<button class="chip ${st==="avoid"?"avoid":""}" aria-pressed="${st==="want"}" data-pick="${esc(n)}">${st==="want"?sw(tagOf(n).category):""}${esc(n)}<span class="x">&times;</span></button>`).join("")
+    : `<span class="sub" style="align-self:center">Your order is empty.</span>`;
+}
+function renderCats(){
+  const el=document.getElementById("cats"); if(!el) return;
+  const q=norm(BUILD.q);
+  let pool=poolNames(); if(q) pool=pool.filter(i=>norm(i.name).includes(q));
+  const g={}; pool.forEach(i=>(g[i.category||"Other"]=g[i.category||"Other"]||[]).push(i));
+  const cats=Object.keys(g).sort();
+  if(BUILD.mode==="venue" && !BUILD.venue){ el.innerHTML=`<div class="empty">Choose a kitchen to see its pantry.</div>`; return; }
+  el.innerHTML = cats.length ? cats.map(c=>`<details class="cat" data-cat="${esc(c)}" ${(q||BUILD.open.has(c))?"open":""}>
+    <summary>${sw(c)}${esc(catLabel(c))}<span class="cnt">${g[c].length}</span></summary>
+    <div class="chips">${g[c].map(i=>{ const st=pickState(i.name); return `<button class="chip ${st==="avoid"?"avoid":""}" aria-pressed="${st==="want"}" data-pick="${esc(i.name)}" data-cycle>${esc(i.name)}${gfTag(i)}</button>`; }).join("")}</div></details>`).join("")
+    : `<div class="empty">No ingredient matches "${esc(BUILD.q)}".</div>`;
+}
+function renderBuildResults(){
+  const el=document.getElementById("bres"); if(!el) return;
+  const want=[...BUILD.picks].filter(([,s])=>s==="want").map(([n])=>tagOf(n));
+  const avoid=new Set([...BUILD.picks].filter(([,s])=>s==="avoid").map(([n])=>norm(n)));
+  const opts={exclude:avoid, gfOnly:BUILD.gfOnly};
+  const best=document.getElementById("best");
+  if(best) best.innerHTML="";
+  if(!want.length){ el.innerHTML = `<div class="note">Pick at least one ingredient to want, or start from a preset above.</div>`; return; }
+  if(BUILD.mode==="venue"){
+    const v=venueOf(BUILD.venue);
+    if(!v){ el.innerHTML=`<div class="note">Choose a kitchen above.</div>`; return; }
+    const s=scoreItem(want,v,opts);
+    if(best) best.innerHTML=`${brandDot(v.name)}<span>${esc(v.name)} <span class="num">${pctTxt(s.pct)}</span></span><button data-jump>See swaps &darr;</button>`;
+    el.innerHTML = `<span class="eyebrow">from ${esc(v.name)}'s pantry</span>${LEGEND}<div class="list" style="margin-top:8px">${ladderRow({v,s},1).replace('aria-expanded="false"','aria-expanded="true"')}</div>`;
+    return;
+  }
+  const ranked=rankVenues(want,opts);
+  if(best && ranked[0]) best.innerHTML=`<span class="eyebrow">best</span>${brandDot(ranked[0].v.name)}<span>${esc(ranked[0].v.name)} <span class="num">${pctTxt(ranked[0].s.pct)}</span></span><button data-jump>All kitchens &darr;</button>`;
+  el.innerHTML = `<span class="eyebrow">closest kitchens</span>${podium(ranked)}
+    <div style="margin-top:18px">${LEGEND}</div><div class="list" style="margin-top:8px">${ranked.map((x,i)=>ladderRow(x,i+1)).join("")}</div>`;
+}
+function cyclePick(n){
+  const st=pickState(n);
+  if(!st) BUILD.picks.set(n,"want"); else if(st==="want") BUILD.picks.set(n,"avoid"); else BUILD.picks.delete(n);
+}
+
+/* =================================================================
+   KITCHENS (pantry overlap heat grid)
+   Sequential single hue, light to dark blue, five steps.
+   ================================================================= */
+const RAMP=["#EEF3FC","#C9DBF7","#8FB4EC","#4A82DD","#1D5FD6","#123F8C"];
+function rampColor(p,lo,hi){ const t=Math.max(0,Math.min(.999,(p-lo)/(hi-lo||1))); return RAMP[Math.floor(t*RAMP.length)]; }
+function venueOrder(){
+  /* greedy nearest neighbour chain so similar kitchens sit together */
+  const left=[...DATA.venues]; const out=[left.shift()];
+  while(left.length){ const last=out[out.length-1]; let bi=0,bp=-1; left.forEach((v,i)=>{ const p=similarity(last,v); if(p>bp){bp=p;bi=i;} }); out.push(left.splice(bi,1)[0]); }
+  return out;
+}
+function viewKitchens(a,b){
+  setDeep(!!a,"kitchens");
+  const order=venueOrder();
+  let lo=100,hi=0; order.forEach(x=>order.forEach(y=>{ if(x!==y){ const p=similarity(x,y); lo=Math.min(lo,p); hi=Math.max(hi,p); } }));
+  const A=a?venueOf(a):null, B=b?venueOf(b):null;
+  const head=`<thead><tr><th></th>${order.map(v=>`<th><span>${esc(v.short)}</span></th>`).join("")}</tr></thead>`;
+  const rows=order.map(x=>`<tr><th>${esc(x.short)}</th>${order.map(y=>{
+    if(x===y) return `<td class="self" aria-label="${esc(x.name)}"></td>`;
+    const p=similarity(x,y); const on=(A===x&&B===y)||(A===y&&B===x);
+    return `<td class="${on?"on":""}" style="background:${rampColor(p,lo,hi)}" data-go="${hash("kitchens",x.name,y.name)}" title="${esc(x.name)} and ${esc(y.name)}: ${pctTxt(p)}"></td>`;
+  }).join("")}</tr>`).join("");
+  const pairs=[]; for(let i=0;i<order.length;i++) for(let j=i+1;j<order.length;j++) pairs.push({x:order[i],y:order[j],p:similarity(order[i],order[j])});
+  pairs.sort((u,w)=>w.p-u.p);
+  app.innerHTML = `
+    <div class="hero" style="padding-top:20px"><span class="eyebrow">pantry overlap</span><h1>Who stocks the same stuff.</h1>
+      <p class="sub">Each square is how well two kitchens could cover each other's pantry. Darker means more alike. Tap a square for the head to head.</p></div>
+    <div id="h2h">${A&&B?h2h(A,B):""}</div>
+    <div class="box" style="margin-top:16px;padding:12px 6px">
+      <div class="heat"><table>${head}<tbody>${rows}</tbody></table></div>
+      <div class="scale"><span>${pctTxt(lo)}</span>${RAMP.map(c=>`<i style="background:${c}"></i>`).join("")}<span>${pctTxt(hi)}</span></div>
+    </div>
+    <section><span class="eyebrow">most alike pairs</span><div class="list">${pairs.slice(0,8).map(q=>`<button class="row box press" data-go="${hash("kitchens",q.x.name,q.y.name)}">${brandDot(q.x.name)}${brandDot(q.y.name)}<div class="main"><div class="t">${esc(q.x.name)} + ${esc(q.y.name)}</div></div><div class="score">${pctTxt(q.p)}</div></button>`).join("")}</div></section>
+    <section><span class="eyebrow">least alike pairs</span><div class="list">${pairs.slice(-4).reverse().map(q=>`<button class="row box press" data-go="${hash("kitchens",q.x.name,q.y.name)}">${brandDot(q.x.name)}${brandDot(q.y.name)}<div class="main"><div class="t">${esc(q.x.name)} + ${esc(q.y.name)}</div></div><div class="score">${pctTxt(q.p)}</div></button>`).join("")}</div></section>`;
+  if(A&&B) document.querySelector(".h2h").scrollIntoView({block:"start"});
+}
+function h2h(A,B){
+  const an=new Map(A.ingredients.filter(i=>!i.mix).map(i=>[norm(i.name),i]));
+  const bn=new Map(B.ingredients.filter(i=>!i.mix).map(i=>[norm(i.name),i]));
+  const shared=[...an.keys()].filter(k=>bn.has(k)).map(k=>an.get(k));
+  const onlyA=[...an.keys()].filter(k=>!bn.has(k)).map(k=>an.get(k));
+  const onlyB=[...bn.keys()].filter(k=>!an.has(k)).map(k=>bn.get(k));
+  const pills=l=>l.length?`<div class="chips" style="margin-top:6px">${l.map(i=>`<span class="chip">${sw(i.category)}${esc(i.name)}</span>`).join("")}</div>`:`<div class="sub">none</div>`;
+  return `<div class="h2h box">
+    <div class="vs">${brandDot(A.name)}<h3>${esc(A.name)}</h3><span class="sub">vs</span>${brandDot(B.name)}<h3>${esc(B.name)}</h3><span class="p">${pctTxt(similarity(A,B))}</span></div>
+    <div class="cols">
+      <div><span class="eyebrow">both stock <span class="num">${shared.length}</span></span>${pills(shared)}</div>
+      <details><summary class="eyebrow">only ${esc(A.name)} <span class="num">${onlyA.length}</span> &#9662;</summary>${pills(onlyA)}</details>
+      <details><summary class="eyebrow">only ${esc(B.name)} <span class="num">${onlyB.length}</span> &#9662;</summary>${pills(onlyB)}</details>
+    </div></div>`;
+}
+
+/* =================================================================
+   EVENTS (one delegated listener for the whole app)
+   ================================================================= */
+document.addEventListener("click", e=>{
+  const t=e.target.closest("[data-go],[data-back],[data-toggle],[data-surprise],[data-chain],[data-sf],[data-more],[data-share],[data-remix],[data-mode],[data-preset],[data-pick],[data-gfonly],[data-clear],[data-jump]");
+  if(!t) return;
+  const d=t.dataset;
+  if("back" in d){ if(NAV>0) history.back(); else go(""); return; }
+  if("go" in d){ go(d.go); return; }
+  if("jump" in d){ const r=document.getElementById("bres"); window.scrollTo({top:r.getBoundingClientRect().top+scrollY-170}); return; }
+  if("toggle" in d){ t.setAttribute("aria-expanded", t.getAttribute("aria-expanded")==="true"?"false":"true"); return; }
+  if("surprise" in d){ const pool=DATA.secret_items.filter(s=>s.components.length); go("item/secret/"+pool[Math.floor(Math.random()*pool.length)].id); return; }
+  if("chain" in d){ SF.chain=d.chain; document.querySelectorAll("[data-chain]").forEach(c=>c.setAttribute("aria-pressed", c.dataset.chain===SF.chain)); renderSecretList(); return; }
+  if("sf" in d){ SF[d.sf]=!SF[d.sf]; t.setAttribute("aria-pressed",SF[d.sf]); renderSecretList(); return; }
+  if("more" in d){ const el=document.getElementById("slist"); el.innerHTML=el._list.map(secretRow).join(""); return; }
+  if("share" in d){
+    const it=app._item, url=location.href, text=it?`${it.name} (${it.venue}) on [ qsr equivalents engine ]`:"";
+    if(navigator.share) navigator.share({title:it?it.name:"qsr equivalents engine",text,url}).catch(()=>{});
+    else if(navigator.clipboard){ navigator.clipboard.writeText(url).then(()=>{ t.textContent="Link copied"; }); }
+    return;
+  }
+  if("remix" in d){ const it=app._item; BUILD.mode="any"; BUILD.picks=new Map(it.components.map(c=>[c.name,"want"])); go("build"); return; }
+  if("mode" in d){ BUILD.mode=d.mode; viewBuild(); return; }
+  if("preset" in d){ BUILD.picks=new Map(PRESETS[+d.preset].items.filter(n=>ING_LOOKUP[norm(n)]).map(n=>[tagOf(n).name,"want"])); renderTray(); renderCats(); renderBuildResults(); return; }
+  if("gfonly" in d){ BUILD.gfOnly=!BUILD.gfOnly; t.setAttribute("aria-pressed",BUILD.gfOnly); renderBuildResults(); return; }
+  if("clear" in d){ BUILD.picks.clear(); renderTray(); renderCats(); renderBuildResults(); return; }
+  if("pick" in d){
+    if("cycle" in d) cyclePick(d.pick); else BUILD.picks.delete(d.pick);
+    renderTray();
+    document.querySelectorAll(`#cats [data-pick]`).forEach(c=>{ if(c.dataset.pick===d.pick){ const st=pickState(d.pick); c.setAttribute("aria-pressed",st==="want"); c.classList.toggle("avoid",st==="avoid"); } });
+    renderBuildResults(); return;
+  }
+});
+document.addEventListener("toggle", e=>{ const c=e.target.closest&&e.target.closest("details.cat"); if(c){ c.open?BUILD.open.add(c.dataset.cat):BUILD.open.delete(c.dataset.cat); } }, true);
+
+/* =================================================================
+   ROUTER
+   ================================================================= */
+let NAV=-1;
+function route(){
+  NAV++;
+  const p=(location.hash||"#").slice(1).split("/").map(decodeURIComponent);
+  window.scrollTo(0,0);
+  if(p[0]==="secret") return viewSecret(p[1]);
+  if(p[0]==="build") return viewBuild();
+  if(p[0]==="kitchens") return viewKitchens(p[1],p[2]);
+  if(p[0]==="venue"&&p[1]) return viewVenue(p[1],p[2]);
+  if(p[0]==="chain"&&p[1]) return viewChain(p[1]);
+  if(p[0]==="item"&&p[1]==="secret") return viewItem("secret",p[2]);
+  if(p[0]==="item"&&p[1]==="official") return viewItem("official",p[2],p[3]);
+  viewHome();
+}
+window.addEventListener("hashchange",route);
+loadData(); route();
+</script>
+__SEAL__
+</body>
+</html>

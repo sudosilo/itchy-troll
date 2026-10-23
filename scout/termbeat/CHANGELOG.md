@@ -1,0 +1,1 @@
+2026-07-19, v2026.07.19. First version. Termbeat is a terminal that reacts to audio from a file or the microphone. It shipped with several terminal themes and modes for a visualizer, bars, and a few small games.

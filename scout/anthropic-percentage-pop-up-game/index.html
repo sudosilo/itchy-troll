@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<title>Anthropic Percentage Pop-up Game</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=Inter+Tight:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: compact stats, then the typing zone. Banners land on top of the input and the line you were on. Dark only. */
+:root{
+  --bg:#1a1a19; --panel:#232321; --ink:#f2f1ec; --muted:#a3a29b;
+  --line:#34332f; --accent:#d97757; --pill:#3a3935; --banner:#2b2b29;
+  --ok:#8cc29b; --bad:#f09a85; --badbg:#4a2a22;
+  --serif:"Source Serif 4",Georgia,serif;
+  --sans:"Inter Tight",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);padding-inline:16px;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.wrap{max-width:620px;margin:0 auto;padding-block:14px 40px;display:flex;flex-direction:column;gap:12px}
+h1{font-family:var(--serif);font-weight:600;font-size:1.45rem;line-height:1.2;margin:0;text-wrap:balance}
+.sub{color:var(--muted);margin:0;font-size:.88rem;line-height:1.45}
+.fine{font-size:.74rem}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:1px;min-width:0}
+.stat b{font-family:var(--mono);font-size:1.05rem;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
+.stat span{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.zone{position:relative;display:flex;flex-direction:column;gap:8px}
+.passage{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;font-family:var(--serif);font-size:1.12rem;line-height:1.6;height:8.6em;overflow:hidden;overflow-wrap:anywhere}
+.passage .c{color:var(--ok)}
+.passage .w{color:var(--bad);background:var(--badbg);border-radius:2px}
+.passage .cur{box-shadow:inset 2px 0 0 var(--accent)}
+.passage .todo{color:var(--muted)}
+#type{width:100%;font-family:var(--mono);font-size:16px;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--ink)}
+#type:focus{outline:2px solid var(--accent);outline-offset:1px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:10px 16px;font-weight:600;-webkit-tap-highlight-color:transparent}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.result{position:relative;font-family:var(--serif);font-size:1.05rem;line-height:1.5;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;min-height:9em}
+.stack{position:absolute;left:-6px;right:-6px;bottom:-6px;display:flex;flex-direction:column-reverse;gap:6px;z-index:6;pointer-events:none}
+.toast{pointer-events:auto;width:100%;background:var(--banner);border:1px solid var(--line);border-radius:22px;padding:14px 10px 14px 18px;display:flex;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,.45);animation:pop .25s ease-out}
+.toast .txt{flex:1;min-width:0}
+.toast .t{font-weight:600;font-size:1rem;line-height:1.3}
+.toast .s{font-size:.82rem;color:var(--muted);margin-top:4px}
+.toast .v{background:var(--pill);border:0;padding:10px 14px;font-size:.88rem;white-space:nowrap}
+.toast .x{border:0;background:none;font-size:1.5rem;line-height:1;padding:8px 10px;color:var(--muted)}
+@keyframes pop{from{transform:translateY(16px);opacity:.3}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.toast{animation:none}}
+@media (max-width:420px){.toast .v{padding:9px 11px;font-size:.8rem}.toast .t{font-size:.95rem}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Anthropic Percentage Pop-up Game</h1>
+  <p class="sub">60 second typing test. Type it or use voice-to-text. A usage banner lands right where you're typing, and anything you type or dictate while it's up goes nowhere. They start the second the page opens and never stop. The clock keeps running.</p>
+  <div class="stats">
+    <div class="stat"><b id="wpm">0</b><span>WPM</span></div>
+    <div class="stat"><b id="acc">100%</b><span>Accuracy</span></div>
+    <div class="stat"><b id="time">60.0</b><span>Seconds</span></div>
+    <div class="stat"><b id="usage">85%</b><span>Weekly limit</span></div>
+  </div>
+  <div class="zone" id="zone">
+    <div class="passage" id="passage"></div>
+    <input id="type" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Start typing or talking">
+    <div class="stack" id="stack"></div>
+  </div>
+  <div class="row">
+    <button id="restart">Restart</button>
+    <span class="sub" id="count">0 pop-ups served</span>
+  </div>
+  <div class="result" id="result" hidden><span id="rtext"></span></div>
+  <p class="sub fine">A fan-made protest game about pop-up messages. Not made by or affiliated with Anthropic.</p>
+</div>
+
+<script>
+var TEXT="You sat down to do one thing. A banner slid up to tell you a number you did not ask for. You closed it and lost the sentence you were holding. For a neurodivergent brain every pop-up is a small act of violence against focus, and climbing back into the work takes far longer than tapping the X. Ninety percent of a good morning can vanish this way, one percentage at a time. People who would have been perfectly happy end up drained and furious at a screen they pay for. Software should wait to be asked. Put the meter in settings, give people a toggle, and let them work. ";
+TEXT=TEXT+TEXT;
+var finalTxt="",finalWpm=0,opened=Date.now(),LEN=60,started=0,ended=false,typed="",served=0,blockedAt=0,lost=0,eaten=0,timer=null,nagT=null,usage=85,battery=27;
+var $=function(id){return document.getElementById(id)};
+var inp=$("type");
+
+function rnd(a,b){return a+Math.random()*(b-a)}
+function pct(n){return n.toFixed(n<1?4:2)+"%"}
+function now(){return new Date()}
+function dayPct(){var d=now();return (d.getHours()*3600+d.getMinutes()*60+d.getSeconds())/864}
+function elapsed(){return started?Math.min(LEN,(Date.now()-started)/1000):0}
+function blocked(){return $("stack").children.length>0}
+function usageMsg(){
+  if(usage>=100)return ["You've reached your weekly limit","Resets Thursday at 5:00 PM"];
+  return ["You've used "+usage+"% of your weekly limit","Resets Thursday at 5:00 PM"];
+}
+
+var FACTS=[
+["About 71% of Earth's surface is water"],
+["About 97% of Earth's water is in the oceans"],
+["Only about 2.5% of Earth's water is fresh"],
+["About 69% of Earth's fresh water is locked in ice"],
+["Earth's air is about 78% nitrogen"],
+["Earth's air is about 21% oxygen"],
+["Argon is about 0.93% of the air you're breathing"],
+["Carbon dioxide is about 0.04% of the atmosphere"],
+["The Sun holds about 99.86% of the solar system's mass"],
+["Jupiter holds about 71% of all planetary mass"],
+["The Sun is about 73% hydrogen by mass"],
+["The Sun is about 25% helium by mass"],
+["Ordinary matter is about 5% of the universe"],
+["Dark matter is about 27% of the universe"],
+["Dark energy is about 68% of the universe"],
+["The Moon reflects about 12% of the sunlight that hits it"],
+["Earth reflects about 30% of incoming sunlight"],
+["Moon gravity is about 16.6% of Earth's"],
+["Mars gravity is about 38% of Earth's"],
+["At its closest, the Moon is 356,500 km away","That's about 87.7% of its farthest distance."],
+["The Moon's closest approach is 92.7% of its average distance","Average is 384,400 km."],
+["Mars is about 53% as wide as Earth"],
+["The Moon is about 27% as wide as Earth"],
+["You can see about 59% of the Moon's surface from Earth","Over time, thanks to wobble."],
+["Venus reflects about 76% of the sunlight that hits it"],
+["Earth is about 3.4% closer to the Sun in January than in July"],
+["The sunlight on your screen is about 499 seconds old","That's 13.9% of an hour."],
+["A day on Venus is about 108% of its year"],
+["A year on Mercury is about 24% of an Earth year"],
+["Saturn's density is about 69% of water's","It would float. Allegedly."],
+["Earth's crust is about 46% oxygen by mass"],
+["Earth's crust is about 28% silicon by mass"],
+["Earth's crust is about 8% aluminum by mass"],
+["Earth's crust is about 5% iron by mass"],
+["Earth's core is about 32% of the planet's mass"],
+["The mantle is about 84% of Earth's volume"],
+["The crust is less than 1% of Earth's volume"],
+["Challenger Deep is about 10,935 meters deep","Everest would fit with 19% of the trench to spare."],
+["Everest is about 81% as tall as the Mariana Trench is deep"],
+["The average ocean depth is about 34% of Challenger Deep"],
+["Only about a quarter of the seafloor is mapped in detail","The other 75% is pending."],
+["The Pacific covers about 32% of Earth's surface"],
+["The ocean makes at least 50% of Earth's oxygen"],
+["The ocean has absorbed about 90% of the excess heat from warming"],
+["The ocean absorbs about a quarter of human CO2 emissions"],
+["Seawater is about 3.5% salt"],
+["The Dead Sea is about 34% salt"],
+["Antarctica holds about 90% of Earth's ice"],
+["Antarctica is about 98% covered in ice"],
+["Greenland is about 80% covered in ice"],
+["Ice covers about 10% of Earth's land"],
+["Deserts cover about 33% of Earth's land"],
+["Forests cover about 31% of Earth's land"],
+["The Amazon is about half of the world's remaining rainforest"],
+["Brazil holds about 60% of the Amazon"],
+["Your body is about 60% water"],
+["Your brain is 2% of your weight and uses 20% of your energy","Some of it is being spent on this banner."],
+["Blood is about 55% plasma"],
+["Plasma is about 92% water"],
+["About 51% of your bones are in your hands and feet"],
+["About 25% of your bones are in your feet"],
+["About 26% of your bones are in your hands","They are busy closing banners."],
+["Blood is about 7% of your body weight"],
+["Your body is about 65% oxygen by mass"],
+["Your body is about 18% carbon by mass"],
+["Your body is about 10% hydrogen by mass"],
+["Your body is about 3% nitrogen by mass"],
+["Your left lung is about 10% smaller than your right"],
+["The air you exhale is still about 16% oxygen"],
+["Skin is about 15% of your body weight"],
+["Humans and chimps share about 98.8% of their DNA"],
+["Any two humans share about 99.9% of their DNA"],
+["Humans and mice share about 85% of protein-coding DNA"],
+["About 8% of your genome is leftover viral DNA"],
+["Only about 1.5% of your genome codes for proteins"],
+["About 10% of people are left-handed"],
+["About 8% of men have color blindness"],
+["About 0.5% of women have color blindness"],
+["You spend about 33% of your life asleep"],
+["REM is about 20 to 25% of your sleep"],
+["About 90% of your serotonin is made in your gut"],
+["Muscle is roughly a third of your body weight"],
+["Smell is commonly said to drive about 80% of flavor"],
+["Tooth enamel is about 96% mineral"],
+["Bone is about two thirds mineral"],
+["Insects are roughly 80% of known animal species"],
+["Beetles are about 25% of all described animal species"],
+["A jellyfish is about 95% water"],
+["A cucumber is about 96% water"],
+["A watermelon is about 92% water"],
+["Lettuce is about 95% water"],
+["A tomato is about 94% water"],
+["A banana is about 75% water"],
+["An apple is about 86% water"],
+["A potato is about 79% water"],
+["Honey is about 17% water"],
+["Honey is about 80% sugar"],
+["Milk is about 87% water"],
+["Brewed coffee is about 98.5% water"],
+["An avocado is about 15% fat"],
+["About 75% of leading food crops benefit from animal pollination"],
+["About two thirds of an octopus's neurons are in its arms"],
+["Livestock are about 60% of all mammal biomass"],
+["Humans are about 36% of all mammal biomass"],
+["Wild mammals are about 4% of all mammal biomass"],
+["Farmed poultry is about 70% of all bird biomass"],
+["Plants are about 82% of all life on Earth by carbon"],
+["Bacteria are about 13% of all life on Earth by carbon"],
+["Animals are about 0.4% of all life on Earth by carbon"],
+["Humans are about 0.01% of all life on Earth by carbon"],
+["Koalas sleep about 80% of the day"],
+["House cats sleep about 60% of the day"],
+["Giraffes sleep less than 10% of the day"],
+["Dolphins sleep with about 50% of their brain at a time"],
+["Dark chocolate is often 70% cocoa or more"],
+["US whole milk is about 3.25% fat"],
+["Most beer is about 5% alcohol"],
+["Most wine is about 12 to 14% alcohol"],
+["80 proof spirits are 40% alcohol"],
+["US butter must be at least 80% milkfat"],
+["US ice cream must be at least 10% milkfat"],
+["US peanut butter must be at least 90% peanuts"],
+["Table salt is about 39% sodium"],
+["About 57% of people live in cities"],
+["Asia is home to about 59% of the world's people"],
+["Africa is home to about 18% of the world's people"],
+["Europe is home to about 9% of the world's people"],
+["North America is home to about 7.5% of the world's people"],
+["South America is home to about 5.5% of the world's people"],
+["Oceania is home to about 0.6% of the world's people"],
+["About 90% of people live in the Northern Hemisphere"],
+["Russia covers about 11% of Earth's land"],
+["Canada covers about 6.7% of Earth's land"],
+["The US covers about 6.1% of Earth's land"],
+["Antarctica is about 9.4% of Earth's land"],
+["The Sahara covers about 30% of Africa"],
+["About 70% of Australia is arid or semi-arid"],
+["About 11% of Iceland is glacier"],
+["About 26% of the Netherlands is below sea level"],
+["Nepal holds about 57% of the world's 8,000 meter peaks","8 of 14."],
+["Lake Baikal holds about 20% of the world's unfrozen surface fresh water"],
+["The Great Lakes hold about 21% of the world's surface fresh water"],
+["Nevada is about 80% federal land"],
+["Alaska is about 61% federal land"],
+["Tribal lands make up over a quarter of Arizona"],
+["Phoenix gets about 85% of its possible sunshine"],
+["The letter e is about 12.7% of English text"],
+["The letter z is about 0.07% of English text"],
+["The word 'the' is about 5% of written English"],
+["About 11% of people speak Mandarin natively"],
+["About 40% of the world's languages are endangered"],
+["The Black Death killed an estimated 30 to 60% of Europe"],
+["The 1918 flu infected about a third of the world"],
+["The Roman Empire held roughly a fifth of the world's people"],
+["The Mongol Empire covered about 16% of Earth's land"],
+["The British Empire covered about a quarter of Earth's land"],
+["About 32% of people aboard the Titanic survived"],
+["50% of the people who flew to the Moon walked on it","12 of 24."],
+["About 7% of all humans who ever lived are alive now"],
+["About 0.07% of people are born on February 29"],
+["8 of 45 US presidents died in office","About 18%."],
+["Each zodiac sign gets about 8.3% of the year"],
+["Mercury is in retrograde about 18% of the year"],
+["A sidereal day is about 99.7% of a solar day"],
+["A lunar month is about 8.1% of a year"],
+["A leap year has about 0.27% more days"],
+["February is about 7.7% of a common year"],
+["Weekends are about 28.6% of the week"],
+["About two thirds of people use the internet"],
+["Android runs on about 70% of the world's smartphones"],
+["Nearly half of all email is spam"],
+["Linux runs 100% of the top 500 supercomputers"],
+["About 56% of QWERTY typing in English is done with the left hand"],
+["Phone batteries often drop to about 80% capacity after 500 cycles"],
+["Phone batteries last longest kept between 20% and 80%"],
+["About 94% of all bitcoin has already been mined"],
+["A nibble is 50% of a byte"],
+["Each digit 0 through 9 is about 10% of the digits of pi"],
+["A flipped coin lands on its starting side about 50.8% of the time"],
+["With 23 people in a room, there's a 50.7% chance two share a birthday"],
+["With 70 people in a room, there's a 99.9% chance two share a birthday"],
+["Switching doors in Monty Hall wins 66.7% of the time"],
+["About 30.1% of numbers in many data sets start with 1","Benford's law."],
+["The golden ratio's smaller part is about 61.8% of the whole"],
+["A royal flush is dealt about 0.000154% of the time"],
+["Two dice roll a 7 about 16.7% of the time"],
+["Two dice roll snake eyes about 2.78% of the time"],
+["Powerball jackpot odds are about 0.00000034%"],
+["Your yearly odds of a lightning strike are about 0.00008%"],
+["About 0.02% of clovers have four leaves"],
+["About 3% of US births are twins"],
+["About 0.4% of births are identical twins"],
+["About 1 to 2% of people have red hair"],
+["About 2% of people have green eyes"],
+["About 70% of people have brown eyes"],
+["About 37% of Americans have O positive blood"],
+["About 7% of Americans have O negative blood"],
+["About 0.6% of Americans have AB negative blood"],
+["Everest's summit has about 33% of sea level oxygen pressure"],
+["About 78% of the world's rain falls on the ocean"],
+["Clouds cover about 67% of Earth at any moment"],
+["Aluminum is 100% recyclable, forever"],
+["Glass is 100% recyclable"],
+["Only about 9% of all plastic ever made has been recycled"],
+["About 30 to 40% of the US food supply is wasted"],
+["With its pedestal, the Statue of Liberty is about 55% as tall as the Washington Monument"],
+["The Eiffel Tower grows about 0.05% taller in summer","Heat."],
+["The Great Wall is about 21,196 km long","About 53% of the way around Earth."],
+["A marathon is about 0.1% of Earth's circumference"],
+["The ISS orbits about 6.6% of Earth's radius above the surface"],
+["The ISS circles Earth about 15.5 times a day","Each lap is about 6.4% of a day."],
+["Light crosses Earth's width in about 4.3% of a second"],
+["Sound travels at about 0.0001% of the speed of light"],
+["A mile is about 160.9% of a kilometer"],
+["An inch is 100% of 2.54 cm, exactly"],
+["A cup of water weighs about 52% of a pound"],
+["Gold is about 75% pure in 18 karat jewelry"],
+["Sterling silver is 92.5% silver"],
+["A US penny is about 97.5% zinc"],
+["A US nickel is 75% copper"],
+["A US quarter is about 91.67% copper"],
+["Paper money in the US is 75% cotton and 25% linen"]
+];
+
+var SUBS=["Resets Thursday at 5:00 PM","You did not ask.","Updated just now.","This affects 0% of your typing.","Tap View usage for more.","Resets never.","Shown for your convenience.","Source: a percentage.","Accurate to within some percent.","Resets at midnight."];
+function factNag(){var f=FACTS[Math.floor(Math.random()*FACTS.length)];return [f[0],f[1]||SUBS[Math.floor(Math.random()*SUBS.length)]]}
+function moonPct(){var syn=29.530588853,ref=Date.UTC(2000,0,6,18,14)/864e5,age=((Date.now()/864e5-ref)%syn+syn)%syn;return (1-Math.cos(2*Math.PI*age/syn))/2*100}
+var LIVE=[
+ function(){return ["The Moon is "+moonPct().toFixed(2)+"% lit right now","Resets in about 29.5 days."]},
+ function(){return ["The NASDAQ is up or down today","By some percent. One of those."]}
+];
+try{
+  fetch("https://api.open-meteo.com/v1/forecast?latitude=35.47&longitude=-97.52&current=temperature_2m,relative_humidity_2m,cloud_cover,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph").then(function(r){return r.json()}).then(function(d){
+    var c=d&&d.current;if(!c)return;
+    LIVE.push(function(){return ["Humidity in Oklahoma City is "+c.relative_humidity_2m+"%","Live. You are not in Oklahoma City."]});
+    LIVE.push(function(){return ["Cloud cover over Oklahoma City is "+c.cloud_cover+"%","Live from Oklahoma. For some reason."]});
+    LIVE.push(function(){return ["It's "+c.temperature_2m+"°F in Oklahoma City","That's "+pct(c.temperature_2m/212*100)+" of boiling."]});
+    LIVE.push(function(){return ["Wind in Oklahoma City is "+c.wind_speed_10m+" mph","About "+pct(c.wind_speed_10m/767*100)+" of the speed of sound."]});
+  }).catch(function(){});
+}catch(e){}
+var resultNags=[
+ function(){return ["Your score is ready","It is "+pct(rnd(10,60))+" visible behind this banner."]},
+ function(){return ["You've read "+pct(rnd(0,30))+" of your results","Resets when the next banner lands"]},
+ function(){return ["Your final WPM was "+finalWpm,"Here it is again in case you missed it under the last one."]},
+ function(){return ["Results are "+pct(rnd(1,40))+" legible","Tap X to raise legibility briefly."]},
+ function(){return ["Want to share your score?","You'll need to read it first. Good luck."]},
+ function(){return ["You've used 100% of this test","Resets when you press Restart"]}
+];
+var nags=[
+ usageMsg, usageMsg, usageMsg,
+ function(){return ["You've used "+pct(elapsed()/LEN*100)+" of this typing test","Resets when you press Restart"]},
+ function(){return ["You've typed "+typed.length+" characters","That's "+pct(typed.length/TEXT.length*100)+" of the passage."]},
+ function(){return ["Your keyboard is 0% available","Close this to raise it to 100%."]},
+ function(){return ["Voice-to-text is 0% listening","Everything you just said went nowhere."]},
+ function(){return [eaten+" characters went nowhere","That's what you typed or said while a banner was up."]},
+ function(){battery-=0.001;return ["Battery dropped by 0.0010%","It is now "+battery.toFixed(3)+"%."]},
+ function(){return ["You've used "+pct(dayPct())+" of today","Resets at midnight"]},
+ function(){return ["You've lost "+curLost().toFixed(1)+" seconds to pop-ups","That's "+pct(curLost()/LEN*100)+" of your test."]},
+ function(){return ["Accuracy is "+$("acc").textContent,"This banner is 0% accurate about whether you wanted it."]},
+ function(){return ["Cell signal is "+rnd(10,99).toFixed(1)+"% of a bar","5G is "+rnd(1,40).toFixed(0)+"% of 5G."]},
+ function(){return ["Thumb fatigue is at "+rnd(60,99).toFixed(1)+"%","Caused by closing banners."]},
+ function(){return ["Where were you?","You were "+pct(typed.length/TEXT.length*100)+" through. Good luck finding it."]},
+ function(){return ["Confidence that you wanted this: 0.00%","Shown anyway."]},
+ function(){return ["Your words per minute are "+$("wpm").textContent,"Down "+pct(rnd(5,40))+" since the last banner."]}
+];
+
+function el(tag,cls,txt){var e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
+function curLost(){return lost+(blockedAt?(Date.now()-blockedAt)/1000:0)}
+function keepFocus(b){b.addEventListener("pointerdown",function(e){e.preventDefault()});b.addEventListener("mousedown",function(e){e.preventDefault()})}
+function nag(msg){
+  var n=msg;
+  if(!n){var q=Math.random();
+    if(ended&&q<.35)n=resultNags[Math.floor(Math.random()*resultNags.length)]();
+    else if(q<.6)n=factNag();
+    else if(q<.72)n=LIVE[Math.floor(Math.random()*LIVE.length)]();
+    else n=nags[Math.floor(Math.random()*nags.length)]();}
+  var box=el("div","toast"),txt=el("div","txt");
+  txt.appendChild(el("div","t",n[0]));txt.appendChild(el("div","s",n[1]));
+  var v=el("button","v","View usage"),x=el("button","x","×");
+  x.setAttribute("aria-label","Dismiss");
+  keepFocus(v);keepFocus(x);
+  v.onclick=function(){nag(usageMsg());nag()};
+  x.onclick=function(){
+    box.remove();
+    if(!blocked()&&blockedAt){lost+=(Date.now()-blockedAt)/1000;blockedAt=0}
+    if(!ended)inp.focus();
+  };
+  box.appendChild(txt);box.appendChild(v);box.appendChild(x);
+  var st=$("stack");st.insertBefore(box,st.firstChild);
+  while(st.children.length>5)st.removeChild(st.lastChild);
+  if(!blockedAt)blockedAt=Date.now();
+  served++;$("count").textContent=served+" pop-ups served";
+}
+function scheduleNag(){
+  clearTimeout(nagT);
+  nagT=setTimeout(function(){
+    nag();if(Math.random()<.35)nag();
+    scheduleNag();
+  },rnd(2000,5000));
+}
+function bumpUsage(){
+  var target=Math.min(100,85+Math.floor(typed.length/30)+Math.floor((Date.now()-opened)/8000));
+  if(target>usage){usage=target;$("usage").textContent=usage+"%";nag(usageMsg())}
+}
+function render(){
+  var p=$("passage");p.textContent="";
+  var from=Math.max(0,typed.length-140),to=Math.min(TEXT.length,typed.length+220),cur=null;
+  for(var i=from;i<to;i++){
+    var s=el("span");s.textContent=TEXT[i];
+    if(i<typed.length)s.className=typed[i]===TEXT[i]?"c":"w";
+    else{s.className="todo";if(i===typed.length){s.className+=" cur";cur=s}}
+    p.appendChild(s);
+  }
+  if(cur)p.scrollTop=Math.max(0,cur.offsetTop-p.clientHeight*0.55);
+}
+function stats(){
+  var t=elapsed(),right=0;
+  for(var i=0;i<typed.length;i++)if(typed[i]===TEXT[i])right++;
+  var wpm=t>0?Math.round((right/5)/(t/60)):0;
+  var acc=typed.length?Math.round(right/typed.length*100):100;
+  $("wpm").textContent=wpm;$("acc").textContent=acc+"%";$("time").textContent=(LEN-t).toFixed(1);
+  if(started&&t>=LEN&&!ended)finish(wpm,acc);
+}
+function finish(wpm,acc){
+  ended=true;clearInterval(timer);finalWpm=wpm;
+  var cl=curLost();
+  var st=$("stack");st.textContent="";inp.blur();
+  var r=$("result");r.hidden=false;r.appendChild(st);
+  $("rtext").textContent="Final: "+wpm+" WPM at "+acc+"% accuracy. "+cl.toFixed(1)+" of 60 seconds ("+Math.round(cl/LEN*100)+"%) went to closing "+served+" pop-ups, and "+eaten+" characters you typed or dictated went nowhere. Weekly limit used: "+usage+"%.";
+  r.scrollIntoView({block:"center"});
+  nag(["Your results are ready","Close this to see them."]);nag();
+}
+inp.addEventListener("input",function(){
+  if(ended){inp.value=typed;return}
+  if(blocked()){eaten+=Math.max(0,inp.value.length-typed.length);inp.value=typed;return}
+  if(!started){started=Date.now();timer=setInterval(stats,100)}
+  typed=inp.value.slice(0,TEXT.length);render();stats();
+});
+$("restart").onclick=function(){
+  clearInterval(timer);clearTimeout(nagT);$("zone").appendChild($("stack"));
+  opened=Date.now();started=0;ended=false;typed="";served=0;blockedAt=0;lost=0;eaten=0;usage=85;
+  inp.value="";$("stack").textContent="";$("usage").textContent="85%";
+  $("result").hidden=true;$("count").textContent="0 pop-ups served";
+  render();stats();inp.focus();nag(usageMsg());scheduleNag();
+};
+setInterval(bumpUsage,250);
+render();stats();nag(usageMsg());scheduleNag();
+</script>
+</body>
+</html>

@@ -1,0 +1,1235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Inkrunner v1</title>
+<style>
+  :root {
+    --paper: #f1efe9;
+    --ink: #0f1f4a;
+    --ink-blue: #1d3f8f;
+    --btn: #fbfaf6;
+    --btn-on: #cfe9ff;
+    --ice: #7cc4f0;
+  }
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: var(--paper);
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    font-family: "Courier New", Courier, monospace;
+    color: var(--ink-blue);
+  }
+  #game {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  #title {
+    position: fixed;
+    top: 12px;
+    left: 14px;
+    font-size: 14px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    pointer-events: none;
+  }
+  #tally {
+    position: fixed;
+    top: 32px;
+    left: 14px;
+    font-size: 12px;
+    letter-spacing: 1px;
+    pointer-events: none;
+  }
+  #msg {
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 28px;
+    font-weight: bold;
+    letter-spacing: 4px;
+    color: var(--ink);
+    opacity: 0;
+    pointer-events: none;
+  }
+  #gauge {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    width: 120px;
+    height: 12px;
+    border: 2px solid var(--ink-blue);
+    background: #faf9f5;
+    pointer-events: none;
+  }
+  #gaugeFill {
+    height: 100%;
+    width: 100%;
+    background: var(--ice);
+  }
+  #stats {
+    position: fixed;
+    top: 32px;
+    right: 14px;
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-align: right;
+    pointer-events: none;
+  }
+  #ghostBtn {
+    position: fixed;
+    top: 56px;
+    right: 14px;
+    height: 30px;
+    padding: 0 10px;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: var(--btn);
+    color: var(--ink);
+    font: inherit;
+    font-size: 12px;
+    font-weight: bold;
+  }
+  .pad {
+    position: fixed;
+    bottom: 0;
+    box-sizing: border-box;
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  #padLeft {
+    left: 0;
+    width: 40%;
+    grid-template-columns: 1fr 1fr;
+  }
+  #padRight {
+    right: 0;
+    width: 58%;
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+  .btn {
+    height: 56px;
+    border: 3px solid var(--ink);
+    border-radius: 12px;
+    background: var(--btn);
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+  }
+  .btn.on {
+    background: var(--btn-on);
+  }
+  .btn[data-act="gas"],
+  .btn[data-act="brace"] {
+    grid-column: span 2;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="title">INKRUNNER v1</div>
+<div id="tally">TRICKS 0</div>
+<div id="stats"></div>
+<button id="ghostBtn">GHOST ON</button>
+<div id="msg"></div>
+<div id="gauge"><div id="gaugeFill"></div></div>
+
+<div id="padLeft" class="pad">
+  <button class="btn" data-act="brace">BRACE</button>
+  <button class="btn" data-act="left">LEFT</button>
+  <button class="btn" data-act="right">RIGHT</button>
+</div>
+
+<div id="padRight" class="pad">
+  <button class="btn" data-act="hopL">HOP L</button>
+  <button class="btn" data-act="hopUp">HOP</button>
+  <button class="btn" data-act="hopR">HOP R</button>
+  <button class="btn" data-act="kick">KICK</button>
+  <button class="btn" data-act="flip180">180</button>
+  <button class="btn" data-act="spin360">360</button>
+  <button class="btn" data-act="boost">BOOST</button>
+  <button class="btn" data-act="gas">GAS</button>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const gaugeFill = document.getElementById("gaugeFill");
+  const msgEl = document.getElementById("msg");
+  const tallyEl = document.getElementById("tally");
+  const statsEl = document.getElementById("stats");
+  const ghostBtn = document.getElementById("ghostBtn");
+
+  // Palette: light paper, graphite pencil, deep blue ink, icy cold gas.
+  const PAPER = "#f1efe9";
+  const ROAD = "#fbfaf6";
+  const GRAPHITE = "#8f8c95";
+  const INK = "#0f1f4a";
+  const INK_BLUE = "#1d3f8f";
+  const CAR_LIGHT = "#f7f9fb";
+  const CAR_SHADE = "#c3cfdd";
+  const CABIN_COLOR = "#dff3ff";
+
+  // Tuning. World units and car local units are the same scale.
+  const GRID = 48;
+  const R_INNER = 120;
+  const R_OUTER = 240;
+  const GRAVITY = 700;
+  const HOP_IMPULSE = 330;
+  const SIDE_IMPULSE = 230;
+  const SIDE_LIFT = 200;
+  const HOP_COST = 22;
+  const SIDE_COST = 12;
+  const BOOST_COST = 30;
+  const BRACE_COST = 10;
+  const REFILL = 14;
+  const MAX_SPEED = 420;
+  const POOL_SIZE = 240;
+
+  // Track and wall tuning. The road is wide enough for several cars side by side.
+  const N_TRACK = 1200;
+  const TRACK_HALF = 150;
+  const TRACK_W = TRACK_HALF * 2;
+  const WALL_T = 10;
+  const BARRIER_H = 16;
+  const R_CAR = 14;
+  const CRASH_TIME = 1.2;
+  const SAFE_AGE = 0.5;
+  const SAMPLE_HZ = 30;
+
+  // Air tricks. Each spins the car with cold gas thrusters while airborne.
+  const TRICKS = {
+    kick: { name: "KICKFLIP", axis: "roll", angle: Math.PI * 2, dur: 0.45, cost: 16 },
+    flip180: { name: "180", axis: "yaw", angle: Math.PI, dur: 0.4, cost: 18 },
+    spin360: { name: "360", axis: "yaw", angle: Math.PI * 2, dur: 0.8, cost: 26 }
+  };
+
+  let W = 0;
+  let H = 0;
+  let DPR = 1;
+  let S = 1;
+  let simTime = 0;
+
+  const car = {
+    x: 0, y: 0, h: 0,
+    vx: 0, vy: 0,
+    z: 0, vz: 0,
+    roll: 0,
+    trick: null,
+    tricks: 0,
+    pressure: 100,
+    burst: false,
+    crashed: false,
+    crashTimer: 0
+  };
+
+  let msgText = "";
+  let msgTimer = 0;
+
+  // Lap state, ghost state and safe respawn samples.
+  let trackIdx = 0;
+  let lastS = 0;
+  let lapNum = 1;
+  let lapStart = 0;
+  let lapClean = true;
+  let bestTime = null;
+  let samples = [];
+  let nextSampleT = 0;
+  let ghost = null;
+  let ghostOn = true;
+  let safe = [];
+  let nextSafeT = 0;
+
+  const held = { left: false, right: false, gas: false, boost: false, brace: false };
+  const taps = { hopUp: false, hopL: false, hopR: false, kick: false, flip180: false, spin360: false };
+
+  // Deterministic jitter so the sketch lines are the same every run.
+  let seed = 1337;
+  function seeded() {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  }
+
+  function wobbled(points, amount) {
+    const pts = [];
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i];
+      const b = points[(i + 1) % points.length];
+      pts.push([a[0] + (seeded() - 0.5) * amount, a[1] + (seeded() - 0.5) * amount]);
+      pts.push([
+        (a[0] + b[0]) / 2 + (seeded() - 0.5) * amount * 1.2,
+        (a[1] + b[1]) / 2 + (seeded() - 0.5) * amount * 1.2
+      ]);
+    }
+    const path = new Path2D();
+    pts.forEach(function (p, i) {
+      if (i === 0) path.moveTo(p[0], p[1]);
+      else path.lineTo(p[0], p[1]);
+    });
+    path.closePath();
+    return path;
+  }
+
+  function polyPath(points) {
+    const path = new Path2D();
+    points.forEach(function (p, i) {
+      if (i === 0) path.moveTo(p[0], p[1]);
+      else path.lineTo(p[0], p[1]);
+    });
+    path.closePath();
+    return path;
+  }
+
+  // Car geometry in local units. X is forward, Y is the car's right side.
+  const BODY = [[30, 0], [12, 13], [-24, 13], [-24, -13], [12, -13]];
+  const RIGHT_HALF = [[30, 0], [12, 13], [-24, 13], [-24, 0]];
+  const LEFT_HALF = [[30, 0], [-24, 0], [-24, -13], [12, -13]];
+  const CABIN_POINTS = [[10, -6], [-5, -8], [-5, 8], [10, 6]];
+  const WHEELS = [[16, 14], [16, -14], [-16, 14], [-16, -14]];
+  const NOZZLES = [[-25, 0], [-24, -9], [-24, 9], [-2, -13], [-2, 13]];
+
+  const OUTLINE = wobbled(BODY, 1.0);
+  const OUTLINE_SKETCH = wobbled(BODY, 1.6);
+  const LEFT_PATH = polyPath(LEFT_HALF);
+  const RIGHT_PATH = polyPath(RIGHT_HALF);
+  const CABIN_PATH = polyPath(CABIN_POINTS);
+
+  // Pencil hatch and graphite hatch, each built once.
+  function makeHatch(tilePx, lineWidth, color, scale) {
+    const tile = document.createElement("canvas");
+    tile.width = tilePx;
+    tile.height = tilePx;
+    const g = tile.getContext("2d");
+    const h = tilePx / 2;
+    g.strokeStyle = color;
+    g.lineWidth = lineWidth;
+    g.beginPath();
+    g.moveTo(0, h);
+    g.lineTo(h, 0);
+    g.moveTo(h, tilePx);
+    g.lineTo(tilePx, h);
+    g.stroke();
+    const pattern = ctx.createPattern(tile, "repeat");
+    if (pattern && pattern.setTransform && window.DOMMatrix) {
+      pattern.setTransform(new DOMMatrix().scale(scale));
+    }
+    return pattern;
+  }
+
+  // Ink and paper stripes for the walls.
+  function makeStripe() {
+    const tile = document.createElement("canvas");
+    tile.width = 12;
+    tile.height = 12;
+    const g = tile.getContext("2d");
+    g.fillStyle = CAR_LIGHT;
+    g.fillRect(0, 0, 12, 12);
+    g.strokeStyle = INK;
+    g.lineWidth = 4;
+    g.beginPath();
+    g.moveTo(0, 6);
+    g.lineTo(6, 0);
+    g.moveTo(6, 12);
+    g.lineTo(12, 6);
+    g.stroke();
+    return ctx.createPattern(tile, "repeat");
+  }
+
+  const HATCH_CAR = makeHatch(16, 1.4, INK, 9 / 16);
+  const HATCH_BG = makeHatch(12, 1, GRAPHITE, 1);
+  const STRIPE = makeStripe();
+
+  // One soft cold gas puff, drawn once and stamped for every particle.
+  const puff = document.createElement("canvas");
+  puff.width = 64;
+  puff.height = 64;
+  (function buildPuff() {
+    const g = puff.getContext("2d");
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, "rgba(255, 255, 255, 0.95)");
+    grad.addColorStop(0.5, "rgba(226, 246, 255, 0.7)");
+    grad.addColorStop(0.8, "rgba(124, 196, 240, 0.35)");
+    grad.addColorStop(1, "rgba(124, 196, 240, 0)");
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+  })();
+
+  // Fixed particle pool, reused forever so nothing is allocated mid-play.
+  const pool = [];
+  for (let i = 0; i < POOL_SIZE; i++) {
+    pool.push({ live: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, life: 0, max: 1, size: 6 });
+  }
+  let poolCursor = 0;
+
+  function emit(x, y, z, vx, vy, vz, life, size) {
+    const p = pool[poolCursor];
+    poolCursor = (poolCursor + 1) % POOL_SIZE;
+    p.live = true;
+    p.x = x;
+    p.y = y;
+    p.z = z;
+    p.vx = vx;
+    p.vy = vy;
+    p.vz = vz;
+    p.life = life;
+    p.max = life;
+    p.size = size;
+  }
+
+  function updatePlumes(dt) {
+    for (let i = 0; i < POOL_SIZE; i++) {
+      const p = pool[i];
+      if (!p.live) continue;
+      p.life -= dt;
+      if (p.life <= 0) {
+        p.live = false;
+        continue;
+      }
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.z += p.vz * dt;
+      p.vx *= Math.max(0, 1 - 2 * dt);
+      p.vy *= Math.max(0, 1 - 2 * dt);
+    }
+  }
+
+  // Track: an organic closed loop with a road and a wall on each edge.
+  function buildTrack() {
+    const pts = [];
+    for (let i = 0; i < N_TRACK; i++) {
+      const th = (i / N_TRACK) * Math.PI * 2;
+      const r = 640 * (1 + 0.22 * Math.sin(2 * th + 0.7) + 0.14 * Math.sin(3 * th + 2.1) +
+                       0.08 * Math.sin(5 * th + 4.0) + 0.05 * Math.sin(7 * th + 1.3));
+      pts.push({ x: Math.cos(th) * r * 1.3, y: Math.sin(th) * r, h: 0 });
+    }
+    const cum = new Float64Array(N_TRACK);
+    let total = 0;
+    for (let i = 0; i < N_TRACK; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % N_TRACK];
+      cum[i] = total;
+      total += Math.hypot(b.x - a.x, b.y - a.y);
+    }
+    for (let i = 0; i < N_TRACK; i++) {
+      const p = pts[(i - 1 + N_TRACK) % N_TRACK];
+      const q = pts[(i + 1) % N_TRACK];
+      pts[i].h = Math.atan2(q.y - p.y, q.x - p.x);
+    }
+
+    const path = new Path2D();
+    const wallL = new Path2D();
+    const wallR = new Path2D();
+    const off = TRACK_HALF + WALL_T / 2;
+    pts.forEach(function (p, i) {
+      if (i === 0) path.moveTo(p.x, p.y);
+      else path.lineTo(p.x, p.y);
+
+      const nx = -Math.sin(p.h);
+      const ny = Math.cos(p.h);
+      const lx = p.x + nx * off;
+      const ly = p.y + ny * off;
+      const rx = p.x - nx * off;
+      const ry = p.y - ny * off;
+      if (i === 0) {
+        wallL.moveTo(lx, ly);
+        wallR.moveTo(rx, ry);
+      } else {
+        wallL.lineTo(lx, ly);
+        wallR.lineTo(rx, ry);
+      }
+    });
+    path.closePath();
+    wallL.closePath();
+    wallR.closePath();
+
+    return { pts: pts, cum: cum, length: total, path: path, wallL: wallL, wallR: wallR };
+  }
+
+  const TRACK = buildTrack();
+
+  function toScreen(wx, wy, wz) {
+    return [
+      W / 2 + (wx - car.x) * S,
+      H / 2 + (wy - car.y) * S - wz * S * 0.9
+    ];
+  }
+
+  function drawGridLines() {
+    ctx.beginPath();
+    const x0 = Math.ceil((car.x - R_OUTER) / GRID);
+    const x1 = Math.floor((car.x + R_OUTER) / GRID);
+    for (let i = x0; i <= x1; i++) {
+      const sx = W / 2 + (i * GRID - car.x) * S;
+      ctx.moveTo(sx, 0);
+      ctx.lineTo(sx, H);
+    }
+    const y0 = Math.ceil((car.y - R_OUTER) / GRID);
+    const y1 = Math.floor((car.y + R_OUTER) / GRID);
+    for (let j = y0; j <= y1; j++) {
+      const sy = H / 2 + (j * GRID - car.y) * S;
+      ctx.moveTo(0, sy);
+      ctx.lineTo(W, sy);
+    }
+    ctx.strokeStyle = GRAPHITE;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  function drawBackground() {
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(0, 0, W, H);
+
+    const cx = W / 2;
+    const cy = H / 2;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, R_OUTER * S, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.fillStyle = HATCH_BG;
+    ctx.globalAlpha = 0.3;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 0.22;
+    drawGridLines();
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, R_INNER * S, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.globalAlpha = 0.45;
+    drawGridLines();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  function trackTransform(offX, offY) {
+    ctx.setTransform(
+      DPR * S, 0, 0, DPR * S,
+      DPR * (W / 2 - car.x * S) + DPR * offX,
+      DPR * (H / 2 - car.y * S) + DPR * offY
+    );
+  }
+
+  function drawTrack() {
+    trackTransform(0, 0);
+    ctx.lineJoin = "round";
+    ctx.lineCap = "butt";
+
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = TRACK_W + 6;
+    ctx.stroke(TRACK.path);
+
+    ctx.strokeStyle = ROAD;
+    ctx.lineWidth = TRACK_W;
+    ctx.stroke(TRACK.path);
+
+    ctx.setLineDash([18, 14]);
+    ctx.strokeStyle = GRAPHITE;
+    ctx.lineWidth = 2;
+    ctx.stroke(TRACK.path);
+    ctx.setLineDash([]);
+
+    // Start and finish line.
+    const p0 = TRACK.pts[0];
+    const sp = toScreen(p0.x, p0.y, 0);
+    const rot = p0.h + Math.PI / 2;
+    const c = Math.cos(rot);
+    const s = Math.sin(rot);
+    ctx.setTransform(DPR * S * c, DPR * S * s, -DPR * S * s, DPR * S * c, DPR * sp[0], DPR * sp[1]);
+    ctx.fillStyle = INK;
+    ctx.fillRect(-TRACK_W / 2, -3, TRACK_W, 6);
+  }
+
+  // Walls: a drop shadow on screen, then the ink edge, then the striped top.
+  function drawWalls() {
+    ctx.lineJoin = "round";
+
+    trackTransform(3, 5);
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = WALL_T + 2;
+    ctx.stroke(TRACK.wallL);
+    ctx.stroke(TRACK.wallR);
+    ctx.globalAlpha = 1;
+
+    trackTransform(0, 0);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = WALL_T + 3;
+    ctx.stroke(TRACK.wallL);
+    ctx.stroke(TRACK.wallR);
+
+    ctx.strokeStyle = STRIPE;
+    ctx.lineWidth = WALL_T;
+    ctx.stroke(TRACK.wallL);
+    ctx.stroke(TRACK.wallR);
+  }
+
+  function drawShadow() {
+    const shrink = Math.max(0.45, 1 - car.z / 260);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.globalAlpha = 0.25 * shrink;
+    ctx.fillStyle = "#4a4d57";
+    ctx.beginPath();
+    ctx.ellipse(W / 2, H / 2, 30 * S * shrink, 15 * S * shrink, car.h, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawCar(sx, sy, k, h, roll, alpha) {
+    const cs = Math.cos(h);
+    const sn = Math.sin(h);
+
+    // Kickflip roll squeezes the car's width. Below zero the far side shows.
+    let cr = Math.cos(roll);
+    if (Math.abs(cr) < 0.08) cr = cr < 0 ? -0.08 : 0.08;
+
+    ctx.setTransform(
+      DPR * k * cs,
+      DPR * k * sn,
+      -DPR * k * sn * cr,
+      DPR * k * cs * cr,
+      DPR * sx,
+      DPR * sy
+    );
+
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = INK;
+    for (let i = 0; i < WHEELS.length; i++) {
+      ctx.beginPath();
+      ctx.ellipse(WHEELS[i][0], WHEELS[i][1], 6, 3.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = CAR_LIGHT;
+    ctx.fill(LEFT_PATH);
+
+    ctx.fillStyle = CAR_SHADE;
+    ctx.fill(RIGHT_PATH);
+    ctx.fillStyle = HATCH_CAR;
+    ctx.fill(RIGHT_PATH);
+
+    ctx.fillStyle = CABIN_COLOR;
+    ctx.fill(CABIN_PATH);
+    ctx.strokeStyle = INK;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.lineWidth = 0.9;
+    ctx.stroke(CABIN_PATH);
+
+    ctx.lineWidth = 2.6;
+    ctx.stroke(OUTLINE);
+    ctx.lineWidth = 1.2;
+    ctx.globalAlpha = alpha * 0.55;
+    ctx.stroke(OUTLINE_SKETCH);
+    ctx.globalAlpha = alpha;
+
+    ctx.fillStyle = INK_BLUE;
+    for (let i = 0; i < NOZZLES.length; i++) {
+      ctx.beginPath();
+      ctx.arc(NOZZLES[i][0], NOZZLES[i][1], 1.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawPlumes() {
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    for (let i = 0; i < POOL_SIZE; i++) {
+      const p = pool[i];
+      if (!p.live) continue;
+      const t = p.life / p.max;
+      const grow = 1 + (1 - t) * 1.6;
+      const size = p.size * grow * S * (1 + Math.max(0, p.z) * 0.002);
+      const pos = toScreen(p.x, p.y, p.z);
+      ctx.globalAlpha = Math.min(1, t * 1.2) * 0.9;
+      ctx.drawImage(puff, pos[0] - size / 2, pos[1] - size / 2, size, size);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function render() {
+    drawBackground();
+    drawTrack();
+    drawWalls();
+    drawShadow();
+
+    // Ghost: the best clean lap replayed alongside the car.
+    if (ghostOn && ghost) {
+      const gi = Math.floor((simTime - lapStart) * SAMPLE_HZ);
+      if (gi >= 0 && gi < ghost.length) {
+        const g = ghost[gi];
+        const gp = toScreen(g.x, g.y, g.z);
+        drawCar(gp[0], gp[1], S * (1 + g.z * 0.0025), g.h, 0, 0.32);
+      }
+    }
+
+    const pos = toScreen(car.x, car.y, car.z);
+    const k = S * (1 + car.z * 0.0025);
+    let alpha = 1;
+    if (car.crashed) {
+      alpha = Math.floor(car.crashTimer * 12) % 2 === 0 ? 0.15 : 1;
+    }
+    drawCar(pos[0], pos[1], k, car.h, car.roll, alpha);
+    drawPlumes();
+  }
+
+  function sideBurst(s, grounded) {
+    const lx = -Math.sin(car.h);
+    const ly = Math.cos(car.h);
+    car.vx += lx * s * SIDE_IMPULSE;
+    car.vy += ly * s * SIDE_IMPULSE;
+    if (grounded) car.vz = SIDE_LIFT;
+    car.pressure -= SIDE_COST;
+    car.burst = true;
+
+    const ex = -s * lx;
+    const ey = -s * ly;
+    for (let i = 0; i < 6; i++) {
+      emit(
+        car.x + ex * 8,
+        car.y + ey * 8,
+        car.z + 3,
+        ex * 170 + (Math.random() - 0.5) * 40,
+        ey * 170 + (Math.random() - 0.5) * 40,
+        Math.random() * 20,
+        0.45,
+        8
+      );
+    }
+  }
+
+  function startTrick(key, airborne) {
+    const T = TRICKS[key];
+    if (!airborne || car.trick || car.pressure < T.cost) return;
+    car.trick = {
+      name: T.name,
+      axis: T.axis,
+      angle: T.angle,
+      dur: T.dur,
+      remaining: T.angle,
+      dir: held.left ? -1 : 1
+    };
+    car.pressure -= T.cost;
+    car.burst = true;
+  }
+
+  function showMsg(text) {
+    msgText = text;
+    msgTimer = 1.1;
+  }
+
+  function updateTrick(dt) {
+    const tr = car.trick;
+    const step = Math.min(tr.remaining, (tr.angle / tr.dur) * dt);
+    tr.remaining -= step;
+    if (tr.axis === "roll") car.roll += step * tr.dir;
+    else car.h += step * tr.dir;
+
+    // Spin thrusters fire from both sides while the trick runs.
+    const lx = -Math.sin(car.h);
+    const ly = Math.cos(car.h);
+    for (let i = 0; i < 2; i++) {
+      const side = i === 0 ? 1 : -1;
+      emit(
+        car.x + lx * side * 12,
+        car.y + ly * side * 12,
+        car.z + 2,
+        lx * side * 120 + (Math.random() - 0.5) * 30,
+        ly * side * 120 + (Math.random() - 0.5) * 30,
+        10,
+        0.4,
+        8
+      );
+    }
+
+    if (tr.remaining <= 1e-6) {
+      car.trick = null;
+      car.roll = 0;
+      car.tricks += 1;
+      tallyEl.textContent = "TRICKS " + car.tricks;
+      showMsg(tr.name);
+    }
+  }
+
+  // Nearest centerline point to the car. The whole loop is checked, so the
+  // car can drive anywhere, on the road or off it.
+  function updateTrackIdx() {
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < N_TRACK; i++) {
+      const p = TRACK.pts[i];
+      const dx = car.x - p.x;
+      const dy = car.y - p.y;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    trackIdx = best;
+  }
+
+  // Signed distance from the centerline, positive to the left of travel.
+  function lateralOffset() {
+    const p = TRACK.pts[trackIdx];
+    return (car.x - p.x) * -Math.sin(p.h) + (car.y - p.y) * Math.cos(p.h);
+  }
+
+  // Brace: while BRACE is held, a wall touch bounces the car back out with
+  // cold gas instead of crashing. Each bounce costs pressure.
+  function braceBounce(lat) {
+    const p = TRACK.pts[trackIdx];
+    const nx = -Math.sin(p.h);
+    const ny = Math.cos(p.h);
+    const sgn = lat > 0 ? 1 : -1;
+    const absLat = Math.abs(lat);
+    const wallCenter = TRACK_HALF + WALL_T / 2;
+
+    // Inside the wall band the car is pushed to the road side. Outside it,
+    // the car is pushed back out to the far side of the wall.
+    const inner = absLat < wallCenter;
+    const target = sgn * (inner ? TRACK_HALF - R_CAR : TRACK_HALF + WALL_T + R_CAR);
+    const toWall = inner ? sgn : -sgn;
+
+    const vn = car.vx * nx + car.vy * ny;
+    if (vn * toWall > 0) {
+      car.vx -= 1.5 * vn * nx;
+      car.vy -= 1.5 * vn * ny;
+    }
+    const push = target - lat;
+    car.x += nx * push;
+    car.y += ny * push;
+
+    car.pressure = Math.max(0, car.pressure - BRACE_COST);
+    car.burst = true;
+    for (let i = 0; i < 6; i++) {
+      emit(
+        car.x + nx * toWall * R_CAR,
+        car.y + ny * toWall * R_CAR,
+        car.z + 2,
+        -nx * toWall * 140 + (Math.random() - 0.5) * 60,
+        -ny * toWall * 140 + (Math.random() - 0.5) * 60,
+        Math.random() * 30,
+        0.4,
+        8
+      );
+    }
+  }
+
+  function onLand() {
+    car.roll = 0;
+    if (car.trick) {
+      car.trick = null;
+      showMsg("BAIL");
+    }
+  }
+
+  function crash() {
+    car.crashed = true;
+    car.crashTimer = CRASH_TIME;
+    car.trick = null;
+    car.roll = 0;
+    car.vx = 0;
+    car.vy = 0;
+    car.vz = 0;
+    car.z = 0;
+    car.burst = false;
+    lapClean = false;
+    samples = [];
+    for (let i = 0; i < 16; i++) {
+      emit(
+        car.x + (Math.random() - 0.5) * 20,
+        car.y + (Math.random() - 0.5) * 20,
+        4,
+        (Math.random() - 0.5) * 220,
+        (Math.random() - 0.5) * 220,
+        40 + Math.random() * 60,
+        0.8,
+        14
+      );
+    }
+    showMsg("CRASH");
+  }
+
+  // Blinky reset: return to the most recent safe spot on the road.
+  function respawn() {
+    let pick = null;
+    for (let i = safe.length - 1; i >= 0; i--) {
+      if (simTime - safe[i].t >= SAFE_AGE) {
+        pick = safe[i];
+        break;
+      }
+    }
+    const idx = pick ? pick.idx : 0;
+    const p = TRACK.pts[idx];
+    car.x = p.x;
+    car.y = p.y;
+    car.h = p.h;
+    car.vx = 0;
+    car.vy = 0;
+    car.z = 0;
+    car.vz = 0;
+    car.roll = 0;
+    car.trick = null;
+    car.crashed = false;
+    car.crashTimer = 0;
+    trackIdx = idx;
+    lastS = TRACK.cum[idx];
+  }
+
+  function finishLap() {
+    const lapTime = simTime - lapStart;
+    if (lapClean && (bestTime === null || lapTime < bestTime)) {
+      bestTime = lapTime;
+      ghost = samples;
+    }
+    lapNum += 1;
+    lapStart = simTime;
+    samples = [];
+    nextSampleT = simTime;
+    lapClean = true;
+    showMsg(fmt(lapTime));
+  }
+
+  function fmt(t) {
+    const m = Math.floor(t / 60);
+    const s = t - m * 60;
+    return m + ":" + (s < 10 ? "0" : "") + s.toFixed(1);
+  }
+
+  // Compare the car against the ghost at the same spot on the track.
+  // Negative means the car is ahead.
+  function ghostDelta() {
+    if (!ghost || ghost.length === 0) return null;
+    const trackS = TRACK.cum[trackIdx];
+    if (ghost[ghost.length - 1].s < trackS) return null;
+    let lo = 0;
+    let hi = ghost.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (ghost[mid].s >= trackS) hi = mid;
+      else lo = mid + 1;
+    }
+    const myT = simTime - lapStart;
+    return myT - lo / SAMPLE_HZ;
+  }
+
+  function statsText() {
+    const t = simTime - lapStart;
+    let text = "LAP " + lapNum + "  " + fmt(t) + "  BEST " + (bestTime === null ? "--" : fmt(bestTime));
+    if (ghostOn && ghost) {
+      const d = ghostDelta();
+      if (d !== null) text += "  GHOST " + (d >= 0 ? "+" : "") + d.toFixed(2);
+    }
+    return text;
+  }
+
+  function trackLogic() {
+    const trackS = TRACK.cum[trackIdx];
+    if (lastS - trackS > TRACK.length / 2) finishLap();
+    lastS = trackS;
+
+    if (lapClean && simTime >= nextSampleT) {
+      samples.push({ x: car.x, y: car.y, h: car.h, z: car.z, s: trackS });
+      nextSampleT += 1 / SAMPLE_HZ;
+    }
+
+    if (simTime >= nextSafeT) {
+      nextSafeT = simTime + 0.25;
+      if (car.z <= 0.01 && Math.abs(lateralOffset()) < TRACK_HALF - 40) {
+        safe.push({ idx: trackIdx, t: simTime });
+        if (safe.length > 60) safe.shift();
+      }
+    }
+  }
+
+  function update(dt) {
+    simTime += dt;
+
+    if (car.crashed) {
+      car.crashTimer -= dt;
+      taps.hopUp = false;
+      taps.hopL = false;
+      taps.hopR = false;
+      taps.kick = false;
+      taps.flip180 = false;
+      taps.spin360 = false;
+      if (car.crashTimer <= 0) respawn();
+      updatePlumes(dt);
+      if (msgTimer > 0) msgTimer = Math.max(0, msgTimer - dt);
+      return;
+    }
+
+    const grounded = car.z <= 0.01 && car.vz <= 0;
+    const airborne = car.z > 0.5 || car.vz !== 0;
+    car.burst = false;
+
+    // Steering. Turning is slower in the air and stops during a trick.
+    const steer = car.trick ? 0 : (held.right ? 1 : 0) - (held.left ? 1 : 0);
+    const speed = Math.hypot(car.vx, car.vy);
+    const turnRate = grounded ? 2.4 : 1.1;
+    car.h += steer * turnRate * dt * Math.min(1, speed / 90);
+
+    const fx = Math.cos(car.h);
+    const fy = Math.sin(car.h);
+    const lx = -fy;
+    const ly = fx;
+    let f = car.vx * fx + car.vy * fy;
+    let l = car.vx * lx + car.vy * ly;
+
+    // Sideways grip is strong on the ground and weak in the air.
+    l *= Math.max(0, 1 - (grounded ? 6 : 0.4) * dt);
+
+    if (grounded) {
+      if (held.gas) f += 260 * dt;
+      f *= Math.max(0, 1 - 0.5 * dt);
+    }
+
+    // Boost is a rear cold gas burst. It works in the air too.
+    if (held.boost && car.pressure > 0) {
+      f += 480 * dt;
+      car.pressure = Math.max(0, car.pressure - BOOST_COST * dt);
+      car.burst = true;
+      if (Math.random() < 0.8) {
+        emit(
+          car.x - fx * 26,
+          car.y - fy * 26,
+          car.z + 2,
+          -fx * 150 + (Math.random() - 0.5) * 30,
+          -fy * 150 + (Math.random() - 0.5) * 30,
+          10,
+          0.5,
+          9
+        );
+      }
+    }
+
+    f = Math.min(f, MAX_SPEED);
+    car.vx = fx * f + lx * l;
+    car.vy = fy * f + ly * l;
+
+    // One-shot bursts from taps.
+    if (taps.hopUp) {
+      taps.hopUp = false;
+      if (grounded && car.pressure >= HOP_COST) {
+        car.vz = HOP_IMPULSE;
+        car.pressure -= HOP_COST;
+        car.burst = true;
+        for (let i = 0; i < 8; i++) {
+          emit(
+            car.x + (Math.random() - 0.5) * 30,
+            car.y + (Math.random() - 0.5) * 30,
+            2,
+            (Math.random() - 0.5) * 60,
+            (Math.random() - 0.5) * 60,
+            30 + Math.random() * 40,
+            0.7,
+            8
+          );
+        }
+      }
+    }
+    if (taps.hopL) {
+      taps.hopL = false;
+      if (car.pressure >= SIDE_COST) sideBurst(-1, grounded);
+    }
+    if (taps.hopR) {
+      taps.hopR = false;
+      if (car.pressure >= SIDE_COST) sideBurst(1, grounded);
+    }
+    if (taps.kick) {
+      taps.kick = false;
+      startTrick("kick", airborne);
+    }
+    if (taps.flip180) {
+      taps.flip180 = false;
+      startTrick("flip180", airborne);
+    }
+    if (taps.spin360) {
+      taps.spin360 = false;
+      startTrick("spin360", airborne);
+    }
+
+    if (car.trick) updateTrick(dt);
+
+    // Gravity and landing on the ground plane.
+    if (car.z > 0 || car.vz !== 0) {
+      car.vz -= GRAVITY * dt;
+      car.z += car.vz * dt;
+      if (car.z <= 0) {
+        const hard = car.vz < 0;
+        car.z = 0;
+        car.vz = 0;
+        if (hard) onLand();
+      }
+    }
+
+    car.x += car.vx * dt;
+    car.y += car.vy * dt;
+
+    updateTrackIdx();
+
+    // Walls: only the band itself (the wall plus the car's half width on each
+    // side) can crash the car, and only while it is low enough to hit it.
+    // Once the car is clear of the band, including outside the track, it is
+    // free to drive. Jumping high enough over a wall is safe.
+    const lat = lateralOffset();
+    const absLat = Math.abs(lat);
+    const inBand = absLat > TRACK_HALF - R_CAR && absLat < TRACK_HALF + WALL_T + R_CAR;
+    if (inBand && car.z < BARRIER_H - 3) {
+      if (held.brace && car.pressure > 0) {
+        braceBounce(lat);
+      } else {
+        crash();
+        updatePlumes(dt);
+        return;
+      }
+    }
+
+    if (!car.burst) {
+      car.pressure = Math.min(100, car.pressure + REFILL * dt);
+    }
+
+    trackLogic();
+
+    if (msgTimer > 0) msgTimer = Math.max(0, msgTimer - dt);
+
+    updatePlumes(dt);
+  }
+
+  let lastPct = -1;
+  let lastStats = "";
+  function updateHud() {
+    const pct = Math.round(car.pressure);
+    if (pct !== lastPct) {
+      lastPct = pct;
+      gaugeFill.style.width = pct + "%";
+      gaugeFill.style.background = pct < 20 ? "#ff9e84" : "#7cc4f0";
+    }
+    msgEl.textContent = msgText;
+    msgEl.style.opacity = Math.min(1, msgTimer * 2);
+    const st = statsText();
+    if (st !== lastStats) {
+      lastStats = st;
+      statsEl.textContent = st;
+    }
+  }
+
+  function toggleGhost() {
+    ghostOn = !ghostOn;
+    ghostBtn.textContent = ghostOn ? "GHOST ON" : "GHOST OFF";
+  }
+
+  ghostBtn.addEventListener("click", toggleGhost);
+
+  // Input: on-screen buttons.
+  document.querySelectorAll(".btn").forEach(function (el) {
+    const act = el.dataset.act;
+    const release = function () {
+      el.classList.remove("on");
+      if (act in held) held[act] = false;
+    };
+    el.addEventListener("pointerdown", function (e) {
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      el.classList.add("on");
+      if (act in held) held[act] = true;
+      else taps[act] = true;
+    });
+    el.addEventListener("pointerup", release);
+    el.addEventListener("pointercancel", release);
+    el.addEventListener("lostpointercapture", release);
+  });
+
+  // Input: keyboard for desktop testing.
+  const KEYMAP = {
+    ArrowLeft: "left", KeyA: "left",
+    ArrowRight: "right", KeyD: "right",
+    ArrowUp: "gas", KeyW: "gas",
+    ShiftLeft: "boost", ShiftRight: "boost",
+    KeyB: "brace",
+    KeyQ: "hopL", KeyE: "hopR", Space: "hopUp",
+    KeyZ: "kick", KeyX: "flip180", KeyC: "spin360"
+  };
+  window.addEventListener("keydown", function (e) {
+    if (e.code === "KeyG") {
+      if (!e.repeat) toggleGhost();
+      return;
+    }
+    const act = KEYMAP[e.code];
+    if (!act) return;
+    e.preventDefault();
+    if (act in held) held[act] = true;
+    else if (!e.repeat) taps[act] = true;
+  });
+  window.addEventListener("keyup", function (e) {
+    const act = KEYMAP[e.code];
+    if (act && act in held) held[act] = false;
+  });
+  window.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+  function resize() {
+    W = window.innerWidth;
+    H = window.innerHeight;
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    S = Math.min(W, H) / 400;
+  }
+  window.addEventListener("resize", resize);
+
+  function spawn() {
+    const p = TRACK.pts[0];
+    car.x = p.x;
+    car.y = p.y;
+    car.h = p.h;
+    trackIdx = 0;
+    lastS = 0;
+    updateTrackIdx();
+    safe.push({ idx: 0, t: 0 });
+    lapStart = 0;
+    nextSampleT = 0;
+    showMsg("GO");
+  }
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.033, (now - last) / 1000);
+    last = now;
+    update(dt);
+    render();
+    updateHud();
+    requestAnimationFrame(frame);
+  }
+
+  resize();
+  spawn();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

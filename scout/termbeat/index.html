@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TERMBEAT — audio reactive terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #EDEEE9;
+    --paper-raised: #F7F7F3;
+    --ink: #1E2320;
+    --ink-soft: #4A4F49;
+    --prompt: #2B5D4E;
+    --beat: #B5652A;
+    --beat-bright: #D97F3C;
+    --comment: #9C9C90;
+    --rule: #D6D6CC;
+    --error: #A23B3B;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Space Grotesk', sans-serif;
+    overflow: hidden;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* ---------- topbar ---------- */
+  #topbar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 18px;
+    background: var(--paper-raised);
+    border-bottom: 1px solid var(--rule);
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.06em;
+    margin-right: 8px;
+    white-space: nowrap;
+  }
+
+  .brand .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--beat);
+    margin-right: 8px;
+    transform: translateY(-1px);
+  }
+
+  .btn {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 14px;
+    border: 1px solid var(--ink);
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .btn:hover { background: var(--ink); color: var(--paper-raised); }
+
+  .btn.active {
+    background: var(--prompt);
+    color: var(--paper-raised);
+    border-color: var(--prompt);
+  }
+
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .btn:disabled:hover { background: var(--paper); color: var(--ink); }
+
+  #fileInput { display: none; }
+
+  .spacer { flex: 1; }
+
+  .field-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  input[type="range"] {
+    width: 110px;
+    accent-color: var(--beat);
+  }
+
+  /* ---------- terminal ---------- */
+  #termWrap {
+    flex: 1;
+    padding: 18px 22px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  #terminal {
+    height: 100%;
+    background: var(--paper-raised);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #termTitle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--rule);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  .chip {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--rule);
+  }
+
+  #termBody {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 18px 60px 18px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13.5px;
+    line-height: 1.65;
+    scrollbar-width: thin;
+  }
+
+  #termBody::-webkit-scrollbar { width: 8px; }
+  #termBody::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 4px; }
+
+  .line { white-space: pre-wrap; word-break: break-all; }
+
+  .prompt-glyph {
+    color: var(--prompt);
+    font-weight: 600;
+    transition: color 0.08s ease, text-shadow 0.08s ease;
+  }
+
+  .prompt-glyph.pulse {
+    color: var(--beat-bright);
+    text-shadow: 0 0 6px rgba(217,127,60,0.35);
+  }
+
+  .cmd-text { color: var(--ink); }
+  .out-text { color: var(--ink-soft); }
+  .out-dim { color: var(--comment); }
+  .out-err { color: var(--error); }
+
+  #cursorLine {
+    display: flex;
+    align-items: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13.5px;
+  }
+
+  #cursor {
+    display: inline-block;
+    width: 8px;
+    height: 16px;
+    background: var(--ink);
+    margin-left: 3px;
+    animation: blink 1s steps(1) infinite;
+  }
+
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------- statusbar ---------- */
+  #statusbar {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    padding: 8px 22px 14px 22px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  .stat { display: flex; align-items: center; gap: 6px; }
+  .stat b { color: var(--ink); font-weight: 600; }
+
+  #beatPip {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--rule);
+    transition: background 0.06s ease, transform 0.06s ease;
+  }
+
+  #beatPip.hit {
+    background: var(--beat-bright);
+    transform: scale(1.35);
+  }
+
+  #hiddenAudio { display: none; }
+
+  @media (max-width: 640px) {
+    #topbar { gap: 8px; }
+    .btn { padding: 7px 10px; font-size: 12px; }
+    .field-label { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <div id="topbar">
+    <div class="brand"><span class="dot" id="brandDot"></span>TERMBEAT</div>
+
+    <button class="btn" id="loadFileBtn">Load audio file</button>
+    <input type="file" id="fileInput" accept="audio/*">
+    <button class="btn" id="micBtn">Use microphone</button>
+    <button class="btn" id="playBtn" disabled>Play</button>
+
+    <div class="spacer"></div>
+
+    <label class="field-label">
+      Sensitivity
+      <input type="range" id="sensitivity" min="105" max="170" value="130">
+    </label>
+  </div>
+
+  <div id="termWrap">
+    <div id="terminal">
+      <div id="termTitle">
+        <span class="chip"></span><span class="chip"></span><span class="chip"></span>
+        <span style="margin-left:6px;" id="termTitleText">termbeat — idle</span>
+      </div>
+      <div id="termBody">
+        <div id="lines"></div>
+        <div id="cursorLine"><span class="prompt-glyph" id="promptGlyph">$</span><span id="cursor"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="statusbar">
+    <div class="stat"><span id="beatPip"></span></div>
+    <div class="stat">BPM <b id="bpmVal">—</b></div>
+    <div class="stat">SRC <b id="srcVal">none</b></div>
+    <div class="stat">STATE <b id="stateVal">idle</b></div>
+  </div>
+
+</div>
+
+<audio id="hiddenAudio" crossorigin="anonymous"></audio>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============ command bank ============ */
+
+  var REPOS = ["fieldlog-core", "grid-runner", "atlas-tiles", "hexnote-web", "spool-daemon",
+    "beacon-relay", "quartz-cli", "north-lattice", "driftwood-api", "vantage-ui"];
+  var HASHES = ["a1c9f02", "7b3e441", "e02aa19", "45fd8c0", "9931bea", "c00d7f1", "2ef451a"];
+  var USERS = ["sudosilo", "orange-dev", "fieldops", "m-operators"];
+  var PORTS = ["3000", "4173", "5173", "8080", "8787"];
+  var FILES = ["intake.js", "config.yaml", "index.html", "worker.ts", "schema.sql",
+    "handler.py", "rate-calc.js", "quote.tsx", "gravel-run.js", "lead-form.js"];
+  var DIRS = ["src/components", "lib/utils", "public/assets", "scripts/build",
+    "server/routes", "data/cache", "tests/unit"];
+
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  function rint(a, b) { return Math.floor(a + Math.random() * (b - a + 1)); }
+
+  var COMMAND_BANKS = {
+    npm: [
+      function () { return "npm install"; },
+      function () { return "npm run build"; },
+      function () { return "npm run dev -- --port " + pick(PORTS); },
+      function () { return "npm audit fix"; },
+      function () { return "npm ci"; },
+      function () { return "npm run lint"; },
+      function () { return "npm run test -- --coverage"; },
+      function () { return "npm outdated"; }
+    ],
+    git: [
+      function () { return "git clone https://github.com/" + pick(USERS) + "/" + pick(REPOS) + ".git"; },
+      function () { return "git checkout -b feature/" + pick(REPOS).split("-")[0] + "-update"; },
+      function () { return "git add ."; },
+      function () { return "git commit -m \"update " + pick(FILES) + "\""; },
+      function () { return "git push origin main"; },
+      function () { return "git status"; },
+      function () { return "git log --oneline -6"; },
+      function () { return "git pull --rebase"; }
+    ],
+    fs: [
+      function () { return "mkdir -p " + pick(DIRS); },
+      function () { return "touch " + pick(FILES); },
+      function () { return "rm -rf node_modules"; },
+      function () { return "mv build/temp ./dist"; },
+      function () { return "cp -r assets ./public"; },
+      function () { return "find . -name \"*.log\" -delete"; },
+      function () { return "ls -la " + pick(DIRS); },
+      function () { return "chmod +x deploy.sh"; }
+    ],
+    sys: [
+      function () { return "ps aux | grep node"; },
+      function () { return "curl -s https://api." + pick(REPOS) + ".dev/status"; },
+      function () { return "df -h"; },
+      function () { return "top -bn1 | head -5"; },
+      function () { return "kill -9 " + rint(1000, 9000); },
+      function () { return "env | grep NODE"; },
+      function () { return "which node"; }
+    ]
+  };
+
+  var OUTPUT_LINES = {
+    npm: [
+      function () { return "added " + rint(120, 900) + " packages in " + (Math.random() * 12 + 2).toFixed(1) + "s"; },
+      function () { return rint(0, 3) + " vulnerabilities found"; },
+      function () { return "build complete — dist/ ready"; },
+      function () { return "> vite build"; },
+      function () { return "✓ " + rint(4, 60) + " modules transformed"; }
+    ],
+    git: [
+      function () { return "Enumerating objects: " + rint(20, 400) + ", done."; },
+      function () { return "[main " + pick(HASHES) + "] update " + pick(FILES); },
+      function () { return rint(1, 6) + " files changed, " + rint(4, 220) + " insertions(+)"; },
+      function () { return "Your branch is up to date with 'origin/main'."; },
+      function () { return "Fast-forward"; }
+    ],
+    fs: [
+      function () { return "removed " + rint(100, 4000) + " files"; },
+      function () { return "directory created"; }
+    ],
+    sys: [
+      function () { return "node    " + rint(1000, 9999) + "  0.4  1.2   node server.js"; },
+      function () { return "{\"status\":\"ok\",\"uptime\":" + rint(100, 90000) + "}"; },
+      function () { return "Filesystem     Use%  Mounted on"; }
+    ]
+  };
+
+  var CATEGORY_KEYS = Object.keys(COMMAND_BANKS);
+
+  function nextCommand() {
+    var cat = pick(CATEGORY_KEYS);
+    var gen = pick(COMMAND_BANKS[cat]);
+    return { category: cat, text: gen() };
+  }
+
+  function outputBlock(cat) {
+    var n = rint(1, 2);
+    var lines = [];
+    for (var i = 0; i < n; i++) lines.push(pick(OUTPUT_LINES[cat])());
+    return lines;
+  }
+
+  /* ============ DOM refs ============ */
+
+  var linesEl = document.getElementById("lines");
+  var termBody = document.getElementById("termBody");
+  var promptGlyph = document.getElementById("promptGlyph");
+  var beatPip = document.getElementById("beatPip");
+  var bpmVal = document.getElementById("bpmVal");
+  var srcVal = document.getElementById("srcVal");
+  var stateVal = document.getElementById("stateVal");
+  var termTitleText = document.getElementById("termTitleText");
+  var loadFileBtn = document.getElementById("loadFileBtn");
+  var fileInput = document.getElementById("fileInput");
+  var micBtn = document.getElementById("micBtn");
+  var playBtn = document.getElementById("playBtn");
+  var sensitivitySlider = document.getElementById("sensitivity");
+  var hiddenAudio = document.getElementById("hiddenAudio");
+
+  var MAX_LINES = 220;
+
+  function appendLine(html, cls) {
+    var div = document.createElement("div");
+    div.className = "line" + (cls ? " " + cls : "");
+    div.innerHTML = html;
+    linesEl.appendChild(div);
+    while (linesEl.children.length > MAX_LINES) {
+      linesEl.removeChild(linesEl.firstChild);
+    }
+    termBody.scrollTop = termBody.scrollHeight;
+    return div;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  /* ============ typing engine ============ */
+
+  var typing = {
+    active: null,      // { category, target, typed, el }
+    phase: "idle"       // idle | typing | output-pending
+  };
+
+  function startNewCommand() {
+    var c = nextCommand();
+    var el = appendLine(
+      "<span class=\"prompt-glyph\">$</span> <span class=\"cmd-text\"></span>",
+      null
+    );
+    typing.active = { category: c.category, target: c.text, typed: "", el: el };
+    typing.phase = "typing";
+  }
+
+  function typeChars(n) {
+    if (!typing.active) startNewCommand();
+    var a = typing.active;
+
+    if (typing.phase === "typing") {
+      var remaining = a.target.length - a.typed.length;
+      var take = Math.min(n, remaining);
+      a.typed += a.target.slice(a.typed.length, a.typed.length + take);
+      var span = a.el.querySelector(".cmd-text");
+      span.textContent = a.typed;
+      termBody.scrollTop = termBody.scrollHeight;
+
+      if (a.typed.length >= a.target.length) {
+        typing.phase = "output-pending";
+      }
+      n -= take;
+    }
+
+    if (typing.phase === "output-pending" && n > 0) {
+      var out = outputBlock(a.category);
+      for (var i = 0; i < out.length; i++) {
+        appendLine(escapeHtml(out[i]), i === out.length - 1 ? "out-dim" : "out-text");
+      }
+      typing.active = null;
+      typing.phase = "idle";
+      startNewCommand();
+    }
+  }
+
+  function pulsePrompt() {
+    promptGlyph.classList.add("pulse");
+    setTimeout(function () { promptGlyph.classList.remove("pulse"); }, 90);
+    if (typing.active && typing.active.el) {
+      var g = typing.active.el.querySelector(".prompt-glyph");
+      if (g) {
+        g.classList.add("pulse");
+        setTimeout(function () { g.classList.remove("pulse"); }, 90);
+      }
+    }
+  }
+
+  /* ============ audio engine ============ */
+
+  var audioCtx = null;
+  var analyser = null;
+  var dataArray = null;
+  var sourceNode = null;
+  var rafId = null;
+
+  var energyHistory = [];
+  var HISTORY_LEN = 40;
+  var lastBeatTime = 0;
+  var beatIntervals = [];
+  var MIN_BEAT_GAP_MS = 220;
+
+  function ensureAudioCtx() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.25;
+      dataArray = new Uint8Array(analyser.frequencyBinCount);
+    }
+    return audioCtx;
+  }
+
+  function connectSource(node, connectToDestination) {
+    if (sourceNode) {
+      try { sourceNode.disconnect(); } catch (e) {}
+    }
+    sourceNode = node;
+    sourceNode.connect(analyser);
+    if (connectToDestination) {
+      sourceNode.connect(audioCtx.destination);
+    }
+  }
+
+  function bassEnergy() {
+    analyser.getByteFrequencyData(dataArray);
+    var sum = 0;
+    var bins = 8;
+    for (var i = 0; i < bins; i++) sum += dataArray[i];
+    return sum / bins;
+  }
+
+  function loop() {
+    rafId = requestAnimationFrame(loop);
+    var e = bassEnergy();
+
+    energyHistory.push(e);
+    if (energyHistory.length > HISTORY_LEN) energyHistory.shift();
+
+    var avg = energyHistory.reduce(function (a, b) { return a + b; }, 0) / energyHistory.length;
+    var sensitivity = parseInt(sensitivitySlider.value, 10) / 100;
+    var now = performance.now();
+
+    var isBeat = e > avg * sensitivity && e > 18 && (now - lastBeatTime) > MIN_BEAT_GAP_MS;
+
+    if (isBeat) {
+      var interval = now - lastBeatTime;
+      lastBeatTime = now;
+
+      if (interval < 2000) {
+        beatIntervals.push(interval);
+        if (beatIntervals.length > 8) beatIntervals.shift();
+      }
+      if (beatIntervals.length >= 3) {
+        var avgInt = beatIntervals.reduce(function (a, b) { return a + b; }, 0) / beatIntervals.length;
+        var bpm = Math.round(60000 / avgInt);
+        if (bpm > 40 && bpm < 240) bpmVal.textContent = bpm;
+      }
+
+      var ratio = Math.min(3, e / Math.max(avg, 1));
+      var chars = Math.max(2, Math.min(14, Math.round(ratio * 5)));
+
+      typeChars(chars);
+      pulsePrompt();
+      beatPip.classList.add("hit");
+      setTimeout(function () { beatPip.classList.remove("hit"); }, 90);
+
+      stateVal.textContent = "reacting";
+    } else if (now - lastBeatTime > 1800) {
+      stateVal.textContent = "listening";
+    }
+  }
+
+  function startLoop() {
+    if (!rafId) loop();
+  }
+
+  function stopLoop() {
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  }
+
+  /* ============ source wiring ============ */
+
+  loadFileBtn.addEventListener("click", function () { fileInput.click(); });
+
+  fileInput.addEventListener("change", function () {
+    var file = fileInput.files[0];
+    if (!file) return;
+
+    ensureAudioCtx();
+    var url = URL.createObjectURL(file);
+    hiddenAudio.src = url;
+
+    if (!hiddenAudio._nodeCreated) {
+      var node = audioCtx.createMediaElementSource(hiddenAudio);
+      hiddenAudio._node = node;
+      hiddenAudio._nodeCreated = true;
+    }
+    connectSource(hiddenAudio._node, true);
+
+    srcVal.textContent = "file";
+    termTitleText.textContent = "termbeat — " + file.name;
+    playBtn.disabled = false;
+    playBtn.textContent = "Play";
+    micBtn.classList.remove("active");
+    loadFileBtn.classList.add("active");
+
+    energyHistory = [];
+    beatIntervals = [];
+    startLoop();
+  });
+
+  playBtn.addEventListener("click", function () {
+    if (hiddenAudio.paused) {
+      audioCtx.resume();
+      hiddenAudio.play();
+      playBtn.textContent = "Pause";
+    } else {
+      hiddenAudio.pause();
+      playBtn.textContent = "Play";
+    }
+  });
+
+  micBtn.addEventListener("click", function () {
+    if (micBtn.classList.contains("active")) {
+      micBtn.classList.remove("active");
+      stopLoop();
+      stateVal.textContent = "idle";
+      srcVal.textContent = "none";
+      termTitleText.textContent = "termbeat — idle";
+      return;
+    }
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      ensureAudioCtx();
+      audioCtx.resume();
+      var node = audioCtx.createMediaStreamSource(stream);
+      connectSource(node, false);
+
+      srcVal.textContent = "mic";
+      termTitleText.textContent = "termbeat — microphone";
+      micBtn.classList.add("active");
+      loadFileBtn.classList.remove("active");
+      hiddenAudio.pause();
+      playBtn.disabled = true;
+
+      energyHistory = [];
+      beatIntervals = [];
+      startLoop();
+    }).catch(function (err) {
+      appendLine("mic permission denied: " + escapeHtml(err.message), "out-err");
+    });
+  });
+
+  /* ============ boot ============ */
+
+  startNewCommand();
+})();
+</script>
+
+</body>
+</html>

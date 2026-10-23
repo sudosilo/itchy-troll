@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#f4ede4">
+<title>pancakes</title>
+<style>
+html, body {
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+body {
+  font-family: Arial, sans-serif;
+  background: #f4ede4;
+  color: #3a2a1a;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+}
+h1 {
+  margin-bottom: 4px;
+}
+#stats {
+  font-size: 16px;
+  margin-bottom: 14px;
+  text-align: center;
+}
+#griddle {
+  width: min(94vw, 480px);
+  aspect-ratio: 1 / 1;
+  background: #d9cfc1;
+  border: 6px solid #8a6d4b;
+  border-radius: 12px;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  overflow: auto;
+}
+.slot {
+  min-width: 36px;
+  min-height: 36px;
+  background: #cfc3b3;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: background 0.15s;
+}
+.slot.bad {
+  background: #e8a0a0;
+}
+.pancake {
+  width: 80%;
+  height: 80%;
+  min-width: 26px;
+  min-height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.3s;
+  box-shadow: inset 0 0 0 3px rgba(0,0,0,0.05);
+}
+#plate {
+  margin-top: 16px;
+  width: min(94vw, 480px);
+  min-height: 56px;
+  background: #ffffff;
+  border: 4px dashed #8a6d4b;
+  border-radius: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 8px;
+  gap: 6px;
+}
+.plate-pancake {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+#gameover {
+  display: none;
+  margin-top: 20px;
+  font-size: 20px;
+  text-align: center;
+}
+button {
+  margin-top: 12px;
+  padding: 10px 20px;
+  font-size: 16px;
+  cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<h1>pancakes</h1>
+<div id="stats">
+  saved: <span id="saved">0</span>
+  strikes: <span id="burnt">0</span> of <span id="maxburnt">5</span>
+  board level: <span id="level">1</span>
+</div>
+
+<div id="griddle"></div>
+
+<div id="plate"></div>
+
+<div id="gameover">
+  <div>game over</div>
+  <div id="finalscore"></div>
+  <button onclick="restart()">play again</button>
+</div>
+
+<script>
+const START_GRID_SIZE = 3;
+const START_MAX_BURNT = 5;
+const MIN_BURN_TIME = 3000;
+const MAX_BURN_TIME = 8000;
+const START_SPAWN_INTERVAL = 1800;
+const SPAWN_SPEEDUP_FACTOR = 0.85;
+const EXPAND_INTERVAL = 20000;
+const MIN_SLOT_PX = 36;
+const READY_RATIO = 0.4;
+
+let gridSize = START_GRID_SIZE;
+let maxBurnt = START_MAX_BURNT;
+let spawnInterval = START_SPAWN_INTERVAL;
+let slots = [];
+let saved = 0;
+let burnt = 0;
+let running = true;
+let spawnTimer = null;
+let tickTimer = null;
+let expandTimer = null;
+
+const griddleEl = document.getElementById('griddle');
+const plateEl = document.getElementById('plate');
+const savedEl = document.getElementById('saved');
+const burntEl = document.getElementById('burnt');
+const maxburntEl = document.getElementById('maxburnt');
+const levelEl = document.getElementById('level');
+const gameoverEl = document.getElementById('gameover');
+const finalscoreEl = document.getElementById('finalscore');
+
+function buildSlots() {
+  griddleEl.style.gridTemplateColumns = 'repeat(' + gridSize + ', minmax(' + MIN_SLOT_PX + 'px, 1fr))';
+  griddleEl.style.gridTemplateRows = 'repeat(' + gridSize + ', minmax(' + MIN_SLOT_PX + 'px, 1fr))';
+  griddleEl.innerHTML = '';
+  const total = gridSize * gridSize;
+  for (let i = 0; i < total; i++) {
+    const slotDiv = document.createElement('div');
+    slotDiv.className = 'slot';
+    slotDiv.dataset.index = i;
+    griddleEl.appendChild(slotDiv);
+  }
+}
+
+function colorForAge(age, burnTime) {
+  const ratio = age / burnTime;
+  if (ratio < 0.4) return '#f2e4c9';
+  if (ratio < 0.7) return '#e0b566';
+  if (ratio < 1.0) return '#a8742f';
+  return '#3b2a1a';
+}
+
+function randomBurnTime() {
+  return MIN_BURN_TIME + Math.random() * (MAX_BURN_TIME - MIN_BURN_TIME);
+}
+
+function spawnPancake() {
+  if (!running) return;
+  const emptyIndexes = slots.map((s, i) => s === null ? i : -1).filter(i => i !== -1);
+  if (emptyIndexes.length === 0) return;
+  const idx = emptyIndexes[Math.floor(Math.random() * emptyIndexes.length)];
+  slots[idx] = { born: Date.now(), burnTime: randomBurnTime() };
+  renderSlot(idx);
+}
+
+function renderSlot(idx) {
+  const slotDiv = griddleEl.children[idx];
+  if (!slotDiv) return;
+  slotDiv.innerHTML = '';
+  const p = slots[idx];
+  if (!p) return;
+  const pancakeDiv = document.createElement('div');
+  pancakeDiv.className = 'pancake';
+  pancakeDiv.style.background = colorForAge(Date.now() - p.born, p.burnTime);
+  pancakeDiv.onclick = () => savePancake(idx);
+  slotDiv.appendChild(pancakeDiv);
+}
+
+function renderAll() {
+  for (let i = 0; i < slots.length; i++) renderSlot(i);
+}
+
+function flashBad(idx) {
+  const slotDiv = griddleEl.children[idx];
+  if (!slotDiv) return;
+  slotDiv.classList.add('bad');
+  setTimeout(() => slotDiv.classList.remove('bad'), 350);
+}
+
+function addStrike() {
+  burnt++;
+  burntEl.textContent = burnt;
+  if (burnt >= maxBurnt) {
+    endGame();
+    return true;
+  }
+  return false;
+}
+
+function savePancake(idx) {
+  if (!running) return;
+  const p = slots[idx];
+  if (!p) return;
+  const age = Date.now() - p.born;
+  const ratio = age / p.burnTime;
+  const color = colorForAge(age, p.burnTime);
+  slots[idx] = null;
+  if (griddleEl.children[idx]) griddleEl.children[idx].innerHTML = '';
+  if (ratio < READY_RATIO) {
+    flashBad(idx);
+    addStrike();
+    return;
+  }
+  saved++;
+  savedEl.textContent = saved;
+  const mini = document.createElement('div');
+  mini.className = 'plate-pancake';
+  mini.style.background = color;
+  plateEl.appendChild(mini);
+}
+
+function tick() {
+  if (!running) return;
+  const now = Date.now();
+  for (let i = 0; i < slots.length; i++) {
+    const p = slots[i];
+    if (!p) continue;
+    const age = now - p.born;
+    if (age >= p.burnTime) {
+      slots[i] = null;
+      if (griddleEl.children[i]) griddleEl.children[i].innerHTML = '';
+      if (addStrike()) return;
+    } else {
+      renderSlot(i);
+    }
+  }
+}
+
+function expandBoard() {
+  if (!running) return;
+  gridSize++;
+  maxBurnt++;
+  spawnInterval = spawnInterval * SPAWN_SPEEDUP_FACTOR;
+  const newTotal = gridSize * gridSize;
+  const newSlots = new Array(newTotal).fill(null);
+  for (let i = 0; i < slots.length && i < newTotal; i++) newSlots[i] = slots[i];
+  slots = newSlots;
+  maxburntEl.textContent = maxBurnt;
+  levelEl.textContent = gridSize - START_GRID_SIZE + 1;
+  buildSlots();
+  renderAll();
+  clearInterval(spawnTimer);
+  spawnTimer = setInterval(spawnPancake, spawnInterval);
+}
+
+function endGame() {
+  running = false;
+  clearInterval(spawnTimer);
+  clearInterval(tickTimer);
+  clearInterval(expandTimer);
+  gameoverEl.style.display = 'block';
+  finalscoreEl.textContent = 'pancakes saved: ' + saved + ' board level reached: ' + (gridSize - START_GRID_SIZE + 1);
+}
+
+function restart() {
+  clearInterval(spawnTimer);
+  clearInterval(tickTimer);
+  clearInterval(expandTimer);
+  gridSize = START_GRID_SIZE;
+  maxBurnt = START_MAX_BURNT;
+  spawnInterval = START_SPAWN_INTERVAL;
+  slots = new Array(gridSize * gridSize).fill(null);
+  saved = 0;
+  burnt = 0;
+  savedEl.textContent = 0;
+  burntEl.textContent = 0;
+  maxburntEl.textContent = maxBurnt;
+  levelEl.textContent = 1;
+  plateEl.innerHTML = '';
+  gameoverEl.style.display = 'none';
+  buildSlots();
+  running = true;
+  spawnTimer = setInterval(spawnPancake, spawnInterval);
+  tickTimer = setInterval(tick, 100);
+  expandTimer = setInterval(expandBoard, EXPAND_INTERVAL);
+}
+
+restart();
+</script>
+
+</body>
+</html>

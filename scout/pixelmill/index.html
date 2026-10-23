@@ -1,0 +1,2282 @@
+<!DOCTYPE html>
+<!-- RED PHONE: PIXELMILL v1.0, pixel CNC toolpath simulator. Built and deployed from Red Phone. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#e8e2d8">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<title>PIXELMILL · toolpath simulator</title>
+<style>
+  :root {
+    --bg: #e8e2d8;
+    --bg-soft: #f0ebe1;
+    --panel: #d8d0c2;
+    --ink: #2a2520;
+    --ink-soft: #5c544a;
+    --rule: #b5ab9a;
+    --red: #c8302a;
+    --red-deep: #8a1f1c;
+    --stock: #141926;
+    --mono: 'JetBrains Mono', 'Courier New', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--mono);
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;
+    font-feature-settings: 'tnum' 1;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background-image:
+      repeating-linear-gradient(0deg, transparent 0, transparent 23px, rgba(90,80,70,0.04) 23px, rgba(90,80,70,0.04) 24px),
+      repeating-linear-gradient(90deg, transparent 0, transparent 23px, rgba(90,80,70,0.04) 23px, rgba(90,80,70,0.04) 24px);
+  }
+  header {
+    padding: 10px 14px 8px;
+    border-bottom: 1.5px solid var(--ink);
+    background: var(--bg-soft);
+    display: flex; align-items: center; gap: 10px;
+    flex-shrink: 0;
+  }
+  .menu-btn {
+    width: 28px; height: 28px;
+    background: var(--ink); border: none;
+    position: relative; cursor: pointer;
+    box-shadow: 2px 2px 0 var(--red-deep);
+    flex-shrink: 0; padding: 0;
+  }
+  .menu-btn span,
+  .menu-btn span::before,
+  .menu-btn span::after {
+    content: ''; position: absolute;
+    left: 6px; right: 6px; height: 2px; background: var(--bg);
+  }
+  .menu-btn span { top: 13px; }
+  .menu-btn span::before { top: -5px; left: 0; right: 0; }
+  .menu-btn span::after { top: 5px; left: 0; right: 0; }
+  .title {
+    flex: 1; font-weight: 800; font-size: 13px;
+    letter-spacing: 0.12em; display: flex; align-items: baseline; gap: 8px;
+  }
+  .title .dot {
+    display: inline-block; width: 7px; height: 7px;
+    background: var(--red); border-radius: 50%;
+    animation: blink 1.1s infinite; transform: translateY(-1px);
+  }
+  @keyframes blink { 0%,55% { opacity: 1; } 60%,100% { opacity: 0.15; } }
+  .sub { font-size: 9.5px; color: var(--ink-soft); letter-spacing: 0.1em; }
+
+  /* INFO BAR — locked dimensions, no reflow */
+  .infobar {
+    background: var(--ink);
+    color: #b8c0d0;
+    border-bottom: 1.5px solid #000;
+    font-size: 9px;
+    letter-spacing: 0.04em;
+    padding: 5px 10px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 6px;
+    flex-shrink: 0;
+    height: 38px;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .infobar .cell {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .infobar .k {
+    font-size: 7px;
+    color: #7a8294;
+    letter-spacing: 0.1em;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+  }
+  .infobar .v {
+    font-size: 10px;
+    color: #5ef0c8;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+    display: block;
+  }
+  .infobar .v.warn { color: #ff5e3a; }
+  .infobar .v.deep { color: #fff03a; }
+  .infobar .swatch {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border: 1px solid #000;
+    vertical-align: -1px;
+    margin: 0 2px;
+  }
+
+  .stage {
+    flex: 1;
+    position: relative;
+    padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+    overflow: hidden;
+    contain: layout size;
+  }
+  .frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 5 / 3;
+    max-height: 100%;
+    background: var(--stock);
+    border: 1.5px solid var(--ink);
+    box-shadow: 3px 3px 0 var(--ink), inset 0 0 0 1px rgba(255,255,255,0.06);
+    overflow: hidden;
+    contain: layout size paint;
+  }
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  .corner {
+    position: absolute;
+    width: 10px; height: 10px;
+    border: 1.5px solid var(--ink);
+    background: var(--bg);
+    z-index: 5;
+  }
+  .corner.tl { top: -6px; left: -6px; }
+  .corner.tr { top: -6px; right: -6px; }
+  .corner.bl { bottom: -6px; left: -6px; }
+  .corner.br { bottom: -6px; right: -6px; }
+
+  /* PIP — picture-in-picture target preview */
+  .pip {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    width: 80px;
+    aspect-ratio: 5/3;
+    border: 1.5px solid #fff;
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.6);
+    background: var(--stock);
+    z-index: 6;
+    display: none;
+    overflow: hidden;
+  }
+  .pip.show { display: block; }
+  .pip canvas {
+    width: 100%; height: 100%;
+    image-rendering: pixelated;
+  }
+  .pip .label {
+    position: absolute;
+    top: -1px; left: -1px;
+    font-size: 7.5px;
+    letter-spacing: 0.12em;
+    background: #fff;
+    color: var(--ink);
+    padding: 1px 4px;
+    font-weight: 800;
+    border-right: 1.5px solid var(--ink);
+    border-bottom: 1.5px solid var(--ink);
+  }
+
+  .panel {
+    flex-shrink: 0;
+    background: var(--panel);
+    border-top: 1.5px solid var(--ink);
+    padding: 10px 12px 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .panel .row {
+    grid-column: 1 / -1;
+    font-size: 9.5px;
+    color: var(--ink-soft);
+    letter-spacing: 0.1em;
+    display: flex; justify-content: space-between;
+    margin-bottom: 2px;
+  }
+  .panel .row .mode-tag { color: var(--red-deep); font-weight: 700; }
+  button {
+    font-family: var(--mono);
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.08em;
+    background: var(--bg-soft);
+    color: var(--ink);
+    border: 1.5px solid var(--ink);
+    padding: 0 8px;
+    height: 38px;
+    cursor: pointer;
+    text-transform: uppercase;
+    box-shadow: 2px 2px 0 var(--ink);
+    transition: transform 0.05s, box-shadow 0.05s;
+    touch-action: manipulation;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+  }
+  button:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink); }
+  button.primary { background: var(--red); color: #fff; }
+  button.wide { grid-column: 1 / -1; }
+  button.toggle.on { background: var(--ink); color: var(--bg-soft); }
+  .speed-wrap {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; gap: 10px;
+    padding: 4px 0 0;
+  }
+  .speed-wrap label {
+    font-size: 9.5px; letter-spacing: 0.1em;
+    color: var(--ink-soft); flex-shrink: 0;
+  }
+  input[type=range] {
+    flex: 1;
+    -webkit-appearance: none; appearance: none;
+    height: 4px; background: var(--ink); outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 18px; height: 18px;
+    background: var(--red);
+    border: 1.5px solid var(--ink); cursor: pointer;
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 18px; height: 18px;
+    background: var(--red);
+    border: 1.5px solid var(--ink); cursor: pointer;
+  }
+
+  .scrim {
+    position: fixed; inset: 0;
+    background: rgba(20,18,15,0.55);
+    z-index: 50;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .scrim.open { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: fixed;
+    top: 0; bottom: 0; left: 0;
+    width: min(82vw, 320px);
+    background: var(--bg-soft);
+    border-right: 2px solid var(--ink);
+    z-index: 51;
+    transform: translateX(-105%);
+    transition: transform 0.22s ease-out;
+    display: flex; flex-direction: column;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .drawer.open { transform: translateX(0); }
+  .drawer-head {
+    padding: 14px 16px 10px;
+    border-bottom: 1.5px solid var(--ink);
+    background: var(--ink);
+    color: var(--bg-soft);
+    display: flex; align-items: baseline; justify-content: space-between;
+  }
+  .drawer-head .h { font-size: 12px; font-weight: 800; letter-spacing: 0.14em; }
+  .drawer-head .s { font-size: 9px; color: #b8c0d0; letter-spacing: 0.12em; }
+  .drawer-scroll { flex: 1; overflow-y: auto; }
+  .mode-list { padding: 8px 10px 4px; }
+  .mode-item {
+    width: 100%; text-align: left;
+    background: var(--bg); color: var(--ink);
+    border: 1.5px solid var(--ink);
+    padding: 11px 12px;
+    margin: 6px 0;
+    font-family: var(--mono); font-size: 11px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    box-shadow: 2px 2px 0 var(--ink);
+    display: flex; align-items: center; gap: 10px;
+    cursor: pointer; touch-action: manipulation;
+    height: auto;
+  }
+  .mode-item:active { transform: translate(2px,2px); box-shadow: 0 0 0 var(--ink); }
+  .mode-item.active { background: var(--ink); color: var(--bg-soft); }
+  .mode-item .badge {
+    display: inline-block; width: 18px; height: 18px;
+    background: var(--red); color: #fff;
+    text-align: center; line-height: 18px; font-size: 10px;
+    border: 1.5px solid var(--ink); flex-shrink: 0;
+  }
+  .mode-item .desc {
+    display: block; font-size: 8.5px; font-weight: 400;
+    color: var(--ink-soft); letter-spacing: 0.06em;
+    text-transform: none; margin-top: 2px;
+  }
+  .mode-item.active .desc { color: #b5ab9a; }
+
+  .preset-section {
+    margin: 10px 10px 4px;
+    padding: 10px;
+    background: var(--panel);
+    border: 1.5px solid var(--ink);
+  }
+  .preset-section .header {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    margin-bottom: 8px;
+    color: var(--ink);
+  }
+  .drawer-toggles {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+  }
+  .drawer-toggles button {
+    font-size: 9.5px;
+    padding: 0 4px;
+    height: 32px;
+    box-shadow: 1.5px 1.5px 0 var(--ink);
+  }
+  .preset-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .preset-grid .preset-btn {
+    font-size: 10px;
+    padding: 0 6px;
+    height: 34px;
+    box-shadow: 1.5px 1.5px 0 var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: flex-start;
+  }
+  .preset-btn .ico {
+    font-size: 13px;
+    width: 16px;
+    text-align: center;
+  }
+  .preset-btn.active {
+    background: var(--red);
+    color: #fff;
+  }
+  .zoom-r {
+    width: 100%;
+    margin-top: 8px;
+    background: #2a6b6e !important;
+    color: #fff !important;
+    border-color: #143638 !important;
+    box-shadow: 2px 2px 0 #143638 !important;
+    height: 38px;
+  }
+  .dpad {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 4px;
+    width: 132px;
+    margin: 0 auto;
+  }
+  .nudge {
+    height: 34px;
+    font-size: 12px;
+    padding: 0;
+    box-shadow: 1.5px 1.5px 0 var(--ink);
+  }
+  .nudge-center {
+    background: var(--red);
+    color: #fff;
+    font-size: 14px;
+  }
+  .offset-readout {
+    text-align: center;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    margin-top: 6px;
+    color: var(--ink-soft);
+  }
+  .offset-readout span { color: var(--red-deep); font-weight: 700; }
+
+  /* floating d-pad over canvas */
+  .dpad-toggle {
+    position: absolute;
+    bottom: 6px;
+    left: 6px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    font-size: 14px;
+    background: rgba(20,25,38,0.85);
+    color: #5ef0c8;
+    border: 1.5px solid #5ef0c8;
+    box-shadow: 1.5px 1.5px 0 rgba(0,0,0,0.5);
+    z-index: 7;
+    cursor: pointer;
+  }
+  .dpad-toggle.active {
+    background: var(--red);
+    color: #fff;
+    border-color: #fff;
+  }
+  .dpad-float {
+    position: absolute;
+    bottom: 40px;
+    left: 6px;
+    background: rgba(232,226,216,0.94);
+    border: 1.5px solid var(--ink);
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+    padding: 6px 8px 8px;
+    z-index: 8;
+    display: none;
+    touch-action: none;
+  }
+  .dpad-float.show { display: block; }
+  .dpad-handle {
+    font-size: 8px;
+    letter-spacing: 0.12em;
+    color: var(--ink);
+    font-weight: 800;
+    text-align: center;
+    margin-bottom: 5px;
+    cursor: grab;
+    user-select: none;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 4px;
+  }
+  .dpad-handle span {
+    color: var(--red-deep);
+    margin-left: 4px;
+  }
+  .lw-btn, .persp-btn {
+    font-size: 10px;
+    height: 32px;
+    padding: 0;
+    box-shadow: 1.5px 1.5px 0 var(--ink);
+  }
+  .lw-btn.active, .persp-btn.active {
+    background: var(--ink);
+    color: var(--bg-soft);
+  }
+
+  .drawer-foot {
+    padding: 10px 14px 14px;
+    border-top: 1.5px solid var(--ink);
+    background: var(--panel);
+    font-size: 9px; letter-spacing: 0.12em;
+    color: var(--ink-soft); text-align: center;
+  }
+  #imgPick { display: none; }
+
+  .mini-toggles {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+  }
+  .mini-toggles button {
+    font-size: 9.5px;
+    padding: 0 4px;
+    height: 30px;
+    box-shadow: 1.5px 1.5px 0 var(--ink);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <button class="menu-btn" id="menuBtn" aria-label="menu"><span></span></button>
+  <div class="title"><span class="dot"></span>PIXELMILL</div>
+  <div class="sub">v1.0</div>
+</header>
+
+<!-- INFO BAR OUTSIDE THE ART -->
+<div class="infobar">
+  <div class="cell">
+    <span class="k">PASS / PROG</span>
+    <span class="v"><span id="pass">001</span> · <span id="prog">RASTER</span></span>
+  </div>
+  <div class="cell">
+    <span class="k">TOOL / FEED</span>
+    <span class="v">T<span id="tool">01</span><span class="swatch" id="sw"></span> · <span id="feed">14</span></span>
+  </div>
+  <div class="cell">
+    <span class="k">XY · DOTS</span>
+    <span class="v"><span id="xy">000,000</span> · <span id="dots">0</span></span>
+  </div>
+  <div class="cell">
+    <span class="k">Z · STATUS</span>
+    <span class="v"><span id="zstate">CUT</span> · <span id="status">RUN</span></span>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="frame">
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+
+    <canvas id="plot"></canvas>
+    <canvas id="bird"></canvas>
+
+    <div class="pip" id="pip">
+      <div class="label">TARGET</div>
+      <canvas id="pipCanvas"></canvas>
+    </div>
+
+    <button class="dpad-toggle" id="dpadToggle" aria-label="toggle nudge pad">✥</button>
+
+    <div class="dpad-float" id="dpadFloat">
+      <div class="dpad-handle" id="dpadHandle">⋮⋮ NUDGE <span id="floatOffsetReadout">+00,+00</span></div>
+      <div class="dpad">
+        <div></div>
+        <button class="nudge" data-dir="up">▲</button>
+        <div></div>
+        <button class="nudge" data-dir="left">◀</button>
+        <button id="btnResetOffset" class="nudge nudge-center">⊙</button>
+        <button class="nudge" data-dir="right">▶</button>
+        <div></div>
+        <button class="nudge" data-dir="down">▼</button>
+        <div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="row">
+    <span>// <span class="mode-tag" id="modeTag">ENDLESS</span></span>
+    <span id="statusMain">▶ RUNNING</span>
+  </div>
+  <button id="btnPause" class="primary">▌▌ PAUSE</button>
+  <button id="btnSkip">⇥ NEXT PROG</button>
+  <button id="btnContext" class="wide" style="display:none">⌧ START OVER</button>
+  <div class="speed-wrap">
+    <label>FEED</label>
+    <input type="range" id="speed" min="1" max="80" value="20">
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-head">
+    <div>
+      <div class="h">MODE SELECT</div>
+      <div class="s">M00 // STANDBY</div>
+    </div>
+    <button class="menu-btn" id="closeBtn" aria-label="close"><span></span></button>
+  </div>
+  <div class="drawer-scroll">
+    <div class="mode-list" id="modeList"></div>
+
+    <div class="preset-section">
+      <div class="header">// TOGGLES</div>
+      <div class="drawer-toggles">
+        <button id="btnFill" class="toggle">▦ FILL</button>
+        <button id="btnFlood" class="toggle on">▣ FLOOD</button>
+        <button id="btnDepth" class="toggle">⇣ DEPTH</button>
+      </div>
+      <div class="drawer-toggles" style="margin-top:6px">
+        <button id="btnFade" class="toggle">⌛ FADE 30s</button>
+      </div>
+    </div>
+
+    <div class="preset-section" id="proPanel" style="display:none">
+      <div class="header">// CITY-PRO CONTROLS</div>
+      <div class="drawer-toggles">
+        <button class="persp-btn active" data-persp="one">1-POINT</button>
+        <button class="persp-btn" data-persp="aerial">AERIAL</button>
+        <button class="persp-btn" data-persp="parallax">PARALLAX</button>
+      </div>
+      <div class="offset-readout" style="margin-top:8px">
+        COMPLEXITY <span id="complexityReadout">L0</span> · LAYERS <span id="layerCount">0/4</span>
+      </div>
+    </div>
+
+    <div class="preset-section">
+      <div class="header">// LINE WIDTH</div>
+      <div class="drawer-toggles">
+        <button class="lw-btn active" data-lw="1">1 PX</button>
+        <button class="lw-btn" data-lw="2">2 PX</button>
+        <button class="lw-btn" data-lw="3">3 PX</button>
+      </div>
+    </div>
+
+    <div class="preset-section">
+      <div class="header">// ACTIONS</div>
+      <div class="drawer-toggles">
+        <button id="btnClear">⌧ CLEAR</button>
+        <button id="btnSave">⤓ SAVE PNG</button>
+      </div>
+      <button id="btnZoomR" class="zoom-r" style="display:none">▶▶ ZOOM/RIGHT &nbsp;·&nbsp; TILE NEXT CITY</button>
+    </div>
+
+    <div class="preset-section">
+      <div class="header">// IMAGE PRESETS</div>
+      <div class="preset-grid" id="presetGrid"></div>
+    </div>
+  </div>
+
+  <div class="drawer-foot">PIXELMILL // TOOLPATH SIMULATOR</div>
+</aside>
+
+<input type="file" id="imgPick" accept="image/*">
+
+<script>
+// RED PHONE: modes endless, template, shapes, cityscape, scroll, city-pro, image; floating nudge pad, line width, fade, flood, depth
+(() => {
+  const plot = document.getElementById('plot');
+  const bird = document.getElementById('bird');
+  const pctx = plot.getContext('2d');
+  const bctx = bird.getContext('2d');
+
+  const W = 160, H = 96;
+  plot.width = bird.width = W;
+  plot.height = bird.height = H;
+  pctx.imageSmoothingEnabled = false;
+  bctx.imageSmoothingEnabled = false;
+
+  // Virtual buffer — grows wider when we tile rightward.
+  // Plot canvas always renders a scaled view of this buffer.
+  const virt = document.createElement('canvas');
+  virt.width = W;
+  virt.height = H;
+  const vctx = virt.getContext('2d');
+  vctx.imageSmoothingEnabled = false;
+
+  function virtExtend(newTileCount) {
+    // Preserve current contents while widening
+    const oldData = vctx.getImageData(0, 0, virt.width, virt.height);
+    virt.width = W * newTileCount;
+    virt.height = H;
+    vctx.imageSmoothingEnabled = false;
+    vctx.putImageData(oldData, 0, 0);
+  }
+
+  // Redraw plot from the virtual buffer (scaled to fit width)
+  function redrawPlot() {
+    pctx.clearRect(0, 0, W, H);
+    // letterbox: scale virtual buffer to fit W width
+    const scale = W / virt.width;
+    const drawH = Math.round(H * scale);
+    const offsetY = Math.floor((H - drawH) / 2);
+    pctx.drawImage(virt, 0, offsetY, W, drawH);
+  }
+
+  // pip
+  const pip = document.getElementById('pip');
+  const pipCanvas = document.getElementById('pipCanvas');
+  pipCanvas.width = W; pipCanvas.height = H;
+  const pipCtx = pipCanvas.getContext('2d');
+  pipCtx.imageSmoothingEnabled = false;
+
+  const PALETTE = [
+    { name: 'NEON-GRN', hex: '#5ef03a', light: '#a8f78a', deep: '#2eb01a' },
+    { name: 'NEON-ORG', hex: '#ff7a1f', light: '#ffb47a', deep: '#cc4a00' },
+    { name: 'NEON-PNK', hex: '#ff2fa8', light: '#ff85cc', deep: '#c00b75' },
+    { name: 'NEON-CYA', hex: '#3afff0', light: '#9efff5', deep: '#0bc4b8' },
+    { name: 'NEON-YEL', hex: '#fff03a', light: '#fff79e', deep: '#c4b500' },
+    { name: 'NEON-PUR', hex: '#b14aff', light: '#d59bff', deep: '#7a1ed1' },
+    { name: 'NEON-RED', hex: '#ff3a3a', light: '#ff8585', deep: '#c00b0b' },
+    { name: 'NEON-BLU', hex: '#3a7aff', light: '#85a5ff', deep: '#0b3ec4' },
+  ];
+
+  const state = {
+    paused: false,
+    speed: 20,
+    fill: false,
+    flood: true,
+    depth: false,
+    toolIdx: 0,
+    progIdx: 0,
+    pass: 1,
+    progName: 'RASTER',
+    mode: 'endless',
+    modeName: 'ENDLESS',
+    dotMode: 'dense',
+    zState: 'CUT',
+    path: [],
+    pathPos: 0,
+    dotCount: 0,
+    bx: 0, by: 0,
+    activePreset: null,
+    tiles: 1,
+    tileOffsetX: 0,
+    scrolling: false,
+    scrollAccum: 0,
+    fadeQueue: [],
+    fadeMs: 30000,
+    fadeOn: false,
+    // visual offset (shifts entire output)
+    offsetX: 0,
+    offsetY: 0,
+    // tool width (1 = single pixel, 2 = 2x2, 3 = 3x3)
+    lineWidth: 1,
+    // CITYSCAPE-PRO state
+    proComplexity: 0,
+    proPerspective: 'one',
+    proHorizonY: 60,
+    proGrowAccum: 0,
+    proCursor: 0,           // current x-position the bird is cutting at
+  };
+
+  // ===== UTILITY =====
+  function bresenham(x0,y0,x1,y1) {
+    const pts = [];
+    let dx = Math.abs(x1-x0), dy = -Math.abs(y1-y0);
+    let sx = x0<x1?1:-1, sy = y0<y1?1:-1;
+    let err = dx+dy;
+    let x=x0,y=y0, safety=0;
+    while (safety++ < 8000) {
+      pts.push({x,y});
+      if (x===x1 && y===y1) break;
+      const e2 = 2*err;
+      if (e2 >= dy) { err += dy; x += sx; }
+      if (e2 <= dx) { err += dx; y += sy; }
+    }
+    return pts;
+  }
+  function asOneSegment(pts, cut=true) { return { segments: [{ pts, cut }] }; }
+
+  // ===== PATTERN GENERATORS =====
+  function genRaster() {
+    const pts = [];
+    const step = 5 + Math.floor(Math.random()*4);
+    const m = 4;
+    let dir = 1;
+    for (let y=m; y<H-m; y+=step) {
+      if (dir>0) for (let x=m; x<W-m; x++) pts.push({x,y});
+      else for (let x=W-m-1; x>=m; x--) pts.push({x,y});
+      for (let yy=y+1; yy<=Math.min(H-m-1, y+step-1); yy++)
+        pts.push({ x: dir>0 ? W-m-1 : m, y: yy });
+      dir = -dir;
+    }
+    return asOneSegment(pts);
+  }
+  function genSpiral() {
+    const pts = [];
+    const cx=W/2, cy=H/2, maxR=Math.min(W,H)/2-4;
+    const turns = 8 + Math.floor(Math.random()*5);
+    for (let i=0; i<2400; i++) {
+      const r = (i/2400)*maxR;
+      const a = (i/2400)*Math.PI*2*turns;
+      const x = Math.round(cx+Math.cos(a)*r);
+      const y = Math.round(cy+Math.sin(a)*r);
+      if (x>=0&&x<W&&y>=0&&y<H) {
+        if (!pts.length || pts[pts.length-1].x!==x || pts[pts.length-1].y!==y) pts.push({x,y});
+      }
+    }
+    return asOneSegment(pts);
+  }
+  function genHatch() {
+    const angle = (Math.random()<0.5?1:-1)*(Math.PI/4);
+    const step = 5 + Math.floor(Math.random()*4);
+    const m=4, cx=W/2, cy=H/2;
+    const lines = [];
+    for (let offset=-W; offset<W; offset+=step) {
+      const line=[];
+      for (let t=-W; t<W; t++) {
+        const x = Math.round(cx + Math.cos(angle)*t - Math.sin(angle)*offset);
+        const y = Math.round(cy + Math.sin(angle)*t + Math.cos(angle)*offset);
+        if (x>=m&&x<W-m&&y>=m&&y<H-m) line.push({x,y});
+      }
+      if (line.length) lines.push(line);
+    }
+    const segments = [];
+    let last = null;
+    lines.forEach((ln, i) => {
+      const seq = i%2 ? ln.slice().reverse() : ln;
+      if (last) segments.push({ pts: bresenham(last.x,last.y,seq[0].x,seq[0].y), cut:false });
+      segments.push({ pts: seq, cut: true });
+      last = seq[seq.length-1];
+    });
+    return { segments };
+  }
+  function genConcentric() {
+    const pts = [];
+    const cx=W/2, cy=H/2, maxR=Math.min(W,H)/2-4;
+    const step = 4 + Math.floor(Math.random()*3);
+    for (let r=step; r<maxR; r+=step) {
+      const circ = Math.max(16, Math.round(2*Math.PI*r));
+      const ring = [];
+      for (let i=0; i<=circ; i++) {
+        const a = (i/circ)*Math.PI*2;
+        const x = Math.round(cx+Math.cos(a)*r);
+        const y = Math.round(cy+Math.sin(a)*r);
+        if (!ring.length || ring[ring.length-1].x!==x || ring[ring.length-1].y!==y) ring.push({x,y});
+      }
+      ring._closed = true;
+      pts.push(...ring);
+    }
+    return asOneSegment(pts);
+  }
+  function genPocket() {
+    const pts = [];
+    let l=6, r=W-6, t=6, b=H-6;
+    while (l<r && t<b) {
+      for (let x=l; x<=r; x++) pts.push({x,y:t});
+      for (let y=t+1; y<=b; y++) pts.push({x:r,y});
+      for (let x=r-1; x>=l; x--) pts.push({x,y:b});
+      for (let y=b-1; y>t; y--) pts.push({x:l,y});
+      l+=2; r-=2; t+=2; b-=2;
+    }
+    return asOneSegment(pts);
+  }
+  function genLissajous() {
+    const pts = [];
+    const cx=W/2, cy=H/2, A=W/2-6, B=H/2-5;
+    const a = 2 + Math.floor(Math.random()*4);
+    const b = 3 + Math.floor(Math.random()*4);
+    const delta = Math.random()*Math.PI;
+    for (let i=0; i<2400; i++) {
+      const t = (i/2400)*Math.PI*2;
+      const x = Math.round(cx + A*Math.sin(a*t+delta));
+      const y = Math.round(cy + B*Math.sin(b*t));
+      if (!pts.length || pts[pts.length-1].x!==x || pts[pts.length-1].y!==y) pts.push({x,y});
+    }
+    return asOneSegment(pts);
+  }
+  function genStar() {
+    const cx=W/2, cy=H/2;
+    const arms = 16 + Math.floor(Math.random()*16);
+    const maxR = Math.min(W,H)/2-5;
+    const segments = [];
+    for (let i=0; i<arms; i++) {
+      const a = (i/arms)*Math.PI*2;
+      const cos=Math.cos(a), sin=Math.sin(a);
+      const cut = [];
+      for (let r=0; r<=maxR; r++) cut.push({x:Math.round(cx+cos*r), y:Math.round(cy+sin*r)});
+      segments.push({ pts: cut, cut: true });
+      segments.push({ pts: cut.slice().reverse(), cut: false });
+    }
+    return { segments };
+  }
+
+  const ENDLESS_PROGS = [
+    { name:'RASTER', gen:genRaster, mode:'dense' },
+    { name:'SPIRAL', gen:genSpiral, mode:'dense' },
+    { name:'HATCH-45', gen:genHatch, mode:'dashed' },
+    { name:'CONCENTRIC', gen:genConcentric, mode:'sparse' },
+    { name:'POCKET', gen:genPocket, mode:'dense' },
+    { name:'LISSAJOUS', gen:genLissajous, mode:'dense' },
+    { name:'STAR-DRILL', gen:genStar, mode:'sparse' },
+  ];
+
+  // ---- TEMPLATES ----
+  function tmplFlower() {
+    const cx=W/2, cy=H/2;
+    const segments = []; let last = null;
+    const r = 16;
+    const centers = [[cx,cy]];
+    for (let i=0;i<6;i++) {
+      const a = (i/6)*Math.PI*2;
+      centers.push([cx+Math.cos(a)*r, cy+Math.sin(a)*r]);
+    }
+    centers.forEach((c,i) => {
+      const pts = [];
+      const circ = Math.max(40, Math.round(2*Math.PI*r));
+      for (let k=0;k<=circ;k++) {
+        const ang = (k/circ)*Math.PI*2;
+        const x = Math.round(c[0]+Math.cos(ang)*r);
+        const y = Math.round(c[1]+Math.sin(ang)*r);
+        if (!pts.length || pts[pts.length-1].x!==x || pts[pts.length-1].y!==y) pts.push({x,y});
+      }
+      if (last) segments.push({ pts: bresenham(last.x,last.y,pts[0].x,pts[0].y), cut:false });
+      pts._closed = true;
+      segments.push({ pts, cut:true });
+      last = pts[pts.length-1];
+    });
+    return { segments };
+  }
+  function tmplKnot() {
+    const cx=W/2, cy=H/2;
+    const A=W/2-8, B=H/2-6;
+    const a=3, b=5, delta=Math.PI/2;
+    const pts=[];
+    for (let i=0;i<3000;i++) {
+      const t=(i/3000)*Math.PI*2;
+      const x=Math.round(cx+A*Math.sin(a*t+delta));
+      const y=Math.round(cy+B*Math.sin(b*t));
+      if (!pts.length || pts[pts.length-1].x!==x || pts[pts.length-1].y!==y) pts.push({x,y});
+    }
+    return asOneSegment(pts);
+  }
+  function tmplMandala() {
+    const cx=W/2, cy=H/2;
+    const segments=[];
+    const arms=16;
+    for (let i=0;i<arms;i++) {
+      const a=(i/arms)*Math.PI*2;
+      const cos=Math.cos(a), sin=Math.sin(a);
+      const pts=[];
+      for (let r=3; r<Math.min(W,H)/2-4; r++) {
+        const wob = Math.sin(r*0.4)*2;
+        pts.push({
+          x: Math.round(cx+cos*r - sin*wob),
+          y: Math.round(cy+sin*r + cos*wob),
+        });
+      }
+      segments.push({ pts, cut:true });
+      segments.push({ pts: pts.slice().reverse(), cut:false });
+    }
+    return { segments };
+  }
+  const TEMPLATES = [
+    { name:'FLOWER', gen:tmplFlower, mode:'dense' },
+    { name:'KNOT', gen:tmplKnot, mode:'dense' },
+    { name:'MANDALA', gen:tmplMandala, mode:'dense' },
+  ];
+
+  // ---- SHAPES ----
+  function shapeSquare() {
+    const m=10;
+    const pts=[];
+    for (let x=m; x<=W-m; x++) pts.push({x,y:m});
+    for (let y=m+1; y<=H-m; y++) pts.push({x:W-m,y});
+    for (let x=W-m-1; x>=m; x--) pts.push({x,y:H-m});
+    for (let y=H-m-1; y>m; y--) pts.push({x:m,y});
+    pts._closed = true;
+    return asOneSegment(pts);
+  }
+  function shapeCircle() {
+    const cx=W/2, cy=H/2, r=Math.min(W,H)/2-8;
+    const pts=[];
+    const steps=Math.round(2*Math.PI*r);
+    for (let i=0;i<=steps;i++) {
+      const a=(i/steps)*Math.PI*2;
+      const x=Math.round(cx+Math.cos(a)*r);
+      const y=Math.round(cy+Math.sin(a)*r);
+      if (!pts.length || pts[pts.length-1].x!==x || pts[pts.length-1].y!==y) pts.push({x,y});
+    }
+    pts._closed = true;
+    return asOneSegment(pts);
+  }
+  function shapeTriangle() {
+    const cx=W/2, cy=H/2, r=Math.min(W,H)/2-8;
+    const verts=[];
+    for (let i=0;i<3;i++) {
+      const a=-Math.PI/2 + (i/3)*Math.PI*2;
+      verts.push({x:Math.round(cx+Math.cos(a)*r), y:Math.round(cy+Math.sin(a)*r)});
+    }
+    const pts=[
+      ...bresenham(verts[0].x,verts[0].y,verts[1].x,verts[1].y),
+      ...bresenham(verts[1].x,verts[1].y,verts[2].x,verts[2].y),
+      ...bresenham(verts[2].x,verts[2].y,verts[0].x,verts[0].y),
+    ];
+    pts._closed = true;
+    return asOneSegment(pts);
+  }
+  function shapeHex() {
+    const cx=W/2, cy=H/2, r=Math.min(W,H)/2-8;
+    const verts=[];
+    for (let i=0;i<6;i++) {
+      const a=(i/6)*Math.PI*2;
+      verts.push({x:Math.round(cx+Math.cos(a)*r), y:Math.round(cy+Math.sin(a)*r)});
+    }
+    const pts=[];
+    for (let i=0;i<6;i++) {
+      const a=verts[i], b=verts[(i+1)%6];
+      pts.push(...bresenham(a.x,a.y,b.x,b.y));
+    }
+    pts._closed = true;
+    return asOneSegment(pts);
+  }
+  function shapeStar5() {
+    const cx=W/2, cy=H/2, rO=Math.min(W,H)/2-8, rI=rO*0.45;
+    const verts=[];
+    for (let i=0;i<10;i++) {
+      const a=-Math.PI/2 + (i/10)*Math.PI*2;
+      const r = i%2 ? rI : rO;
+      verts.push({x:Math.round(cx+Math.cos(a)*r), y:Math.round(cy+Math.sin(a)*r)});
+    }
+    const pts=[];
+    for (let i=0;i<10;i++) {
+      const a=verts[i], b=verts[(i+1)%10];
+      pts.push(...bresenham(a.x,a.y,b.x,b.y));
+    }
+    pts._closed = true;
+    return asOneSegment(pts);
+  }
+  const SHAPES = [
+    { name:'SQUARE', gen:shapeSquare, mode:'dense' },
+    { name:'CIRCLE', gen:shapeCircle, mode:'dense' },
+    { name:'TRIANGLE', gen:shapeTriangle, mode:'dense' },
+    { name:'HEXAGON', gen:shapeHex, mode:'dense' },
+    { name:'STAR-5', gen:shapeStar5, mode:'dense' },
+  ];
+
+  // ---- CITYSCAPE ----
+  function genCityscape() {
+    const segments = [];
+    const horizon = Math.floor(H * 0.66);
+    const waterTop = horizon + 1;
+    let cursor = 3; let last = null;
+    const buildings = [];
+    while (cursor < W - 3) {
+      const w = 7 + Math.floor(Math.random()*14);
+      const h = 18 + Math.floor(Math.random()*42);
+      const top = Math.max(3, horizon - h);
+      const left = cursor;
+      const right = Math.min(W-3, cursor + w);
+      if (right - left < 5) break;
+      const hasSpire = Math.random() < 0.25 && h > 35;
+      const spireH = hasSpire ? 4 + Math.floor(Math.random()*6) : 0;
+      const spireX = Math.floor((left+right)/2);
+      buildings.push({ left, right, top, bottom: horizon, spireH, spireX });
+      cursor = right + 1 + Math.floor(Math.random()*3);
+    }
+    buildings.forEach(b => {
+      const outline = [];
+      if (b.spireH > 0) {
+        outline.push({x: b.spireX, y: b.top - b.spireH});
+        for (let y = b.top - b.spireH; y <= b.top; y++) outline.push({x: b.spireX, y});
+      }
+      for (let x=b.left; x<=b.right; x++) outline.push({x, y:b.top});
+      for (let y=b.top+1; y<=b.bottom; y++) outline.push({x:b.right, y});
+      for (let x=b.right-1; x>=b.left; x--) outline.push({x, y:b.bottom});
+      for (let y=b.bottom-1; y>b.top; y--) outline.push({x:b.left, y});
+      outline._closed = true;
+      if (last) segments.push({ pts: bresenham(last.x,last.y,outline[0].x,outline[0].y), cut:false });
+      segments.push({ pts: outline, cut: true });
+      last = outline[outline.length-1];
+      const rows = Math.floor((b.bottom - b.top - 4) / 3);
+      for (let r=0; r<rows; r++) {
+        const wy = b.top + 3 + r*3;
+        for (let wx = b.left+2; wx < b.right-1; wx += 3) {
+          if (Math.random() < 0.15) continue;
+          const win = [{x:wx,y:wy},{x:wx+1,y:wy}];
+          segments.push({ pts: bresenham(last.x,last.y,win[0].x,win[0].y), cut:false });
+          segments.push({ pts: win, cut: true });
+          last = win[win.length-1];
+        }
+      }
+    });
+    const gline = [];
+    for (let x=2; x<W-2; x++) gline.push({x, y:horizon});
+    segments.push({ pts: bresenham(last.x,last.y,gline[0].x,gline[0].y), cut:false });
+    segments.push({ pts: gline, cut:true });
+    last = gline[gline.length-1];
+    buildings.forEach(b => {
+      const reflH = b.bottom - b.top;
+      const maxReflH = H - waterTop - 1;
+      const useH = Math.min(reflH, maxReflH);
+      if (useH < 3) return;
+      const refl = [];
+      for (let x=b.left; x<=b.right; x++) refl.push({x, y: waterTop + useH - 1});
+      for (let y=waterTop+useH-2; y>=waterTop; y--) refl.push({x: b.right, y});
+      for (let x=b.right-1; x>=b.left; x--) refl.push({x, y: waterTop});
+      for (let y=waterTop+1; y<waterTop+useH-1; y++) refl.push({x: b.left, y});
+      segments.push({ pts: bresenham(last.x,last.y,refl[0].x,refl[0].y), cut:false });
+      segments.push({ pts: refl, cut: true, sparse: true });
+      last = refl[refl.length-1];
+    });
+    const ripples = [];
+    for (let x = 2; x < W-2; x += 3 + Math.floor(Math.random()*4)) {
+      ripples.push({x, y: waterTop + 1 + (Math.random()<0.5?0:1)});
+      ripples.push({x: x+1, y: waterTop + 1 + (Math.random()<0.5?0:1)});
+    }
+    if (ripples.length) {
+      segments.push({ pts: bresenham(last.x,last.y,ripples[0].x,ripples[0].y), cut:false });
+      segments.push({ pts: ripples, cut: true, sparse: true });
+    }
+    return { segments };
+  }
+
+  // ===========================================================
+  // ===========   CITYSCAPE-PRO  (perspective)  ===============
+  // ===========================================================
+  // Generates ONE chunk (1-3 buildings) at the current right edge,
+  // styled per the active perspective mode + complexity layer count.
+
+  function genCityscapePro() {
+    const segments = [];
+    let last = { x: state.tileOffsetX, y: state.proHorizonY };
+
+    // Helper to add a segment-relative path
+    function pushPath(pts, opts={}) {
+      if (last) segments.push({ pts: bresenham(last.x - state.tileOffsetX, last.y, pts[0].x, pts[0].y), cut:false });
+      pts._closed = !!opts.closed;
+      segments.push({ pts, cut:true, sparse: !!opts.sparse });
+      last = { x: pts[pts.length-1].x + state.tileOffsetX, y: pts[pts.length-1].y };
+    }
+
+    // Number of buildings to drop in this chunk
+    const chunkCount = 1 + Math.floor(Math.random() * 2);
+    let cursor = 2;
+
+    for (let i = 0; i < chunkCount; i++) {
+      // Per-perspective sizing
+      let buildingWidth, buildingHeight, depthFactor, drawY;
+
+      if (state.proPerspective === 'one') {
+        // 1-point perspective: random depth, but height/width scale relative to a vanishing point
+        depthFactor = 0.4 + Math.random() * 0.6; // 0.4..1.0 (closer = bigger)
+        buildingWidth = Math.round((6 + Math.random() * 14) * depthFactor);
+        buildingHeight = Math.round((22 + Math.random() * 50) * depthFactor);
+      } else if (state.proPerspective === 'aerial') {
+        // Aerial: newer buildings appear smaller (recede toward horizon)
+        // Use a depth based on a slowly-decreasing factor with each chunk
+        depthFactor = 0.5 + Math.random() * 0.5;
+        buildingWidth = Math.round((6 + Math.random() * 10) * depthFactor);
+        buildingHeight = Math.round((16 + Math.random() * 40) * depthFactor);
+      } else {
+        // parallax — uses depthFactor for foreground/midground/background classification
+        const layer = Math.random();
+        if (layer < 0.33) depthFactor = 1.0; // foreground
+        else if (layer < 0.66) depthFactor = 0.7; // midground
+        else depthFactor = 0.45; // background
+        buildingWidth = Math.round((7 + Math.random() * 14) * depthFactor);
+        buildingHeight = Math.round((18 + Math.random() * 50) * depthFactor);
+      }
+
+      if (buildingWidth < 4) buildingWidth = 4;
+      if (buildingHeight < 8) buildingHeight = 8;
+
+      // Position vertically: base at horizon, shorter buildings sit ON the horizon
+      // For aerial, smaller buildings sit slightly above horizon for receding effect
+      let baseY = state.proHorizonY;
+      if (state.proPerspective === 'aerial' && depthFactor < 0.7) {
+        baseY -= Math.round((1 - depthFactor) * 6);
+      }
+
+      const left = cursor;
+      const right = Math.min(W - 2, left + buildingWidth);
+      const top = Math.max(2, baseY - buildingHeight);
+
+      if (right - left < 4) { cursor += 2; continue; }
+
+      // Outline (closed)
+      const outline = [];
+      // Spire if tall + close
+      const hasSpire = depthFactor > 0.6 && buildingHeight > 30 && Math.random() < 0.35;
+      const spireH = hasSpire ? Math.round((4 + Math.random()*8) * depthFactor) : 0;
+      const spireX = Math.floor((left+right)/2);
+      if (hasSpire) {
+        outline.push({x: spireX, y: top - spireH});
+        for (let y = top - spireH; y <= top; y++) outline.push({x: spireX, y});
+      }
+      for (let x=left; x<=right; x++) outline.push({x, y:top});
+      for (let y=top+1; y<=baseY; y++) outline.push({x:right, y});
+      for (let x=right-1; x>=left; x--) outline.push({x, y:baseY});
+      for (let y=baseY-1; y>top; y--) outline.push({x:left, y});
+
+      pushPath(outline, { closed: true });
+
+      // Windows — density scales with complexity AND depth
+      const windowDensity = depthFactor > 0.7 ? 3 : (depthFactor > 0.5 ? 4 : 5);
+      const windowChance = 0.85 - (1 - depthFactor) * 0.4;
+      const rows = Math.floor((baseY - top - 4) / windowDensity);
+      for (let r=0; r<rows; r++) {
+        const wy = top + 3 + r * windowDensity;
+        for (let wx = left+2; wx < right-1; wx += windowDensity) {
+          if (Math.random() > windowChance) continue;
+          const winLen = depthFactor > 0.6 ? 2 : 1;
+          const win = [];
+          for (let k=0; k<winLen; k++) win.push({x: wx+k, y: wy});
+          pushPath(win);
+        }
+      }
+
+      // COMPLEXITY layers — added on each restart
+      // Layer 1: ground-floor entrance (small notch at bottom)
+      if (state.proComplexity >= 1 && depthFactor > 0.5) {
+        const doorW = Math.min(3, Math.floor(buildingWidth/3));
+        const doorX = Math.floor((left+right)/2 - doorW/2);
+        const doorTop = baseY - Math.min(5, Math.floor(buildingHeight/8));
+        const door = [];
+        for (let y = doorTop; y <= baseY-1; y++) door.push({x: doorX, y});
+        for (let x = doorX; x <= doorX + doorW; x++) door.push({x, y: doorTop});
+        for (let y = doorTop+1; y <= baseY-1; y++) door.push({x: doorX + doorW, y});
+        pushPath(door);
+      }
+
+      // Layer 2: roof details (water tower, billboard)
+      if (state.proComplexity >= 2 && depthFactor > 0.55 && Math.random() < 0.5) {
+        const detailW = Math.max(2, Math.floor(buildingWidth/3));
+        const detailX = left + Math.floor((buildingWidth - detailW)/2);
+        const detailH = 3 + Math.floor(Math.random()*3);
+        const detail = [];
+        for (let x=detailX; x<=detailX+detailW; x++) detail.push({x, y: top-detailH});
+        for (let y=top-detailH+1; y<=top; y++) detail.push({x: detailX+detailW, y});
+        for (let x=detailX+detailW-1; x>=detailX; x--) detail.push({x, y: top});
+        for (let y=top-1; y>top-detailH; y--) detail.push({x: detailX, y});
+        detail._closed = true;
+        pushPath(detail, { closed: true });
+      }
+
+      // Layer 3: vertical pinstripes (architectural lines)
+      if (state.proComplexity >= 3 && depthFactor > 0.6) {
+        const stripeCount = Math.max(1, Math.floor(buildingWidth/4));
+        for (let s=0; s<stripeCount; s++) {
+          const sx = left + Math.floor(buildingWidth * (s+0.5) / stripeCount);
+          const stripe = [];
+          for (let y=top+1; y<=baseY-1; y+=2) stripe.push({x: sx, y});
+          pushPath(stripe, { sparse: true });
+        }
+      }
+
+      // Layer 4: animated billboards / illuminated text bars
+      if (state.proComplexity >= 4 && depthFactor > 0.5 && Math.random() < 0.4) {
+        const billY = top + Math.floor(buildingHeight * 0.3);
+        const billBar = [];
+        for (let x=left+1; x<right; x++) billBar.push({x, y: billY});
+        pushPath(billBar);
+      }
+
+      cursor = right + 1 + Math.floor(Math.random() * 3);
+      if (cursor > W - 4) break;
+    }
+
+    // Ground line at horizon (only on first chunk per pass; keep cheap)
+    if (Math.random() < 0.3) {
+      const gline = [];
+      for (let x=0; x<W; x++) gline.push({x, y: state.proHorizonY});
+      pushPath(gline, { sparse: true });
+    }
+
+    return { segments };
+  }
+
+  // ===========================================================
+  // ============   PRESET PIXEL-ART IMAGES   ==================
+  // ===========================================================
+  // Each preset is a function that draws onto a 160x96 imageData,
+  // marking pixels as "should cut" (alpha > 0 / dark).
+  // The output is a Uint8ClampedArray of RGBA.
+
+  function blankCanvasData() {
+    const off = document.createElement('canvas');
+    off.width = W; off.height = H;
+    const o = off.getContext('2d');
+    o.fillStyle = '#ffffff';
+    o.fillRect(0,0,W,H);
+    return { canvas: off, ctx: o };
+  }
+
+  function presetEarth() {
+    const { canvas, ctx } = blankCanvasData();
+    // dark ocean disk + lighter continents
+    const cx = W/2, cy = H/2, R = Math.min(W,H)/2 - 4;
+    ctx.fillStyle = '#000';
+    // ocean
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI*2);
+    ctx.fill();
+    // carve out continents in white
+    ctx.fillStyle = '#fff';
+    function blob(centerX, centerY, points) {
+      ctx.beginPath();
+      points.forEach((p,i) => {
+        const x = centerX + p[0];
+        const y = centerY + p[1];
+        if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      });
+      ctx.closePath();
+      ctx.fill();
+    }
+    // africa/europe blob
+    blob(cx+4, cy-4, [[-8,-18],[-2,-22],[6,-20],[10,-12],[6,-4],[8,4],[6,12],[2,20],[-4,18],[-8,8],[-10,0],[-8,-10]]);
+    // americas blob (west side)
+    blob(cx-22, cy+2, [[-6,-16],[0,-20],[4,-14],[2,-6],[6,2],[4,12],[-2,18],[-6,12],[-8,4],[-6,-6]]);
+    // small island clusters
+    [[18,-12],[22,12],[-30,-6],[28,-22]].forEach(([dx,dy]) => {
+      ctx.beginPath();
+      ctx.arc(cx+dx, cy+dy, 3, 0, Math.PI*2);
+      ctx.fill();
+    });
+    // re-darken ocean ring (everything outside circle stays white = no cut)
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    // canvas now has transparent outside + dark/light inside
+    // we want: cut = dark pixels; flood the rest = white
+    const composite = blankCanvasData();
+    composite.ctx.drawImage(canvas, 0, 0);
+    return composite.ctx.getImageData(0,0,W,H).data;
+  }
+
+  function presetEiffel() {
+    const { canvas, ctx } = blankCanvasData();
+    ctx.fillStyle = '#000';
+    const cx = W/2;
+    const baseY = H - 6;
+    const topY = 8;
+    // tower silhouette via polygon halves
+    const profile = []; // {y, halfWidth}
+    for (let y = topY; y <= baseY; y++) {
+      const t = (y - topY) / (baseY - topY);
+      // narrow at top, wider at base, with two pinches (legs)
+      let hw;
+      if (t < 0.15) hw = 2 + t*8;       // very top
+      else if (t < 0.45) hw = 3 + t*6;  // antenna section
+      else if (t < 0.6) hw = 8;         // middle observation
+      else hw = 8 + (t-0.6)*45;         // legs flare
+      // small pinches
+      if (Math.abs(t-0.55) < 0.04) hw -= 1;
+      profile.push({y, hw: Math.round(hw)});
+    }
+    // draw silhouette
+    profile.forEach(p => {
+      ctx.fillRect(cx - p.hw, p.y, p.hw*2, 1);
+    });
+    // legs gap — clear arch at bottom
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(cx, baseY-2, 12, 9, 0, 0, Math.PI);
+    ctx.fill();
+    // observation deck lines
+    ctx.fillStyle = '#000';
+    ctx.fillRect(cx-10, topY+22, 20, 2);
+    ctx.fillRect(cx-12, topY+44, 24, 2);
+    // ground
+    ctx.fillRect(0, baseY+1, W, 1);
+    return ctx.getImageData(0,0,W,H).data;
+  }
+
+  function presetSmiley() {
+    const { canvas, ctx } = blankCanvasData();
+    const cx = W/2, cy = H/2, R = Math.min(W,H)/2 - 6;
+    ctx.fillStyle = '#000';
+    // face outline ring (annulus)
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI*2);
+    ctx.arc(cx, cy, R-2, 0, Math.PI*2, true);
+    ctx.fill('evenodd');
+    // eyes
+    ctx.beginPath();
+    ctx.arc(cx-12, cy-6, 3, 0, Math.PI*2);
+    ctx.arc(cx+12, cy-6, 3, 0, Math.PI*2);
+    ctx.fill();
+    // smile arc — draw as filled crescent
+    ctx.beginPath();
+    ctx.arc(cx, cy, 16, 0.15*Math.PI, 0.85*Math.PI);
+    ctx.arc(cx, cy, 13, 0.85*Math.PI, 0.15*Math.PI, true);
+    ctx.fill();
+    return ctx.getImageData(0,0,W,H).data;
+  }
+
+  function presetSkull() {
+    const { canvas, ctx } = blankCanvasData();
+    const cx = W/2, cy = H/2 - 4;
+    ctx.fillStyle = '#000';
+    // cranium
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 26, 22, 0, 0, Math.PI*2);
+    ctx.fill();
+    // jaw
+    ctx.beginPath();
+    ctx.ellipse(cx, cy+18, 18, 10, 0, 0, Math.PI*2);
+    ctx.fill();
+    // eye sockets
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(cx-10, cy-2, 5, 6, 0, 0, Math.PI*2);
+    ctx.ellipse(cx+10, cy-2, 5, 6, 0, 0, Math.PI*2);
+    ctx.fill();
+    // nose hole
+    ctx.beginPath();
+    ctx.moveTo(cx, cy+6);
+    ctx.lineTo(cx-3, cy+12);
+    ctx.lineTo(cx+3, cy+12);
+    ctx.closePath();
+    ctx.fill();
+    // teeth lines
+    ctx.fillStyle = '#fff';
+    for (let i=-2; i<=2; i++) {
+      ctx.fillRect(cx + i*4, cy+14, 1, 8);
+    }
+    // crossbones
+    ctx.fillStyle = '#000';
+    ctx.save();
+    ctx.translate(cx, cy+30);
+    ctx.rotate(Math.PI/8);
+    ctx.fillRect(-32, -2, 64, 4);
+    ctx.fillRect(-30, -6, 6, 12);
+    ctx.fillRect(24, -6, 6, 12);
+    ctx.rotate(-Math.PI/4);
+    ctx.fillRect(-32, -2, 64, 4);
+    ctx.fillRect(-30, -6, 6, 12);
+    ctx.fillRect(24, -6, 6, 12);
+    ctx.restore();
+    return ctx.getImageData(0,0,W,H).data;
+  }
+
+  function presetHeart() {
+    const { canvas, ctx } = blankCanvasData();
+    ctx.fillStyle = '#000';
+    const cx = W/2, cy = H/2;
+    ctx.beginPath();
+    ctx.arc(cx-10, cy-4, 12, 0, Math.PI*2);
+    ctx.arc(cx+10, cy-4, 12, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx-22, cy);
+    ctx.lineTo(cx+22, cy);
+    ctx.lineTo(cx, cy+28);
+    ctx.closePath();
+    ctx.fill();
+    return ctx.getImageData(0,0,W,H).data;
+  }
+
+  function presetPortrait() {
+    // Stylized profile silhouette (Mona Lisa-ish bust)
+    const { canvas, ctx } = blankCanvasData();
+    ctx.fillStyle = '#000';
+    const cx = W/2 + 8;
+    // background hills
+    ctx.fillRect(0, H-30, W, 30);
+    // bust shoulders (clear out)
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(cx, H-2, 50, 22, 0, Math.PI, 0);
+    ctx.fill();
+    // head
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(cx, H/2-6, 18, 22, 0, 0, Math.PI*2);
+    ctx.fill();
+    // hair sweep
+    ctx.beginPath();
+    ctx.ellipse(cx-4, H/2-12, 22, 18, -0.3, 0, Math.PI*2);
+    ctx.fill();
+    // face clearing
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(cx+2, H/2-4, 11, 15, 0, 0, Math.PI*2);
+    ctx.fill();
+    // eye, brow, smile dots
+    ctx.fillStyle = '#000';
+    ctx.fillRect(cx-2, H/2-8, 3, 1);
+    ctx.fillRect(cx+5, H/2-8, 3, 1);
+    ctx.fillRect(cx-2, H/2-10, 3, 1);
+    ctx.fillRect(cx+5, H/2-10, 3, 1);
+    ctx.fillRect(cx, H/2+2, 4, 1);
+    return ctx.getImageData(0,0,W,H).data;
+  }
+
+  // ---- Source for IMAGE mode ----
+  let imageDataCache = null;
+
+  function setPreset(name) {
+    state.activePreset = name;
+    if (name === 'earth') imageDataCache = presetEarth();
+    else if (name === 'eiffel') imageDataCache = presetEiffel();
+    else if (name === 'smiley') imageDataCache = presetSmiley();
+    else if (name === 'skull') imageDataCache = presetSkull();
+    else if (name === 'heart') imageDataCache = presetHeart();
+    else if (name === 'portrait') imageDataCache = presetPortrait();
+    renderPip();
+  }
+
+  function renderPip() {
+    if (!imageDataCache) { pip.classList.remove('show'); return; }
+    pip.classList.add('show');
+    // draw on dark stock, with cuts in cyan to show target
+    pipCtx.fillStyle = '#141926';
+    pipCtx.fillRect(0,0,W,H);
+    const img = pipCtx.createImageData(W, H);
+    for (let i=0; i<W*H; i++) {
+      const r = imageDataCache[i*4];
+      const g = imageDataCache[i*4+1];
+      const b = imageDataCache[i*4+2];
+      const lum = 0.299*r + 0.587*g + 0.114*b;
+      if (lum < 128) {
+        // cut pixel — show in cyan
+        img.data[i*4] = 0x3a;
+        img.data[i*4+1] = 0xff;
+        img.data[i*4+2] = 0xf0;
+        img.data[i*4+3] = 255;
+      } else {
+        img.data[i*4] = 0x14;
+        img.data[i*4+1] = 0x19;
+        img.data[i*4+2] = 0x26;
+        img.data[i*4+3] = 255;
+      }
+    }
+    pipCtx.putImageData(img, 0, 0);
+  }
+
+  function genFromImage() {
+    if (!imageDataCache) {
+      const pts = [];
+      for (let y=20; y<H-20; y+=4) for (let x=20; x<W-20; x+=4) pts.push({x,y});
+      return asOneSegment(pts);
+    }
+    const segments = []; let last = null;
+    const data = imageDataCache;
+    for (let y=0; y<H; y++) {
+      let runStart = -1;
+      for (let x=0; x<W; x++) {
+        const i = (y*W + x)*4;
+        const lum = 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
+        const isDark = lum < 128;
+        if (isDark && runStart < 0) runStart = x;
+        if ((!isDark || x === W-1) && runStart >= 0) {
+          const endX = isDark ? x : x-1;
+          const run = [];
+          for (let xx=runStart; xx<=endX; xx++) run.push({x:xx, y});
+          if (last) segments.push({ pts: bresenham(last.x,last.y,run[0].x,run[0].y), cut:false });
+          segments.push({ pts: run, cut: true });
+          last = run[run.length-1];
+          runStart = -1;
+        }
+      }
+    }
+    return { segments };
+  }
+
+  // ===== MODES =====
+  const MODES = {
+    endless: { label:'ENDLESS', desc:'Cycle G-code programs forever', catalog:ENDLESS_PROGS,
+      nextProgIdx:(i)=> (i+1) % ENDLESS_PROGS.length },
+    template: { label:'TEMPLATE', desc:'Curated symmetric patterns', catalog:TEMPLATES,
+      nextProgIdx:(i)=> (i+1) % TEMPLATES.length },
+    shapes: { label:'SHAPES', desc:'Basic geometric primitives', catalog:SHAPES,
+      nextProgIdx:(i)=> (i+1) % SHAPES.length },
+    cityscape: { label:'CITYSCAPE', desc:'Skyline + reflection', catalog:[{ name:'SKYLINE', gen:genCityscape, mode:'dense' }],
+      nextProgIdx:()=>0 },
+    scroll: { label:'SCROLL', desc:'Endless side-scrolling city', catalog:[{ name:'SCROLL', gen:genCityscape, mode:'dense' }],
+      nextProgIdx:()=>0 },
+    pro: { label:'CITY-PRO', desc:'Zoom-out perspective city', catalog:[{ name:'PRO', gen:genCityscapePro, mode:'dense' }],
+      nextProgIdx:()=>0 },
+    image: { label:'IMAGE→TOOL', desc:'Preset or your photo → cuts', catalog:[{ name:'IMG-RASTER', gen:genFromImage, mode:'dense' }],
+      nextProgIdx:()=>0 },
+  };
+
+  function loadProgram() {
+    const m = MODES[state.mode];
+    const p = m.catalog[state.progIdx];
+    state.progName = p.name;
+    state.dotMode = p.mode;
+    state.path = [];
+    const built = p.gen();
+    built.segments.forEach((seg) => {
+      const isClosed = !!(seg.pts && seg.pts._closed);
+      for (let i=0; i<seg.pts.length; i++) {
+        const pt = seg.pts[i];
+        state.path.push({
+          x: pt.x, y: pt.y, cut: seg.cut,
+          sparse: !!seg.sparse,
+          shapeEnd: isClosed && i === seg.pts.length - 1,
+          startPt: isClosed ? seg.pts[0] : null,
+        });
+      }
+    });
+    state.pathPos = 0;
+    if (state.fill) state.dotMode = 'dense';
+  }
+
+  function nextProgram() {
+    const m = MODES[state.mode];
+    state.progIdx = m.nextProgIdx(state.progIdx);
+    state.toolIdx = (state.toolIdx + 1 + Math.floor(Math.random()*2)) % PALETTE.length;
+    state.pass++;
+    loadProgram();
+  }
+
+  function clearAll() {
+    virt.width = W;
+    virt.height = H;
+    vctx.imageSmoothingEnabled = false;
+    vctx.clearRect(0,0,virt.width,virt.height);
+    pctx.clearRect(0,0,W,H);
+    state.pass = 1;
+    state.progIdx = 0;
+    state.toolIdx = 0;
+    state.dotCount = 0;
+    state.tiles = 1;
+    state.tileOffsetX = 0;
+    state.fadeQueue = [];
+    loadProgram();
+    redrawPlot();
+  }
+
+  function setMode(mode) {
+    state.mode = mode;
+    state.modeName = MODES[mode].label;
+    state.progIdx = 0;
+    state.pass = 1;
+    let initWidth = W;
+    if (mode === 'scroll') initWidth = W * 2;
+    if (mode === 'pro') initWidth = W; // grows over time
+    virt.width = initWidth;
+    virt.height = H;
+    vctx.imageSmoothingEnabled = false;
+    vctx.clearRect(0,0,virt.width,virt.height);
+    pctx.clearRect(0,0,W,H);
+    state.dotCount = 0;
+    state.tiles = 1;
+    state.tileOffsetX = (mode === 'scroll') ? W : 0;
+    state.scrolling = (mode === 'scroll');
+    state.scrollAccum = 0;
+    state.fadeQueue = [];
+    // pro mode resets
+    if (mode === 'pro') {
+      state.proComplexity = 0;
+      state.proGrowAccum = 0;
+      state.proHorizonY = 60;
+      state.proPerspective = 'one';
+      state.proCursor = 0;
+    }
+    loadProgram();
+    redrawPlot();
+    document.getElementById('modeTag').textContent = state.modeName;
+    if (mode !== 'image') pip.classList.remove('show');
+    else if (imageDataCache) pip.classList.add('show');
+    document.getElementById('btnZoomR').style.display = (mode === 'cityscape') ? '' : 'none';
+    // Context button on main panel
+    const btnContext = document.getElementById('btnContext');
+    if (mode === 'scroll') {
+      btnContext.style.display = '';
+      btnContext.textContent = '⌧ START OVER';
+    } else if (mode === 'pro') {
+      btnContext.style.display = '';
+      btnContext.textContent = '↻ ADD LAYER';
+    } else {
+      btnContext.style.display = 'none';
+    }
+    // pro panel section visibility
+    const proPanel = document.getElementById('proPanel');
+    if (proPanel) proPanel.style.display = (mode === 'pro') ? '' : 'none';
+    const c = document.getElementById('complexityReadout');
+    const l = document.getElementById('layerCount');
+    if (c) c.textContent = 'L' + state.proComplexity;
+    if (l) l.textContent = state.proComplexity + '/4';
+    // sync persp button active state
+    document.querySelectorAll('.persp-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.persp === state.proPerspective);
+    });
+  }
+
+  function depthAtPos(pos) {
+    if (!state.depth) return 'CUT';
+    const phase = Math.floor(pos / 12) % 6;
+    if (phase < 2) return 'SHALLOW';
+    if (phase < 4) return 'CUT';
+    return 'DEEP';
+  }
+
+  function recordFade(vx, vy) {
+    if (!state.fadeOn) return;
+    if (state.mode !== 'shapes' && state.mode !== 'template') return;
+    if (vx < 0 || vy < 0 || vx >= virt.width || vy >= H) return;
+    state.fadeQueue.push({ x: vx, y: vy, t: performance.now() });
+  }
+
+  function stampPixel(vx, vy, hex) {
+    const w = state.lineWidth;
+    vctx.fillStyle = hex;
+    if (w === 1) {
+      vctx.fillRect(vx, vy, 1, 1);
+      recordFade(vx, vy);
+      state.dotCount++;
+    } else {
+      // Square brush centered on point
+      const half = Math.floor(w/2);
+      for (let dy = -half; dy <= w - 1 - half; dy++) {
+        for (let dx = -half; dx <= w - 1 - half; dx++) {
+          const px = vx + dx, py = vy + dy;
+          if (px < 0 || py < 0 || px >= virt.width || py >= H) continue;
+          vctx.fillRect(px, py, 1, 1);
+          recordFade(px, py);
+        }
+      }
+      state.dotCount += w * w;
+    }
+  }
+
+  function stamp(x, y, hex, hexLight, hexDeep, z) {
+    const vx = x + state.tileOffsetX + state.offsetX;
+    const vy = y + state.offsetY;
+    if (vy < 0 || vy >= H) return; // clip vertical offset
+    if (z === 'SHALLOW') {
+      stampPixel(vx, vy, hexLight);
+    } else if (z === 'DEEP') {
+      // DEEP draws a diamond at base width, plus offset neighbors
+      stampPixel(vx, vy, hexDeep);
+      if (vx-1>=0) { vctx.fillStyle = hexDeep; vctx.fillRect(vx-1, vy, 1, 1); recordFade(vx-1, vy); }
+      if (vx+1<virt.width) { vctx.fillStyle = hexDeep; vctx.fillRect(vx+1, vy, 1, 1); recordFade(vx+1, vy); }
+      if (vy-1>=0) { vctx.fillStyle = hexDeep; vctx.fillRect(vx, vy-1, 1, 1); recordFade(vx, vy-1); }
+      if (vy+1<H) { vctx.fillStyle = hexDeep; vctx.fillRect(vx, vy+1, 1, 1); recordFade(vx, vy+1); }
+      state.dotCount += 4;
+    } else {
+      stampPixel(vx, vy, hex);
+    }
+  }
+
+  function complementaryHex(hex) {
+    const r = parseInt(hex.slice(1,3),16);
+    const g = parseInt(hex.slice(3,5),16);
+    const b = parseInt(hex.slice(5,7),16);
+    const nr = Math.round(b * 0.55);
+    const ng = Math.round(r * 0.55);
+    const nb = Math.round(g * 0.55);
+    return `rgb(${nr},${ng},${nb})`;
+  }
+
+  function tryFlood(startPt, outlineHex) {
+    if (!state.flood) return;
+    const offX = state.tileOffsetX;
+    // Compute centroid of the closed shape from the path we just walked
+    // by averaging recent cut points belonging to this shape
+    let cx = 0, cy = 0, count = 0;
+    // Scan backward through path to find the most recent shape start
+    for (let i = state.pathPos - 1; i >= 0 && count < 400; i--) {
+      const p = state.path[i];
+      if (!p.cut) break;
+      cx += p.x;
+      cy += p.y;
+      count++;
+      if (p === startPt || (p.startPt === startPt)) break;
+    }
+    cx = count ? Math.round(cx / count) : startPt.x;
+    cy = count ? Math.round(cy / count) : startPt.y;
+
+    const candidates = [
+      { x: cx, y: cy },                    // centroid first
+      { x: startPt.x + 3, y: startPt.y + 3 },
+      { x: startPt.x - 3, y: startPt.y + 3 },
+      { x: startPt.x + 3, y: startPt.y - 3 },
+      { x: startPt.x - 3, y: startPt.y - 3 },
+    ];
+    const img = vctx.getImageData(offX, 0, W, H);
+    const data = img.data;
+    function isWall(x, y) {
+      if (x<0||y<0||x>=W||y>=H) return true;
+      const idx = (y*W + x)*4;
+      return data[idx+3] > 0;
+    }
+    let seed = null;
+    for (const c of candidates) {
+      if (!isWall(c.x, c.y)) { seed = c; break; }
+    }
+    if (!seed) return;
+    const visited = new Uint8Array(W*H);
+    const stack = [seed];
+    const fillPixels = [];
+    let safety = 0;
+    const MAX = W * H;
+    let edgeCount = 0;
+    while (stack.length && safety++ < MAX) {
+      const p = stack.pop();
+      if (p.x<0||p.y<0||p.x>=W||p.y>=H) continue;
+      const k = p.y*W + p.x;
+      if (visited[k]) continue;
+      if (isWall(p.x, p.y)) continue;
+      visited[k] = 1;
+      fillPixels.push(p);
+      if (p.x===0||p.y===0||p.x===W-1||p.y===H-1) {
+        edgeCount++;
+        if (edgeCount > 2) return; // bail early on leak
+      }
+      stack.push({x:p.x+1,y:p.y});
+      stack.push({x:p.x-1,y:p.y});
+      stack.push({x:p.x,y:p.y+1});
+      stack.push({x:p.x,y:p.y-1});
+    }
+    if (fillPixels.length < 10 || fillPixels.length > W*H*0.4) return;
+    vctx.fillStyle = complementaryHex(outlineHex);
+    vctx.globalAlpha = 0.55;
+    for (const p of fillPixels) {
+      const fx = p.x + offX;
+      vctx.fillRect(fx, p.y, 1, 1);
+      recordFade(fx, p.y);
+    }
+    vctx.globalAlpha = 1;
+  }
+
+  function drawTool(x, y) {
+    bctx.clearRect(0,0,W,H);
+    const tool = PALETTE[state.toolIdx];
+    // Bird is at virtual coords (x + tileOffsetX, y) — convert to plot coords
+    const scale = W / virt.width;
+    const drawH = Math.round(H * scale);
+    const offsetY = Math.floor((H - drawH) / 2);
+    const sx = Math.round((x + state.tileOffsetX) * scale);
+    const sy = Math.round(y * scale + offsetY);
+    // Tool dot — always 1 plot pixel for crisp visibility
+    let c = tool.hex;
+    if (state.zState === 'RAPID') c = '#ffffff';
+    else if (state.zState === 'DEEP') c = tool.deep;
+    else if (state.zState === 'SHALLOW') c = tool.light;
+    // halo
+    bctx.fillStyle = 'rgba(255,255,255,0.18)';
+    if (sx-1>=0) bctx.fillRect(sx-1, sy, 1, 1);
+    if (sx+1<W) bctx.fillRect(sx+1, sy, 1, 1);
+    if (sy-1>=0) bctx.fillRect(sx, sy-1, 1, 1);
+    if (sy+1<H) bctx.fillRect(sx, sy+1, 1, 1);
+    bctx.fillStyle = c;
+    bctx.fillRect(sx, sy, 1, 1);
+    if (state.zState === 'RAPID') {
+      bctx.fillStyle = 'rgba(255,255,255,0.55)';
+      if (sx-3>=0) bctx.fillRect(sx-3,sy,1,1);
+      if (sx+3<W) bctx.fillRect(sx+3,sy,1,1);
+      if (sy-3>=0) bctx.fillRect(sx,sy-3,1,1);
+      if (sy+3<H) bctx.fillRect(sx,sy+3,1,1);
+    }
+  }
+
+  // HUD references
+  const elPass = document.getElementById('pass');
+  const elProg = document.getElementById('prog');
+  const elDots = document.getElementById('dots');
+  const elZ = document.getElementById('zstate');
+  const elTool = document.getElementById('tool');
+  const elFeed = document.getElementById('feed');
+  const elXY = document.getElementById('xy');
+  const elSw = document.getElementById('sw');
+  const elStatus = document.getElementById('status');
+  const elStatusMain = document.getElementById('statusMain');
+
+  function fmtCompact(n) {
+    if (n < 1000) return String(n);
+    if (n < 10000) return (n/1000).toFixed(1) + 'k';
+    if (n < 1000000) return Math.floor(n/1000) + 'k';
+    return (n/1000000).toFixed(1) + 'M';
+  }
+
+  function updateHUD() {
+    elPass.textContent = String(state.pass).padStart(3,'0');
+    elProg.textContent = state.progName;
+    elDots.textContent = fmtCompact(state.dotCount);
+    elZ.textContent = state.zState;
+    // class for color (whole v cell)
+    const zParent = elZ.parentElement;
+    zParent.className = 'v';
+    if (state.zState === 'RAPID') zParent.className += ' warn';
+    else if (state.zState === 'DEEP') zParent.className += ' deep';
+    elTool.textContent = String(state.toolIdx+1).padStart(2,'0');
+    elFeed.textContent = String(state.speed).padStart(2,'0');
+    elXY.textContent = `${String(state.bx).padStart(3,'0')},${String(state.by).padStart(3,'0')}`;
+    elSw.style.background = PALETTE[state.toolIdx].hex;
+    elSw.style.color = PALETTE[state.toolIdx].hex;
+    elStatus.textContent = state.paused ? 'PAUSE' : 'RUN';
+  }
+
+  // Reusable scratch canvas for fast scrolling
+  const scratch = document.createElement('canvas');
+  scratch.width = W * 2;
+  scratch.height = H;
+  const sctx = scratch.getContext('2d');
+  sctx.imageSmoothingEnabled = false;
+
+  function doScroll() {
+    if (!state.scrolling) return;
+    state.scrollAccum += state.speed * 0.012;
+    let shift = Math.floor(state.scrollAccum);
+    if (shift < 1) return;
+    state.scrollAccum -= shift;
+    // copy virtual buffer offset left into scratch, then back
+    if (scratch.width !== virt.width) { scratch.width = virt.width; }
+    sctx.clearRect(0, 0, scratch.width, H);
+    sctx.drawImage(virt, -shift, 0);
+    vctx.clearRect(0, 0, virt.width, H);
+    vctx.drawImage(scratch, 0, 0);
+    // shift bird's cut origin so absolute position stays put
+    state.tileOffsetX -= shift;
+    // shift fade queue and drop entries that scrolled off
+    for (const px of state.fadeQueue) px.x -= shift;
+    while (state.fadeQueue.length && state.fadeQueue[0].x < 0) state.fadeQueue.shift();
+  }
+
+  function nextProgramScroll() {
+    // After each city completes, regenerate at the same right-edge offset
+    state.toolIdx = (state.toolIdx + 1 + Math.floor(Math.random()*2)) % PALETTE.length;
+    state.pass++;
+    state.tileOffsetX = virt.width - W;
+    loadProgram();
+  }
+
+  function nextProgramPro() {
+    // Advance cursor by one chunk-width (~W*0.4)
+    const STEP = Math.floor(W * 0.4);
+    state.proCursor += STEP;
+    // Grow virtual canvas only if cursor would push the next chunk past the right edge
+    if (state.proCursor + W > virt.width) {
+      if (virt.width < 4000) {
+        const oldData = vctx.getImageData(0, 0, virt.width, H);
+        virt.width = virt.width + STEP * 2; // grow by 2 chunks worth
+        vctx.imageSmoothingEnabled = false;
+        vctx.putImageData(oldData, 0, 0);
+      }
+    }
+    state.tileOffsetX = state.proCursor;
+    // Cycle perspective occasionally for variety
+    if (state.pass % 5 === 0) {
+      const modes = ['one', 'aerial', 'parallax'];
+      state.proPerspective = modes[Math.floor(Math.random() * modes.length)];
+    }
+    if (Math.random() < 0.35) {
+      state.toolIdx = (state.toolIdx + 1) % PALETTE.length;
+    }
+    state.pass++;
+    loadProgram();
+  }
+
+  function proAddLayer() {
+    // Keep existing canvas, bump complexity, restart cursor at the leftmost edge
+    state.proComplexity = Math.min(4, state.proComplexity + 1);
+    state.toolIdx = (state.toolIdx + 2) % PALETTE.length;
+    state.proCursor = 0;
+    state.tileOffsetX = 0;
+    state.pass++;
+    loadProgram();
+    const c = document.getElementById('complexityReadout');
+    const l = document.getElementById('layerCount');
+    if (c) c.textContent = 'L' + state.proComplexity;
+    if (l) l.textContent = state.proComplexity + '/4';
+  }
+
+  function processFades() {
+    if (!state.fadeOn) return;
+    if (state.mode !== 'shapes' && state.mode !== 'template') return;
+    if (state.fadeQueue.length === 0) return;
+    const now = performance.now();
+    const cutoff = now - state.fadeMs;
+    let removed = 0;
+    while (state.fadeQueue.length > 0 && state.fadeQueue[0].t < cutoff) {
+      const px = state.fadeQueue.shift();
+      vctx.clearRect(px.x, px.y, 1, 1);
+      removed++;
+      if (removed > 2000) break;
+    }
+  }
+
+  let frame = 0;
+  function loop() {
+    if (!state.paused) {
+      const stepsPerFrame = Math.max(1, Math.floor(state.speed * 0.55));
+      for (let s=0; s<stepsPerFrame; s++) {
+        if (state.pathPos >= state.path.length) {
+          if (state.mode === 'pro') nextProgramPro();
+          else if (state.scrolling) nextProgramScroll();
+          else nextProgram();
+        }
+        const pt = state.path[state.pathPos++];
+        state.bx = pt.x; state.by = pt.y;
+        if (!pt.cut) {
+          state.zState = 'RAPID';
+        } else {
+          state.zState = depthAtPos(state.pathPos);
+          const tool = PALETTE[state.toolIdx];
+          let lay = false;
+          if (state.fill || state.dotMode === 'dense') lay = true;
+          else if (state.dotMode === 'sparse') lay = (state.pathPos % 2) === 0;
+          else if (state.dotMode === 'dashed') lay = (Math.floor(state.pathPos/3) % 2) === 0;
+          if (pt.sparse) lay = lay && (state.pathPos % 2 === 0);
+          if (lay) stamp(state.bx, state.by, tool.hex, tool.light, tool.deep, state.zState);
+          if (pt.shapeEnd && pt.startPt) tryFlood(pt.startPt, tool.hex);
+        }
+      }
+      doScroll();
+      processFades();
+      redrawPlot();
+      drawTool(state.bx, state.by);
+      frame++;
+      if (frame % 3 === 0) updateHUD();
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // ===== DRAWER =====
+  const scrim = document.getElementById('scrim');
+  const drawer = document.getElementById('drawer');
+  const modeList = document.getElementById('modeList');
+  const presetGrid = document.getElementById('presetGrid');
+
+  const PRESETS = [
+    { key: 'earth',    label: 'EARTH',     ico: '◉' },
+    { key: 'eiffel',   label: 'EIFFEL',    ico: '⊥' },
+    { key: 'smiley',   label: 'SMILEY',    ico: '☺' },
+    { key: 'skull',    label: 'SKULL',     ico: '☠' },
+    { key: 'heart',    label: 'HEART',     ico: '♥' },
+    { key: 'portrait', label: 'PORTRAIT',  ico: '☻' },
+  ];
+
+  function buildModeList() {
+    modeList.innerHTML = '';
+    const order = ['endless','template','shapes','cityscape','scroll','pro','image'];
+    order.forEach((key, i) => {
+      const m = MODES[key];
+      const b = document.createElement('button');
+      b.className = 'mode-item' + (state.mode === key ? ' active' : '');
+      b.innerHTML = `
+        <span class="badge">${String(i+1).padStart(2,'0')}</span>
+        <span>${m.label}<span class="desc">${m.desc}</span></span>
+      `;
+      b.addEventListener('click', () => {
+        setMode(key);
+        buildModeList();
+        if (key !== 'image') closeDrawer();
+      });
+      modeList.appendChild(b);
+    });
+  }
+
+  function buildPresetGrid() {
+    presetGrid.innerHTML = '';
+    PRESETS.forEach(p => {
+      const b = document.createElement('button');
+      b.className = 'preset-btn' + (state.activePreset === p.key ? ' active' : '');
+      b.innerHTML = `<span class="ico">${p.ico}</span><span>${p.label}</span>`;
+      b.addEventListener('click', () => {
+        setPreset(p.key);
+        setMode('image');
+        buildPresetGrid();
+        buildModeList();
+        closeDrawer();
+      });
+      presetGrid.appendChild(b);
+    });
+    // custom photo button
+    const photo = document.createElement('button');
+    photo.className = 'preset-btn';
+    photo.innerHTML = `<span class="ico">⎙</span><span>FROM PHOTO</span>`;
+    photo.style.gridColumn = '1 / -1';
+    photo.addEventListener('click', () => {
+      document.getElementById('imgPick').click();
+    });
+    presetGrid.appendChild(photo);
+  }
+
+  function openDrawer() { scrim.classList.add('open'); drawer.classList.add('open'); }
+  function closeDrawer() { scrim.classList.remove('open'); drawer.classList.remove('open'); }
+  document.getElementById('menuBtn').addEventListener('click', openDrawer);
+  document.getElementById('closeBtn').addEventListener('click', closeDrawer);
+  scrim.addEventListener('click', closeDrawer);
+
+  document.getElementById('imgPick').addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const img = new Image();
+    img.onload = () => {
+      const off = document.createElement('canvas');
+      off.width = W; off.height = H;
+      const o = off.getContext('2d');
+      o.imageSmoothingEnabled = false;
+      const ratio = Math.min(W/img.width, H/img.height);
+      const iw = img.width*ratio, ih = img.height*ratio;
+      const ox = (W-iw)/2, oy = (H-ih)/2;
+      o.fillStyle = '#fff';
+      o.fillRect(0,0,W,H);
+      o.drawImage(img, ox, oy, iw, ih);
+      imageDataCache = o.getImageData(0,0,W,H).data;
+      state.activePreset = 'custom';
+      renderPip();
+      setMode('image');
+      buildPresetGrid();
+      buildModeList();
+      closeDrawer();
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+
+  document.getElementById('btnPause').addEventListener('click', (e) => {
+    state.paused = !state.paused;
+    e.target.textContent = state.paused ? '▶ RESUME' : '▌▌ PAUSE';
+    elStatusMain.textContent = state.paused ? '▌▌ PAUSED' : '▶ RUNNING';
+  });
+  document.getElementById('btnSkip').addEventListener('click', () => {
+    if (state.mode === 'pro') nextProgramPro();
+    else if (state.scrolling) nextProgramScroll();
+    else nextProgram();
+  });
+  document.getElementById('btnClear').addEventListener('click', clearAll);
+  document.getElementById('btnContext').addEventListener('click', () => {
+    if (state.mode === 'scroll') {
+      setMode('scroll');
+    } else if (state.mode === 'pro') {
+      proAddLayer();
+    }
+  });
+  document.getElementById('btnFill').addEventListener('click', (e) => {
+    state.fill = !state.fill;
+    e.target.classList.toggle('on', state.fill);
+    e.target.textContent = state.fill ? '▦ FILL ✓' : '▦ FILL';
+    if (state.fill && state.speed > 30) {
+      state.speed = 20;
+      document.getElementById('speed').value = 20;
+    }
+    if (state.path.length) loadProgram();
+  });
+  document.getElementById('btnFlood').addEventListener('click', (e) => {
+    state.flood = !state.flood;
+    e.target.classList.toggle('on', state.flood);
+    e.target.textContent = state.flood ? '▣ FLOOD ✓' : '▣ FLOOD';
+  });
+  document.getElementById('btnDepth').addEventListener('click', (e) => {
+    state.depth = !state.depth;
+    e.target.classList.toggle('on', state.depth);
+    e.target.textContent = state.depth ? '⇣ DEPTH ✓' : '⇣ DEPTH';
+  });
+  document.getElementById('btnFade').addEventListener('click', (e) => {
+    state.fadeOn = !state.fadeOn;
+    e.target.classList.toggle('on', state.fadeOn);
+    e.target.textContent = state.fadeOn ? '⌛ FADE ✓' : '⌛ FADE 30s';
+    if (!state.fadeOn) state.fadeQueue = []; // dump pending fades when turning off
+  });
+  document.getElementById('btnZoomR').addEventListener('click', () => {
+    if (state.mode !== 'cityscape') return;
+    // Extend the virtual buffer rightward by one tile (W pixels)
+    state.tiles += 1;
+    virtExtend(state.tiles);
+    // Shift the tile origin so new cuts land in the new rightmost tile
+    state.tileOffsetX = (state.tiles - 1) * W;
+    // Reset toolpath at new origin and pick a new tool color so it's clearly a new city
+    state.toolIdx = (state.toolIdx + 1 + Math.floor(Math.random()*2)) % PALETTE.length;
+    state.pass++;
+    loadProgram();
+  });
+  document.getElementById('btnSave').addEventListener('click', () => {
+    // Export at native virtual resolution scaled up
+    const targetW = 1280;
+    const scale = Math.max(1, Math.floor(targetW / virt.width));
+    const off = document.createElement('canvas');
+    off.width = virt.width * scale;
+    off.height = virt.height * scale;
+    const o = off.getContext('2d');
+    o.imageSmoothingEnabled = false;
+    o.fillStyle = '#141926';
+    o.fillRect(0,0,off.width,off.height);
+    o.drawImage(virt, 0, 0, off.width, off.height);
+    off.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pixelmill_${state.modeName}_t${state.tiles}_pass${String(state.pass).padStart(3,'0')}_${state.progName}.png`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+  });
+  document.getElementById('speed').addEventListener('input', (e) => {
+    state.speed = parseInt(e.target.value, 10);
+  });
+
+  // OFFSET d-pad
+  function updateOffsetReadout() {
+    const x = state.offsetX, y = state.offsetY;
+    const fmt = (n) => (n >= 0 ? '+' : '') + String(Math.abs(n)).padStart(2, '0');
+    const sign = (n) => n < 0 ? '-' : '+';
+    const text = `${sign(x)}${String(Math.abs(x)).padStart(2,'0')},${sign(y)}${String(Math.abs(y)).padStart(2,'0')}`;
+    const out = document.getElementById('offsetReadout');
+    if (out) out.textContent = text;
+    const fout = document.getElementById('floatOffsetReadout');
+    if (fout) fout.textContent = text;
+  }
+  document.querySelectorAll('.nudge[data-dir]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const d = btn.dataset.dir;
+      const step = 2;
+      if (d === 'up') state.offsetY -= step;
+      else if (d === 'down') state.offsetY += step;
+      else if (d === 'left') state.offsetX -= step;
+      else if (d === 'right') state.offsetX += step;
+      state.offsetX = Math.max(-40, Math.min(40, state.offsetX));
+      state.offsetY = Math.max(-40, Math.min(40, state.offsetY));
+      updateOffsetReadout();
+    });
+  });
+  document.getElementById('btnResetOffset').addEventListener('click', () => {
+    state.offsetX = 0;
+    state.offsetY = 0;
+    updateOffsetReadout();
+  });
+
+  // Floating d-pad toggle
+  const dpadToggle = document.getElementById('dpadToggle');
+  const dpadFloat = document.getElementById('dpadFloat');
+  dpadToggle.addEventListener('click', () => {
+    const showing = dpadFloat.classList.toggle('show');
+    dpadToggle.classList.toggle('active', showing);
+  });
+
+  // Drag floating d-pad by its handle
+  (() => {
+    const handle = document.getElementById('dpadHandle');
+    let drag = null;
+    function start(e) {
+      const t = e.touches ? e.touches[0] : e;
+      const r = dpadFloat.getBoundingClientRect();
+      const frameR = dpadFloat.parentElement.getBoundingClientRect();
+      drag = {
+        startX: t.clientX, startY: t.clientY,
+        baseLeft: r.left - frameR.left,
+        baseBottom: frameR.bottom - r.bottom,
+      };
+      e.preventDefault();
+    }
+    function move(e) {
+      if (!drag) return;
+      const t = e.touches ? e.touches[0] : e;
+      const dx = t.clientX - drag.startX;
+      const dy = t.clientY - drag.startY;
+      const frameR = dpadFloat.parentElement.getBoundingClientRect();
+      const r = dpadFloat.getBoundingClientRect();
+      let newLeft = drag.baseLeft + dx;
+      let newBottom = drag.baseBottom - dy;
+      newLeft = Math.max(2, Math.min(frameR.width - r.width - 2, newLeft));
+      newBottom = Math.max(2, Math.min(frameR.height - r.height - 2, newBottom));
+      dpadFloat.style.left = newLeft + 'px';
+      dpadFloat.style.bottom = newBottom + 'px';
+      e.preventDefault();
+    }
+    function end() { drag = null; }
+    handle.addEventListener('mousedown', start);
+    handle.addEventListener('touchstart', start, { passive: false });
+    document.addEventListener('mousemove', move);
+    document.addEventListener('touchmove', move, { passive: false });
+    document.addEventListener('mouseup', end);
+    document.addEventListener('touchend', end);
+  })();
+
+  // LINE WIDTH buttons
+  document.querySelectorAll('.lw-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.lineWidth = parseInt(btn.dataset.lw, 10);
+      document.querySelectorAll('.lw-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  // PERSPECTIVE buttons (CITY-PRO)
+  function updateProReadout() {
+    const c = document.getElementById('complexityReadout');
+    const l = document.getElementById('layerCount');
+    if (c) c.textContent = 'L' + state.proComplexity;
+    if (l) l.textContent = state.proComplexity + '/4';
+  }
+  document.querySelectorAll('.persp-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.proPerspective = btn.dataset.persp;
+      document.querySelectorAll('.persp-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  updateOffsetReadout();
+  updateProReadout();
+
+  buildModeList();
+  buildPresetGrid();
+  loadProgram();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

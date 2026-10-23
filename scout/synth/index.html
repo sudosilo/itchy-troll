@@ -1,0 +1,1501 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>AXIOM SYNTH</title>
+<!--
+  RED PHONE: v1 original build. Synth engine, presets, keyboard, step sequencer, looper, demo mode with 50 templates.
+  RED PHONE: v2 bug pass and rebuild.
+    Light and dark themes with a toggle, dark tuned for contrast, no black backgrounds.
+    Lookahead scheduler on a worker clock replaces setInterval stepping (tight timing, no drift on BPM change).
+    Every voice has its own filter and envelope so saved loops keep the sound they were recorded with.
+    Looper notes now release. v1 never sent note off to loop voices and stacked sustained oscillators forever.
+    Sequencer rows no longer cut each other off (v1 shared one voice key per row and an old timeout killed the new note).
+    Voice cap with oldest voice stealing plus a master compressor to stop clipping on dense demo patterns.
+    Knob indicator rotates, not the whole knob. Cutoff knob is logarithmic. Pointer events for mouse and touch.
+    Keys release on window blur, mouseleave no longer spams note offs into the recorder.
+    Canvas resize no longer stacks scale transforms. Arpeggio and call and response patterns no longer multiply per row.
+    External font import removed. Alerts replaced with status line text.
+-->
+<style>
+  /* RED PHONE: v2 theme tokens. Dark is the tuned default, light is the alternate. Neither uses black backgrounds. */
+  :root, [data-theme="dark"] {
+    --bg: #2e3446;
+    --bg-glow1: rgba(79,227,255,0.10);
+    --bg-glow2: rgba(255,107,143,0.10);
+    --panel: #3a4157;
+    --panel2: #454d66;
+    --border: #5c6582;
+    --text: #eef1f8;
+    --dim: #b6bdd0;
+    --accent: #4fe3ff;
+    --accent2: #ff6b8f;
+    --accent3: #c6ff4a;
+    --gold: #ffd34d;
+    --on-text: #1f2433;
+    --step-off: #4b5472;
+    --step-down: #555f80;
+    --step-hover: #5e6990;
+    --knob-bg: #4b5472;
+    --viz-bg: #353c52;
+    --wkey: #f4f6fa;
+    --wkey-on: #bdf3ff;
+    --wkey-label: #6b7488;
+    --bkey: #2f3546;
+    --bkey-on: #2fb8d6;
+  }
+  [data-theme="light"] {
+    --bg: #eef1f6;
+    --bg-glow1: rgba(0,127,158,0.08);
+    --bg-glow2: rgba(208,36,90,0.07);
+    --panel: #ffffff;
+    --panel2: #f2f5f9;
+    --border: #c7cfdc;
+    --text: #1f2533;
+    --dim: #5b6578;
+    --accent: #007f9e;
+    --accent2: #d0245a;
+    --accent3: #3f7a00;
+    --gold: #a86f00;
+    --on-text: #ffffff;
+    --step-off: #e1e6ee;
+    --step-down: #d3dae6;
+    --step-hover: #c6cfdf;
+    --knob-bg: #e8ecf3;
+    --viz-bg: #f6f8fb;
+    --wkey: #ffffff;
+    --wkey-on: #c4f1fb;
+    --wkey-label: #8a93a6;
+    --bkey: #3a4052;
+    --bkey-on: #0a9cc0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { background: var(--bg); }
+
+  body {
+    color: var(--text);
+    font-family: 'Courier New', ui-monospace, monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 12px 40px;
+    background-image:
+      radial-gradient(ellipse at 20% 0%, var(--bg-glow1) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 100%, var(--bg-glow2) 0%, transparent 60%);
+    background-attachment: fixed;
+    transition: background-color 0.25s, color 0.25s;
+  }
+
+  .display { font-family: Futura, 'Century Gothic', 'Avenir Next', 'Trebuchet MS', sans-serif; }
+
+  .topbar {
+    width: 100%;
+    max-width: 1100px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  h1 {
+    font-weight: 900;
+    font-size: 2rem;
+    letter-spacing: 0.3em;
+    color: var(--accent);
+    line-height: 1;
+  }
+
+  .subtitle { font-size: 0.65rem; letter-spacing: 0.22em; color: var(--dim); margin-top: 6px; }
+
+  .theme-btn {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.72rem;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+  .theme-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .main-container { width: 100%; max-width: 1100px; display: flex; flex-direction: column; gap: 12px; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    position: relative;
+    transition: background-color 0.25s, border-color 0.25s;
+  }
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 20px; right: 20px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.45;
+  }
+
+  .panel-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.25em;
+    color: var(--dim);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+  }
+
+  .presets-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .preset-btn, .seq-btn {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.72rem;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background-color 0.15s;
+    letter-spacing: 0.05em;
+    touch-action: manipulation;
+  }
+  .preset-btn:hover, .seq-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .preset-btn.active { background: var(--accent); color: var(--on-text); border-color: var(--accent); font-weight: bold; }
+  .seq-btn.playing { background: var(--accent2); border-color: var(--accent2); color: var(--on-text); }
+  .seq-btn.rec-active { background: var(--accent2); border-color: var(--accent2); color: var(--on-text); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+  .controls-grid { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-start; }
+  .control-group { display: flex; flex-direction: column; gap: 10px; }
+  .control-group-label { font-size: 0.6rem; letter-spacing: 0.2em; color: var(--dim); text-transform: uppercase; }
+  .knobs-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .knob-wrap { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+
+  /* RED PHONE: v2 knob uses an inner indicator so only the pointer line rotates */
+  .knob {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    background: var(--knob-bg);
+    border: 2px solid var(--border);
+    position: relative;
+    cursor: ns-resize;
+    touch-action: none;
+    user-select: none;
+  }
+  .knob:hover, .knob.dragging { border-color: var(--accent); }
+  .knob-ind { position: absolute; inset: 0; transform: rotate(var(--rot, -135deg)); pointer-events: none; }
+  .knob-ind::after {
+    content: '';
+    position: absolute;
+    left: 50%; top: 5px;
+    width: 3px; height: 14px;
+    margin-left: -1.5px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+  .knob-label { font-size: 0.62rem; color: var(--dim); letter-spacing: 0.08em; }
+  .knob-val { font-size: 0.62rem; color: var(--accent); min-width: 44px; text-align: center; }
+
+  .wave-btns { display: flex; gap: 6px; }
+  .wave-btn {
+    width: 44px; height: 36px;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0;
+    touch-action: manipulation;
+  }
+  .wave-btn svg { width: 28px; height: 18px; }
+  .wave-btn svg path, .wave-btn svg polyline { stroke: var(--dim); stroke-width: 1.6; fill: none; }
+  .wave-btn:hover { border-color: var(--accent); }
+  .wave-btn.active { border-color: var(--accent); background: var(--knob-bg); }
+  .wave-btn.active svg path, .wave-btn.active svg polyline { stroke: var(--accent); }
+
+  /* KEYBOARD */
+  .keyboard {
+    position: relative;
+    display: flex;
+    height: 120px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    width: 100%;
+    max-width: 820px;
+    margin: 0 auto;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .white-key {
+    flex: 1;
+    background: var(--wkey);
+    border-right: 1px solid #a9b1c0;
+    border-radius: 0 0 4px 4px;
+    cursor: pointer;
+    display: flex; align-items: flex-end; justify-content: center;
+    padding-bottom: 6px;
+    touch-action: none;
+  }
+  .white-key span { font-size: 0.5rem; color: var(--wkey-label); pointer-events: none; }
+  .white-key.active { background: var(--wkey-on); }
+  .black-key {
+    position: absolute;
+    top: 0;
+    height: 62%;
+    background: var(--bkey);
+    border-radius: 0 0 3px 3px;
+    z-index: 2;
+    cursor: pointer;
+    touch-action: none;
+  }
+  .black-key.active { background: var(--bkey-on); }
+
+  /* SEQUENCER */
+  .seq-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; flex-wrap: wrap; }
+  .seq-header .panel-label { margin-bottom: 0; }
+  .seq-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .bpm-wrap { display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: var(--dim); }
+  .bpm-input {
+    width: 58px;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    font-family: inherit;
+    font-size: 0.9rem;
+    text-align: center;
+    border-radius: 4px;
+    padding: 5px;
+  }
+
+  .step-grid { display: flex; flex-direction: column; gap: 4px; }
+  .step-row { display: flex; gap: 3px; align-items: center; }
+  .step-row-label { width: 36px; font-size: 0.6rem; color: var(--dim); text-align: right; padding-right: 6px; flex-shrink: 0; }
+  .step-cell {
+    flex: 1;
+    min-width: 0;
+    height: 26px;
+    background: var(--step-off);
+    border: 1px solid transparent;
+    border-radius: 3px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .step-cell.down { background: var(--step-down); }
+  .step-cell:hover { background: var(--step-hover); }
+  .step-cell.bar-gap { margin-left: 4px; }
+  .step-cell.on { background: var(--accent); }
+  .step-cell.current { border-color: var(--accent2); }
+  .step-cell.on.current { background: var(--accent2); }
+
+  /* LOOPER */
+  .loops-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .loop-item {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 0.7rem;
+    flex-wrap: wrap;
+  }
+  .loop-item.active-loop { border-color: var(--accent3); }
+  .loop-item-name { color: var(--accent3); letter-spacing: 0.05em; font-weight: bold; }
+  .loop-item-meta { color: var(--dim); }
+  .loop-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.66rem;
+    padding: 4px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .loop-btn:hover { border-color: var(--accent3); color: var(--accent3); }
+  .empty-loops { color: var(--dim); font-size: 0.7rem; padding: 8px 2px; }
+
+  /* DEMO */
+  .demo-panel { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .demo-btn {
+    background: linear-gradient(135deg, #ff3366, #ff7a00, #ffcc00);
+    background-size: 200% 200%;
+    border: none;
+    color: #2a1a10;
+    font-weight: 900;
+    font-size: 0.85rem;
+    padding: 12px 24px;
+    border-radius: 6px;
+    cursor: pointer;
+    letter-spacing: 0.15em;
+    animation: demoGradient 3s ease infinite;
+    box-shadow: 0 0 18px rgba(255,90,60,0.35);
+    position: relative;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+  .demo-btn::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.35) 50%, transparent 100%);
+    transform: translateX(-100%);
+  }
+  .demo-btn:active { transform: scale(0.97); }
+  .demo-btn.firing::after { animation: shimmer 0.6s ease forwards; }
+  @keyframes demoGradient { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+  @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+  .demo-info { flex: 1; min-width: 200px; }
+  .demo-song-name { font-size: 0.95rem; color: var(--gold); letter-spacing: 0.1em; margin-bottom: 4px; font-weight: bold; }
+  .demo-song-meta { font-size: 0.64rem; color: var(--dim); letter-spacing: 0.06em; line-height: 1.5; }
+  .demo-counter { font-size: 1.8rem; font-weight: 900; color: var(--border); min-width: 60px; text-align: right; transition: color 0.3s; }
+  .demo-counter.flash { color: var(--accent2); }
+
+  /* VIZ + STATUS */
+  canvas#osc-viz { width: 100%; height: 64px; border: 1px solid var(--border); border-radius: 4px; display: block; }
+  .status-bar { display: flex; gap: 16px; align-items: center; font-size: 0.64rem; color: var(--dim); flex-wrap: wrap; margin-top: 10px; }
+  .status-item { display: flex; gap: 6px; align-items: center; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); }
+  .status-dot.on { background: var(--accent3); box-shadow: 0 0 6px var(--accent3); }
+  #status-note { color: var(--accent); }
+
+  @media (max-width: 560px) {
+    h1 { font-size: 1.5rem; }
+    .knob { width: 46px; height: 46px; }
+    .step-cell { height: 24px; }
+    .step-row-label { width: 30px; font-size: 0.55rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <h1 class="display">AXIOM</h1>
+    <p class="subtitle">BROWSER SYNTHESIZER · SEQUENCER · LOOPER</p>
+  </div>
+  <button class="theme-btn" id="btn-theme">LIGHT MODE</button>
+</div>
+
+<div class="main-container">
+
+  <div class="panel">
+    <div class="panel-label">Presets</div>
+    <div class="presets-row" id="presets-row"></div>
+  </div>
+
+  <div class="panel">
+    <div class="demo-panel">
+      <button class="demo-btn display" id="btn-demo">⚡ DEMO MODE</button>
+      <div class="demo-info">
+        <div class="demo-song-name display" id="demo-song-name">READY</div>
+        <div class="demo-song-meta" id="demo-song-meta">Hit DEMO MODE to generate a new song from 50 musical templates</div>
+      </div>
+      <div class="demo-counter display" id="demo-counter">00</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-label">Synthesizer</div>
+    <div class="controls-grid">
+      <div class="control-group">
+        <div class="control-group-label">Waveform</div>
+        <div class="wave-btns" id="wave-btns">
+          <button class="wave-btn active" data-wave="sawtooth" title="Sawtooth"><svg viewBox="0 0 28 18"><polyline points="0,16 14,2 14,16 28,2"/></svg></button>
+          <button class="wave-btn" data-wave="square" title="Square"><svg viewBox="0 0 28 18"><polyline points="1,16 1,4 14,4 14,16 27,16 27,4"/></svg></button>
+          <button class="wave-btn" data-wave="sine" title="Sine"><svg viewBox="0 0 28 18"><path d="M0,10 Q7,0 14,10 Q21,20 28,10"/></svg></button>
+          <button class="wave-btn" data-wave="triangle" title="Triangle"><svg viewBox="0 0 28 18"><polyline points="0,16 7,2 21,16 28,2"/></svg></button>
+        </div>
+      </div>
+      <div class="control-group">
+        <div class="control-group-label">Envelope</div>
+        <div class="knobs-row" id="knobs-env"></div>
+      </div>
+      <div class="control-group">
+        <div class="control-group-label">Filter</div>
+        <div class="knobs-row" id="knobs-filter"></div>
+      </div>
+      <div class="control-group">
+        <div class="control-group-label">Effects</div>
+        <div class="knobs-row" id="knobs-fx"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-label">Keyboard · tap keys or use A W S E D F T G Y H U J K O L P</div>
+    <div class="keyboard" id="keyboard"></div>
+  </div>
+
+  <div class="panel">
+    <div class="seq-header">
+      <div class="panel-label">Step Sequencer · 16 steps × 8 rows</div>
+      <div class="seq-controls">
+        <div class="bpm-wrap">BPM <input type="number" class="bpm-input" id="bpm-input" value="120" min="40" max="240" inputmode="numeric"></div>
+        <button class="seq-btn" id="btn-clear-seq">CLEAR</button>
+        <button class="seq-btn" id="btn-play-seq">▶ PLAY</button>
+      </div>
+    </div>
+    <div class="step-grid" id="step-grid"></div>
+  </div>
+
+  <div class="panel">
+    <div class="seq-header">
+      <div class="panel-label">Looper · record the keyboard · stack layers</div>
+      <div class="seq-controls">
+        <button class="seq-btn" id="btn-record">⏺ RECORD</button>
+        <button class="seq-btn" id="btn-save-loop">SAVE LOOP</button>
+        <button class="seq-btn" id="btn-clear-rec">DISCARD</button>
+      </div>
+    </div>
+    <div class="loops-row" id="loops-row"></div>
+  </div>
+
+  <div class="panel">
+    <canvas id="osc-viz"></canvas>
+    <div class="status-bar">
+      <div class="status-item"><div class="status-dot" id="dot-audio"></div> Audio Engine</div>
+      <div class="status-item"><div class="status-dot" id="dot-seq"></div> Sequencer</div>
+      <div class="status-item"><div class="status-dot" id="dot-rec"></div> Recording</div>
+      <div class="status-item" id="status-note">Tap any key or button to start audio</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────
+// RED PHONE: v2 THEME
+// ─────────────────────────────────────────────
+const themeColors = { accent: '#4fe3ff', viz: '#353c52', grid: '#5c6582' };
+
+function readThemeColors() {
+  const cs = getComputedStyle(document.documentElement);
+  themeColors.accent = cs.getPropertyValue('--accent').trim() || '#4fe3ff';
+  themeColors.viz = cs.getPropertyValue('--viz-bg').trim() || '#353c52';
+  themeColors.grid = cs.getPropertyValue('--border').trim() || '#5c6582';
+}
+
+function setTheme(name) {
+  document.documentElement.setAttribute('data-theme', name);
+  document.getElementById('btn-theme').textContent = name === 'dark' ? 'LIGHT MODE' : 'DARK MODE';
+  try { localStorage.setItem('axiom-theme', name); } catch (e) {}
+  readThemeColors();
+}
+
+(function initTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem('axiom-theme'); } catch (e) {}
+  setTheme(saved === 'light' ? 'light' : 'dark');
+})();
+
+document.getElementById('btn-theme').addEventListener('click', () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  setTheme(cur === 'dark' ? 'light' : 'dark');
+});
+
+// ─────────────────────────────────────────────
+// SYNTH STATE
+// ─────────────────────────────────────────────
+const synth = {
+  wave: 'sawtooth', attack: 0.01, decay: 0.3, sustain: 0.5, release: 0.5,
+  cutoff: 4000, resonance: 1, reverb: 0.2, delay: 0.0, volume: 0.75
+};
+const PARAM_KEYS = ['wave', 'attack', 'decay', 'sustain', 'release', 'cutoff', 'resonance', 'reverb', 'delay', 'volume'];
+function snapshot(src) { const o = {}; PARAM_KEYS.forEach(k => { o[k] = src[k]; }); return o; }
+
+let bpm = 120;
+
+// ─────────────────────────────────────────────
+// AUDIO ENGINE
+// RED PHONE: v2 graph. voices -> voiceBus -> masterGain -> compressor -> analyser -> out,
+// with reverb and delay sends off masterGain also landing in the compressor.
+// ─────────────────────────────────────────────
+let ctx = null;
+let voiceBus, masterGain, comp, analyser, reverbWet, delayNode, delayFb, delayWet;
+
+function initAudio() {
+  if (ctx) {
+    if (ctx.state === 'suspended') ctx.resume();
+    return true;
+  }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) { setStatus('Web Audio is not supported in this browser'); return false; }
+  ctx = new AC();
+
+  voiceBus = ctx.createGain();
+  voiceBus.gain.value = 0.3; // RED PHONE: v2 headroom for polyphony
+
+  masterGain = ctx.createGain();
+  masterGain.gain.value = synth.volume;
+
+  comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -12;
+  comp.knee.value = 10;
+  comp.ratio.value = 8;
+  comp.attack.value = 0.003;
+  comp.release.value = 0.2;
+
+  analyser = ctx.createAnalyser();
+  analyser.fftSize = 1024;
+
+  voiceBus.connect(masterGain);
+  masterGain.connect(comp);
+
+  const conv = ctx.createConvolver();
+  conv.buffer = makeReverbBuffer(2.5, 2);
+  reverbWet = ctx.createGain();
+  reverbWet.gain.value = synth.reverb;
+  masterGain.connect(conv);
+  conv.connect(reverbWet);
+  reverbWet.connect(comp);
+
+  // RED PHONE: v2 delay feedback loop no longer runs through the wet level
+  delayNode = ctx.createDelay(2.0);
+  delayFb = ctx.createGain();
+  delayFb.gain.value = 0.38;
+  delayWet = ctx.createGain();
+  delayWet.gain.value = synth.delay;
+  masterGain.connect(delayNode);
+  delayNode.connect(delayFb);
+  delayFb.connect(delayNode);
+  delayNode.connect(delayWet);
+  delayWet.connect(comp);
+
+  comp.connect(analyser);
+  analyser.connect(ctx.destination);
+
+  updateDelayTime();
+  startClock();
+  dot('audio', true);
+  if (ctx.state === 'suspended') ctx.resume();
+  return true;
+}
+
+function makeReverbBuffer(duration, decay) {
+  const rate = ctx.sampleRate;
+  const len = Math.floor(rate * duration);
+  const buf = ctx.createBuffer(2, len, rate);
+  for (let c = 0; c < 2; c++) {
+    const d = buf.getChannelData(c);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+  }
+  return buf;
+}
+
+// RED PHONE: v2 delay time follows tempo (dotted eighth)
+function updateDelayTime() {
+  if (!delayNode) return;
+  delayNode.delayTime.setTargetAtTime(Math.min(1.9, (60 / bpm) * 0.75), ctx.currentTime, 0.05);
+}
+
+// ─────────────────────────────────────────────
+// VOICES
+// RED PHONE: v2 each voice owns osc + filter + envelope. Scheduled at audio time.
+// ─────────────────────────────────────────────
+const voices = new Set();
+const MAX_VOICES = 40;
+
+function midiToFreq(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+
+function envValueAt(v, t) {
+  const dt = t - v.start;
+  if (dt <= 0) return 0;
+  if (dt < v.p.attack) return dt / v.p.attack;
+  const d2 = dt - v.p.attack;
+  if (d2 < v.p.decay) return 1 + (v.p.sustain - 1) * (d2 / v.p.decay);
+  return v.p.sustain;
+}
+
+function createVoice(midi, when, params) {
+  if (voices.size >= MAX_VOICES) {
+    let oldest = null;
+    voices.forEach(v => { if (!oldest || v.start < oldest.start) oldest = v; });
+    if (oldest) { releaseVoice(oldest, ctx.currentTime, 0.015, true); voices.delete(oldest); }
+  }
+  const p = {
+    wave: params.wave,
+    attack: Math.max(0.001, params.attack),
+    decay: Math.max(0.005, params.decay),
+    sustain: Math.min(1, Math.max(0.0001, params.sustain)),
+    release: Math.max(0.01, params.release),
+    cutoff: params.cutoff,
+    resonance: params.resonance
+  };
+  const osc = ctx.createOscillator();
+  osc.type = p.wave;
+  osc.frequency.setValueAtTime(midiToFreq(midi), when);
+
+  const filt = ctx.createBiquadFilter();
+  filt.type = 'lowpass';
+  filt.frequency.setValueAtTime(p.cutoff, when);
+  filt.Q.setValueAtTime(p.resonance, when);
+
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0, when);
+  env.gain.linearRampToValueAtTime(1, when + p.attack);
+  env.gain.linearRampToValueAtTime(p.sustain, when + p.attack + p.decay);
+
+  osc.connect(filt);
+  filt.connect(env);
+  env.connect(voiceBus);
+  osc.start(when);
+
+  const v = { osc, filt, env, midi, start: when, p, live: false, released: false };
+  voices.add(v);
+  osc.onended = () => {
+    voices.delete(v);
+    try { osc.disconnect(); filt.disconnect(); env.disconnect(); } catch (e) {}
+  };
+  return v;
+}
+
+// RED PHONE: v2 release computes the envelope level itself (Firefox has no cancelAndHoldAtTime)
+function releaseVoice(v, when, relOverride, force) {
+  if (v.released && !force) return;
+  v.released = true;
+  const t = Math.max(when, ctx.currentTime);
+  const rel = relOverride != null ? relOverride : v.p.release;
+  const level = envValueAt(v, t);
+  const g = v.env.gain;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(level, t);
+  g.linearRampToValueAtTime(0, t + rel);
+  try { v.osc.stop(t + rel + 0.05); } catch (e) {}
+}
+
+// Live filter tweaks reach voices that follow the panel
+function applyLiveFilter() {
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  voices.forEach(v => {
+    if (!v.live) return;
+    v.filt.frequency.setTargetAtTime(synth.cutoff, now, 0.02);
+    v.filt.Q.setTargetAtTime(synth.resonance, now, 0.02);
+  });
+}
+
+// ─────────────────────────────────────────────
+// NOTES
+// ─────────────────────────────────────────────
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+function noteName(midi) { return NOTE_NAMES[midi % 12] + (Math.floor(midi / 12) - 1); }
+
+// ─────────────────────────────────────────────
+// PRESETS (Roland-inspired)
+// ─────────────────────────────────────────────
+const PRESETS = [
+  { name: '303 Acid',   wave: 'sawtooth', attack: 0.005, decay: 0.2, sustain: 0.3, release: 0.1, cutoff: 800,  resonance: 18, reverb: 0.05, delay: 0.0,  volume: 0.8 },
+  { name: 'Juno Pad',   wave: 'sawtooth', attack: 0.4,   decay: 0.5, sustain: 0.7, release: 1.2, cutoff: 2200, resonance: 3,  reverb: 0.6,  delay: 0.2,  volume: 0.7 },
+  { name: '808 Sub',    wave: 'sine',     attack: 0.001, decay: 0.8, sustain: 0.0, release: 0.3, cutoff: 300,  resonance: 1,  reverb: 0.1,  delay: 0.0,  volume: 0.9 },
+  { name: 'Lead Synth', wave: 'square',   attack: 0.01,  decay: 0.1, sustain: 0.8, release: 0.2, cutoff: 5000, resonance: 4,  reverb: 0.2,  delay: 0.3,  volume: 0.75 },
+  { name: 'Strings',    wave: 'sawtooth', attack: 0.6,   decay: 0.8, sustain: 0.9, release: 2.0, cutoff: 3500, resonance: 2,  reverb: 0.8,  delay: 0.1,  volume: 0.65 },
+  { name: 'Pluck',      wave: 'triangle', attack: 0.001, decay: 0.15, sustain: 0.0, release: 0.4, cutoff: 6000, resonance: 8, reverb: 0.3,  delay: 0.15, volume: 0.8 },
+  { name: 'Choir',      wave: 'sine',     attack: 0.3,   decay: 0.4, sustain: 0.8, release: 1.5, cutoff: 4000, resonance: 1,  reverb: 0.9,  delay: 0.0,  volume: 0.6 }
+];
+
+function applyParams(params) {
+  PARAM_KEYS.forEach(k => { if (params[k] !== undefined) synth[k] = params[k]; });
+  renderAllKnobs();
+  applyLiveFilter();
+  applyFx();
+  document.querySelectorAll('#wave-btns .wave-btn').forEach(b => b.classList.toggle('active', b.dataset.wave === synth.wave));
+}
+
+function markPreset(name) {
+  document.querySelectorAll('.preset-btn').forEach(b => b.classList.toggle('active', b.dataset.name === name));
+}
+
+function applyFx() {
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  reverbWet.gain.setTargetAtTime(synth.reverb, now, 0.03);
+  delayWet.gain.setTargetAtTime(synth.delay, now, 0.03);
+  masterGain.gain.setTargetAtTime(synth.volume, now, 0.03);
+}
+
+// ─────────────────────────────────────────────
+// KNOBS
+// RED PHONE: v2 pointer events, log scale cutoff, indicator child rotates
+// ─────────────────────────────────────────────
+const KNOBS = [
+  { p: 'attack',    label: 'ATK',    min: 0.001, max: 2,     group: 'knobs-env' },
+  { p: 'decay',     label: 'DCY',    min: 0.01,  max: 2,     group: 'knobs-env' },
+  { p: 'sustain',   label: 'SUS',    min: 0,     max: 1,     group: 'knobs-env' },
+  { p: 'release',   label: 'REL',    min: 0.01,  max: 4,     group: 'knobs-env' },
+  { p: 'cutoff',    label: 'CUTOFF', min: 80,    max: 18000, group: 'knobs-filter', log: true },
+  { p: 'resonance', label: 'RES',    min: 0.1,   max: 25,    group: 'knobs-filter' },
+  { p: 'reverb',    label: 'REVERB', min: 0,     max: 1,     group: 'knobs-fx' },
+  { p: 'delay',     label: 'DELAY',  min: 0,     max: 1,     group: 'knobs-fx' },
+  { p: 'volume',    label: 'VOL',    min: 0,     max: 1,     group: 'knobs-fx' }
+];
+const knobEls = {};
+
+function toNorm(k, v) {
+  if (k.log) return Math.log(v / k.min) / Math.log(k.max / k.min);
+  return (v - k.min) / (k.max - k.min);
+}
+function fromNorm(k, n) {
+  n = Math.min(1, Math.max(0, n));
+  if (k.log) return k.min * Math.pow(k.max / k.min, n);
+  return k.min + n * (k.max - k.min);
+}
+function fmtVal(k, v) {
+  if (k.p === 'cutoff') return Math.round(v) + ' Hz';
+  if (k.p === 'resonance') return v.toFixed(1);
+  return v.toFixed(2);
+}
+
+function renderKnob(k) {
+  const els = knobEls[k.p];
+  const v = Math.min(k.max, Math.max(k.min, synth[k.p]));
+  els.ind.style.setProperty('--rot', (-135 + toNorm(k, v) * 270) + 'deg');
+  els.val.textContent = fmtVal(k, v);
+}
+function renderAllKnobs() { KNOBS.forEach(renderKnob); }
+
+function setParam(k, v) {
+  synth[k.p] = v;
+  renderKnob(k);
+  if (k.p === 'cutoff' || k.p === 'resonance') applyLiveFilter();
+  else if (k.p === 'reverb' || k.p === 'delay' || k.p === 'volume') applyFx();
+}
+
+KNOBS.forEach(k => {
+  const wrap = document.createElement('div');
+  wrap.className = 'knob-wrap';
+  wrap.innerHTML = '<div class="knob"><div class="knob-ind"></div></div><div class="knob-label">' + k.label + '</div><div class="knob-val"></div>';
+  document.getElementById(k.group).appendChild(wrap);
+  const knob = wrap.querySelector('.knob');
+  knobEls[k.p] = { knob, ind: wrap.querySelector('.knob-ind'), val: wrap.querySelector('.knob-val') };
+
+  let startY = 0, startN = 0, dragging = false;
+  knob.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    dragging = true;
+    startY = e.clientY;
+    startN = toNorm(k, synth[k.p]);
+    knob.classList.add('dragging');
+    try { knob.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  knob.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    setParam(k, fromNorm(k, startN + (startY - e.clientY) / 160));
+  });
+  const end = () => { dragging = false; knob.classList.remove('dragging'); };
+  knob.addEventListener('pointerup', end);
+  knob.addEventListener('pointercancel', end);
+  knob.addEventListener('lostpointercapture', end);
+});
+
+// Presets UI
+const presetsRow = document.getElementById('presets-row');
+PRESETS.forEach(p => {
+  const btn = document.createElement('button');
+  btn.className = 'preset-btn';
+  btn.textContent = p.name;
+  btn.dataset.name = p.name;
+  btn.addEventListener('click', () => { markPreset(p.name); applyParams(p); });
+  presetsRow.appendChild(btn);
+});
+
+// Wave buttons
+document.querySelectorAll('#wave-btns .wave-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    synth.wave = btn.dataset.wave;
+    document.querySelectorAll('#wave-btns .wave-btn').forEach(b => b.classList.toggle('active', b === btn));
+  });
+});
+
+// ─────────────────────────────────────────────
+// KEYBOARD
+// RED PHONE: v2 pointer capture per key, pressed set guards duplicate on/off
+// ─────────────────────────────────────────────
+const KB_LOW = 60, KB_HIGH = 83;
+const BLACK_PCS = [1, 3, 6, 8, 10];
+const keyEls = {};
+const pressed = new Set();
+const held = new Map();
+
+(function buildKeyboard() {
+  const kb = document.getElementById('keyboard');
+  const whites = [];
+  for (let m = KB_LOW; m <= KB_HIGH; m++) if (!BLACK_PCS.includes(m % 12)) whites.push(m);
+  const w = 100 / whites.length;
+  let wi = 0;
+  for (let m = KB_LOW; m <= KB_HIGH; m++) {
+    const isBlack = BLACK_PCS.includes(m % 12);
+    const el = document.createElement('div');
+    if (isBlack) {
+      el.className = 'black-key';
+      el.style.left = (wi * w - w * 0.3) + '%';
+      el.style.width = (w * 0.6) + '%';
+    } else {
+      el.className = 'white-key';
+      el.innerHTML = '<span>' + noteName(m) + '</span>';
+      wi++;
+    }
+    el.dataset.midi = m;
+    kb.appendChild(el);
+    keyEls[m] = el;
+
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      try { el.setPointerCapture(e.pointerId); } catch (err) {}
+      pressKey(m);
+    });
+    const up = () => releaseKey(m);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('lostpointercapture', up);
+  }
+})();
+
+function pressKey(midi) {
+  if (pressed.has(midi)) return;
+  if (!initAudio()) return;
+  pressed.add(midi);
+  const v = createVoice(midi, ctx.currentTime, snapshot(synth));
+  v.live = true;
+  held.set(midi, v);
+  recNoteOn(midi);
+  if (keyEls[midi]) keyEls[midi].classList.add('active');
+  setStatus('▶ ' + noteName(midi));
+}
+
+function releaseKey(midi) {
+  if (!pressed.has(midi)) return;
+  pressed.delete(midi);
+  const v = held.get(midi);
+  if (v) releaseVoice(v, ctx.currentTime);
+  held.delete(midi);
+  recNoteOff(midi);
+  if (keyEls[midi]) keyEls[midi].classList.remove('active');
+}
+
+const KB_MAP = {
+  'a': 60, 'w': 61, 's': 62, 'e': 63, 'd': 64, 'f': 65, 't': 66, 'g': 67,
+  'y': 68, 'h': 69, 'u': 70, 'j': 71, 'k': 72, 'o': 73, 'l': 74, 'p': 75, ';': 76
+};
+
+window.addEventListener('keydown', e => {
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+  const midi = KB_MAP[e.key.toLowerCase()];
+  if (midi !== undefined) pressKey(midi);
+});
+window.addEventListener('keyup', e => {
+  const midi = KB_MAP[e.key.toLowerCase()];
+  if (midi !== undefined) releaseKey(midi);
+});
+
+// RED PHONE: v2 stuck note guard
+function releaseAllKeys() { Array.from(pressed).forEach(releaseKey); }
+window.addEventListener('blur', releaseAllKeys);
+document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAllKeys(); });
+
+// ─────────────────────────────────────────────
+// SEQUENCER
+// ─────────────────────────────────────────────
+const SEQ_ROWS = 8;
+const SEQ_STEPS = 16;
+const SEQ_NOTES = [60, 62, 64, 65, 67, 69, 71, 72].map(m => ({ midi: m, name: noteName(m) }));
+
+let seqGrid = Array.from({ length: SEQ_ROWS }, () => Array(SEQ_STEPS).fill(false));
+let seqPlaying = false;
+let seqStep = 0;
+let seqNextTime = 0;
+const uiQueue = [];
+let uiStep = -1;
+const cells = Array.from({ length: SEQ_ROWS }, () => []);
+const rowLabels = [];
+
+(function buildGrid() {
+  const grid = document.getElementById('step-grid');
+  // RED PHONE: v2 highest row drawn on top like a piano roll
+  for (let row = SEQ_ROWS - 1; row >= 0; row--) {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'step-row';
+    const label = document.createElement('div');
+    label.className = 'step-row-label';
+    label.textContent = SEQ_NOTES[row].name;
+    rowLabels[row] = label;
+    rowEl.appendChild(label);
+    for (let step = 0; step < SEQ_STEPS; step++) {
+      const cell = document.createElement('div');
+      cell.className = 'step-cell' + (step % 4 === 0 ? ' down' : '') + (step % 4 === 0 && step > 0 ? ' bar-gap' : '');
+      cell.addEventListener('click', () => {
+        seqGrid[row][step] = !seqGrid[row][step];
+        cell.classList.toggle('on', seqGrid[row][step]);
+        if (seqGrid[row][step] && !seqPlaying && initAudio()) {
+          const v = createVoice(SEQ_NOTES[row].midi, ctx.currentTime, snapshot(synth));
+          releaseVoice(v, ctx.currentTime + 0.15);
+        }
+      });
+      cells[row][step] = cell;
+      rowEl.appendChild(cell);
+    }
+    grid.appendChild(rowEl);
+  }
+})();
+
+function renderGrid() {
+  for (let r = 0; r < SEQ_ROWS; r++) for (let s = 0; s < SEQ_STEPS; s++) cells[r][s].classList.toggle('on', seqGrid[r][s]);
+}
+function renderRowLabels() { for (let r = 0; r < SEQ_ROWS; r++) rowLabels[r].textContent = SEQ_NOTES[r].name; }
+
+function setCurrentStep(step) {
+  if (uiStep === step) return;
+  if (uiStep >= 0) for (let r = 0; r < SEQ_ROWS; r++) cells[r][uiStep].classList.remove('current');
+  uiStep = step;
+  if (step >= 0) for (let r = 0; r < SEQ_ROWS; r++) cells[r][step].classList.add('current');
+}
+
+function stepDur() { return 60 / bpm / 4; }
+
+function scheduleStep(step, when) {
+  const gate = stepDur() * 0.8;
+  const p = snapshot(synth);
+  for (let r = 0; r < SEQ_ROWS; r++) {
+    if (!seqGrid[r][step]) continue;
+    // RED PHONE: v2 every hit is its own voice, released at its own scheduled time
+    const v = createVoice(SEQ_NOTES[r].midi, when, p);
+    v.live = true;
+    releaseVoice(v, when + gate);
+  }
+}
+
+function startSeq() {
+  if (!initAudio()) return;
+  seqStep = 0;
+  seqNextTime = ctx.currentTime + 0.06;
+  uiQueue.length = 0;
+  seqPlaying = true;
+  dot('seq', true);
+  const b = document.getElementById('btn-play-seq');
+  b.textContent = '■ STOP';
+  b.classList.add('playing');
+}
+
+function stopSeq() {
+  seqPlaying = false;
+  uiQueue.length = 0;
+  setCurrentStep(-1);
+  dot('seq', false);
+  const b = document.getElementById('btn-play-seq');
+  b.textContent = '▶ PLAY';
+  b.classList.remove('playing');
+}
+
+function restartSeqFromTop() {
+  if (!ctx) return;
+  seqStep = 0;
+  seqNextTime = ctx.currentTime + 0.06;
+  uiQueue.length = 0;
+}
+
+document.getElementById('btn-play-seq').addEventListener('click', () => { if (seqPlaying) stopSeq(); else startSeq(); });
+document.getElementById('btn-clear-seq').addEventListener('click', () => {
+  seqGrid = Array.from({ length: SEQ_ROWS }, () => Array(SEQ_STEPS).fill(false));
+  renderGrid();
+});
+
+// RED PHONE: v2 BPM clamps and applies live, no stop and restart
+const bpmInput = document.getElementById('bpm-input');
+function commitBpm() {
+  let v = parseInt(bpmInput.value, 10);
+  if (isNaN(v)) v = bpm;
+  v = Math.min(240, Math.max(40, v));
+  bpm = v;
+  bpmInput.value = v;
+  updateDelayTime();
+}
+bpmInput.addEventListener('change', commitBpm);
+bpmInput.addEventListener('blur', commitBpm);
+
+// ─────────────────────────────────────────────
+// CLOCK
+// RED PHONE: v2 worker timer keeps ticking when the tab is backgrounded; audio clock does the real timing
+// ─────────────────────────────────────────────
+const LOOKAHEAD = 0.12;
+let clockStarted = false;
+
+function startClock() {
+  if (clockStarted) return;
+  clockStarted = true;
+  try {
+    const src = "let id=null;onmessage=function(e){if(e.data==='start'){clearInterval(id);id=setInterval(function(){postMessage('t')},25);}};";
+    const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+    const worker = new Worker(url);
+    worker.onmessage = schedulerTick;
+    worker.postMessage('start');
+  } catch (e) {
+    setInterval(schedulerTick, 25);
+  }
+}
+
+function schedulerTick() {
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  const horizon = now + LOOKAHEAD;
+  if (seqPlaying) {
+    // RED PHONE: v2 if the clock fell behind (tab asleep), jump forward instead of firing a burst
+    if (seqNextTime < now - 0.2) seqNextTime = now + 0.02;
+    while (seqNextTime < horizon) {
+      scheduleStep(seqStep, seqNextTime);
+      uiQueue.push({ step: seqStep, time: seqNextTime });
+      seqNextTime += stepDur();
+      seqStep = (seqStep + 1) % SEQ_STEPS;
+    }
+    if (uiQueue.length > 64) uiQueue.splice(0, uiQueue.length - 64);
+  }
+  for (const l of loops) scheduleLoop(l, now, horizon);
+}
+
+// ─────────────────────────────────────────────
+// LOOPER
+// RED PHONE: v2 records note on and off pairs, loops schedule on the audio clock with their own sound
+// ─────────────────────────────────────────────
+let recording = false;
+let recStart = 0;
+let recLength = 0;
+let recNotes = [];
+let recParams = null;
+const recOpen = new Map();
+let loops = [];
+let loopCounter = 0;
+
+function recNoteOn(midi) {
+  if (!recording) return;
+  recOpen.set(midi, ctx.currentTime - recStart);
+}
+function recNoteOff(midi) {
+  if (!recording || !recOpen.has(midi)) return;
+  const t = recOpen.get(midi);
+  recNotes.push({ midi, t, dur: Math.max(0.03, (ctx.currentTime - recStart) - t) });
+  recOpen.delete(midi);
+}
+
+const recBtn = document.getElementById('btn-record');
+
+function startRecording() {
+  if (!initAudio()) return;
+  recording = true;
+  recStart = ctx.currentTime;
+  recNotes = [];
+  recOpen.clear();
+  recLength = 0;
+  dot('rec', true);
+  recBtn.textContent = '⏹ STOP REC';
+  recBtn.classList.add('rec-active');
+  setStatus('Recording. Play the keyboard, then SAVE LOOP.');
+}
+
+function stopRecording() {
+  if (!recording) return;
+  const end = ctx.currentTime - recStart;
+  recOpen.forEach((t, midi) => recNotes.push({ midi, t, dur: Math.max(0.03, end - t) }));
+  recOpen.clear();
+  recLength = end;
+  recParams = snapshot(synth);
+  recording = false;
+  dot('rec', false);
+  recBtn.textContent = '⏺ RECORD';
+  recBtn.classList.remove('rec-active');
+}
+
+function saveLoop() {
+  stopRecording();
+  if (!recNotes.length) { setStatus('Nothing recorded yet. Hit RECORD and play some keys.'); return; }
+  const notes = recNotes.slice().sort((a, b) => a.t - b.t);
+  const lastEnd = notes[notes.length - 1].t + 0.05;
+  loopCounter++;
+  loops.push({
+    id: loopCounter,
+    name: 'LOOP ' + loopCounter,
+    notes,
+    length: Math.max(0.25, recLength, lastEnd),
+    params: recParams || snapshot(synth),
+    muted: false,
+    iterStart: ctx.currentTime + 0.05,
+    idx: 0
+  });
+  recNotes = [];
+  renderLoops();
+  setStatus('Saved ' + 'LOOP ' + loopCounter + '. Record the next layer.');
+}
+
+function scheduleLoop(l, now, horizon) {
+  if (l.iterStart + l.length < now - 0.2) {
+    const k = Math.ceil((now - l.iterStart) / l.length);
+    l.iterStart += k * l.length;
+    l.idx = 0;
+  }
+  let guard = 0;
+  while (guard++ < 256) {
+    if (l.idx >= l.notes.length) { l.iterStart += l.length; l.idx = 0; }
+    const n = l.notes[l.idx];
+    const when = l.iterStart + n.t;
+    if (when >= horizon) break;
+    if (!l.muted && when >= now - 0.01) {
+      const v = createVoice(n.midi, Math.max(when, now), l.params);
+      releaseVoice(v, when + n.dur);
+    }
+    l.idx++;
+  }
+}
+
+const loopsRow = document.getElementById('loops-row');
+function renderLoops() {
+  if (!loops.length) {
+    loopsRow.innerHTML = '<div class="empty-loops">No loops saved yet. Record some keyboard playing, then save it as a layer.</div>';
+    return;
+  }
+  loopsRow.innerHTML = loops.map(l =>
+    '<div class="loop-item' + (l.muted ? '' : ' active-loop') + '">' +
+      '<span class="loop-item-name">' + l.name + '</span>' +
+      '<span class="loop-item-meta">' + l.notes.length + ' notes · ' + l.length.toFixed(1) + 's</span>' +
+      '<button class="loop-btn" data-act="mute" data-id="' + l.id + '">' + (l.muted ? 'UNMUTE' : 'MUTE') + '</button>' +
+      '<button class="loop-btn" data-act="del" data-id="' + l.id + '">DELETE</button>' +
+    '</div>'
+  ).join('');
+}
+
+// RED PHONE: v2 event delegation instead of inline onclick globals
+loopsRow.addEventListener('click', e => {
+  const btn = e.target.closest('.loop-btn');
+  if (!btn) return;
+  const id = parseInt(btn.dataset.id, 10);
+  if (btn.dataset.act === 'mute') {
+    const l = loops.find(x => x.id === id);
+    if (l) l.muted = !l.muted;
+  } else if (btn.dataset.act === 'del') {
+    loops = loops.filter(x => x.id !== id);
+  }
+  renderLoops();
+});
+
+recBtn.addEventListener('click', () => { if (recording) stopRecording(); else startRecording(); });
+document.getElementById('btn-save-loop').addEventListener('click', saveLoop);
+document.getElementById('btn-clear-rec').addEventListener('click', () => {
+  stopRecording();
+  recNotes = [];
+  setStatus('Recording discarded.');
+});
+
+// ─────────────────────────────────────────────
+// VIZ + UI FRAME LOOP
+// RED PHONE: v2 setTransform on resize (v1 stacked scale calls), theme aware colors
+// ─────────────────────────────────────────────
+const canvas = document.getElementById('osc-viz');
+const c2 = canvas.getContext('2d');
+let vizBuf = null;
+
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.max(1, Math.round(canvas.clientWidth * dpr));
+  canvas.height = Math.max(1, Math.round(canvas.clientHeight * dpr));
+  c2.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function frame() {
+  requestAnimationFrame(frame);
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  c2.fillStyle = themeColors.viz;
+  c2.fillRect(0, 0, w, h);
+  c2.strokeStyle = themeColors.grid;
+  c2.lineWidth = 1;
+  c2.beginPath();
+  c2.moveTo(0, h / 2);
+  c2.lineTo(w, h / 2);
+  c2.stroke();
+
+  if (!ctx) return;
+
+  if (seqPlaying) {
+    let s = null;
+    while (uiQueue.length && uiQueue[0].time <= ctx.currentTime) s = uiQueue.shift().step;
+    if (s !== null) setCurrentStep(s);
+  }
+
+  if (!vizBuf) vizBuf = new Uint8Array(analyser.fftSize);
+  analyser.getByteTimeDomainData(vizBuf);
+  c2.strokeStyle = themeColors.accent;
+  c2.lineWidth = 2;
+  c2.beginPath();
+  for (let i = 0; i < vizBuf.length; i++) {
+    const x = (i / (vizBuf.length - 1)) * w;
+    const y = (vizBuf[i] / 255) * h;
+    if (i === 0) c2.moveTo(x, y); else c2.lineTo(x, y);
+  }
+  c2.stroke();
+}
+requestAnimationFrame(frame);
+
+// ─────────────────────────────────────────────
+// UI HELPERS
+// ─────────────────────────────────────────────
+function dot(name, on) {
+  const el = document.getElementById('dot-' + name);
+  if (el) el.classList.toggle('on', on);
+}
+function setStatus(msg) { document.getElementById('status-note').textContent = msg; }
+
+// ─────────────────────────────────────────────
+// DEMO MODE · 50 SONG TEMPLATES
+// ─────────────────────────────────────────────
+let demoCount = 0;
+
+const SCALES = {
+  minor:      [0, 2, 3, 5, 7, 8, 10],
+  major:      [0, 2, 4, 5, 7, 9, 11],
+  pentatonic: [0, 2, 4, 7, 9],
+  blues:      [0, 3, 5, 6, 7, 10],
+  dorian:     [0, 2, 3, 5, 7, 9, 10],
+  phrygian:   [0, 1, 3, 5, 7, 8, 10],
+  lydian:     [0, 2, 4, 6, 7, 9, 11],
+  mixolydian: [0, 2, 4, 5, 7, 9, 10],
+  diminished: [0, 2, 3, 5, 6, 8, 9, 11],
+  chromatic:  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+  wholetone:  [0, 2, 4, 6, 8, 10],
+  arabic:     [0, 1, 4, 5, 7, 8, 11]
+};
+
+const DEMO_TEMPLATES = [
+  { name: "ACID RAIN",        genre: "Acid Techno",     bpmRange: [130, 145], preset: "303 Acid",   scale: "minor",      density: 0.55, rowFocus: [0, 1, 2],                 rhythmStyle: "sparse_bass" },
+  { name: "DEEP SPACE",       genre: "Ambient",         bpmRange: [70, 90],   preset: "Juno Pad",   scale: "minor",      density: 0.25, rowFocus: [4, 5, 6, 7],              rhythmStyle: "floating" },
+  { name: "808 BOUNCE",       genre: "Trap",            bpmRange: [140, 160], preset: "808 Sub",    scale: "pentatonic", density: 0.4,  rowFocus: [0, 1],                    rhythmStyle: "trap_hi" },
+  { name: "JUNO SUNRISE",     genre: "Synthwave",       bpmRange: [100, 118], preset: "Juno Pad",   scale: "major",      density: 0.45, rowFocus: [3, 4, 5, 6],              rhythmStyle: "melodic" },
+  { name: "DETROIT IRON",     genre: "Detroit Techno",  bpmRange: [128, 138], preset: "Lead Synth", scale: "minor",      density: 0.6,  rowFocus: [0, 1, 2, 3],              rhythmStyle: "four_on_floor" },
+  { name: "JUNGLE FEVER",     genre: "Jungle/DnB",      bpmRange: [170, 180], preset: "Lead Synth", scale: "minor",      density: 0.65, rowFocus: [0, 1, 2],                 rhythmStyle: "breakbeat" },
+  { name: "SYNTHWAVE NIGHT",  genre: "Retrowave",       bpmRange: [95, 110],  preset: "Strings",    scale: "minor",      density: 0.35, rowFocus: [2, 3, 4, 5],              rhythmStyle: "melodic" },
+  { name: "CHILL PLUCK",      genre: "Lo-Fi",           bpmRange: [75, 90],   preset: "Pluck",      scale: "pentatonic", density: 0.3,  rowFocus: [3, 4, 5],                 rhythmStyle: "floating" },
+  { name: "TRANCE STATE",     genre: "Trance",          bpmRange: [138, 142], preset: "Lead Synth", scale: "minor",      density: 0.7,  rowFocus: [1, 2, 3, 4],              rhythmStyle: "arpeggiated" },
+  { name: "GOSPEL MACHINE",   genre: "Gospel House",    bpmRange: [120, 128], preset: "Choir",      scale: "major",      density: 0.5,  rowFocus: [4, 5, 6, 7],              rhythmStyle: "call_response" },
+  { name: "BLADE RUNNER",     genre: "Cinematic",       bpmRange: [60, 80],   preset: "Strings",    scale: "minor",      density: 0.2,  rowFocus: [5, 6, 7],                 rhythmStyle: "floating" },
+  { name: "BERLIN WALL",      genre: "Industrial",      bpmRange: [125, 135], preset: "303 Acid",   scale: "phrygian",   density: 0.7,  rowFocus: [0, 1, 2, 3],              rhythmStyle: "four_on_floor" },
+  { name: "SUNRISE PROTOCOL", genre: "Progressive",     bpmRange: [128, 132], preset: "Juno Pad",   scale: "dorian",     density: 0.45, rowFocus: [2, 3, 4, 5, 6],           rhythmStyle: "arpeggiated" },
+  { name: "NEON DESERT",      genre: "Electro",         bpmRange: [115, 125], preset: "Lead Synth", scale: "phrygian",   density: 0.5,  rowFocus: [1, 2, 3, 4],              rhythmStyle: "melodic" },
+  { name: "SUB ZERO",         genre: "Dub Techno",      bpmRange: [130, 140], preset: "808 Sub",    scale: "minor",      density: 0.35, rowFocus: [0, 1],                    rhythmStyle: "sparse_bass" },
+  { name: "CHROMATIC DRIFT",  genre: "Experimental",    bpmRange: [90, 130],  preset: "Pluck",      scale: "chromatic",  density: 0.4,  rowFocus: [0, 1, 2, 3, 4, 5, 6, 7],  rhythmStyle: "random" },
+  { name: "CATHEDRAL",        genre: "Dark Ambient",    bpmRange: [50, 70],   preset: "Choir",      scale: "minor",      density: 0.15, rowFocus: [6, 7],                    rhythmStyle: "floating" },
+  { name: "FUNK MATRIX",      genre: "Electrofunk",     bpmRange: [105, 118], preset: "Lead Synth", scale: "pentatonic", density: 0.6,  rowFocus: [0, 1, 2, 3, 4],           rhythmStyle: "syncopated" },
+  { name: "ACID JAZZ",        genre: "Acid Jazz",       bpmRange: [95, 115],  preset: "303 Acid",   scale: "blues",      density: 0.5,  rowFocus: [1, 2, 3, 4, 5],           rhythmStyle: "syncopated" },
+  { name: "HYPERDRIVE",       genre: "Hardtechno",      bpmRange: [148, 160], preset: "Lead Synth", scale: "minor",      density: 0.8,  rowFocus: [0, 1, 2, 3],              rhythmStyle: "four_on_floor" },
+  { name: "TOKYO DRIFT",      genre: "City Pop",        bpmRange: [100, 115], preset: "Juno Pad",   scale: "major",      density: 0.4,  rowFocus: [3, 4, 5, 6, 7],           rhythmStyle: "melodic" },
+  { name: "GHOST PROTOCOL",   genre: "IDM",             bpmRange: [85, 140],  preset: "Pluck",      scale: "diminished", density: 0.55, rowFocus: [0, 2, 4, 6],              rhythmStyle: "random" },
+  { name: "LUNAR MODULE",     genre: "Space Disco",     bpmRange: [118, 126], preset: "Strings",    scale: "major",      density: 0.5,  rowFocus: [2, 3, 4, 5, 6],           rhythmStyle: "arpeggiated" },
+  { name: "DEEP SEA",         genre: "Deep House",      bpmRange: [120, 125], preset: "808 Sub",    scale: "minor",      density: 0.4,  rowFocus: [0, 1, 2, 3],              rhythmStyle: "four_on_floor" },
+  { name: "SOLAR WINDS",      genre: "New Age",         bpmRange: [60, 85],   preset: "Strings",    scale: "lydian",     density: 0.2,  rowFocus: [4, 5, 6, 7],              rhythmStyle: "floating" },
+  { name: "IRON CURTAIN",     genre: "EBM",             bpmRange: [128, 140], preset: "Lead Synth", scale: "phrygian",   density: 0.65, rowFocus: [0, 1, 2, 3, 4],           rhythmStyle: "four_on_floor" },
+  { name: "VAPORWAVE 2049",   genre: "Vaporwave",       bpmRange: [80, 95],   preset: "Juno Pad",   scale: "major",      density: 0.3,  rowFocus: [3, 4, 5, 6, 7],           rhythmStyle: "floating" },
+  { name: "RAVE CAVE",        genre: "Gabber",          bpmRange: [160, 180], preset: "Lead Synth", scale: "minor",      density: 0.85, rowFocus: [0, 1, 2, 3],              rhythmStyle: "four_on_floor" },
+  { name: "RESONANT DECAY",   genre: "Glitch",          bpmRange: [95, 160],  preset: "303 Acid",   scale: "chromatic",  density: 0.45, rowFocus: [0, 1, 2, 3, 4, 5],        rhythmStyle: "random" },
+  { name: "MIDNIGHT EXPRESS", genre: "Nu Disco",        bpmRange: [118, 126], preset: "Pluck",      scale: "major",      density: 0.55, rowFocus: [2, 3, 4, 5, 6],           rhythmStyle: "syncopated" },
+  { name: "VOID WALKER",      genre: "Dark Techno",     bpmRange: [132, 142], preset: "808 Sub",    scale: "phrygian",   density: 0.5,  rowFocus: [0, 1, 2],                 rhythmStyle: "sparse_bass" },
+  { name: "POLARIS",          genre: "Ambient Techno",  bpmRange: [128, 135], preset: "Juno Pad",   scale: "dorian",     density: 0.35, rowFocus: [3, 4, 5, 6],              rhythmStyle: "melodic" },
+  { name: "SERAPHIM",         genre: "Ethereal",        bpmRange: [55, 75],   preset: "Choir",      scale: "lydian",     density: 0.2,  rowFocus: [5, 6, 7],                 rhythmStyle: "floating" },
+  { name: "VOLTAGE SPIKE",    genre: "Electro",         bpmRange: [120, 135], preset: "Lead Synth", scale: "mixolydian", density: 0.6,  rowFocus: [0, 1, 2, 3, 4],           rhythmStyle: "arpeggiated" },
+  { name: "CARBON FIBER",     genre: "Minimal Techno",  bpmRange: [130, 138], preset: "303 Acid",   scale: "minor",      density: 0.3,  rowFocus: [0, 1],                    rhythmStyle: "sparse_bass" },
+  { name: "NEON GENESIS",     genre: "Anime Synth",     bpmRange: [128, 145], preset: "Lead Synth", scale: "major",      density: 0.65, rowFocus: [1, 2, 3, 4, 5],           rhythmStyle: "arpeggiated" },
+  { name: "MIDNIGHT GOSPEL",  genre: "Psych House",     bpmRange: [122, 130], preset: "Choir",      scale: "dorian",     density: 0.5,  rowFocus: [3, 4, 5, 6, 7],           rhythmStyle: "call_response" },
+  { name: "WARP FACTOR 9",    genre: "Sci-Fi Techno",   bpmRange: [135, 148], preset: "Pluck",      scale: "wholetone",  density: 0.6,  rowFocus: [0, 1, 2, 3, 4],           rhythmStyle: "arpeggiated" },
+  { name: "COPPER RAIN",      genre: "Post-Punk Synth", bpmRange: [100, 120], preset: "Lead Synth", scale: "minor",      density: 0.55, rowFocus: [1, 2, 3, 4],              rhythmStyle: "syncopated" },
+  { name: "DESERT STORM",     genre: "Industrial Dub",  bpmRange: [90, 110],  preset: "808 Sub",    scale: "arabic",     density: 0.4,  rowFocus: [0, 1, 2, 3],              rhythmStyle: "sparse_bass" },
+  { name: "SILICON DREAMS",   genre: "Chillwave",       bpmRange: [85, 100],  preset: "Juno Pad",   scale: "major",      density: 0.35, rowFocus: [3, 4, 5, 6, 7],           rhythmStyle: "melodic" },
+  { name: "ENTROPY ENGINE",   genre: "Noise Techno",    bpmRange: [140, 160], preset: "303 Acid",   scale: "chromatic",  density: 0.75, rowFocus: [0, 1, 2, 3, 4, 5, 6, 7],  rhythmStyle: "random" },
+  { name: "GOLDEN RATIO",     genre: "Math Rock Synth", bpmRange: [110, 130], preset: "Pluck",      scale: "mixolydian", density: 0.5,  rowFocus: [0, 1, 2, 3, 4, 5],        rhythmStyle: "syncopated" },
+  { name: "PLASMA FIELD",     genre: "Modular Drone",   bpmRange: [60, 90],   preset: "Strings",    scale: "wholetone",  density: 0.2,  rowFocus: [5, 6, 7],                 rhythmStyle: "floating" },
+  { name: "CIRCUIT BREAKER",  genre: "Breakcore",       bpmRange: [160, 200], preset: "Lead Synth", scale: "minor",      density: 0.8,  rowFocus: [0, 1, 2, 3, 4],           rhythmStyle: "breakbeat" },
+  { name: "ECHO CHAMBER",     genre: "Dub",             bpmRange: [80, 100],  preset: "Pluck",      scale: "minor",      density: 0.3,  rowFocus: [1, 2, 3, 4],              rhythmStyle: "call_response" },
+  { name: "ASTRAL PLANE",     genre: "Psychedelic",     bpmRange: [90, 120],  preset: "Choir",      scale: "lydian",     density: 0.45, rowFocus: [2, 3, 4, 5, 6, 7],        rhythmStyle: "arpeggiated" },
+  { name: "IRON GALAXY",      genre: "Space Techno",    bpmRange: [130, 145], preset: "808 Sub",    scale: "dorian",     density: 0.55, rowFocus: [0, 1, 2, 3],              rhythmStyle: "four_on_floor" },
+  { name: "PHANTOM SIGNAL",   genre: "Post-Industrial", bpmRange: [115, 130], preset: "303 Acid",   scale: "phrygian",   density: 0.6,  rowFocus: [0, 1, 2, 3, 4],           rhythmStyle: "syncopated" },
+  { name: "ZERO GRAVITY",     genre: "Ambient House",   bpmRange: [120, 128], preset: "Juno Pad",   scale: "major",      density: 0.35, rowFocus: [3, 4, 5, 6, 7],           rhythmStyle: "floating" }
+];
+
+// RED PHONE: v2 arpeggiated, call_response and melodic now run once per pattern (v1 repeated them per row and stacked chords)
+function genPattern(style, rows, density) {
+  const g = Array.from({ length: SEQ_ROWS }, () => Array(SEQ_STEPS).fill(false));
+  const r = Math.random;
+  const pick = a => a[Math.floor(r() * a.length)];
+  const sorted = rows.slice().sort((a, b) => a - b);
+
+  if (style === 'arpeggiated') {
+    const order = r() > 0.5 ? sorted : sorted.slice().reverse();
+    const rate = pick([1, 1, 2]);
+    for (let s = 0; s < SEQ_STEPS; s++) {
+      if (s % rate === 0 && r() < Math.min(0.95, density + 0.25)) g[order[Math.floor(s / rate) % order.length]][s] = true;
+    }
+    return g;
+  }
+
+  if (style === 'call_response') {
+    const half = Math.ceil(sorted.length / 2);
+    const callRows = sorted.slice(0, half);
+    const respRows = sorted.length > half ? sorted.slice(half) : sorted;
+    for (let s = 0; s < 8; s++) if (r() < density + 0.1) g[pick(callRows)][s] = true;
+    for (let s = 8; s < 16; s++) if (r() < density + 0.1) g[pick(respRows)][s] = true;
+    return g;
+  }
+
+  if (style === 'melodic') {
+    let idx = Math.floor(r() * sorted.length);
+    for (let s = 0; s < SEQ_STEPS; s++) {
+      if (r() < density + 0.15) {
+        g[sorted[idx]][s] = true;
+        idx = Math.min(sorted.length - 1, Math.max(0, idx + pick([-1, 0, 1, 1, -1, 2, -2])));
+        if (r() > 0.6) s++; // leave room so the note rings
+      }
+    }
+    return g;
+  }
+
+  const mid = sorted[Math.floor(sorted.length / 2)];
+  sorted.forEach(row => {
+    switch (style) {
+      case 'four_on_floor':
+        for (let s = 0; s < SEQ_STEPS; s++) {
+          if (row === sorted[0] && s % 4 === 0) { g[row][s] = true; continue; }
+          if (r() < density * 0.35) g[row][s] = true;
+        }
+        break;
+      case 'sparse_bass':
+        [0, pick([2, 3]), pick([6, 7]), pick([9, 10, 11])].forEach(s => { if (r() < 0.8) g[row][s] = true; });
+        for (let s = 0; s < SEQ_STEPS; s++) if (r() < 0.06) g[row][s] = true;
+        break;
+      case 'syncopated':
+        for (let s = 0; s < SEQ_STEPS; s++) {
+          const prob = s % 4 === 0 ? density * 0.15 : density * 0.5;
+          if (r() < prob) g[row][s] = true;
+        }
+        break;
+      case 'floating': {
+        const c1 = Math.floor(r() * 8), c2 = Math.floor(r() * 8) + 8;
+        for (let s = 0; s < SEQ_STEPS; s++) {
+          const near = Math.abs(s - c1) <= 1 || Math.abs(s - c2) <= 1;
+          if (r() < (near ? density + 0.3 : density * 0.1)) g[row][s] = true;
+        }
+        break;
+      }
+      case 'breakbeat': {
+        const isHi = row > mid;
+        for (let s = 0; s < SEQ_STEPS; s++) {
+          if (isHi) { if (r() < 0.55) g[row][s] = true; continue; }
+          if ([0, 3, 6, 7, 10, 11, 14].includes(s) && r() < density + 0.1) g[row][s] = true;
+          else if (r() < density * 0.15) g[row][s] = true;
+        }
+        break;
+      }
+      case 'trap_hi':
+        if (row === sorted[0]) {
+          g[row][0] = true;
+          g[row][8] = true;
+          if (r() < 0.5) g[row][pick([3, 4, 12, 13])] = true;
+        } else {
+          for (let s = 0; s < SEQ_STEPS; s++) if (r() < (s % 2 === 0 ? 0.7 : 0.4)) g[row][s] = true;
+        }
+        break;
+      case 'random':
+      default: {
+        // RED PHONE: v2 density spread across rows so 8 row patterns stay listenable
+        const prob = density * Math.min(1, 3 / sorted.length);
+        for (let s = 0; s < SEQ_STEPS; s++) if (r() < prob) g[row][s] = true;
+        break;
+      }
+    }
+  });
+  return g;
+}
+
+function remapSeqNotesToScale(scaleName, rootMidi) {
+  const iv = SCALES[scaleName] || SCALES.minor;
+  return SEQ_NOTES.map((_, i) => rootMidi + Math.floor(i / iv.length) * 12 + iv[i % iv.length]);
+}
+
+function randomizePresetParams(template) {
+  const base = PRESETS.find(p => p.name === template.preset) || PRESETS[0];
+  const jitter = (v, pct) => Math.max(0, v + (Math.random() - 0.5) * 2 * v * pct);
+  return {
+    wave: base.wave,
+    attack: Math.min(2, jitter(base.attack, 0.5)),
+    decay: Math.min(2, jitter(base.decay, 0.4)),
+    sustain: Math.min(1, jitter(base.sustain, 0.3)),
+    release: Math.min(4, jitter(base.release, 0.4)),
+    cutoff: Math.min(18000, Math.max(80, jitter(base.cutoff, 0.4))),
+    resonance: Math.min(25, Math.max(0.1, jitter(base.resonance, 0.5))),
+    reverb: Math.min(1, jitter(base.reverb, 0.5)),
+    delay: Math.min(1, jitter(base.delay, 0.6)),
+    volume: base.volume
+  };
+}
+
+function fireDemo() {
+  if (!initAudio()) return;
+
+  demoCount++;
+  const counterEl = document.getElementById('demo-counter');
+  counterEl.textContent = String(demoCount).padStart(2, '0');
+  counterEl.classList.add('flash');
+  setTimeout(() => counterEl.classList.remove('flash'), 400);
+
+  const template = DEMO_TEMPLATES[(demoCount - 1) % DEMO_TEMPLATES.length];
+
+  bpm = Math.floor(template.bpmRange[0] + Math.random() * (template.bpmRange[1] - template.bpmRange[0] + 1));
+  bpmInput.value = bpm;
+  updateDelayTime();
+
+  const roots = [48, 50, 52, 53, 55, 57];
+  const root = roots[Math.floor(Math.random() * roots.length)];
+
+  remapSeqNotesToScale(template.scale, root).forEach((midi, i) => {
+    SEQ_NOTES[i].midi = midi;
+    SEQ_NOTES[i].name = noteName(midi);
+  });
+  renderRowLabels();
+
+  seqGrid = genPattern(template.rhythmStyle, template.rowFocus, template.density);
+  renderGrid();
+
+  applyParams(randomizePresetParams(template));
+  markPreset(template.preset);
+
+  document.getElementById('demo-song-name').textContent = template.name;
+  document.getElementById('demo-song-meta').textContent =
+    template.genre + '  ·  ' + bpm + ' BPM  ·  ' + NOTE_NAMES[root % 12] + ' ' + template.scale + '  ·  ' + template.rhythmStyle.replace(/_/g, ' ');
+
+  const btn = document.getElementById('btn-demo');
+  btn.classList.remove('firing');
+  void btn.offsetWidth;
+  btn.classList.add('firing');
+  setTimeout(() => btn.classList.remove('firing'), 700);
+
+  // RED PHONE: v2 no stop/timeout race, just restart from step one on the audio clock
+  if (seqPlaying) restartSeqFromTop(); else startSeq();
+}
+
+document.getElementById('btn-demo').addEventListener('click', fireDemo);
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+markPreset(PRESETS[0].name);
+applyParams(PRESETS[0]);
+renderLoops();
+</script>
+</body>
+</html>

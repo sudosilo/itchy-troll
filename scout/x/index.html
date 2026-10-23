@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Mary Jane-Man</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Boogaloo&family=Permanent+Marker&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { overscroll-behavior:none; }
+  body {
+    background:#eef7e6;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:flex-start;
+    min-height:100vh; padding:12px 0;
+    font-family:'Boogaloo',cursive;
+    background-image:
+      radial-gradient(ellipse at 20% 15%, rgba(120,200,110,0.35) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 85%, rgba(90,175,90,0.3) 0%, transparent 60%);
+  }
+  h1 {
+    font-family:'Permanent Marker',cursive;
+    color:#2f6d2f; font-size:1.9rem;
+    letter-spacing:2px; margin-bottom:6px;
+    text-shadow:0 2px 0 #b9e2ac;
+  }
+  #hud {
+    display:flex; gap:26px;
+    color:#2f6d2f; font-size:1.1rem; margin-bottom:8px;
+  }
+  #wrapper { position:relative; display:inline-block; }
+  #gameCanvas {
+    border:3px solid #4b9b4b; border-radius:10px;
+    background:#f4fbee;
+    box-shadow:0 6px 18px rgba(60,120,60,0.25);
+    display:block; touch-action:none;
+  }
+  #overlay {
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    background:rgba(240,250,235,0.96);
+    color:#2f6d2f; gap:10px; border-radius:10px;
+    padding:14px; text-align:center;
+  }
+  #overlay h2 { font-family:'Permanent Marker',cursive; font-size:1.5rem; }
+  #overlay p { color:#3f7a3f; font-size:0.85rem; line-height:1.5; }
+  .btn {
+    background:linear-gradient(135deg,#5cb85c,#3d8b3d);
+    color:#fff; border:none; padding:12px 30px;
+    border-radius:30px; font-family:'Permanent Marker',cursive;
+    font-size:1.15rem; cursor:pointer; margin-top:8px;
+    box-shadow:0 3px 0 #2c6b2c; touch-action:manipulation;
+  }
+  .btn:active { transform:translateY(2px); box-shadow:0 1px 0 #2c6b2c; }
+  #msg {
+    color:#b8860b; font-family:'Permanent Marker',cursive;
+    font-size:1.1rem; height:26px; margin-top:6px; text-align:center;
+  }
+  #pad {
+    display:grid; grid-template-columns:repeat(3,58px);
+    grid-template-rows:repeat(2,58px); gap:8px;
+    margin-top:10px; touch-action:none;
+  }
+  .pk {
+    background:#dff0d3; border:2px solid #4b9b4b; border-radius:12px;
+    color:#2f6d2f; font-size:1.5rem; display:flex;
+    align-items:center; justify-content:center;
+    user-select:none; touch-action:none;
+  }
+  .pk:active { background:#b9e2ac; }
+  .pk.blank { visibility:hidden; }
+
+  #infoBtn {
+    background:#dff0d3; border:2px solid #4b9b4b; color:#2f6d2f;
+    border-radius:50%; width:34px; height:34px; font-size:1.1rem;
+    font-family:'Permanent Marker',cursive; cursor:pointer;
+    touch-action:manipulation; line-height:1;
+  }
+  #infoBtn:active { background:#b9e2ac; }
+  #infoModal {
+    position:absolute; inset:0; display:none;
+    flex-direction:column; align-items:center; justify-content:flex-start;
+    background:rgba(240,250,235,0.98); border-radius:10px;
+    padding:12px; overflow-y:auto; text-align:left;
+    color:#2f6d2f; z-index:10; -webkit-overflow-scrolling:touch;
+    touch-action:pan-y;
+  }
+  #infoModal h3 {
+    font-family:'Permanent Marker',cursive; font-size:1.05rem;
+    margin:8px 0 4px; align-self:flex-start;
+  }
+  #infoModal p { font-size:0.74rem; line-height:1.5; color:#3f7a3f; margin-bottom:4px; }
+  #infoModal .close { margin-top:10px; align-self:center; }
+  #controls { color:#6b8a6b; font-size:0.8rem; margin-top:8px; }
+</style>
+</head>
+<body>
+<h1>Mary Jane-Man</h1>
+<div id="hud">
+  <span>SCORE: <span id="score">0</span></span>
+  <span>LIVES: <span id="lives">3</span></span>
+  <span>LEVEL: <span id="level">1</span></span>
+  <button id="infoBtn" aria-label="Info">i</button>
+</div>
+<div id="wrapper">
+  <canvas id="gameCanvas" width="340" height="340"></canvas>
+  <div id="overlay">
+    <h2>Mary Jane-Man</h2>
+    <p>You are a weed leaf. Collect all the nugs.<br>
+       Avoid the pipes or they will smoke you.<br>
+       Grab a <strong style="color:#b8860b">Golden Nug</strong> to scare them.</p>
+    <button class="btn" id="startBtn">BLAZE IT</button>
+  </div>
+  <div id="infoModal">
+    <h3>How To Play</h3>
+    <p>You are a cannabis leaf loose in the maze. Eat every green nug to clear the
+    level. Four lit pipes named Bubba, Mary, Cheech and Chong roam the board, and
+    they alternate between chasing you directly and scattering at random, so the
+    pressure comes in waves rather than constantly.</p>
+    <p>Touching a pipe costs you a life and you start with three. Eating one of the
+    four Golden Nugs in the corners flips things for a while: the pipes turn blue
+    and run from you, and you can eat them for 200 points each. They blink white
+    just before the effect wears off, so that is your cue to back away. A regular
+    nug is worth 10 points and a Golden Nug is worth 50 on its own.</p>
+    <p>The row through the middle of the maze wraps around, so leaving the left
+    edge brings you out on the right. Use it to break a chase. Clear the board and
+    the next level starts with faster pipes.</p>
+    <h3>Controls</h3>
+    <p>Use the D-pad below the board, or swipe across the board itself, or use the
+    arrow keys or WASD on a keyboard. Turns are queued, so you can press a
+    direction slightly before the opening and the leaf takes it as soon as the
+    turn is legal.</p>
+    <h3>About</h3>
+    <p>Mary Jane-Man was designed and built by Green. The whole thing was written
+    and shipped from the Green phone, developing in Termux on Android and deploying
+    straight to Vercel from the command line, with no desktop involved at any
+    point.</p>
+    <p>The original source for this game lives in Google Drive. It is no longer
+    held in Claude, so Drive is the authoritative copy and anything you need to
+    fork, audit or continue from should be pulled from there rather than from a
+    chat history.</p>
+    <button class="btn close" id="infoClose">Back</button>
+  </div>
+</div>
+<div id="msg"></div>
+<div id="pad">
+  <div class="pk blank"></div>
+  <div class="pk" data-dir="up">&#9650;</div>
+  <div class="pk blank"></div>
+  <div class="pk" data-dir="left">&#9664;</div>
+  <div class="pk" data-dir="down">&#9660;</div>
+  <div class="pk" data-dir="right">&#9654;</div>
+</div>
+<div id="controls">Arrow keys, WASD, D-pad, or swipe the board</div>
+
+<script>
+// GREEN PHONE EDIT - clean rebuild, verified syntax
+(function () {
+  'use strict';
+
+  var canvas = document.getElementById('gameCanvas');
+  var ctx = canvas.getContext('2d');
+  var overlay = document.getElementById('overlay');
+  var scoreEl = document.getElementById('score');
+  var livesEl = document.getElementById('lives');
+  var levelEl = document.getElementById('level');
+  var msgEl = document.getElementById('msg');
+
+  var CELL = 17, COLS = 20, ROWS = 20;
+
+  var BASE_MAP = [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,2,2,2,2,2,2,2,2,1,1,2,2,2,2,2,2,2,2,1],
+    [1,3,1,1,2,1,1,1,2,1,1,2,1,1,1,2,1,1,3,1],
+    [1,2,1,1,2,1,1,1,2,1,1,2,1,1,1,2,1,1,2,1],
+    [1,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1],
+    [1,2,1,1,2,1,2,1,1,1,1,1,1,2,1,2,1,1,2,1],
+    [1,2,2,2,2,1,2,2,2,1,1,2,2,2,1,2,2,2,2,1],
+    [1,1,1,1,2,1,1,1,4,1,1,4,1,1,1,2,1,1,1,1],
+    [1,1,1,1,2,1,4,4,4,4,4,4,4,4,1,2,1,1,1,1],
+    [1,1,1,1,2,1,4,1,1,4,4,1,1,4,1,2,1,1,1,1],
+    [4,4,4,4,2,4,4,1,4,4,4,4,1,4,4,2,4,4,4,4],
+    [1,1,1,1,2,1,4,1,1,1,1,1,1,4,1,2,1,1,1,1],
+    [1,1,1,1,2,1,4,4,4,4,4,4,4,4,1,2,1,1,1,1],
+    [1,1,1,1,2,1,4,1,1,1,1,1,1,4,1,2,1,1,1,1],
+    [1,2,2,2,2,2,2,2,2,1,1,2,2,2,2,2,2,2,2,1],
+    [1,2,1,1,2,1,1,1,2,1,1,2,1,1,1,2,1,1,2,1],
+    [1,3,2,1,2,2,2,2,2,4,4,2,2,2,2,2,1,2,3,1],
+    [1,1,2,1,2,1,2,1,1,1,1,1,1,2,1,2,1,2,1,1],
+    [1,2,2,2,2,1,2,2,2,1,1,2,2,2,1,2,2,2,2,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+  ];
+
+  var PIPE_STARTS = [
+    {col:9,row:10},{col:10,row:10},{col:11,row:10},{col:10,row:9}
+  ];
+  var PIPE_COLORS = ['#d9534f','#d9539b','#4a90d9','#d9a441'];
+  var PIPE_NAMES = ['Bubba','Mary','Cheech','Chong'];
+
+  var map, player, pipes, score, lives, level, gameState;
+  var powerTimer = 0, animFrame = null, msgTimeout = null;
+  var particles = [];
+  var deathPhase = false, deathTimer = 0, levelUpTimer = 0;
+
+  function resetMap() {
+    return BASE_MAP.map(function (r) { return r.slice(); });
+  }
+
+  function countDots(m) {
+    var n = 0, r, c;
+    for (r = 0; r < m.length; r++) {
+      for (c = 0; c < m[r].length; c++) {
+        if (m[r][c] === 2 || m[r][c] === 3) { n++; }
+      }
+    }
+    return n;
+  }
+
+  function canMove(col, row) {
+    var c = ((col % COLS) + COLS) % COLS;
+    if (row < 0 || row >= ROWS) { return false; }
+    return map[row][c] !== 1;
+  }
+
+  function isAtCenter(e) {
+    var cx = e.col * CELL + CELL / 2;
+    var cy = e.row * CELL + CELL / 2;
+    return Math.abs(e.x - cx) < e.speed + 1 && Math.abs(e.y - cy) < e.speed + 1;
+  }
+
+  function drawRoundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y); ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r); ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h); ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r); ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+  }
+
+  function spawnPlayer() {
+    player = {
+      x: 10 * CELL + CELL / 2, y: 15 * CELL + CELL / 2,
+      col: 10, row: 15,
+      dx: 0, dy: 0, nextDx: 1, nextDy: 0,
+      speed: 1.7, powered: false, spinAngle: 0
+    };
+  }
+
+  function spawnPipes() {
+    pipes = PIPE_STARTS.map(function (p, i) {
+      return {
+        x: p.col * CELL + CELL / 2, y: p.row * CELL + CELL / 2,
+        col: p.col, row: p.row,
+        dx: (i % 2 === 0 ? 1 : -1), dy: 0,
+        color: PIPE_COLORS[i], name: PIPE_NAMES[i],
+        speed: 1.1 + level * 0.12,
+        scared: false, scaredTimer: 0,
+        dead: false,
+        mode: 'scatter', modeTimer: 300,
+        smokeAnim: 0
+      };
+    });
+  }
+
+  function chooseDir(pipe) {
+    var revDx = -pipe.dx, revDy = -pipe.dy;
+    var all = [{dx:1,dy:0},{dx:-1,dy:0},{dx:0,dy:1},{dx:0,dy:-1}];
+    var opts = all.filter(function (d) {
+      return !(d.dx === revDx && d.dy === revDy) && canMove(pipe.col + d.dx, pipe.row + d.dy);
+    });
+    if (opts.length === 0) {
+      opts = all.filter(function (d) { return canMove(pipe.col + d.dx, pipe.row + d.dy); });
+    }
+    if (opts.length === 0) { return; }
+
+    var best = opts[Math.floor(Math.random() * opts.length)];
+
+    if (!pipe.scared && pipe.mode === 'chase') {
+      var nearest = Infinity;
+      opts.forEach(function (d) {
+        var dist = Math.hypot(pipe.col + d.dx - player.col, pipe.row + d.dy - player.row);
+        if (dist < nearest) { nearest = dist; best = d; }
+      });
+    } else if (pipe.scared) {
+      var farthest = -1;
+      opts.forEach(function (d) {
+        var dist = Math.hypot(pipe.col + d.dx - player.col, pipe.row + d.dy - player.row);
+        if (dist > farthest) { farthest = dist; best = d; }
+      });
+    }
+    pipe.dx = best.dx;
+    pipe.dy = best.dy;
+  }
+
+  function moveEntity(e) {
+    if (isAtCenter(e)) {
+      e.x = e.col * CELL + CELL / 2;
+      e.y = e.row * CELL + CELL / 2;
+
+      if (e === player && canMove(e.col + e.nextDx, e.row + e.nextDy)) {
+        e.dx = e.nextDx;
+        e.dy = e.nextDy;
+      }
+
+      var nc = e.col + e.dx, nr = e.row + e.dy;
+      if (canMove(nc, nr)) {
+        e.col = ((nc % COLS) + COLS) % COLS;
+        e.row = nr;
+      } else if (e !== player) {
+        chooseDir(e);
+      }
+    }
+
+    e.x += e.dx * e.speed;
+    e.y += e.dy * e.speed;
+
+    if (e.x < -CELL / 2) {
+      e.x = COLS * CELL - CELL / 2;
+      e.col = COLS - 1;
+    } else if (e.x > COLS * CELL - CELL / 2) {
+      e.x = CELL / 2;
+      e.col = 0;
+    }
+  }
+
+  function drawLeaf(cx, cy, size, angle, color, alpha) {
+    var leaflets = [
+      {a:-Math.PI/2,      w:0.18, h:0.55},
+      {a:-Math.PI/2-0.55, w:0.14, h:0.45},
+      {a:-Math.PI/2+0.55, w:0.14, h:0.45},
+      {a:-Math.PI/2-1.1,  w:0.12, h:0.38},
+      {a:-Math.PI/2+1.1,  w:0.12, h:0.38},
+      {a: Math.PI/2-0.5,  w:0.10, h:0.28},
+      {a: Math.PI/2+0.5,  w:0.10, h:0.28}
+    ];
+    var s = size, i, l;
+
+    ctx.save();
+    ctx.globalAlpha = (alpha === undefined) ? 1 : alpha;
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    ctx.fillStyle = color;
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s * 0.28, s * 0.45, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    for (i = 0; i < leaflets.length; i++) {
+      l = leaflets[i];
+      ctx.save();
+      ctx.rotate(l.a);
+      ctx.beginPath();
+      ctx.ellipse(0, -s * l.h * 0.5, s * l.w, s * l.h, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    ctx.fillStyle = '#2d6e2d';
+    ctx.fillRect(-s * 0.04, s * 0.3, s * 0.08, s * 0.25);
+    ctx.restore();
+  }
+
+  function drawPipe(pipe) {
+    var pw = 14, ph = 18, i, t, sy, sa, sr, blink, bodyColor;
+
+    ctx.save();
+    ctx.translate(pipe.x, pipe.y);
+
+    if (pipe.dead) {
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.ellipse(-4, -3, 3, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(4, -3, 3, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#26f';
+      ctx.beginPath(); ctx.ellipse(-4, -3, 1.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(4, -3, 1.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    blink = pipe.scared && pipe.scaredTimer < 120 && Math.floor(pipe.scaredTimer / 15) % 2 === 0;
+    bodyColor = pipe.scared ? (blink ? '#ffffff' : '#4a6fd9') : pipe.color;
+
+    ctx.fillStyle = pipe.scared ? (blink ? '#c9d6ff' : '#3a4a80') : '#8a6a44';
+    drawRoundRect(-pw / 2, -ph / 2 + 3, pw, ph, 4);
+    ctx.fill();
+
+    ctx.fillStyle = pipe.scared ? bodyColor : '#6a4a24';
+    ctx.beginPath(); ctx.ellipse(0, -ph / 2 + 3, pw / 2 + 2, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath(); ctx.ellipse(0, -ph / 2 - 1, pw / 2 + 2, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+    if (!pipe.scared) {
+      ctx.fillStyle = 'rgba(255,140,0,0.85)';
+      ctx.beginPath(); ctx.ellipse(0, -ph / 2 - 1, 3.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+    }
+
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(-3.5, -3, 3, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(3.5, -3, 3, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = pipe.scared ? '#c00' : '#222';
+    ctx.beginPath(); ctx.ellipse(-3, -3, 1.4, 1.4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(4, -3, 1.4, 1.4, 0, 0, Math.PI * 2); ctx.fill();
+
+    if (!pipe.scared) {
+      for (i = 0; i < 3; i++) {
+        t = (pipe.smokeAnim * 0.05 + i * 0.33) % 1;
+        sy = -ph / 2 - 6 - t * 13;
+        sa = (1 - t) * 0.4;
+        sr = 2 + t * 3.5;
+        ctx.globalAlpha = sa;
+        ctx.fillStyle = '#9aa89a';
+        ctx.beginPath();
+        ctx.arc(Math.sin(t * 10 + i) * 3, sy, sr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawMaze() {
+    var row, col, cell, x, y, t;
+    for (row = 0; row < ROWS; row++) {
+      for (col = 0; col < COLS; col++) {
+        cell = map[row][col];
+        x = col * CELL;
+        y = row * CELL;
+        if (cell === 1) {
+          ctx.fillStyle = '#7cc47c';
+          ctx.fillRect(x, y, CELL, CELL);
+          ctx.strokeStyle = '#5aa85a';
+          ctx.lineWidth = 0.5;
+          ctx.strokeRect(x + 0.5, y + 0.5, CELL - 1, CELL - 1);
+        } else {
+          ctx.fillStyle = '#f4fbee';
+          ctx.fillRect(x, y, CELL, CELL);
+          if (cell === 2) {
+            ctx.fillStyle = '#3d8b3d';
+            ctx.beginPath();
+            ctx.arc(x + CELL / 2, y + CELL / 2, 2, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (cell === 3) {
+            t = Date.now() * 0.004;
+            drawLeaf(x + CELL / 2, y + CELL / 2, 8, t * 0.5, '#d4a017', 1);
+          }
+        }
+      }
+    }
+  }
+
+  function addParticles(x, y, color, n) {
+    var i, a, sp;
+    n = n || 8;
+    for (i = 0; i < n; i++) {
+      a = Math.random() * Math.PI * 2;
+      sp = 1 + Math.random() * 2.5;
+      particles.push({
+        x: x, y: y,
+        dx: Math.cos(a) * sp, dy: Math.sin(a) * sp,
+        life: 1, color: color, size: 1.5 + Math.random() * 3
+      });
+    }
+  }
+
+  function updateParticles() {
+    var alive = [], i, p;
+    for (i = 0; i < particles.length; i++) {
+      p = particles[i];
+      p.x += p.dx;
+      p.y += p.dy;
+      p.dy += 0.05;
+      p.life -= 0.03;
+      if (p.life > 0) {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+        ctx.fill();
+        alive.push(p);
+      }
+    }
+    particles = alive;
+    ctx.globalAlpha = 1;
+  }
+
+  function updateHUD() {
+    scoreEl.textContent = score;
+    livesEl.textContent = lives;
+    levelEl.textContent = level;
+  }
+
+  function showMsg(txt, dur) {
+    msgEl.textContent = txt;
+    clearTimeout(msgTimeout);
+    msgTimeout = setTimeout(function () { msgEl.textContent = ''; }, dur || 1600);
+  }
+
+  function setDir(dx, dy) {
+    if (player) {
+      player.nextDx = dx;
+      player.nextDy = dy;
+    }
+  }
+
+  function showGameOver() {
+    overlay.innerHTML =
+      '<h2>Smoked Out</h2>' +
+      '<p>Final Score: <strong style="color:#b8860b;font-size:1.3rem">' + score + '</strong></p>' +
+      '<p>The pipes got you.</p>' +
+      '<button class="btn" id="againBtn">Try Again</button>';
+    overlay.style.display = 'flex';
+    bindStart(document.getElementById('againBtn'));
+  }
+
+  function initGame() {
+    map = resetMap();
+    score = 0;
+    lives = 3;
+    level = 1;
+    powerTimer = 0;
+    particles = [];
+    deathPhase = false;
+    deathTimer = 0;
+    levelUpTimer = 0;
+    gameState = 'playing';
+    spawnPlayer();
+    spawnPipes();
+    updateHUD();
+  }
+
+  function gameLoop() {
+    animFrame = requestAnimationFrame(gameLoop);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawMaze();
+
+    if (gameState !== 'playing') {
+      updateParticles();
+      return;
+    }
+
+    if (powerTimer > 0) {
+      powerTimer--;
+      if (powerTimer === 0) {
+        pipes.forEach(function (p) { if (!p.dead) { p.scared = false; } });
+        player.powered = false;
+      }
+    }
+
+    if (deathPhase) {
+      deathTimer++;
+      player.spinAngle += 0.25;
+      var shrink = Math.max(0, 1 - deathTimer / 50);
+      if (shrink > 0) {
+        drawLeaf(player.x, player.y, CELL * 0.9 * shrink, player.spinAngle, '#c0392b', shrink);
+      }
+      updateParticles();
+      if (deathTimer > 65) {
+        deathPhase = false;
+        deathTimer = 0;
+        if (lives <= 0) {
+          gameState = 'gameover';
+          showGameOver();
+        } else {
+          spawnPlayer();
+          spawnPipes();
+        }
+      }
+      return;
+    }
+
+    if (levelUpTimer > 0) {
+      levelUpTimer--;
+      ctx.save();
+      ctx.globalAlpha = Math.sin(levelUpTimer * 0.2) * 0.5 + 0.5;
+      ctx.fillStyle = '#2f6d2f';
+      ctx.font = 'bold 22px Boogaloo, cursive';
+      ctx.textAlign = 'center';
+      ctx.fillText('LEVEL UP', canvas.width / 2, canvas.height / 2);
+      ctx.restore();
+      updateParticles();
+      if (levelUpTimer === 0) {
+        map = resetMap();
+        level++;
+        spawnPlayer();
+        spawnPipes();
+        updateHUD();
+      }
+      return;
+    }
+
+    moveEntity(player);
+    player.spinAngle += 0.04;
+
+    var pc = ((Math.round((player.x - CELL / 2) / CELL)) % COLS + COLS) % COLS;
+    var pr = Math.round((player.y - CELL / 2) / CELL);
+    if (pr >= 0 && pr < ROWS) {
+      var cell = map[pr][pc];
+      if (cell === 2) {
+        map[pr][pc] = 4;
+        score += 10;
+        addParticles(player.x, player.y, '#3d8b3d', 3);
+        updateHUD();
+      } else if (cell === 3) {
+        map[pr][pc] = 4;
+        score += 50;
+        powerTimer = 420;
+        player.powered = true;
+        pipes.forEach(function (p) {
+          if (!p.dead) { p.scared = true; p.scaredTimer = 420; }
+        });
+        addParticles(player.x, player.y, '#d4a017', 8);
+        showMsg('GOLDEN NUG');
+        updateHUD();
+      }
+    }
+
+    if (countDots(map) === 0) {
+      levelUpTimer = 90;
+      addParticles(canvas.width / 2, canvas.height / 2, '#3d8b3d', 24);
+      showMsg('BLAZED THE LEVEL');
+    }
+
+    var i, pipe, home, hx, hy, dist;
+    for (i = 0; i < pipes.length; i++) {
+      pipe = pipes[i];
+
+      if (pipe.dead) {
+        home = PIPE_STARTS[i];
+        hx = home.col * CELL + CELL / 2;
+        hy = home.row * CELL + CELL / 2;
+        if (Math.abs(pipe.x - hx) < 6 && Math.abs(pipe.y - hy) < 6) {
+          pipe.dead = false;
+          pipe.scared = false;
+          pipe.col = home.col;
+          pipe.row = home.row;
+        } else {
+          pipe.x += Math.sign(hx - pipe.x) * pipe.speed * 1.6;
+          pipe.y += Math.sign(hy - pipe.y) * pipe.speed * 1.6;
+        }
+      } else {
+        pipe.smokeAnim++;
+        if (pipe.scared) { pipe.scaredTimer--; }
+        pipe.modeTimer--;
+        if (pipe.modeTimer <= 0) {
+          pipe.mode = (pipe.mode === 'chase') ? 'scatter' : 'chase';
+          pipe.modeTimer = (pipe.mode === 'chase') ? 400 : 200;
+        }
+        if (isAtCenter(pipe)) { chooseDir(pipe); }
+        moveEntity(pipe);
+      }
+
+      if (!pipe.dead) {
+        dist = Math.hypot(pipe.x - player.x, pipe.y - player.y);
+        if (dist < CELL * 0.7) {
+          if (player.powered && pipe.scared) {
+            pipe.dead = true;
+            pipe.scared = false;
+            score += 200;
+            addParticles(pipe.x, pipe.y, pipe.color, 10);
+            showMsg(pipe.name + ' got smoked');
+            updateHUD();
+          } else {
+            lives--;
+            updateHUD();
+            addParticles(player.x, player.y, '#c0392b', 16);
+            showMsg(lives > 0 ? 'Got smoked' : 'Blazed out', 2000);
+            deathPhase = true;
+            deathTimer = 0;
+            powerTimer = 0;
+            pipes.forEach(function (p) { p.scared = false; });
+            return;
+          }
+        }
+      }
+      drawPipe(pipe);
+    }
+
+    drawLeaf(player.x, player.y, CELL * 0.95, player.spinAngle,
+             player.powered ? '#d4a017' : '#3d8b3d', 1);
+
+    updateParticles();
+  }
+
+  function startGame() {
+    overlay.style.display = 'none';
+    if (animFrame) { cancelAnimationFrame(animFrame); }
+    initGame();
+    gameLoop();
+  }
+
+  function bindStart(el) {
+    if (!el) { return; }
+    var fired = false;
+    el.addEventListener('touchend', function (ev) {
+      ev.preventDefault();
+      fired = true;
+      startGame();
+    }, false);
+    el.addEventListener('click', function () {
+      if (fired) { fired = false; return; }
+      startGame();
+    }, false);
+  }
+
+  bindStart(document.getElementById('startBtn'));
+
+  var KEYMAP = {
+    ArrowUp:    [0, -1], ArrowDown:  [0, 1],
+    ArrowLeft:  [-1, 0], ArrowRight: [1, 0],
+    w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0],
+    W: [0, -1], S: [0, 1], A: [-1, 0], D: [1, 0]
+  };
+
+  document.addEventListener('keydown', function (ev) {
+    var k = KEYMAP[ev.key];
+    if (k) {
+      ev.preventDefault();
+      setDir(k[0], k[1]);
+    }
+  }, false);
+
+  var PADMAP = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+
+  Array.prototype.forEach.call(document.querySelectorAll('.pk[data-dir]'), function (el) {
+    var k = PADMAP[el.getAttribute('data-dir')];
+    el.addEventListener('touchstart', function (ev) {
+      ev.preventDefault();
+      setDir(k[0], k[1]);
+    }, false);
+    el.addEventListener('mousedown', function (ev) {
+      ev.preventDefault();
+      setDir(k[0], k[1]);
+    }, false);
+  });
+
+  var touchStart = null;
+
+  canvas.addEventListener('touchstart', function (ev) {
+    ev.preventDefault();
+    touchStart = { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
+  }, false);
+
+  canvas.addEventListener('touchmove', function (ev) {
+    ev.preventDefault();
+  }, false);
+
+  canvas.addEventListener('touchend', function (ev) {
+    ev.preventDefault();
+    if (!touchStart) { return; }
+    var dx = ev.changedTouches[0].clientX - touchStart.x;
+    var dy = ev.changedTouches[0].clientY - touchStart.y;
+    if (Math.abs(dx) < 12 && Math.abs(dy) < 12) { touchStart = null; return; }
+    if (Math.abs(dx) > Math.abs(dy)) {
+      setDir(dx > 0 ? 1 : -1, 0);
+    } else {
+      setDir(0, dy > 0 ? 1 : -1);
+    }
+    touchStart = null;
+  }, false);
+
+  // GREEN PHONE EDIT - info panel wiring
+  var infoModal = document.getElementById('infoModal');
+  var infoBtn = document.getElementById('infoBtn');
+  var infoClose = document.getElementById('infoClose');
+
+  function bindTap(el, fn) {
+    if (!el) { return; }
+    var fired = false;
+    el.addEventListener('touchend', function (ev) {
+      ev.preventDefault();
+      fired = true;
+      fn();
+    }, false);
+    el.addEventListener('click', function () {
+      if (fired) { fired = false; return; }
+      fn();
+    }, false);
+  }
+
+  bindTap(infoBtn, function () { infoModal.style.display = 'flex'; });
+  bindTap(infoClose, function () { infoModal.style.display = 'none'; });
+
+  map = resetMap();
+  level = 1;
+  score = 0;
+  lives = 3;
+  gameState = 'idle';
+  drawMaze();
+}());
+</script>
+</body>
+</html>

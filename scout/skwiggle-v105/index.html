@@ -1,0 +1,1623 @@
+<!DOCTYPE html>
+<!-- ============================================================================
+  VERCEL STUMBLER  -  HANDOFF NOTES   (RED PHONE -> next phone)
+  ============================================================================
+  WHAT IT IS
+  Single-file static app. Generates <host>.vercel.app names and opens them in a
+  new tab so you can "stumble" onto live deployments. Kept finds are stored and
+  synced. Lives at stumbler.vercel.app. Deployed from ~/stumbler via Vercel CLI.
+
+  DEPLOY (RED PHONE termux)
+    cd ~/stumbler
+    cp "$(ls -t ~/storage/downloads/index*.html | head -1)" index.html
+    vercel --prod
+    rm ~/storage/downloads/index*.html
+  Firefox caches hard - hard-refresh the live page after a deploy or you will
+  think nothing changed.
+
+  THREE MODES (tabs)
+    STUMBLE  - word-word combos; biased by stems of kept hits (the feedback loop)
+    DICTIONARY - walks a single-word list in order (dictIdx persists)
+    CLONES   - mangles ~100 popular site names into clone-style hosts
+               ({site}-clone, clone-{site}, {site}-next, backwards, etc.)
+
+  KEPT HITS + SYNC
+    Local cache: localStorage key "stumbler.hits.v1" (array of url strings).
+    Cloud: frontend calls fetch("/api/hits") GET and POST.
+      GET  -> { hits: [...] }
+      POST { urls:[...] } -> adds, returns full list.
+    LIVE backend = Upstash Redis via the Vercel function at /api/hits
+      (api/hits.js in this same project; SADD/SMEMBERS on set "stumbler:hits").
+      Env vars: UPSTASH_REDIS_REST_URL / _TOKEN  (or KV_REST_API_URL/_TOKEN).
+    ALTERNATE backend (NOT live) = Railway + SQLite, in a SEPARATE service
+      folder (server.js + package.json, express + better-sqlite3, table
+      hits(url PK, found_at), endpoints GET/POST /hits, CORS open). To use it:
+      host that service on Railway w/ a volume at /data, then point the
+      frontend at its public URL instead of "/api/hits".
+
+  SEED
+    SEED = 160 confirmed real finds (full urls). Merged in ONCE per SEED_VER
+    (currently "v3-160"); save() dedupes so re-merge is safe. If you change the
+    SEED list, BUMP SEED_VER or it won't re-apply over existing data.
+
+  CATEGORIES  (built, but HALF DONE - this is the handoff point)
+    CATS    = { url -> category }  in localStorage "stumbler.cats.v1"
+    CATLIST = user-growable names  in localStorage "stumbler.catlist.v1",
+              starts ["Stumble","Dictionary","Clone"].
+    Helpers: catOf(), setCat(), ensureCat(), guessCat(), modeCat().
+    Kept hits auto-tag by the mode they were found in. EXPORT already writes
+    [{url,cat}] so labels ride along in the export file.
+
+    >>> UNFINISHED NEXT TASK: category labels DO NOT sync to the cloud. <<<
+    Only the URLs sync; CATS lives only in the browser, so labels are
+    device-local and can be lost on a cache clear. To finish:
+      1. Change wire format so the backend stores+returns {url,cat}:
+         - Upstash: switch the set to a HASH (HSET key url cat / HGETALL),
+           migrating the old "stumbler:hits" set (default missing cats to
+           "Stumble").
+         - Railway: add a cat column; upsert ON CONFLICT(url) DO UPDATE SET cat.
+      2. pushCloud() sends objects [{url,cat}] not bare urls.
+      3. pullCloud() tolerates BOTH shapes (string OR {url,cat}) so a frontend
+         deployed before the backend doesn't break.
+      4. setCat()/the per-row category <select> onchange pushes that label to
+         the cloud immediately (right now it only saves locally).
+      5. Reconcile by url AND push rows whose cat changed, not just new urls.
+    BEFORE TOUCHING ANY OF THIS: export a labeled backup so the manual
+    labeling already done isn't lost.
+
+  CONVENTIONS
+    - Mark every contribution with a "RED PHONE:" / "<COLOR> PHONE:" comment.
+    - Backgrounds must stay LIGHT (no black/near-black panels). Red/warm accents ok.
+    - Project hands off across RED / GREEN / ORANGE / BLUE phones.
+  ============================================================================ -->
+<!-- RED PHONE: stumbler. stumble=app-word combos, dict=single words in order. No server. -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#e7e2d4" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+<title>Vercel Stumbler</title>
+<style>
+  :root { --paper:#e7e2d4; --panel:#efebdf; --ink:#2a2620; --dim:#857c69;
+          --rule:#b3ab96; --red:#b23a2b; --red2:#8c2c20; --green:#3f7d52;
+          --brown:#6c5f49; --brown2:#4f4636; }
+  * { box-sizing:border-box; }
+  html { background:#e7e2d4; }
+  body { margin:0 auto; min-height:100dvh; max-width:520px; background:var(--paper);
+    color:var(--ink); font-family:ui-monospace,"Share Tech Mono","JetBrains Mono",monospace;
+    padding:18px 14px 32px; -webkit-text-size-adjust:100%; }
+  h1 { font-size:15px; letter-spacing:.22em; margin:0; text-align:center; color:var(--ink); font-weight:700; }
+  h1::before { content:"[ "; color:var(--red); }
+  h1::after { content:" ]"; color:var(--red); }
+  h1 b { color:var(--red); -webkit-text-fill-color:currentColor; }
+  .hud { display:flex; justify-content:space-between; gap:8px; margin:9px 0 10px; padding:5px 2px;
+    font-size:10px; letter-spacing:.1em; color:var(--dim);
+    border-top:1px dashed var(--rule); border-bottom:1px dashed var(--rule); }
+  .hud b { color:var(--red); font-weight:700; }
+
+  .tabs { display:flex; gap:6px; margin-bottom:8px; }
+  .tab { flex:1; font-family:inherit; font-weight:700; font-size:10px;
+    letter-spacing:.02em; padding:10px 3px; border-radius:2px; cursor:pointer;
+    white-space:nowrap; border:1.5px solid var(--rule); background:var(--panel); color:var(--dim);
+    -webkit-tap-highlight-color:transparent; }
+  .tab.active { background:var(--red); color:var(--paper); border-color:var(--red2); }
+  .tab.active::before { content:">"; margin-right:3px; }
+  .tab.active::after { content:"<"; margin-left:3px; }
+  .pos { text-align:center; font-size:10px; letter-spacing:.1em; color:var(--dim);
+    margin:0 0 12px; min-height:13px; }
+
+  .url { width:100%; text-align:left; font-size:13px; color:var(--ink);
+    background:var(--panel); border:1.5px solid var(--rule); border-radius:2px;
+    padding:13px 12px; margin-bottom:12px; font-family:inherit; }
+  .url::placeholder { color:var(--dim); }
+
+  .row { display:flex; gap:8px; }
+  button { border:none; cursor:pointer; color:var(--paper); font-family:inherit; font-weight:700;
+    border-radius:2px; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+  .stumble { flex:2; font-size:20px; letter-spacing:.16em; padding:18px;
+    background:var(--red); color:var(--paper); border:1.5px solid var(--red2); }
+  select.platform { flex:1; font-family:inherit; font-weight:700; font-size:11px; letter-spacing:.03em;
+    color:var(--ink); background:var(--panel); border:1.5px solid var(--rule); border-radius:2px;
+    padding:12px 4px; text-align:center; text-align-last:center; cursor:pointer;
+    -webkit-tap-highlight-color:transparent; }
+  .stumble::before { content:"> "; opacity:.65; }
+  .stumble:active { transform:translateY(1px); background:var(--red2); }
+  .keep { flex:1; font-size:13px; letter-spacing:.06em; background:var(--panel);
+    color:var(--ink); border:1.5px solid var(--rule); }
+  .keep:active { transform:translateY(1px); background:var(--rule); }
+  select.keep { width:100%; margin-top:8px; font-family:inherit; font-weight:700; font-size:13px; letter-spacing:.06em;
+    color:var(--ink); background:var(--panel); border:1.5px solid var(--rule); border-radius:2px;
+    padding:12px 8px; text-align:center; text-align-last:center; cursor:pointer;
+    -webkit-tap-highlight-color:transparent; }
+  select.topic { flex:1; font-family:inherit; font-weight:700; font-size:10px; letter-spacing:.02em;
+    color:var(--ink); background:var(--panel); border:1.5px solid var(--rule); border-radius:2px;
+    padding:10px 2px; text-align:center; text-align-last:center; cursor:pointer;
+    -webkit-tap-highlight-color:transparent; }
+  /* RED PHONE: nested collapsible section inside the drawer (topics live here) */
+  .dsection { margin:0 0 12px; }
+  .dsection-hd { width:100%; display:flex; align-items:center; justify-content:space-between;
+    font-family:inherit; font-weight:700; font-size:12px; letter-spacing:.08em; color:var(--ink);
+    background:var(--panel); border:1.5px solid var(--rule); border-radius:2px; padding:11px;
+    cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .dsection-hd .chev { transition:transform .15s ease; color:var(--red); }
+  .dsection-hd.open .chev { transform:rotate(90deg); }
+  .dsection-body { margin-top:8px; }
+  .dsection-body[hidden] { display:none; }
+  .customrow { display:flex; gap:8px; margin-top:8px; }
+  .customrow[hidden] { display:none; }
+  .customrow .ctinput { flex:1; min-width:0; font-family:inherit; font-size:13px; color:var(--ink);
+    background:var(--panel); border:1.5px solid var(--red); border-radius:2px; padding:11px; }
+  .customrow .ctinput::placeholder { color:var(--dim); }
+  .customrow .ctadd { flex:none; font-family:inherit; font-weight:700; font-size:12px; letter-spacing:.06em;
+    color:var(--paper); background:var(--red); border:1.5px solid var(--red2); border-radius:2px; padding:11px 14px; cursor:pointer; }
+  .customrow .ctx { flex:none; width:40px; font-family:inherit; font-weight:700; font-size:18px;
+    color:var(--ink); background:var(--panel); border:1.5px solid var(--rule); border-radius:2px; cursor:pointer; }
+  .keepcat { width:100%; margin-top:8px; font-family:inherit; font-size:13px; font-weight:700;
+    letter-spacing:.04em; color:var(--ink); background:var(--panel);
+    border:1.5px solid var(--rule); border-radius:2px; padding:11px; }
+
+  .add { display:flex; gap:8px; margin-top:10px; }
+  .add input { flex:1; min-width:0; font-family:inherit; font-size:13px; color:var(--ink);
+    background:var(--panel); border:1.5px solid var(--rule); border-radius:2px;
+    padding:11px; }
+  .add input::placeholder { color:var(--dim); }
+  .add input.invalid { border-color:var(--red); color:var(--red); }
+  .add input.invalid::placeholder { color:var(--red); }
+  .add button { flex:none; font-size:13px; letter-spacing:.06em; padding:11px 14px;
+    background:var(--panel); color:var(--ink); border:1.5px solid var(--rule); }
+  .add button:active { transform:translateY(1px); background:var(--rule); }
+  .add .clearx { width:40px; padding:0; font-size:18px; font-weight:700; }
+
+  .io { display:flex; gap:8px; margin-top:8px; justify-content:flex-start; }
+  .io button { flex:none; width:38px; height:38px; font-size:16px; font-weight:700; padding:0;
+    background:var(--panel); color:var(--ink); border:1.5px solid var(--rule); border-radius:2px; }
+  .io button:active { transform:translateY(1px); background:var(--rule); }
+
+  .hd { display:flex; justify-content:space-between; align-items:baseline;
+    margin:24px 0 8px; font-size:10px; letter-spacing:.16em; color:var(--dim);
+    text-transform:uppercase; }
+  ul { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:0; }
+  li { display:flex; gap:6px; align-items:center; border-bottom:1px dashed var(--rule); padding:1px 0; }
+  li a { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:2px;
+    text-decoration:none; color:var(--ink);
+    background:none; border:none; border-radius:0; padding:9px 2px; font-size:12px; }
+  li a::before { content:""; }
+  .ver { position:absolute; right:0; top:50%; transform:translateY(-50%);
+    font-size:10px; letter-spacing:.06em; color:var(--dim); }
+  .age { flex:none; min-width:36px; text-align:right; font-size:10px; letter-spacing:.02em;
+    color:var(--dim); font-variant-numeric:tabular-nums; }
+  .age.old { color:var(--red); font-weight:700; }
+  .age.warn { color:#a5701a; }
+  li a .sub { color:var(--ink); word-break:break-all; }
+  li a .tldrow { display:flex; align-items:center; gap:6px; }
+  li a .tld { color:var(--dim); }
+  li a .x { color:var(--red); font-weight:700; flex:none; }
+  li .cat { flex:none; font-family:inherit; font-size:10px; letter-spacing:.03em; color:var(--ink);
+    background:var(--panel); border:1.5px solid var(--rule); border-radius:2px; padding:3px 5px; max-width:104px; }
+  .filters { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; }
+  .chip { font-family:inherit; font-weight:700; font-size:10px; letter-spacing:.05em;
+    text-transform:uppercase; padding:6px 10px; border-radius:2px; cursor:pointer;
+    border:1.5px solid var(--rule); background:var(--panel); color:var(--dim);
+    -webkit-tap-highlight-color:transparent; }
+  .chip.active { background:var(--red); color:var(--paper); border-color:var(--red2); }
+  .chip.add { color:var(--ink); }
+  .empty { font-size:11px; color:var(--dim); }
+  .sync { font-weight:400; letter-spacing:.03em; color:var(--dim); }
+  .pager { display:flex; align-items:center; justify-content:center; gap:12px; margin-top:12px; }
+  .pager button { font-family:inherit; font-weight:700; font-size:13px; color:var(--ink);
+    background:var(--panel); border:1.5px solid var(--rule); border-radius:2px;
+    padding:8px 14px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .pager button:disabled { opacity:.4; }
+  .pager .pinfo { font-size:11px; letter-spacing:.04em; color:var(--dim); min-width:104px; text-align:center; }
+  /* RED PHONE: hamburger + kept-hits drawer */
+  .topbar { position:relative; display:flex; align-items:center; justify-content:center; min-height:36px; }
+  .hamburger { position:absolute; left:0; top:50%; transform:translateY(-50%); display:flex;
+    align-items:center; gap:7px; background:var(--panel); border:1.5px solid var(--rule);
+    border-radius:2px; padding:7px 10px; cursor:pointer; -webkit-tap-highlight-color:transparent;
+    font-family:inherit; color:var(--ink); }
+  .hamburger::before { content:"<\2261"; font-weight:700; font-size:14px; }
+  .hamburger .bars { display:none; }
+  .hamburger .badge { font-family:inherit; font-weight:700; font-size:11px; color:var(--red); min-width:14px; }
+  .scrim { position:fixed; inset:0; background:rgba(42,38,32,.42); opacity:0; pointer-events:none;
+    transition:opacity .18s ease; z-index:40; }
+  .scrim.open { opacity:1; pointer-events:auto; }
+  .drawer { position:fixed; top:0; left:0; bottom:0; width:min(92vw,460px); background:var(--paper);
+    border-right:1.5px solid var(--ink); box-shadow:5px 0 0 var(--rule);
+    transform:translateX(-102%); transition:transform .2s ease; z-index:50; overflow-y:auto;
+    padding:16px 14px calc(28px + env(safe-area-inset-bottom)); }
+  .drawer.open { transform:translateX(0); }
+  .drawer-hd { display:flex; align-items:center; justify-content:space-between;
+    font-weight:700; letter-spacing:.12em; font-size:14px; color:var(--ink); }
+  .drawer-hd::before { content:"// "; color:var(--red); }
+  .dclose { background:none; border:none; font-size:24px; line-height:1; color:var(--ink);
+    cursor:pointer; padding:0 4px; -webkit-tap-highlight-color:transparent; }
+  .drawer-sub { font-size:11px; color:var(--dim); letter-spacing:.04em; margin:3px 0 12px; }
+  .drawer-sub::before { content:":: "; }
+  .drawer-sub::after { content:" ::"; }
+  .dtools { display:flex; gap:8px; margin:0 0 12px; }
+  .dtools button { flex:1; font-family:inherit; font-weight:700; font-size:11px; letter-spacing:.08em;
+    padding:9px; background:var(--panel); color:var(--ink); border:1.5px solid var(--rule);
+    border-radius:2px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .dtools button:disabled { opacity:.5; }
+  .dtools button.armed { background:var(--red); color:var(--paper); border-color:var(--red2); }
+  .search { width:100%; font-family:inherit; font-size:13px; color:var(--ink);
+    background:var(--panel); border:1.5px solid var(--rule); border-radius:2px;
+    padding:10px 11px; margin:0 0 10px; }
+  .search::placeholder { color:var(--dim); }
+  .stat { display:flex; align-items:center; gap:4px; flex:none; }
+  .stat .dot { font-size:11px; line-height:1; font-style:normal; }
+  .stat .dot.up { color:var(--green); }
+  .stat .dot.broken { color:var(--red); }
+  .stat .dot.dead { color:#9a9488; }
+  .stat .dot.unknown { color:var(--dim); }
+  .stat .spark { font-size:9px; letter-spacing:-1px; line-height:1; white-space:nowrap; }
+  .stat .spark i { font-style:normal; }
+  .stat .spark i.u { color:var(--green); }
+  .stat .spark i.b { color:var(--red); }
+  .stat .spark i.d { color:#9a9488; }
+  .del { flex:none; background:none; border:1.5px solid var(--rule); color:var(--red);
+    border-radius:2px; font-family:inherit; font-weight:700; font-size:12px; padding:4px 8px;
+    cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  /* RED PHONE: footer seal */
+  .seal { margin-top:30px; padding-top:12px; text-align:center; border-top:1px dashed var(--rule); }
+  .seal-mark { font-family:inherit; font-weight:700; letter-spacing:2px; font-size:10px; color:var(--red); }
+  /* RED PHONE: about popup */
+  .info { position:absolute; right:34px; top:50%; transform:translateY(-50%); width:30px; height:30px;
+    background:var(--panel); border:1.5px solid var(--rule); border-radius:2px; color:var(--red);
+    font-family:inherit; font-weight:700; font-size:14px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .statsbtn { position:absolute; right:0; top:50%; transform:translateY(-50%); width:30px; height:30px;
+    background:var(--panel); border:1.5px solid var(--rule); border-radius:2px; color:var(--red);
+    font-family:inherit; font-weight:700; font-size:15px; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .donut { display:block; margin:2px auto 14px; }
+  .dt-num { font-size:24px; font-weight:700; fill:var(--ink); font-family:ui-monospace,monospace; }
+  .dt-lbl { font-size:9px; letter-spacing:.2em; fill:var(--dim); font-family:ui-monospace,monospace; }
+  .legend { list-style:none; margin:0; padding:0; }
+  .legend li { display:flex; align-items:center; gap:9px; font-size:12px; padding:6px 0; border-bottom:1px dashed var(--rule); }
+  .legend .sw { width:12px; height:12px; border-radius:2px; flex:none; }
+  .legend .ln { flex:1; text-transform:uppercase; letter-spacing:.04em; word-break:break-all; }
+  .legend .lc { color:var(--dim); flex:none; font-variant-numeric:tabular-nums; }
+  .about-scrim { position:fixed; inset:0; background:rgba(42,38,32,.35); opacity:0; pointer-events:none;
+    transition:opacity .18s ease; z-index:60; }
+  .about-scrim.open { opacity:1; pointer-events:auto; }
+  .about { position:fixed; left:50%; top:50%; transform:translate(-50%,-46%) scale(.98);
+    width:min(92vw,480px); max-height:82vh; overflow-y:auto; z-index:61;
+    background:#efe9db;
+    border:1.5px solid var(--ink); border-radius:4px; box-shadow:0 8px 30px rgba(42,38,32,.3);
+    padding:16px 16px calc(20px + env(safe-area-inset-bottom)); opacity:0; pointer-events:none;
+    transition:opacity .18s ease, transform .18s ease; }
+  .about.open { opacity:1; pointer-events:auto; transform:translate(-50%,-50%) scale(1); }
+  .about-hd { display:flex; align-items:center; justify-content:space-between; font-weight:700;
+    letter-spacing:.1em; font-size:13px; color:var(--red); margin-bottom:8px; }
+  .aclose { background:none; border:none; font-size:24px; line-height:1; color:var(--ink);
+    cursor:pointer; padding:0 4px; -webkit-tap-highlight-color:transparent; }
+  .about-body { font-size:12.5px; line-height:1.62; color:var(--ink); }
+  .about-body p { margin:0 0 10px; }
+  .about-body .ah { color:var(--red); font-weight:700; letter-spacing:.06em; margin-top:14px; }
+  .about-body b { color:var(--ink); }
+  .about-body code { background:rgba(178,58,43,.1); color:var(--red2); padding:1px 4px;
+    border-radius:2px; font-size:11.5px; word-break:break-all; }
+  /* ============================================================
+     RED PHONE: v3.1 LOOK -> STAINED GLASS (colored panes + black
+     leading). Solid warm shades of one family, heavy near-black came
+     outlines, wonky hand-drawn corners. No blur, no transparency, so
+     nothing bleeds through. One self-contained block; delete to revert.
+     ============================================================ */
+  html, body {
+    background:
+      radial-gradient(1100px 620px at 12% -5%, rgba(201,104,74,.10), transparent 60%),
+      radial-gradient(1000px 700px at 92% 14%, rgba(74,120,150,.08), transparent 62%),
+      #ece6d8;
+    background-attachment: fixed;
+  }
+  /* RED PHONE: leaded came -> thick near-black outlines + wonky corners */
+  .tab, .stumble, select.keep, select.topic, .url, .add input, .add button, .io button,
+  .chip, li .cat, .pager button, .search, .info, .statsbtn, .hamburger,
+  .customrow .ctinput, .customrow .ctadd, .customrow .ctx, .drawer, .about, .dsection-hd {
+    border-width: 2.5px; border-color: #141009;
+    border-radius: 14px 9px 15px 10px / 10px 15px 9px 14px;
+  }
+  /* RED PHONE: stained panes -> SOLID warm shades + soft top sheen (opaque) */
+  .tab, select.keep, select.topic, .url, .add input, .pager button, .search, .dsection-hd, li .cat {
+    background: linear-gradient(180deg,#f7f1e6,#efe8da);
+  }
+  .add button, .io button, .info, .statsbtn, .hamburger, .customrow .ctinput {
+    background: linear-gradient(180deg,#f4eee0,#e9e1d1);
+  }
+  .chip { background: linear-gradient(180deg,#f6efe1,#ece4d3); }
+  .stumble, .tab.active, .chip.active { border-color: #141009; }
+  /* RED PHONE: drawer + popups must be fully opaque so they cover the app */
+  .drawer { background: #ece6d8; }
+  .about { background: #efe9db; }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <button class="hamburger" id="menu" aria-label="Open kept hits">
+      <span class="bars"></span>
+    </button>
+    <h1>VERCEL <b>STUMBLER</b></h1>
+    <span class="ver" id="ver"></span>
+  </header>
+  <div class="hud" id="hud"></div>
+
+  <div class="tabs">
+    <button class="tab active" id="tab-stumble" data-mode="stumble">STUMBLE</button>
+    <button class="tab" id="tab-dict" data-mode="dict">DICTIONARY</button>
+    <button class="tab" id="tab-clone" data-mode="clone">CLONES</button>
+    <select class="topic" id="topic" aria-label="stumble a topic"></select>
+  </div>
+  <div class="pos" id="pos"></div>
+
+  <input class="url" id="url" type="text" inputmode="url" autocapitalize="off"
+         autocomplete="off" spellcheck="false" placeholder="&gt; tap stumble or type a url" />
+
+  <div class="row">
+    <button class="stumble" id="go">STUMBLE</button>
+    <select class="platform" id="platform" aria-label="platform to stumble"></select>
+  </div>
+  <select class="keep" id="keep" aria-label="keep to category"></select>
+  <div class="customrow" id="customRow" hidden>
+    <input class="ctinput" id="customTopic" type="text" inputmode="text" autocapitalize="off"
+           autocomplete="off" spellcheck="false" placeholder="&gt; type a topic word" />
+    <button class="ctadd" id="customAdd">ADD</button>
+    <button class="ctx" id="customCancel" aria-label="cancel">&times;</button>
+  </div>
+
+  <div class="add">
+    <input id="manual" type="url" inputmode="url" autocapitalize="off" autocomplete="off"
+           spellcheck="false" placeholder="paste a url you found&hellip;" />
+    <button id="addbtn">ADD</button>
+    <button class="clearx" id="manualClear" aria-label="clear">&times;</button>
+  </div>
+
+  <div class="io">
+    <button id="exportbtn" aria-label="Export" title="Export">&#8595;</button>
+    <button id="uploadbtn" aria-label="Upload" title="Upload">&#8593;</button>
+    <button id="info" aria-label="What is this?">?</button>
+    <button id="statsBtn" aria-label="Category chart">&#9684;</button>
+    <input id="file" type="file" accept=".json,.txt,application/json,text/plain" hidden />
+  </div>
+
+
+  <div class="scrim" id="scrim"></div>
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-hd">
+      <span>KEPT HITS <span id="sync" class="sync"></span></span>
+      <button class="dclose" id="menuClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="dtools">
+    </div>
+    <input id="search" class="search" type="search" inputmode="search" autocomplete="off"
+           spellcheck="false" placeholder="&gt; search discovered urls&hellip;" />
+    <div class="dsection">
+      <button class="dsection-hd" id="catsToggle"><span>&#9638; CATEGORIES</span><span class="chev">&#9656;</span></button>
+      <div class="dsection-body" id="catsBody" hidden>
+        <div class="filters" id="filters"></div>
+      </div>
+    </div>
+    <ul id="hits"></ul>
+    <div class="pager" id="pager"></div>
+    <div class="empty" id="empty">none yet &mdash; keep the legit ones</div>
+  </aside>
+
+  <div class="about-scrim" id="statsScrim"></div>
+  <aside class="about" id="statsPop" aria-hidden="true">
+    <div class="about-hd">
+      <span>// CATEGORY BREAKDOWN</span>
+      <button class="aclose" id="statsClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="about-body" id="statsBody"></div>
+  </aside>
+
+  <div class="about-scrim" id="aboutScrim"></div>
+  <aside class="about" id="about" aria-hidden="true">
+    <div class="about-hd">
+      <span>// WHAT IS THIS</span>
+      <button class="aclose" id="aboutClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="about-body">
+      <p><b>Vercel Stumbler</b> hunts for websites people have quietly deployed to
+      <code>.vercel.app</code> and left open to the world. You generate a candidate
+      address, it opens in a new tab, and if a real site loads you found one.</p>
+
+      <p class="ah">:: THE THREE MODES ::</p>
+      <p><b>STUMBLE</b> mashes words into concept-style names like
+      <code>quick-loop</code> or <code>stock-game</code> &mdash; compound, made-up,
+      leet-style ideas.</p>
+      <p><b>DICTIONARY</b> walks single real words &mdash; <code>ocean</code>,
+      <code>falcon</code>, <code>coffee</code> &mdash; from a random start each visit
+      so no two phones cover the same ground.</p>
+      <p><b>CLONES</b> mangles well-known site names the way clone-builders do:
+      <code>netflix-clone</code>, <code>clone-spotify</code>, <code>youtube-react</code>.</p>
+
+      <p class="ah">:: STUMBLE A TOPIC ::</p>
+      <p>The <code>&#9671; topic</code> box next to STUMBLE steers generation toward a
+      theme. Pick <code>frogs</code> for <code>treefrogs</code>, <code>lily-ribbit</code>;
+      pick <code>apple</code> for <code>sarahs-airpods</code>. Kept hits file themselves
+      under that topic.</p>
+
+      <p class="ah">:: KEEPING + CATEGORIES ::</p>
+      <p>Found a real one? The <b>keep</b> control is a dropdown &mdash; pick a category
+      and it saves there, best guess at the top. Everything lands in KEPT HITS behind
+      the menu, filterable and searchable.</p>
+
+      <p class="ah">:: THE AGE BADGE ::</p>
+      <p>The marker left of each saved row is how long since a human last opened it
+      through this app: <code>5m</code>, <code>11h</code>, <code>43d</code>. A dash means
+      never visited. It goes amber past 30 days and red at the 99-day cap, flagging
+      stale finds for a recheck. Only a real tap moves it, nothing automated.</p>
+
+      <p class="ah">:: SHARED ACROSS PHONES ::</p>
+      <p>Every keep, label, and visit syncs to a shared database, so a find on one phone
+      shows up on the others. The cloud mark by KEPT HITS shows time since last sync.</p>
+
+      <p class="ah">:: THE POINT ::</p>
+      <p>Over time the kept list becomes a hand-curated map of the open, unsecured
+      corner of Vercel &mdash; a discovery corpus built one confirmed site at a time.</p>
+    </div>
+  </aside>
+
+<script>
+// RED PHONE: STUMBLE vocab -> app words, ordered most-likely first.
+//   Combined as word-word / wordword. NEVER numbered (fresh guesses
+//   resolve better bare). Numbers only come from saved hits below.
+const BASE = ["app","my","dev","web","site","ai","api","dashboard","admin","portal",
+"blog","docs","store","shop","portfolio","resume","todo","task","notes","chat","bot",
+"game","play","music","photo","video","draw","paint","canvas","news","feed","social",
+"link","bio","form","poll","quiz","map","weather","clock","timer","calendar","recipe",
+"food","menu","order","book","travel","trip","fit","gym","run","health","learn","course",
+"study","card","test","hello","world","example","sample","project","starter",
+"template","lab","studio","vue","svelte","astro","node",
+"data","cloud","edge","pixel","retro","neon","snake","chess","arcade","stream","gallery",
+"wiki","kanban","board","tracker","budget","finance","crypto","wallet","pay","invoice",
+"ledger","stock","crew","shift","team","home","landing","page","portal","tool","kit",
+"flow","spark","forge","build","stack","core","loop","wave","field","quick","cool","tiny"];
+
+// RED PHONE: DICTIONARY vocab -> SINGLE words, ordered roughly by how
+//   common / likely-as-an-app they are. Walked sequentially, one per
+//   tap. Other-language words mixed in near the end for fun (ascii only).
+const DICT = ["app","home","hello","world","test","demo","game","play","blog","shop",
+"store","music","photo","video","news","food","travel","book","money","work","time",
+"life","love","light","dark","fire","water","earth","wind","star","moon","sun","sky",
+"cloud","rain","snow","storm","ocean","river","lake","mountain","forest","desert","island",
+"city","town","road","bridge","tower","castle","garden","field","farm","market","money",
+"gold","silver","copper","iron","steel","stone","glass","paper","wood","cotton","silk",
+"coffee","tea","sugar","honey","bread","apple","orange","lemon","cherry","grape","mango",
+"berry","mint","ginger","pepper","tiger","lion","wolf","fox","bear","eagle","hawk","owl",
+"raven","robin","sparrow","swan","crane","heron","dove","falcon","panther","cobra","viper",
+"dragon","phoenix","griffin","unicorn","pixel","vector","matrix","cipher","kernel","binary",
+"signal","beacon","compass","anchor","arrow","blade","shield","spear","crown","throne","quest",
+"legend","myth","fable","saga","echo","whisper","shadow","ember","frost","flame","spark","glow",
+"prism","crystal","quartz","amber","jade","opal","ruby","pearl","ivory","onyx","cobalt","indigo",
+"violet","crimson","scarlet","azure","amber","olive","maroon","teal","coral","ivory","slate",
+"comet","meteor","nebula","galaxy","orbit","cosmos","lunar","solar","stellar","nova","pulsar",
+"zenith","apex","summit","ridge","valley","canyon","cliff","glacier","tundra","savanna","jungle",
+"meadow","prairie","lagoon","reef","tide","wave","current","breeze","gale","mist","fog","dew",
+"casa","sol","luna","mar","fuego","agua","tierra","cielo","flor","gato","perro","rojo","verde",
+"azul","oro","noche","dia","mundo","vida","amor","fiesta","maison","soleil","lune","feu","eau",
+"ciel","fleur","chat","chien","rouge","vert","bleu","nuit","jour","reve","vie","amour","liberte",
+"haus","sonne","mond","feuer","wasser","himmel","blume","katze","hund","rot","gruen","blau",
+"nacht","tag","welt","leben","licht","wald","berg","stern","sora","hikari","yume","neko","mizu",
+"hoshi","kaze","tsuki","hana","yama","umi","kawa","mori","sakura","kumo","tori","ame","yuki",
+"cielo","stella","luce","fuoco","acqua","terra","fiore","gatto","rosso","verde","notte","vita"];
+
+// RED PHONE: CLONES vocab -> well-known site base-names (no TLD). Clone-builders
+//   recreate these and name them similarly, so we mangle each into the
+//   conventions people actually use. Trim/extend this list freely.
+const SITES = ["youtube","netflix","spotify","twitter","instagram","facebook","reddit",
+"amazon","google","tiktok","discord","twitch","github","gitlab","notion","figma","canva",
+"airbnb","uber","lyft","doordash","grubhub","venmo","paypal","stripe","slack","zoom",
+"dropbox","gmail","outlook","linkedin","pinterest","snapchat","whatsapp","telegram",
+"tinder","bumble","hinge","soundcloud","bandcamp","vimeo","hulu","disney","crunchyroll",
+"steam","roblox","minecraft","fortnite","leetcode","hackerrank","codepen","codesandbox",
+"replit","stackoverflow","medium","substack","wordpress","wix","squarespace","shopify",
+"etsy","ebay","walmart","target","wayfair","ikea","zillow","redfin","indeed","glassdoor",
+"coursera","udemy","khanacademy","duolingo","quizlet","chegg","wikipedia","quora","yelp",
+"tripadvisor","booking","expedia","kayak","robinhood","coinbase","binance","cashapp",
+"openai","chatgpt","claude","gemini","perplexity","midjourney","huggingface","vercel",
+"netlify","heroku","railway","supabase","firebase","cloudflare","trello","asana","jira",
+"clickup","airtable","calendly","loom","miro","framer","webflow","cursor","linktree"];
+
+// RED PHONE: clone naming conventions seen in the wild
+const PRE = ["my","new","mini","free","open","the","get","go","try","not","fake","re","just"];
+const SUF = ["clone","app","web","next","react","demo","lite","pro","ai","x","io","hub","js","now"];
+const reverse = (s) => s.split("").reverse().join("");
+let cloneTarget = "";
+
+// RED PHONE: clone host -> weighted toward the -clone family (highest yield)
+function cloneHost() {
+  const b = pick(SITES);
+  cloneTarget = b;
+  const r = Math.random();
+  if (r < 0.34) return b + "-clone" + (Math.random() < 0.25 ? "-" + (2 + (Math.random()*7|0)) : "");
+  if (r < 0.46) return "clone-" + b;
+  if (r < 0.55) return b + "clone";
+  if (r < 0.72) return b + "-" + pick(SUF);
+  if (r < 0.86) return pick(PRE) + "-" + b;
+  if (r < 0.94) return reverse(b);          // spelled backwards
+  return pick(PRE) + b;                       // glued prefix
+}
+
+const KEY = "stumbler.hits.v1";
+const MODE_KEY = "stumbler.mode.v1";
+const DIDX_KEY = "stumbler.dictidx.v1";
+let mode = (() => { try { return localStorage.getItem(MODE_KEY) || "stumble"; } catch { return "stumble"; } })();
+// RED PHONE: start the dictionary walk at a random spot each access (not the
+//   beginning) so different phones/sessions don't all run the same sequence.
+let dictIdx = DICT.length > 1 ? 1 + Math.floor(Math.random() * (DICT.length - 1)) : 0;
+
+// RED PHONE: storage -> in-memory list mirrored to localStorage (offline
+//   cache) AND synced to /api/hits (the cross-phone source of truth).
+// RED PHONE: storage -> in-memory list mirrored to localStorage (offline
+//   cache) AND synced to /api/hits (the cross-phone source of truth).
+// RED PHONE: SEED = confirmed real finds (full urls), folded in from the haul.
+const SEED = [
+"https://codesandbox-clone.vercel.app","https://firebase-clone.vercel.app","https://clone-wikipedia.vercel.app","https://telegram-demo.vercel.app",
+"https://hulu-clone.vercel.app","https://unicorn.vercel.app","https://griffin.vercel.app","https://phoenix.vercel.app",
+"https://dragon.vercel.app","https://cobra.vercel.app","https://panther.vercel.app","https://falcon.vercel.app",
+"https://dove.vercel.app","https://heron.vercel.app","https://crane.vercel.app","https://swan.vercel.app",
+"https://sparrow.vercel.app","https://robin.vercel.app","https://raven.vercel.app","https://owl.vercel.app",
+"https://hawk.vercel.app","https://eagle.vercel.app","https://three.vercel.app","https://two.vercel.app",
+"https://one.vercel.app","https://bear.vercel.app","https://fox.vercel.app","https://wolf.vercel.app",
+"https://pepper.vercel.app","https://ginger.vercel.app","https://berry.vercel.app","https://mango.vercel.app",
+"https://grape.vercel.app","https://cherry.vercel.app","https://lemon.vercel.app","https://xhamster.vercel.app",
+"https://xvideos.vercel.app","https://videoa.vercel.app","https://orange.vercel.app","https://bread.vercel.app",
+"https://honey.vercel.app","https://sugar.vercel.app","https://tea.vercel.app","https://coffee.vercel.app",
+"https://cotton.vercel.app","https://paper.vercel.app","https://glass.vercel.app","https://stone.vercel.app",
+"https://steel.vercel.app","https://iron.vercel.app","https://copper.vercel.app","https://silver.vercel.app",
+"https://gold.vercel.app","https://money.vercel.app","https://market.vercel.app","https://field.vercel.app",
+"https://garden.vercel.app","https://tower.vercel.app","https://bridge.vercel.app","https://road.vercel.app",
+"https://island.vercel.app","https://desert.vercel.app","https://mountain.vercel.app","https://amateur.vercel.app",
+"https://anal.vercel.app","https://lake.vercel.app","https://river.vercel.app","https://ocean.vercel.app",
+"https://storm.vercel.app","https://snow.vercel.app","https://rain.vercel.app","https://cloud.vercel.app",
+"https://sky.vercel.app","https://sun.vercel.app","https://moon.vercel.app","https://star.vercel.app",
+"https://fire.vercel.app","https://dark.vercel.app","https://light.vercel.app","https://love.vercel.app",
+"https://life.vercel.app","https://time.vercel.app","https://work.vercel.app","https://book.vercel.app",
+"https://travel.vercel.app","https://news.vercel.app","https://video.vercel.app","https://store.vercel.app",
+"https://shop.vercel.app","https://blog.vercel.app","https://play.vercel.app","https://game.vercel.app",
+"https://test.vercel.app","https://world.vercel.app","https://hello.vercel.app","https://home.vercel.app",
+"https://fortniteclone.vercel.app","https://porn-hub.vercel.app","https://svelte-hub.vercel.app","https://vercel-clone.vercel.app",
+"https://arcade-tracker.vercel.app","https://clone-cursor.vercel.app","https://shopify-clone.vercel.app","https://loom-x.vercel.app",
+"https://heroku-clone.vercel.app","https://clone-instagram.vercel.app","https://claudeclone.vercel.app","https://muidem.vercel.app",
+"https://clone-pinterest.vercel.app","https://linktree-clone.vercel.app","https://soundcloudclone.vercel.app","https://clone-spotify.vercel.app",
+"https://calendly-clone.vercel.app","https://duolingo-clone.vercel.app","https://fortnite-hub.vercel.app","https://the-target.vercel.app",
+"https://stripe-clone.vercel.app","https://youtube-react.vercel.app","https://box.vercel.app","https://sandbox.vercel.app",
+"https://codesandbox.vercel.app","https://twitter-clone.vercel.app","https://fake-wordpress.vercel.app","https://myslack.vercel.app",
+"https://clone-chatgpt.vercel.app","https://wayfair-clone.vercel.app","https://twitchclone.vercel.app","https://netlify-hub.vercel.app",
+"https://googleclone.vercel.app","https://clone-ikea.vercel.app","https://quizlet-clone.vercel.app","https://clone-netflix.vercel.app",
+"https://linkedin-clone.vercel.app","https://airbnbclone.vercel.app","https://try-spotify.vercel.app","https://fake-youtube.vercel.app",
+"https://gptfree.vercel.app","https://free-gpt.vercel.app","https://clone-twitch.vercel.app","https://mycalendly.vercel.app",
+"https://twitch-clone.vercel.app","https://the-youtube.vercel.app","https://not-gemini.vercel.app","https://task-example.vercel.app",
+"https://fastfood.vercel.app","https://game-run.vercel.app","https://stock-play.vercel.app","https://sexgame.vercel.app",
+"https://sexygame.vercel.app","https://game-play.vercel.app","https://game-day.vercel.app","https://game-next.vercel.app",
+"https://sexy.vercel.app","https://sex.vercel.app","https://app.vercel.app","https://next-app.vercel.app",
+"https://app8.vercel.app","https://gameforge.vercel.app","https://quick-loop.vercel.app","https://stock-game.vercel.app"
+];
+
+function loadLocal() { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } }
+let HITS = loadLocal();
+const load = () => HITS;
+
+// RED PHONE: categories ------------------------------------------------
+//   CATS  = map { url -> category name }   (per-hit assignment)
+//   CATLIST = ordered list of category names the user can grow
+const CATS_KEY = "stumbler.cats.v1";
+const CATLIST_KEY = "stumbler.catlist.v1";
+const DEFAULT_CATS = ["Stumble", "Dictionary", "Clone", "Functional", "Broken",
+  "Redirect", "Placeholder", "Login", "Game", "Tool", "Shop", "Art", "Blog", "AI", "Foreign"];
+function loadCats() { try { return JSON.parse(localStorage.getItem(CATS_KEY) || "{}") || {}; } catch { return {}; } }
+function loadCatList() {
+  try { const a = JSON.parse(localStorage.getItem(CATLIST_KEY) || "null"); if (Array.isArray(a) && a.length) return a; } catch {}
+  return DEFAULT_CATS.slice();
+}
+let CATS = loadCats();
+let CATLIST = loadCatList();
+const saveCats = () => { try { localStorage.setItem(CATS_KEY, JSON.stringify(CATS)); } catch {} };
+const saveCatList = () => { try { localStorage.setItem(CATLIST_KEY, JSON.stringify(CATLIST)); } catch {} };
+let activeFilter = "All"; // RED PHONE: which category the list is filtered to
+let searchQ = "";         // RED PHONE: live url search text
+const PER_PAGE = 30;      // RED PHONE: kept-hits rows per page
+let page = 0;             // RED PHONE: current page index
+
+const catOf = (u) => CATS[u] || "Stumble";
+function ensureCat(name) {
+  if (!name) return;
+  const lc = name.toLowerCase();
+  if (CATLIST.some(c => c.toLowerCase() === lc)) return; // RED PHONE: case-insensitive, no doubles
+  CATLIST.push(name); saveCatList();
+}
+function setCat(u, name) { if (!u || !name) return; CATS[u] = name; ensureCat(name); saveCats(); }
+// RED PHONE: which category a mode's finds belong to
+const modeCat = () => (mode === "dict" ? "Dictionary" : mode === "clone" ? "Clone" : "Stumble");
+// RED PHONE: heuristic category for the seed / unknown urls
+// RED PHONE: known single-word vocabulary (dict words + stumble stems), used
+//   to tell a real single word from a smashed-together concept.
+let _wordset = null;
+function wordset() {
+  if (_wordset) return _wordset;
+  _wordset = new Set();
+  const add = (arr) => { try { for (const w of arr) { const s = String(w).toLowerCase(); if (/^[a-z]{2,}$/.test(s)) _wordset.add(s); } } catch {} };
+  add(DICT); add(BASE);
+  return _wordset;
+}
+function splitsIntoTwoWords(h) {
+  const ws = wordset();
+  for (let i = 2; i <= h.length - 2; i++) if (ws.has(h.slice(0, i)) && ws.has(h.slice(i))) return true;
+  return false;
+}
+// RED PHONE: category by URL SHAPE, not by the mode you found it in.
+//   Clone      -> clone markers / knockoff affixes / brand rips
+//   Dictionary -> a single real word (one token, letters only)
+//   Stumble    -> concept ideas: dashes, smashed-together words, digits/leet
+function guessCat(u) {
+  const h = u.replace(/^https?:\/\//, "").split(".")[0].toLowerCase();
+  if (/clone/.test(h)) return "Clone";
+  if (/(^|-)(fake|not|try|the)-/.test(h)) return "Clone";
+  if (/-(hub|x|react|next|demo)$/.test(h)) return "Clone";
+  if (/gpt/.test(h)) return "Clone";
+  if (h.includes("-") || /[0-9]/.test(h)) return "Stumble";   // multi-token or mangled/leet
+  if (wordset().has(h)) return "Dictionary";                   // known single word
+  if (splitsIntoTwoWords(h)) return "Stumble";                 // concatenated concept
+  return "Dictionary";                                          // lone token (brand/proper noun)
+}
+
+function save(l) {
+  // RED PHONE: dedupe (keep first-seen order), cap, mirror to localStorage
+  const seen = new Set(); const out = [];
+  for (const u of l) { if (u && !seen.has(u)) { seen.add(u); out.push(u); } }
+  HITS = out.slice(0, 1000);
+  try { localStorage.setItem(KEY, JSON.stringify(HITS)); } catch {}
+}
+
+// RED PHONE: cloud sync ------------------------------------------------
+let syncEl = null;
+const setSync = (t) => { if (syncEl) syncEl.textContent = t; };
+
+// RED PHONE: fold cloud items into local. Accepts BOTH old (plain url string)
+//   and new ({url,cat}) shapes so a frontend deployed before the backend, or a
+//   backend still returning strings, both keep working. Cloud cat wins on pull
+//   (local label edits push up immediately, so this converges).
+function applyCloud(items) {
+  const urls = [];
+  for (const it of items) {
+    if (typeof it === "string") {
+      urls.push(it);
+      if (!CATS[it]) setCat(it, guessCat(it));
+    } else if (it && it.url) {
+      urls.push(it.url);
+      if (it.cat) setCat(it.url, it.cat);
+      else if (!CATS[it.url]) setCat(it.url, guessCat(it.url));
+    }
+  }
+  return urls;
+}
+
+// RED PHONE: unsynced local keeps that failed to push -> survive pulls, retried
+function loadPending() { try { return JSON.parse(localStorage.getItem("stumbler.pending.v1") || "[]"); } catch { return []; } }
+function savePending(p) { try { localStorage.setItem("stumbler.pending.v1", JSON.stringify(p.slice(0, 200))); } catch {} }
+
+// RED PHONE: sync freshness -> the emblem shows how long since a real pull,
+//   so a stale phone stops falsely reading "synced" forever.
+let syncing = false, pushing = false, lastSyncAt = 0, syncState = "";
+function relTime(ts) {
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 60) return s + "s ago";
+  const m = Math.round(s / 60); if (m < 60) return m + "m ago";
+  return Math.round(m / 60) + "h ago";
+}
+function paintSync() {
+  const q = loadPending().length; // RED PHONE: items not yet confirmed in cloud
+  if (syncState === "syncing") setSync("\u2601 syncing\u2026");
+  else if (syncState === "saving") setSync("\u2601 saving\u2026");
+  else if (syncState === "offline") setSync(q ? "\u2601 offline \u00b7 " + q + " queued" : "\u2601 offline");
+  else if (syncState === "synced") setSync(q ? "\u21ba " + q + " unsynced" : "\u2601 synced \u00b7 " + relTime(lastSyncAt));
+  else if (syncState === "limit") setSync("\u2601 daily add limit reached");
+  else setSync("");
+}
+
+async function pullCloud(silent) {
+  if (syncing || pushing) return;      // RED PHONE: no overlapping pulls, none mid-push
+  syncing = true; if (!silent) { syncState = "syncing"; paintSync(); } // RED PHONE: background poll stays quiet
+  try {
+    const r = await fetch("/api/hits", { headers: { Accept: "application/json" } });
+    if (!r.ok) throw new Error("pull " + r.status); // RED PHONE: a 500 is NOT synced
+    const j = await r.json();
+    mergeTimes(j); // RED PHONE: pick up visits from other phones
+    const items = Array.isArray(j.hits) ? j.hits : [];
+    const cloudUrls = applyCloud(items);          // RED PHONE: cloud labels win
+    const pending = loadPending();
+    // RED PHONE: cloud is authoritative (so deletes elsewhere stick); only
+    //   unsynced local keeps (pending) survive. Items the cloud dropped vanish.
+    save([...cloudUrls, ...pending]); render();
+    if (!items.length) { await pushCloud(SEED); }       // RED PHONE: seed an empty cloud
+    else if (pending.length) { await pushCloud(pending, true); } // RED PHONE: flush unsynced
+    lastSyncAt = Date.now(); syncState = "synced"; paintSync();
+  } catch { syncState = "offline"; paintSync(); }
+  finally { syncing = false; }
+}
+
+async function pushCloud(urls, isRetry) {
+  urls = (Array.isArray(urls) ? urls : [urls]).filter(Boolean);
+  if (!urls.length) return;
+  if (!isRetry) { save([...urls, ...HITS]); render(); }   // RED PHONE: optimistic add
+  // RED PHONE: queue FIRST -> if the POST errors or 500s, the item is never lost
+  { const p = loadPending(); for (const u of urls) if (!p.includes(u)) p.push(u); savePending(p); }
+  pushing = true; syncState = "saving"; paintSync();
+  const hits = urls.map(u => ({ url: u, cat: catOf(u) }));
+  try {
+    const r = await fetch("/api/hits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ hits, urls }), // RED PHONE: hits=w/labels, urls=legacy fallback
+    });
+    if (r.status === 429) {
+      // RED PHONE: global daily cap hit -> drop these (don't retry forever), notify
+      savePending(loadPending().filter(u => !urls.includes(u)));
+      save(HITS.filter(u => !urls.includes(u))); render();
+      syncState = "limit"; paintSync();
+      return;
+    }
+    if (!r.ok) throw new Error("push " + r.status);       // RED PHONE: 500/403 -> keep queued
+    const j = await r.json();
+    if (!Array.isArray(j.hits)) throw new Error("bad push response");
+    mergeTimes(j); // RED PHONE: pick up firstSeen stamps + other-phone visits
+    // RED PHONE: confirmed in cloud -> clear these from the queue
+    const remaining = loadPending().filter(u => !urls.includes(u));
+    savePending(remaining);
+    const got = applyCloud(j.hits); save([...got, ...remaining]); render();
+    lastSyncAt = Date.now(); syncState = "synced"; paintSync();
+  } catch {
+    syncState = "offline"; paintSync();                    // RED PHONE: stays queued, retried later
+  } finally { pushing = false; }
+}
+
+// RED PHONE: machine liveness removed. Only human visits mark a url.
+
+// RED PHONE: proven stems from kept hits -> stumble feedback loop
+function stems() {
+  const s = [];
+  for (const u of load()) {
+    const host = u.replace(/^https?:\/\//,"").split(".")[0];
+    for (let part of host.split("-")) {
+      part = part.replace(/[0-9]+$/,"");
+      if (part.length >= 2) s.push(part);
+    }
+  }
+  return s;
+}
+const pick = (a) => a[Math.random()*a.length|0];
+function pickWord(proven, pool) {
+  return (proven.length && Math.random() < 0.45) ? pick(proven) : pick(pool);
+}
+
+// RED PHONE: numbered variants ONLY from saved vercel hosts.
+//   if base exists, a sibling like name2 / name+1 might too.
+function savedVercelHosts() {
+  return load()
+    .filter(u => SUFFIX_RE.test(u.replace(/^https?:\/\//, "")))
+    .map(u => u.replace(/^https?:\/\//, "").replace(SUFFIX_RE, ""))
+    .filter(Boolean);
+}
+function numberedFromSaved() {
+  const hosts = savedVercelHosts();
+  if (!hosts.length) return null;
+  let h = pick(hosts);
+  const m = h.match(/^(.*?)(\d+)$/);
+  if (m) return m[1] + (parseInt(m[2],10) + 1);   // increment existing number
+  return h + (2 + (Math.random()*7|0));            // else append 2..8
+}
+
+// RED PHONE: does this host read as a Clone? (mirrors guessCat's clone rules)
+//   Clones belong ONLY in the CLONES tab, so STUMBLE must never emit one.
+function looksClone(h) {
+  h = String(h).toLowerCase();
+  return /clone/.test(h) || /(^|-)(fake|not|try|the)-/.test(h) || /-(hub|x|react|next|demo)$/.test(h) || /gpt/.test(h);
+}
+// RED PHONE: stumble host -> app-word combo, one hyphen max, no number.
+//   Retries if it comes out clone-shaped, so STUMBLE stays out of Clone.
+function stumbleHost() {
+  for (let i = 0; i < 12; i++) {
+    if (Math.random() < 0.25) { const n = numberedFromSaved(); if (n && !looksClone(n)) return n; }
+    const p = stems(), a = pickWord(p, BASE), b = pickWord(p, BASE);
+    const h = Math.random() < 0.6 ? a + "-" + b : a + b;
+    if (!looksClone(h)) return h;
+  }
+  return "quick-loop"; // RED PHONE: safe fallback (never clone-shaped)
+}
+// RED PHONE: dictionary host -> next single word in order, wraps around
+function dictHost() {
+  const w = DICT[dictIdx];
+  dictIdx = (dictIdx + 1) % DICT.length;
+  try { localStorage.setItem(DIDX_KEY, String(dictIdx)); } catch {}
+  return w;
+}
+
+// RED PHONE: TOPIC word banks -> "stumble a topic". Curated so it works offline
+//   with no AI. Add a topic in one line: NAME:[words]. (An AI source can later
+//   feed this same map without any UI change.)
+const TOPICS = {
+  apple: ["itunes","icloud","iphone","ipad","mac","macbook","ios","siri","appstore","airpods","retina","ipod","imac","facetime","cupertino"],
+  aliens: ["ufo","roswell","grey","saucer","abduct","mothership","xeno","probe","contact","area51","martian","cosmic","invader","beacon","signal"],
+  frogs: ["tree","hopper","ribbit","tadpole","lily","croak","toad","pond","leap","pad","bullfrog","poison","dart","swamp","prince"],
+  coffee: ["bean","brew","espresso","latte","roast","mocha","barista","grind","drip","cappuccino","mug","cafe","arabica","pour","steam"],
+  retail: ["shop","store","cart","sale","checkout","outlet","deal","market","mall","aisle","register","coupon","stock","brand","bargain"],
+  space: ["nova","orbit","comet","nebula","galaxy","rocket","cosmos","lunar","stellar","meteor","void","quasar","astro","launch","saturn"],
+  crypto: ["chain","token","ledger","wallet","mint","stake","block","node","defi","satoshi","hash","coin","vault","dao","gas"],
+  music: ["beat","tempo","chord","synth","vinyl","track","remix","bass","melody","tune","studio","mixer","groove","sample","loop"],
+  cats: ["whisker","purr","kitten","paw","meow","feline","tabby","claw","catnip","mittens","tom","alley","lynx","prowl","nap"],
+  cars: ["turbo","drift","engine","garage","motor","chassis","nitro","wheel","coupe","torque","piston","exhaust","rally","gear","speed"],
+  food: ["crave","bite","snack","feast","recipe","chef","kitchen","plate","spice","grill","fresh","tasty","munch","dish","savory"],
+  games: ["quest","level","boss","pixel","arcade","loot","respawn","combo","spawn","guild","raid","score","player","arena","retro"],
+};
+const NAMES = ["jessica","mike","sarah","john","alex","emma","chris","kevin","laura","ryan","nina","omar","zoe","paul"];
+const FILLERS = ["name","app","portal","login","my","official","fan","store","zone","world","central","daily","live"];
+// RED PHONE: user-typed custom topics (offline, seed-word based) -> {name:[word]}
+function loadCustomTopics() { try { return JSON.parse(localStorage.getItem("stumbler.customtopics") || "{}"); } catch { return {}; } }
+let CUSTOM_TOPICS = loadCustomTopics();
+function saveCustomTopics() { try { localStorage.setItem("stumbler.customtopics", JSON.stringify(CUSTOM_TOPICS)); } catch {} }
+const topicBank = (t) => TOPICS[t] || CUSTOM_TOPICS[t] || [t];
+const topicWord = (t) => { const b = topicBank(t); return b[(Math.random() * b.length) | 0]; };
+const topicCat = (t) => t.charAt(0).toUpperCase() + t.slice(1); // RED PHONE: bucket name = topic
+
+// RED PHONE: topic-aware generators (mirror the three modes). Second word swaps
+//   to a filler when it collides, so single-word custom topics still vary.
+function stumbleTopicHost(t) {
+  for (let i = 0; i < 12; i++) {
+    const a = topicWord(t); let b = topicWord(t); if (b === a) b = pick(FILLERS);
+    const r = Math.random();
+    let h;
+    if (r < 0.28) h = a + "-" + b;
+    else if (r < 0.48) h = pick(NAMES) + "s-" + a;             // jessicas-icloud
+    else if (r < 0.68) h = a + "-" + pick(FILLERS);
+    else if (r < 0.84) h = a + b;
+    else h = a + "-" + pick(FILLERS) + "-" + (2 + (Math.random() * 7 | 0));
+    if (!looksClone(h)) return h; // RED PHONE: keep topic-stumbles out of Clone
+  }
+  return topicWord(t) + "-" + pick(FILLERS);
+}
+function dictTopicHost(t) {
+  const a = topicWord(t), b = topicWord(t);
+  return (Math.random() < 0.6 || b === a) ? a : a + b;      // treefrogs
+}
+function cloneTopicHost(t) {
+  const a = topicWord(t), r = Math.random();
+  if (r < 0.4) return a + "-clone";
+  if (r < 0.6) return "clone-" + a;
+  if (r < 0.8) return a + "-" + pick(SUF);
+  return a + "app";
+}
+
+// RED PHONE: url helpers -------------------------------------------
+// RED PHONE: platforms to stumble. Add a new host by adding ONE line here;
+//   the picker, validation, completion and URL display all follow automatically.
+const PLATFORMS = [
+  { id: "vercel", label: "VERCEL", suffix: "vercel.app" },
+  { id: "cloudflare", label: "CLOUDFLARE", suffix: "pages.dev" },
+  { id: "netlify", label: "NETLIFY", suffix: "netlify.app" },
+];
+const PLATFORM_SUFFIXES = PLATFORMS.map(p => p.suffix);
+const SUFFIX_RE = new RegExp("\\.(?:" + PLATFORM_SUFFIXES.map(s => s.replace(/\./g, "\\.")).join("|") + ")$", "i");
+let activePlatform = (() => { try { return localStorage.getItem("stumbler.platform") || "all"; } catch { return "all"; } })();
+// RED PHONE: suffix for a stumble -> picked platform, or a random one on ALL
+function stumbleSuffix() {
+  const p = PLATFORMS.find(x => x.id === activePlatform);
+  return p ? p.suffix : PLATFORMS[(Math.random() * PLATFORMS.length) | 0].suffix;
+}
+// RED PHONE: bare typed word completes to the picked platform, else vercel on ALL
+function completeSuffix() {
+  const p = PLATFORMS.find(x => x.id === activePlatform);
+  return p ? p.suffix : "vercel.app";
+}
+
+function normalize(raw) {
+  let v = (raw || "").trim();
+  if (!v) return "";
+  v = v.replace(/^https?:\/\//i, "");
+  const slash = v.indexOf("/");
+  let host = (slash === -1 ? v : v.slice(0, slash)).replace(/\/+$/, "");
+  const rest = slash === -1 ? "" : v.slice(slash);
+  // RED PHONE: bare label (e.g. "potato") -> complete to a platform host
+  if (!SUFFIX_RE.test(host) && /^[a-z0-9][a-z0-9-]*$/i.test(host)) host = host + "." + completeSuffix();
+  try { return new URL("https://" + host + rest).href.replace(/\/$/, ""); } catch { return ""; }
+}
+// RED PHONE: accept any known platform host (vercel.app, pages.dev, ...)
+function isPlatformUrl(u) {
+  try { const h = new URL(u).hostname.toLowerCase(); return PLATFORM_SUFFIXES.some(s => h === s || h.endsWith("." + s)); }
+  catch { return false; }
+}
+// RED PHONE: hardcoded keyword ban list. Manual moderation by the operator ->
+//   any url/topic containing one of these substrings is silently refused.
+//   Add or remove words here; matching is case-insensitive on the raw text.
+//   (Client-side only, so it deters rather than enforces; that's by design.)
+const BANNED = [
+  "porn","xxx","xvideos","xhamster","pornhub","onlyfans","nsfw","hentai",
+  "cp","childp","preteen","loli","shota","rape","incest","bestial","zoophil",
+  "nazi","hitler","kkk","isis","terror","behead","gore","liveleak",
+  "nigger","faggot","kike","spic","chink","tranny","retard",
+  "suicide","selfharm","self-harm","kill-yourself","kys",
+  "cannibal","snuff","necro","molest","pedophile","pedo","csam"
+];
+function isBanned(text) {
+  const t = String(text || "").toLowerCase();
+  return BANNED.some(w => t.includes(w));
+}
+const urlField = document.getElementById("url");
+const posEl = document.getElementById("pos");
+// RED PHONE: per-device visit log -> age stamp on each row ("11h","43d", cap 99d)
+const VKEY = "stumbler.visited.v1";
+function loadVisited() { try { return JSON.parse(localStorage.getItem(VKEY) || "{}"); } catch { return {}; } }
+let VISITED = loadVisited();
+function saveVisited() { try { localStorage.setItem(VKEY, JSON.stringify(VISITED)); } catch {} }
+function markVisited(u) {
+  if (!u) return;
+  VISITED[u] = Date.now(); saveVisited(); // RED PHONE: local cache
+  // RED PHONE: propagate the visit so age is fresh on every phone
+  try { fetch("/api/hits", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "visit", url: u }) }); } catch {}
+}
+// RED PHONE: fold cloud last-visited times into local (newest wins)
+function mergeTimes(j) {
+  if (!j || !j.times) return;
+  let ch = false;
+  for (const u in j.times) { const l = j.times[u] && j.times[u].l; if (l && l > (VISITED[u] || 0)) { VISITED[u] = l; ch = true; } }
+  if (ch) saveVisited();
+}
+function ageLabel(u) {
+  const ts = VISITED[u]; if (!ts) return "";
+  const mins = (Date.now() - ts) / 60000;
+  if (mins < 1) return "now";
+  if (mins < 60) return Math.floor(mins) + "m"; // RED PHONE: minutes tier
+  const h = mins / 60;
+  if (h < 24) return Math.floor(h) + "h";
+  return Math.min(Math.floor(h / 24), 99) + "d"; // RED PHONE: never past 99d
+}
+const openUrl = (u) => { if (!u) return; markVisited(u); window.open(u, "_blank", "noopener"); };
+
+function updatePos() {
+  if (!posEl) return;
+  if (mode === "dict") posEl.textContent = "WORD " + (dictIdx + 1) + " / " + DICT.length + " \u00b7 NEXT: " + DICT[dictIdx];
+  else posEl.textContent = "";
+}
+
+// RED PHONE: render kept hits --------------------------------------
+function renderChips() {
+  const bar = document.getElementById("filters");
+  bar.innerHTML = "";
+  const names = ["All", ...CATLIST];
+  for (const name of names) {
+    const b = document.createElement("button");
+    b.className = "chip" + (activeFilter === name ? " active" : "");
+    b.textContent = name;
+    b.onclick = () => { activeFilter = name; page = 0; render(); };
+    bar.appendChild(b);
+  }
+  const add = document.createElement("button");
+  add.className = "chip add"; add.textContent = "+";
+  add.onclick = () => {
+    const name = (prompt("New category name") || "").trim();
+    if (name) { ensureCat(name); activeFilter = name; page = 0; render(); }
+  };
+  bar.appendChild(add);
+  if (typeof fillKeepCat === "function") fillKeepCat(); // RED PHONE: keep picker tracks CATLIST
+}
+
+function render() {
+  renderChips();
+  const all = load();
+  let list = activeFilter === "All" ? all : all.filter(u => catOf(u) === activeFilter);
+  if (searchQ) list = list.filter(u => u.toLowerCase().includes(searchQ)); // RED PHONE: url search
+  const ul = document.getElementById("hits");
+  document.getElementById("empty").style.display = all.length ? "none" : "block";
+
+  // RED PHONE: clamp page to range, then slice to the current 30
+  const pages = Math.max(1, Math.ceil(list.length / PER_PAGE));
+  if (page >= pages) page = pages - 1;
+  if (page < 0) page = 0;
+  const start = page * PER_PAGE;
+  const slice = list.slice(start, start + PER_PAGE);
+
+  ul.innerHTML = "";
+  for (const u of slice) {
+    const li = document.createElement("li");
+    // RED PHONE: left age stamp (replaces the old carrot) -> time since last visit
+    const age = document.createElement("span");
+    age.className = "age";
+    const lbl = ageLabel(u);
+    age.textContent = lbl || "\u2013"; // RED PHONE: neutral dash until a human opens it
+    const days = (lbl.endsWith("d")) ? parseInt(lbl, 10) : 0;
+    if (days >= 99) age.classList.add("old");      // RED PHONE: capped + red
+    else if (days >= 30) age.classList.add("warn"); // RED PHONE: getting stale
+    const a = document.createElement("a");
+    a.href = u; a.target = "_blank"; a.rel = "noopener";
+    // RED PHONE: subdomain on top, platform suffix (.vercel.app / .pages.dev) faint gray below
+    const host = u.replace(/^https?:\/\//, "");
+    const m = host.match(SUFFIX_RE);
+    const tld = m ? m[0] : "";
+    const sub = tld ? host.slice(0, host.length - tld.length) : host;
+    a.innerHTML = '<span class="sub">' + escHtml(sub) + '</span>' +
+      '<span class="tldrow"><span class="tld">' + escHtml(tld) + '</span><span class="x">&#8599;</span></span>';
+    a.addEventListener("click", () => { markVisited(u); setTimeout(render, 60); }); // RED PHONE: log the visit, refresh age
+    // RED PHONE: per-row category picker -> reassign on change
+    const sel = document.createElement("select");
+    sel.className = "cat";
+    for (const c of CATLIST) {
+      const o = document.createElement("option");
+      o.value = c; o.textContent = c; if (c === catOf(u)) o.selected = true;
+      sel.appendChild(o);
+    }
+    sel.onchange = () => { setCat(u, sel.value); render(); pushCloud([u]); }; // RED PHONE: sync the label change
+    li.appendChild(age);
+    li.appendChild(a);
+    li.appendChild(sel);
+    ul.appendChild(li);
+  }
+  renderPager(list.length, pages);
+  // RED PHONE: HUD stat line, game-style
+  const hud = document.getElementById("hud");
+  if (hud) {
+    const ml = { stumble: "STUMBLE", dict: "DICTIONARY", clone: "CLONES" }[mode] || mode.toUpperCase();
+    const pl = (PLATFORMS.find(p => p.id === activePlatform) || { label: "ALL" }).label;
+    hud.innerHTML = "<span>MODE <b>" + ml + "</b></span>" +
+      "<span>ON <b>" + pl + "</b></span>" +
+      (activeTopic ? "<span>TOPIC <b>" + escHtml(topicCat(activeTopic)) + "</b></span>" : "");
+  }
+}
+
+// RED PHONE: prev / page x of y / next -> hidden when it all fits on one page
+function renderPager(total, pages) {
+  const bar = document.getElementById("pager");
+  bar.innerHTML = "";
+  if (pages <= 1) return;
+  const prev = document.createElement("button");
+  prev.textContent = "\u2039 prev"; prev.disabled = page <= 0;
+  prev.onclick = () => { if (page > 0) { page--; render(); window.scrollTo(0, document.getElementById("hits").offsetTop); } };
+  const info = document.createElement("span");
+  info.className = "pinfo";
+  const from = page * PER_PAGE + 1, to = Math.min(total, (page + 1) * PER_PAGE);
+  info.textContent = from + "\u2013" + to + " of " + total;
+  const next = document.createElement("button");
+  next.textContent = "next \u203a"; next.disabled = page >= pages - 1;
+  next.onclick = () => { if (page < pages - 1) { page++; render(); window.scrollTo(0, document.getElementById("hits").offsetTop); } };
+  bar.appendChild(prev); bar.appendChild(info); bar.appendChild(next);
+}
+function addToHits(u, cat) {
+  if (!u || !isPlatformUrl(u)) return; // RED PHONE: known platform only
+  if (isBanned(u)) return;          // RED PHONE: banned keyword -> refuse
+  setCat(u, cat || guessCat(u)); // RED PHONE: shape-based tag before syncing
+  markVisited(u);                // RED PHONE: discovered/checked now
+  pushCloud([u]); // RED PHONE: local + cloud
+}
+
+// RED PHONE: mode tabs ---------------------------------------------
+function setMode(m) {
+  mode = m;
+  try { localStorage.setItem(MODE_KEY, m); } catch {}
+  document.getElementById("tab-stumble").classList.toggle("active", m === "stumble");
+  document.getElementById("tab-dict").classList.toggle("active", m === "dict");
+  document.getElementById("tab-clone").classList.toggle("active", m === "clone");
+  const go = document.getElementById("go"); if (go) go.textContent = m === "dict" ? "DICTIONARY" : m === "clone" ? "CLONES" : "STUMBLE";
+  updatePos();
+  render(); // RED PHONE: keep HUD mode label in sync
+  if (typeof clearLive === "function") { clearLive(); refillLive(); } // RED PHONE: queue matches mode
+}
+document.getElementById("tab-stumble").onclick = () => setMode("stumble");
+document.getElementById("tab-dict").onclick = () => setMode("dict");
+document.getElementById("tab-clone").onclick = () => setMode("clone");
+
+// RED PHONE: actions -----------------------------------------------
+// RED PHONE: the keep button IS the category dropdown. Pick a category = save
+//   there. Face always reads "keep"; the shape-guess sits at the top.
+const keepEl = document.getElementById("keep");
+function fillKeepCat(guess) {
+  if (!keepEl) return;
+  keepEl.innerHTML = "";
+  const face = document.createElement("option");
+  face.value = ""; face.textContent = "\u2605 keep"; keepEl.appendChild(face);
+  const ordered = [];
+  if (guess && CATLIST.includes(guess)) ordered.push(guess);
+  for (const c of CATLIST) if (c !== guess) ordered.push(c);
+  for (const c of ordered) {
+    const o = document.createElement("option");
+    o.value = c; o.textContent = (c === guess) ? c + "  \u25c4 guess" : c;
+    keepEl.appendChild(o);
+  }
+  keepEl.selectedIndex = 0;
+}
+function defaultKeepCat(u) { if (u) fillKeepCat(guessCat(u)); } // RED PHONE: guess to the top
+if (keepEl) keepEl.onchange = () => {
+  const cat = keepEl.value;
+  if (cat) addToHits(normalize(urlField.value), cat); // RED PHONE: save to chosen bucket
+  keepEl.selectedIndex = 0; // RED PHONE: reset face to "keep"
+};
+
+// RED PHONE: topic picker -> "stumble a topic". Drives whichever mode is active
+//   and files kept hits under the topic's own bucket.
+const topicEl = document.getElementById("topic");
+let activeTopic = (() => { try { return localStorage.getItem("stumbler.topic") || ""; } catch { return ""; } })();
+function fillTopics() {
+  if (!topicEl) return;
+  topicEl.innerHTML = "";
+  const none = document.createElement("option");
+  none.value = ""; none.textContent = "\u25c7 topic"; topicEl.appendChild(none);
+  for (const t of [...Object.keys(TOPICS), ...Object.keys(CUSTOM_TOPICS)]) {
+    const o = document.createElement("option");
+    o.value = t; o.textContent = topicCat(t) + (CUSTOM_TOPICS[t] ? " \u2217" : "");
+    if (t === activeTopic) o.selected = true;
+    topicEl.appendChild(o);
+  }
+  const cust = document.createElement("option");
+  cust.value = "__custom__"; cust.textContent = "+ custom topic\u2026"; topicEl.appendChild(cust);
+}
+if (topicEl) topicEl.onchange = () => {
+  if (topicEl.value === "__custom__") {
+    // RED PHONE: reveal the in-page text field (prompt() is blocked in sandboxes)
+    topicEl.value = activeTopic;
+    const row = document.getElementById("customRow");
+    if (row) { row.hidden = false; const inp = document.getElementById("customTopic"); if (inp) { inp.value = ""; inp.focus(); } }
+    return;
+  }
+  activeTopic = topicEl.value;
+  try { localStorage.setItem("stumbler.topic", activeTopic); } catch {}
+  if (activeTopic) ensureCat(topicCat(activeTopic)); // RED PHONE: make the bucket exist
+  fillTopics();
+  render();
+  clearLive(); refillLive(); // RED PHONE: queue matches topic
+};
+// RED PHONE: commit / cancel a typed custom topic
+function commitCustomTopic() {
+  const inp = document.getElementById("customTopic"), row = document.getElementById("customRow");
+  const raw = ((inp && inp.value) || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+  if (raw && !isBanned(raw)) { // RED PHONE: banned keyword -> silently drop
+    if (!TOPICS[raw] && !CUSTOM_TOPICS[raw]) {
+      CUSTOM_TOPICS[raw] = [raw]; saveCustomTopics();
+      notifyNewTopic(raw); // RED PHONE: server emails you on each new topic
+    }
+    activeTopic = raw;
+    try { localStorage.setItem("stumbler.topic", activeTopic); } catch {}
+    ensureCat(topicCat(activeTopic));
+    fillTopics(); render();
+  }
+  if (row) row.hidden = true;
+}
+// RED PHONE: fire-and-forget ping to the server so it can email "new topic: X".
+//   No-ops cleanly until /api/notify is deployed.
+function notifyNewTopic(name) {
+  try {
+    fetch("/api/notify", { method: "POST", keepalive: true,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "topic", name }) });
+  } catch {}
+}
+(function () {
+  const add = document.getElementById("customAdd"), cancel = document.getElementById("customCancel"),
+        inp = document.getElementById("customTopic"), row = document.getElementById("customRow");
+  if (add) add.onclick = commitCustomTopic;
+  if (cancel) cancel.onclick = () => { if (row) row.hidden = true; };
+  if (inp) inp.addEventListener("keydown", (e) => { if (e.key === "Enter") commitCustomTopic(); });
+})();
+fillTopics();
+if (activeTopic) ensureCat(topicCat(activeTopic)); // RED PHONE: restore persisted topic bucket
+
+// RED PHONE: one place that generates the next candidate host for the active
+//   mode + topic. topicBank() covers built-in AND custom topics.
+function nextHost() {
+  const t = activeTopic;
+  if (t) return mode === "dict" ? dictTopicHost(t) : mode === "clone" ? cloneTopicHost(t) : stumbleTopicHost(t);
+  return mode === "dict" ? dictHost() : mode === "clone" ? cloneHost() : stumbleHost();
+}
+// RED PHONE: background live-verify queue. Pre-checks candidates via /api/live
+//   so STUMBLE can hand you a verified-200 site and skip 404s. DICTIONARY is
+//   excluded (its walk is sequential; pre-generating would consume the order).
+//   Falls back to instant local generation whenever the queue is empty or the
+//   endpoint isn't deployed.
+let liveQueue = [];
+let refilling = false;
+function clearLive() { liveQueue = []; }
+async function refillLive() {
+  if (refilling || mode === "dict") return;
+  refilling = true;
+  let tries = 0;
+  try {
+    while (liveQueue.length < 2 && tries < 8) {
+      tries++;
+      const host = nextHost() + "." + stumbleSuffix();
+      if (isBanned(host)) continue;
+      const r = await fetch("/api/live?host=" + encodeURIComponent(host));
+      const j = await r.json();
+      if (j && j.live) liveQueue.push("https://" + host);
+    }
+  } catch { /* endpoint absent -> rely on local fallback */ }
+  finally { refilling = false; }
+}
+
+// RED PHONE: platform picker -> ALL + each platform. Drives the stumble suffix.
+const platformEl = document.getElementById("platform");
+function fillPlatforms() {
+  if (!platformEl) return;
+  platformEl.innerHTML = "";
+  const all = document.createElement("option");
+  all.value = "all"; all.textContent = "ALL"; if (activePlatform === "all") all.selected = true;
+  platformEl.appendChild(all);
+  for (const p of PLATFORMS) {
+    const o = document.createElement("option");
+    o.value = p.id; o.textContent = p.label; if (p.id === activePlatform) o.selected = true;
+    platformEl.appendChild(o);
+  }
+}
+if (platformEl) platformEl.onchange = () => {
+  activePlatform = platformEl.value;
+  try { localStorage.setItem("stumbler.platform", activePlatform); } catch {}
+  render();
+  clearLive(); refillLive(); // RED PHONE: queue matches platform
+};
+fillPlatforms();
+
+document.getElementById("go").onclick = () => {
+  const t = activeTopic;
+  // RED PHONE: serve a pre-verified live one when we have it, else generate now
+  let u = (mode !== "dict" && liveQueue.length) ? liveQueue.shift() : ("https://" + nextHost() + "." + stumbleSuffix());
+  urlField.value = u;
+  if (t) fillKeepCat(topicCat(t)); else defaultKeepCat(u); // RED PHONE: topic hit files under topic
+  openUrl(u); updatePos();
+  refillLive(); // RED PHONE: top the queue back up in the background
+};
+urlField.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { const u = normalize(urlField.value); if (u) { urlField.value = u; if (activeTopic) fillKeepCat(topicCat(activeTopic)); else defaultKeepCat(u); openUrl(u); } }
+});
+
+const manual = document.getElementById("manual");
+const addCat = () => (activeFilter !== "All" ? activeFilter : null); // RED PHONE: chosen filter, else shape-based
+// RED PHONE: only accept *.vercel.app in the paste field; reject anything else
+function tryManualAdd() {
+  const u = normalize(manual.value);
+  if (!u || !isPlatformUrl(u)) {
+    manual.classList.add("invalid");
+    manual.setAttribute("placeholder", "vercel.app urls only");
+    setTimeout(() => manual.classList.remove("invalid"), 1500);
+    return;
+  }
+  addToHits(u, addCat()); manual.value = "";
+}
+document.getElementById("addbtn").onclick = tryManualAdd;
+manual.addEventListener("keydown", (e) => { if (e.key === "Enter") tryManualAdd(); });
+manual.addEventListener("input", () => manual.classList.remove("invalid"));
+(function () { const c = document.getElementById("manualClear"); if (c) c.onclick = () => { manual.value = ""; manual.classList.remove("invalid"); manual.setAttribute("placeholder", "paste a url you found\u2026"); }; })();
+
+// RED PHONE: export ------------------------------------------------
+document.getElementById("exportbtn").onclick = () => {
+  // RED PHONE: export url + category so tags survive export -> import
+  const data = load().map(u => ({ url: u, cat: catOf(u) }));
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const d = new Date().toISOString().slice(0,10).replace(/-/g,"");
+  a.href = url; a.download = "stumbler-hits-" + d + ".json";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+// RED PHONE: upload ------------------------------------------------
+const fileInput = document.getElementById("file");
+document.getElementById("uploadbtn").onclick = () => fileInput.click();
+fileInput.addEventListener("change", () => {
+  const f = fileInput.files && fileInput.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    let incoming = [];
+    const txt = String(reader.result || "");
+    try { const j = JSON.parse(txt); if (Array.isArray(j)) incoming = j; } catch {}
+    if (!incoming.length) incoming = txt.split(/\r?\n/);
+    // RED PHONE: accept [{url,cat}], ["url"], or newline text -> restore tags when present
+    const urls = [];
+    for (const item of incoming) {
+      let u, c;
+      if (item && typeof item === "object") { u = normalize(item.url); c = item.cat; }
+      else { u = normalize(item); }
+      if (!u || !isPlatformUrl(u)) continue; // RED PHONE: known platform only
+      urls.push(u);
+      if (!VISITED[u]) markVisited(u); // RED PHONE: stamp new uploads
+      // RED PHONE: keep custom labels (Sexy, Russian, Broken...), re-shape the auto trio
+      if (c && !["Stumble", "Dictionary", "Clone"].includes(c)) setCat(u, c);
+      else setCat(u, guessCat(u));
+    }
+    pushCloud(urls); fileInput.value = ""; // RED PHONE: uploads go to the cloud too
+  };
+  reader.readAsText(f);
+});
+
+syncEl = document.getElementById("sync");
+// RED PHONE: kept-hits drawer open/close
+(function () {
+  const drawer = document.getElementById("drawer");
+  const scrim = document.getElementById("scrim");
+  const openMenu = () => { drawer.classList.add("open"); scrim.classList.add("open"); drawer.setAttribute("aria-hidden", "false"); pullCloud(); }; // RED PHONE: refresh on open
+  const closeMenu = () => { drawer.classList.remove("open"); scrim.classList.remove("open"); drawer.setAttribute("aria-hidden", "true"); };
+  document.getElementById("menu").onclick = openMenu;
+  document.getElementById("menuClose").onclick = closeMenu;
+  scrim.onclick = closeMenu;
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+})();
+
+// RED PHONE: nested topics section toggle (declutters the main screen)
+(function () {
+  const t = document.getElementById("topicsToggle"), b = document.getElementById("topicsBody");
+  if (t && b) t.onclick = () => { const open = b.hidden; b.hidden = !open; t.classList.toggle("open", open); };
+})();
+// RED PHONE: nested categories section toggle (tucks the filter chips away)
+(function () {
+  const t = document.getElementById("catsToggle"), b = document.getElementById("catsBody");
+  if (t && b) t.onclick = () => { const open = b.hidden; b.hidden = !open; t.classList.toggle("open", open); };
+})();
+
+// RED PHONE: about popup open/close
+(function () {
+  const a = document.getElementById("about"), s = document.getElementById("aboutScrim");
+  if (!a || !s) return;
+  const open = () => { a.classList.add("open"); s.classList.add("open"); a.setAttribute("aria-hidden", "false"); };
+  const close = () => { a.classList.remove("open"); s.classList.remove("open"); a.setAttribute("aria-hidden", "true"); };
+  const btn = document.getElementById("info"); if (btn) btn.onclick = open;
+  const x = document.getElementById("aboutClose"); if (x) x.onclick = close;
+  s.onclick = close;
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+})();
+
+// RED PHONE: category donut chart
+const CHART_COLORS = ["#b23a2b","#a5701a","#3f7d52","#6c5f49","#c08a2e","#4a6a7a",
+  "#8c2c20","#5a7d6a","#9a4a2a","#7a6a3a","#a56a5a","#6a5a7a","#7d7a3f","#b5731d"];
+function escHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+function renderStats() {
+  const body = document.getElementById("statsBody"); if (!body) return;
+  const all = load();
+  const counts = {};
+  for (const u of all) { const c = catOf(u); counts[c] = (counts[c] || 0) + 1; }
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  const total = all.length;
+  if (!total) { body.innerHTML = "<p>no kept hits yet</p>"; return; }
+  const r = 54, cx = 70, cy = 70, sw = 26, C = 2 * Math.PI * r;
+  let off = 0, arcs = "";
+  entries.forEach(([, n], i) => {
+    const len = (n / total) * C, col = CHART_COLORS[i % CHART_COLORS.length];
+    arcs += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + col +
+      '" stroke-width="' + sw + '" stroke-dasharray="' + len + ' ' + (C - len) +
+      '" stroke-dashoffset="' + (-off) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"/>';
+    off += len;
+  });
+  const svg = '<svg viewBox="0 0 140 140" width="150" height="150" class="donut">' + arcs +
+    '<text x="70" y="66" text-anchor="middle" class="dt-num">' + total + '</text>' +
+    '<text x="70" y="82" text-anchor="middle" class="dt-lbl">HITS</text></svg>';
+  let leg = '<ul class="legend">';
+  entries.forEach(([name, n], i) => {
+    const col = CHART_COLORS[i % CHART_COLORS.length], pct = Math.round(n / total * 100);
+    leg += '<li><span class="sw" style="background:' + col + '"></span><span class="ln">' +
+      escHtml(name) + '</span><span class="lc">' + n + " \u00b7 " + pct + '%</span></li>';
+  });
+  body.innerHTML = svg + leg + "</ul>";
+}
+// RED PHONE: stats popup open/close
+(function () {
+  const p = document.getElementById("statsPop"), s = document.getElementById("statsScrim");
+  if (!p || !s) return;
+  const open = () => { renderStats(); p.classList.add("open"); s.classList.add("open"); p.setAttribute("aria-hidden", "false"); };
+  const close = () => { p.classList.remove("open"); s.classList.remove("open"); p.setAttribute("aria-hidden", "true"); };
+  const btn = document.getElementById("statsBtn"); if (btn) btn.onclick = open;
+  const x = document.getElementById("statsClose"); if (x) x.onclick = close;
+  s.onclick = close;
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+})();
+// RED PHONE: merge SEED in once per version, even if HITS already has data
+//   (dedupe makes this safe). Bump SEED_VER whenever the SEED list changes.
+const SEED_VER = "v4-160-cats";
+let seededVer = null; try { seededVer = localStorage.getItem("stumbler.seedver"); } catch {}
+if (seededVer !== SEED_VER) {
+  save([...SEED, ...HITS]);
+  for (const u of SEED) { if (!CATS[u]) setCat(u, guessCat(u)); } // RED PHONE: sort the seed into Clone/Stumble
+  try { localStorage.setItem("stumbler.seedver", SEED_VER); } catch {}
+}
+for (const c of DEFAULT_CATS) ensureCat(c); // RED PHONE: merge in topic categories
+// RED PHONE: one-time collapse of case-duplicate chips (broken vs Broken).
+//   Keep first-seen casing, remap affected hits, sync the corrections up.
+if (localStorage.getItem("stumbler.catdedupe") !== "v1") {
+  const canon = {}; const cleaned = [];
+  for (const c of CATLIST) { const lc = c.toLowerCase(); if (!(lc in canon)) { canon[lc] = c; cleaned.push(c); } }
+  CATLIST = cleaned; saveCatList();
+  const changed = [];
+  for (const u in CATS) { const cn = canon[String(CATS[u]).toLowerCase()]; if (cn && cn !== CATS[u]) { CATS[u] = cn; changed.push(u); } }
+  saveCats();
+  try { localStorage.setItem("stumbler.catdedupe", "v1"); } catch {}
+  if (changed.length) pushCloud(changed);
+}
+// RED PHONE: one-time re-sort of the auto trio by url shape. Custom labels
+//   (Sexy, Russian, Broken, ...) are left untouched. Bump RESORT_VER to redo.
+const RESORT_VER = "v1-shape";
+let resortVer = null; try { resortVer = localStorage.getItem("stumbler.resortver"); } catch {}
+if (resortVer !== RESORT_VER) {
+  const AUTO = new Set(["Stumble", "Dictionary", "Clone"]);
+  const changed = [];
+  for (const u of HITS) {
+    const cur = catOf(u);
+    if (AUTO.has(cur)) { const g = guessCat(u); if (g !== cur) { setCat(u, g); changed.push(u); } }
+  }
+  try { localStorage.setItem("stumbler.resortver", RESORT_VER); } catch {}
+  if (changed.length) pushCloud(changed); // RED PHONE: sync corrected labels
+}
+setMode(mode);
+// RED PHONE: version tag
+const APP_VERSION = "3.9";
+const verEl = document.getElementById("ver"); if (verEl) verEl.textContent = "v" + APP_VERSION;
+// RED PHONE: NO baseline stamp. Age is set ONLY by a real human tap. Unvisited
+//   urls show a neutral dash until someone actually opens them.
+render();
+pullCloud(); // RED PHONE: merge in the shared cloud list (and seed it if empty)
+refillLive(); // RED PHONE: begin pre-verifying live candidates in the background
+// RED PHONE: live url search
+const searchEl = document.getElementById("search");
+if (searchEl) searchEl.oninput = () => { searchQ = searchEl.value.trim().toLowerCase(); page = 0; render(); };
+
+// RED PHONE: keep every phone converged. Manual triggers are visible; the
+//   background poll is SILENT (no blip) and only updates the "Xs ago" readout.
+if (syncEl) { syncEl.style.cursor = "pointer"; syncEl.title = "tap to refresh"; syncEl.onclick = () => pullCloud(); }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) pullCloud(); }); // RED PHONE: refresh when the phone comes back
+setInterval(() => { if (!document.hidden) pullCloud(true); }, 30000); // RED PHONE: silent background poll
+setInterval(paintSync, 5000); // RED PHONE: tick the "synced Xs ago" readout
+</script>
+  <!-- =====================================================================
+       MOHAVE TECHNOLOGY GROUP // CREATOR SEAL
+       Drop this ONE block into any HTML page, anywhere before </body>.
+       The only thing you edit is the CONFIG object on the next few lines.
+       ===================================================================== -->
+  <script>
+  (function () {
+
+    /* ---------- CONFIG: the only part you change ---------- */
+    var CONFIG = {
+      org:      "Mohave Technology Group",
+      monogram: "MTG",                       // shown in the center of the seal
+      mission:  "Practical software and hardware, built in the field.",
+      github:   "https://github.com/sudosilo",
+      linkedin: "https://www.linkedin.com/in/dicktemple"
+    };
+    /* ----------------------------------------------------- */
+
+
+    /* ---------- LAYER 1: the signature pressed into the source ----------
+       This runs once and writes your identity into the page head so that
+       anyone viewing source, and any machine reading the page, can find
+       the maker even if the footer is removed. */
+    var head = document.head || document.getElementsByTagName("head")[0];
+
+    // A plain comment banner, visible in View Source.
+    head.appendChild(document.createComment(
+      " Made by " + CONFIG.org + " // " + CONFIG.github + " // " + CONFIG.linkedin + " "
+    ));
+
+    // Standard "author" tag set to the group, not a personal name.
+    var metaAuthor = document.createElement("meta");
+    metaAuthor.setAttribute("name", "author");
+    metaAuthor.setAttribute("content", CONFIG.org);
+    head.appendChild(metaAuthor);
+
+    // rel="me" links: the web standard for saying "these profiles are mine".
+    [CONFIG.github, CONFIG.linkedin].forEach(function (url) {
+      var l = document.createElement("link");
+      l.setAttribute("rel", "me");
+      l.setAttribute("href", url);
+      head.appendChild(l);
+    });
+
+    // Structured data block, so search engines and crawlers can read it.
+    var ld = document.createElement("script");
+    ld.type = "application/ld+json";
+    ld.textContent = JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": CONFIG.org,
+      "sameAs": [CONFIG.github, CONFIG.linkedin]
+    });
+    head.appendChild(ld);
+
+
+    /* ---------- LAYER 2: the visible seal ---------- */
+
+    // The look of the seal. All self contained, no fonts to download.
+    var css = ''
+      + '.mtg-seal{box-sizing:border-box;width:100%;background:#efe9da;'
+      + 'border-top:1px solid #cabfa3;color:#2b2620;'
+      + 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;'
+      + 'padding:18px 20px;display:flex;flex-direction:column;align-items:center;gap:12px;}'
+      + '.mtg-seal-row{display:flex;align-items:center;gap:14px;}'
+      + '.mtg-seal-btn{background:none;border:0;padding:0;margin:0;cursor:pointer;'
+      + 'display:flex;align-items:center;gap:14px;color:inherit;font:inherit;}'
+      + '.mtg-seal-svg{display:block;transition:transform .18s ease;}'
+      + '.mtg-seal.open .mtg-seal-svg{transform:scale(.94);}'
+      + '.mtg-seal-label{text-align:left;line-height:1.3;}'
+      + '.mtg-seal-org{font-family:Georgia,"Times New Roman",serif;font-size:14px;'
+      + 'letter-spacing:.3px;color:#2b2620;}'
+      + '.mtg-seal-ask{font-size:12px;color:#7a2e28;text-decoration:underline;}'
+      + '.mtg-seal-panel{overflow:hidden;max-height:0;opacity:0;'
+      + 'transition:max-height .25s ease,opacity .25s ease;width:100%;max-width:360px;}'
+      + '.mtg-seal.open .mtg-seal-panel{max-height:200px;opacity:1;}'
+      + '.mtg-seal-mission{font-style:italic;color:#4a443b;font-size:13px;'
+      + 'text-align:center;margin:0 0 12px;line-height:1.5;}'
+      + '.mtg-seal-links{display:flex;justify-content:center;gap:10px;}'
+      + '.mtg-seal-links a{flex:1;text-align:center;text-decoration:none;'
+      + 'font-size:13px;color:#2b2620;background:#faf7ef;border:1px solid #cabfa3;'
+      + 'border-radius:6px;padding:8px 10px;transition:background .15s ease;}'
+      + '.mtg-seal-links a:hover{background:#fff;}'
+      + '.mtg-seal-btn:focus-visible{outline:2px solid #7a2e28;outline-offset:3px;border-radius:4px;}'
+      + '.mtg-seal-links a:focus-visible{outline:2px solid #7a2e28;outline-offset:2px;}'
+      + '@media (prefers-reduced-motion: reduce){'
+      + '.mtg-seal-svg,.mtg-seal-panel{transition:none;}}';
+
+    var style = document.createElement("style");
+    style.textContent = css;
+    head.appendChild(style);
+
+    // The seal artwork. An SVG circle with the org name around the ring,
+    // the monogram in the center, and a small diamond mark at the bottom.
+    function buildSeal() {
+      var org = CONFIG.org.toUpperCase();
+      return ''
+        + '<svg class="mtg-seal-svg" viewBox="0 0 120 120" width="58" height="58" '
+        +   'role="img" aria-label="' + CONFIG.org + ' seal">'
+        +   '<defs>'
+        +     '<path id="mtgTop" d="M 23,60 A 37,37 0 0 1 97,60" fill="none"/>'
+        +   '</defs>'
+        +   '<circle cx="60" cy="60" r="55" fill="none" stroke="#7a2e28" stroke-width="2.5"/>'
+        +   '<circle cx="60" cy="60" r="48" fill="none" stroke="#7a2e28" stroke-width="1"/>'
+        +   '<text font-family="Georgia,serif" font-size="8" fill="#7a2e28">'
+        +     '<textPath href="#mtgTop" startOffset="50%" text-anchor="middle" '
+        +     'textLength="106" lengthAdjust="spacingAndGlyphs">'
+        +     org + '</textPath>'
+        +   '</text>'
+        +   '<text x="60" y="60" text-anchor="middle" dominant-baseline="central" '
+        +     'font-family="Georgia,serif" font-weight="700" font-size="27" '
+        +     'fill="#7a2e28">' + CONFIG.monogram + '</text>'
+        +   '<g fill="#7a2e28">'
+        +     '<rect x="58" y="83.5" width="4" height="4"/>'
+        +     '<rect x="63" y="88.5" width="4" height="4"/>'
+        +     '<rect x="53" y="93.5" width="4" height="4"/>'
+        +     '<rect x="58" y="93.5" width="4" height="4"/>'
+        +     '<rect x="63" y="93.5" width="4" height="4"/>'
+        +   '</g>'
+        + '</svg>';
+    }
+
+    // Build the footer element.
+    var seal = document.createElement("footer");
+    seal.className = "mtg-seal";
+    seal.innerHTML = ''
+      + '<div class="mtg-seal-row">'
+      +   '<button class="mtg-seal-btn" type="button" aria-expanded="false">'
+      +     buildSeal()
+      +     '<span class="mtg-seal-label">'
+      +       '<span class="mtg-seal-org">' + CONFIG.org + '</span><br>'
+      +       '<span class="mtg-seal-ask">Who made this?</span>'
+      +     '</span>'
+      +   '</button>'
+      + '</div>'
+      + '<div class="mtg-seal-panel">'
+      +   '<p class="mtg-seal-mission">' + CONFIG.mission + '</p>'
+      +   '<div class="mtg-seal-links">'
+      +     '<a href="' + CONFIG.github + '" target="_blank" rel="noopener me">GitHub</a>'
+      +     '<a href="' + CONFIG.linkedin + '" target="_blank" rel="noopener me">LinkedIn</a>'
+      +   '</div>'
+      + '</div>';
+
+    // Tapping the seal opens or closes the panel.
+    var btn = seal.querySelector(".mtg-seal-btn");
+    btn.addEventListener("click", function () {
+      var nowOpen = seal.classList.toggle("open");
+      btn.setAttribute("aria-expanded", nowOpen ? "true" : "false");
+    });
+
+    // Place the seal at the very bottom of the page.
+    document.body.appendChild(seal);
+
+  })();
+  </script>
+  <!-- ===================== END CREATOR SEAL ===================== -->
+</body>
+</html>

@@ -1,0 +1,1668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tractor Services Toolkit</title>
+<meta name="description" content="Blueprint, rate calculator, quote builder, lead intake, and a grading game for tractor and land services work.">
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;800&family=Public+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --paper: #FAF7EF;
+    --sheet: #F6F1E4;
+    --grid: #E5DCC6;
+    --ink: #2B2620;
+    --steel: #7A2E28;
+    --hivis: #D97B2A;
+    --dirt: #8A6A3B;
+    --go: #4A6B44;
+    --stop: #7A2E28;
+    --line: #CABFA3;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Public Sans', sans-serif;
+    color: var(--ink);
+    background:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+      var(--paper);
+    background-size: 24px 24px, 24px 24px, auto;
+    min-height: 100vh;
+    padding: 16px 12px 80px;
+  }
+  .sheet {
+    max-width: 760px;
+    margin: 0 auto;
+    background: var(--sheet);
+    border: 3px solid var(--ink);
+    box-shadow: 6px 6px 0 rgba(43,38,32,0.15);
+  }
+
+  /* Title block, like the corner of a civil drawing */
+  .titleblock {
+    border-bottom: 3px solid var(--ink);
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+  .tb-main { padding: 20px 18px 16px; }
+  .tb-eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--steel);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  h1 {
+    font-family: 'Saira Condensed', sans-serif;
+    font-weight: 800;
+    font-size: clamp(30px, 7vw, 46px);
+    line-height: 0.95;
+    text-transform: uppercase;
+    letter-spacing: 0.01em;
+  }
+  h1 .accent {
+    background: var(--hivis);
+    padding: 0 6px;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+  .tb-sub {
+    margin-top: 10px;
+    font-size: 14px;
+    line-height: 1.45;
+    max-width: 46ch;
+    color: #4A443B;
+  }
+  .tb-meta {
+    border-left: 3px solid var(--ink);
+    display: flex;
+    flex-direction: column;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    min-width: 118px;
+  }
+  .tb-meta div {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    flex: 1;
+  }
+  .tb-meta div:last-child { border-bottom: none; }
+  .tb-meta span { display: block; color: var(--steel); letter-spacing: 0.1em; margin-bottom: 2px; }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    padding: 12px 18px;
+    border-bottom: 3px solid var(--ink);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    background: #EFE9DA;
+  }
+  .legend i {
+    display: inline-block;
+    width: 12px; height: 12px;
+    margin-right: 6px;
+    vertical-align: -2px;
+    border: 2px solid var(--ink);
+  }
+  .l-phase i { background: var(--hivis); }
+  .l-decision i { background: #fff; transform: rotate(45deg); width: 10px; height: 10px; }
+  .l-loop i { background: var(--go); }
+
+  /* Flow column */
+  .flow { padding: 26px 16px 30px; }
+  .lane {
+    position: relative;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+
+  .connector {
+    width: 3px;
+    height: 26px;
+    background: var(--ink);
+    margin: 0 auto;
+    position: relative;
+  }
+  .connector::after {
+    content: '';
+    position: absolute;
+    bottom: -1px; left: 50%;
+    transform: translateX(-50%);
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid var(--ink);
+  }
+  .connector.short { height: 18px; }
+
+  .node {
+    border: 3px solid var(--ink);
+    background: #FCF9F1;
+    box-shadow: 4px 4px 0 rgba(43,38,32,0.12);
+  }
+  .node-head {
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 14px;
+    font-family: inherit;
+  }
+  .node-head:focus-visible {
+    outline: 3px solid var(--steel);
+    outline-offset: 2px;
+  }
+  .stage {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--hivis);
+    border: 2px solid var(--ink);
+    padding: 3px 7px;
+    white-space: nowrap;
+  }
+  .node-title {
+    font-family: 'Saira Condensed', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: 19px;
+    letter-spacing: 0.02em;
+    flex: 1;
+    line-height: 1.05;
+  }
+  .chev {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    color: var(--steel);
+    transition: transform 0.18s ease;
+  }
+  .node.open .chev { transform: rotate(90deg); }
+
+  .node-body {
+    display: none;
+    border-top: 2px solid var(--ink);
+    padding: 14px 16px 16px;
+    font-size: 14px;
+    line-height: 1.55;
+    background: #F2ECDC;
+  }
+  .node.open .node-body { display: block; }
+
+  .node-body h3 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--steel);
+    margin: 14px 0 6px;
+  }
+  .node-body h3:first-child { margin-top: 0; }
+  .node-body p { margin-bottom: 8px; }
+
+  .check {
+    padding-left: 26px;
+    position: relative;
+    margin-bottom: 7px;
+  }
+  .check {
+    cursor: pointer;
+    user-select: none;
+    border-radius: 3px;
+  }
+  .check:focus-visible {
+    outline: 2px solid var(--steel);
+    outline-offset: 2px;
+  }
+  .check::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 3px;
+    width: 13px; height: 13px;
+    border: 2px solid var(--ink);
+    background: #FAF7EF;
+  }
+  .check.done { color: #7B7263; }
+  .check.done::before { background: var(--hivis); }
+  .check.done::after {
+    content: '';
+    position: absolute;
+    left: 4px; top: 4px;
+    width: 5px; height: 9px;
+    border: solid var(--ink);
+    border-width: 0 3px 3px 0;
+    transform: rotate(40deg);
+  }
+  .doc {
+    padding-left: 26px;
+    position: relative;
+    margin-bottom: 7px;
+  }
+  .doc::before {
+    content: '';
+    position: absolute;
+    left: 1px; top: 3px;
+    width: 11px; height: 14px;
+    border: 2px solid var(--dirt);
+    background: #FAF7EF;
+    border-radius: 0 4px 0 0;
+  }
+  .script {
+    background: #FAF7EF;
+    border: 2px dashed var(--steel);
+    padding: 10px 12px;
+    font-size: 13px;
+    margin: 8px 0;
+  }
+  .script em { font-style: normal; color: var(--steel); font-weight: 600; }
+  .warn {
+    background: #F3E4DC;
+    border: 2px solid var(--stop);
+    padding: 10px 12px;
+    font-size: 13px;
+    margin: 8px 0;
+  }
+  .warn strong { color: var(--stop); }
+  .tip {
+    background: #F6E6D0;
+    border: 2px solid var(--dirt);
+    padding: 10px 12px;
+    font-size: 13px;
+    margin: 8px 0;
+  }
+
+  /* Decision diamond */
+  .decision {
+    display: flex;
+    justify-content: center;
+    padding: 6px 0;
+  }
+  .diamond {
+    border: 3px solid var(--ink);
+    background: #FCF9F1;
+    transform: rotate(45deg);
+    width: 128px; height: 128px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 4px 4px 0 rgba(43,38,32,0.12);
+  }
+  .diamond span {
+    transform: rotate(-45deg);
+    font-family: 'Saira Condensed', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: 14px;
+    text-align: center;
+    width: 130px;
+    line-height: 1.1;
+  }
+  .branches {
+    display: flex;
+    justify-content: space-between;
+    max-width: 420px;
+    margin: 10px auto 0;
+    gap: 10px;
+  }
+  .branch {
+    flex: 1;
+    text-align: center;
+  }
+  .branch-tag {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    padding: 3px 8px;
+    border: 2px solid var(--ink);
+    margin-bottom: 6px;
+  }
+  .branch.yes .branch-tag { background: var(--go); color: #fff; border-color: var(--go); }
+  .branch.no .branch-tag { background: var(--stop); color: #fff; border-color: var(--stop); }
+  .branch p { font-size: 12.5px; line-height: 1.4; color: #4A443B; }
+
+  .loopnote {
+    max-width: 560px;
+    margin: 26px auto 0;
+    border: 3px solid var(--go);
+    background: #ECEEDD;
+    padding: 14px 16px;
+    font-size: 13.5px;
+    line-height: 1.5;
+  }
+  .loopnote strong {
+    font-family: 'Saira Condensed', sans-serif;
+    text-transform: uppercase;
+    font-size: 17px;
+    color: var(--go);
+    display: block;
+    margin-bottom: 4px;
+    letter-spacing: 0.02em;
+  }
+
+  .footer {
+    border-top: 3px solid var(--ink);
+    padding: 12px 18px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--steel);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .controls {
+    max-width: 760px;
+    margin: 0 auto 14px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+  .controls button {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    padding: 8px 12px;
+    background: #FCF9F1;
+    border: 2px solid var(--ink);
+    cursor: pointer;
+    box-shadow: 3px 3px 0 rgba(43,38,32,0.15);
+  }
+  .controls button:active { transform: translate(2px, 2px); box-shadow: none; }
+  #infoBtn {
+    font-family: Georgia, serif;
+    font-style: italic;
+    font-weight: 700;
+    font-size: 15px;
+    width: 34px;
+    padding: 0;
+    border-radius: 50%;
+    color: var(--steel);
+  }
+
+  .info-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(43,38,32,0.45);
+    z-index: 50;
+    padding: 24px 14px;
+    overflow-y: auto;
+  }
+  .info-overlay.show { display: block; }
+  .info-card {
+    max-width: 480px;
+    margin: 40px auto;
+    background: var(--sheet);
+    border: 3px solid var(--ink);
+    box-shadow: 6px 6px 0 rgba(43,38,32,0.3);
+    padding: 20px 20px 22px;
+  }
+  .info-card h2 {
+    font-family: 'Saira Condensed', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: 24px;
+    margin-bottom: 4px;
+  }
+  .info-card .info-eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--steel);
+    margin-bottom: 12px;
+  }
+  .info-card p {
+    font-size: 14px;
+    line-height: 1.55;
+    margin-bottom: 10px;
+    color: #4A443B;
+  }
+  .info-card .close-info {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    padding: 8px 14px;
+    background: var(--hivis);
+    border: 2px solid var(--ink);
+    cursor: pointer;
+    margin-top: 6px;
+    box-shadow: 3px 3px 0 rgba(43,38,32,0.15);
+  }
+  .info-card .close-info:active { transform: translate(2px, 2px); box-shadow: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chev { transition: none; }
+  }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .controls, .info-overlay, .tabs, .tool-btn, .game-wrap, .game-hud, .lead-steps, .lead-page, .lead-done, #leadMap { display: none !important; }
+    .panel { display: none !important; }
+    .panel.show { display: block !important; }
+    .tool-sheet { box-shadow: none; border-width: 2px; }
+    .sheet { box-shadow: none; max-width: none; border-width: 2px; }
+    .node, .diamond, .controls button { box-shadow: none; }
+    .node-body { display: block !important; }
+    .chev { display: none; }
+    .node, .decision, .loopnote, .titleblock { break-inside: avoid; page-break-inside: avoid; }
+    .node-head { cursor: default; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+
+  @media (max-width: 480px) {
+    .tb-meta { display: none; }
+    .diamond { width: 110px; height: 110px; }
+    .diamond span { font-size: 12.5px; width: 112px; }
+  }
+
+  /* ===== App shell: tab bar and panels ===== */
+  .tabs {
+    max-width: 760px;
+    margin: 0 auto 16px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .tab {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    padding: 9px 12px;
+    background: #FCF9F1;
+    border: 2px solid var(--ink);
+    cursor: pointer;
+    box-shadow: 3px 3px 0 rgba(43,38,32,0.15);
+  }
+  .tab:active { transform: translate(2px, 2px); box-shadow: none; }
+  .tab[aria-selected="true"] {
+    background: var(--hivis);
+    font-weight: 500;
+  }
+  .tab:focus-visible, #infoBtn:focus-visible {
+    outline: 3px solid var(--steel);
+    outline-offset: 2px;
+  }
+  .tabs #infoBtn { margin-left: auto; }
+  .panel { display: none; }
+  .panel.show { display: block; }
+
+  /* ===== Tool sheets (rate, quote, game share this frame) ===== */
+  .tool-sheet {
+    max-width: 760px;
+    margin: 0 auto;
+    background: var(--sheet);
+    border: 3px solid var(--ink);
+    box-shadow: 6px 6px 0 rgba(43,38,32,0.15);
+    padding: 20px 18px 24px;
+  }
+  .tool-sheet h2 {
+    font-family: 'Saira Condensed', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: 28px;
+    line-height: 1;
+  }
+  .tool-eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--steel);
+    margin-bottom: 6px;
+  }
+  .tool-intro {
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: #4A443B;
+    margin: 8px 0 16px;
+    max-width: 56ch;
+  }
+  .field { margin-bottom: 12px; }
+  .field label {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--steel);
+    margin-bottom: 4px;
+  }
+  .field input, .field textarea {
+    width: 100%;
+    font-family: 'Public Sans', sans-serif;
+    font-size: 16px;
+    padding: 10px 11px;
+    border: 2px solid var(--ink);
+    background: #FCF9F1;
+    color: var(--ink);
+  }
+  .field input:focus, .field textarea:focus {
+    outline: 3px solid var(--steel);
+    outline-offset: 1px;
+  }
+  .field .hint { font-size: 12px; color: #7B7263; margin-top: 3px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  @media (max-width: 430px) { .grid2 { grid-template-columns: 1fr; } }
+
+  .readout {
+    border: 3px solid var(--ink);
+    background: #FCF9F1;
+    margin-top: 14px;
+  }
+  .readout .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 9px 13px;
+    border-bottom: 1px solid var(--line);
+    font-size: 14px;
+  }
+  .readout .row:last-child { border-bottom: none; }
+  .readout .row.total {
+    background: var(--hivis);
+    border-top: 2px solid var(--ink);
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .readout .row span:first-child { color: #4A443B; }
+  .readout .row.total span:first-child { color: var(--ink); }
+  .readout .num { font-family: 'IBM Plex Mono', monospace; }
+
+  .tool-btn {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    padding: 10px 14px;
+    background: var(--hivis);
+    border: 2px solid var(--ink);
+    cursor: pointer;
+    margin-top: 14px;
+    margin-right: 8px;
+    box-shadow: 3px 3px 0 rgba(43,38,32,0.15);
+  }
+  .tool-btn.quiet { background: #FCF9F1; }
+  .tool-btn:active { transform: translate(2px, 2px); box-shadow: none; }
+  .tool-btn:focus-visible { outline: 3px solid var(--steel); outline-offset: 2px; }
+
+  /* Printable quote document */
+  .quote-doc {
+    border: 3px solid var(--ink);
+    background: #FCF9F1;
+    padding: 18px 16px;
+    margin-top: 18px;
+  }
+  .quote-doc h3 {
+    font-family: 'Saira Condensed', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: 22px;
+    margin-bottom: 2px;
+  }
+  .quote-doc .qd-meta {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    color: var(--steel);
+    margin-bottom: 12px;
+  }
+  .quote-doc p { font-size: 13.5px; line-height: 1.5; margin-bottom: 8px; }
+  .qd-terms { font-size: 11.5px; color: #7B7263; margin-top: 10px; line-height: 1.45; }
+
+  /* ===== Gravel Run game ===== */
+  .game-wrap { margin-top: 14px; }
+  #gameCanvas {
+    display: block;
+    width: 100%;
+    border: 3px solid var(--ink);
+    background: #F2ECDC;
+    touch-action: none;
+  }
+  .game-hud {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+  }
+  .game-hud .stat { padding: 6px 10px; border: 2px solid var(--ink); background: #FCF9F1; }
+  .game-msg {
+    margin-top: 10px;
+    font-size: 14px;
+    line-height: 1.5;
+    border: 2px dashed var(--steel);
+    background: #FAF7EF;
+    padding: 10px 12px;
+  }
+
+  /* ===== Lead form ===== */
+  .lead-steps {
+    display: flex;
+    align-items: center;
+    margin-bottom: 18px;
+    max-width: 220px;
+  }
+  .lead-step-dot {
+    width: 28px; height: 28px;
+    border: 2px solid var(--ink);
+    background: #FCF9F1;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .lead-step-dot.active { background: var(--hivis); }
+  .lead-step-dot.done { background: var(--go); border-color: var(--go); color: #fff; }
+  .lead-step-line { flex: 1; height: 2px; background: var(--line); }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    padding: 8px 12px;
+    background: #FCF9F1;
+    border: 2px solid var(--ink);
+    cursor: pointer;
+  }
+  .chip.picked { background: var(--hivis); }
+  .chip:focus-visible { outline: 3px solid var(--steel); outline-offset: 2px; }
+  #leadMap {
+    height: 220px;
+    border: 2px solid var(--ink);
+    margin-top: 4px;
+  }
+  .lead-done {
+    border: 3px solid var(--go);
+    background: #ECEEDD;
+    padding: 16px 18px;
+  }
+  .lead-done h3 {
+    font-family: 'Saira Condensed', sans-serif;
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: 22px;
+    color: var(--go);
+    margin-bottom: 6px;
+  }
+</style>
+</head>
+<body>
+
+<nav class="tabs" role="tablist" aria-label="Tools">
+  <button class="tab" id="tabBlueprint" role="tab" aria-selected="true" data-panel="panelBlueprint">BLUEPRINT</button>
+  <button class="tab" id="tabRate" role="tab" aria-selected="false" data-panel="panelRate">RATE</button>
+  <button class="tab" id="tabQuote" role="tab" aria-selected="false" data-panel="panelQuote">QUOTE</button>
+  <button class="tab" id="tabGame" role="tab" aria-selected="false" data-panel="panelGame">GAME</button>
+  <button class="tab" id="tabLead" role="tab" aria-selected="false" data-panel="panelLead">LEAD</button>
+  <button id="infoBtn" aria-label="About this app" aria-haspopup="dialog">i</button>
+</nav>
+
+<main>
+  <section class="panel show" id="panelBlueprint" role="tabpanel">
+<div class="controls">
+  <button id="expandAll">EXPAND ALL</button>
+  <button id="collapseAll">COLLAPSE ALL</button>
+  <button id="printBtn">PRINT</button>
+</div>
+
+<div class="sheet">
+  <div class="titleblock">
+    <div class="tb-main">
+      <div class="tb-eyebrow">Field Operations Drawing // Land &amp; Tractor Services</div>
+      <h1>Tractor Services <span class="accent">Systems Blueprint</span></h1>
+      <p class="tb-sub">Every system a one-operator land services business needs to quote, schedule, execute, and get paid without anything living only in your head. Tap any stage to open its checklists, scripts, and documents.</p>
+    </div>
+    <div class="tb-meta">
+      <div><span>SHEET</span>1 OF 1</div>
+      <div><span>SCALE</span>OWNER-OP</div>
+      <div><span>REV</span>A</div>
+      <div><span>STATUS</span>ISSUED</div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span class="l-phase"><i></i>SYSTEM STAGE</span>
+    <span class="l-decision"><i></i>DECISION POINT</span>
+    <span class="l-loop"><i></i>FEEDBACK LOOP</span>
+  </div>
+
+  <div class="flow">
+    <div class="lane">
+
+      <div class="node" data-node>
+        <button class="node-head" aria-expanded="false">
+          <span class="stage">S-01</span>
+          <span class="node-title">Business Foundation</span>
+          <span class="chev">&gt;</span>
+        </button>
+        <div class="node-body">
+          <h3>One-time setup, revisit yearly</h3>
+          <div class="check">LLC filed, EIN on hand, business bank account separate from personal</div>
+          <div class="check">General liability insurance plus inland marine coverage on the tractor and implements</div>
+          <div class="check">Defined service area drawn on a map with a mobilization fee for anything past the line</div>
+          <div class="check">Equipment roster: tractor, implements, trailer, truck, each with serial numbers and photos for insurance</div>
+          <h3>Documents this stage owns</h3>
+          <div class="doc">Certificate of insurance PDF ready to text to any client who asks</div>
+          <div class="doc">Rate sheet: hourly rate, half-day and full-day rates, mobilization fee, material markup percentage</div>
+          <div class="doc">Standard terms: deposit policy, weather delays, access requirements, what happens when hidden rock or caliche changes the scope</div>
+        </div>
+      </div>
+
+      <div class="connector"></div>
+
+      <div class="node" data-node>
+        <button class="node-head" aria-expanded="false">
+          <span class="stage">S-02</span>
+          <span class="node-title">Marketing Engine</span>
+          <span class="chev">&gt;</span>
+        </button>
+        <div class="node-body">
+          <h3>Runs continuously in the background</h3>
+          <div class="check">Google Business Profile with the right categories: land clearing, grading, excavating contractor</div>
+          <div class="check">Before and after photos taken on every single job, phone in the same two spots each time</div>
+          <div class="check">Neighbor loop: while the tractor is on a street, the three nearest driveways get a door hanger with a photo of the machine working next door</div>
+          <div class="check">Referral rule: every happy client hears the same sentence before you leave</div>
+          <div class="script"><em>Referral line:</em> "If a neighbor asks who did this, my number is on this card, and I take fifty dollars off your next grading if they book."</div>
+          <h3>Documents this stage owns</h3>
+          <div class="doc">Door hanger or card template with one photo, one service list, one phone number</div>
+          <div class="doc">Photo naming convention so before/after pairs stay matched</div>
+        </div>
+      </div>
+
+      <div class="connector"></div>
+
+      <div class="node" data-node>
+        <button class="node-head" aria-expanded="false">
+          <span class="stage">S-03</span>
+          <span class="node-title">Lead Intake</span>
+          <span class="chev">&gt;</span>
+        </button>
+        <div class="node-body">
+          <h3>Every call or text answered the same way</h3>
+          <p>The intake script exists so a five-minute call tells you whether this is a drive-by quote or a paid site visit. Same questions, same order, every time.</p>
+          <div class="script">
+            <em>Intake questions:</em> What is the property address? What are we doing: clearing, grading, gravel, or a mix? Roughly how big is the area? Is the gate at least as wide as a pickup? Any slopes, washes, septic, or buried lines you know about? Is material already on site or does it need delivery? Can you text me three photos and a pin drop?
+          </div>
+          <div class="check">Every lead logged the moment the call ends: name, number, address, job type, source</div>
+          <div class="check">Photos and pin requested by text before hanging up</div>
+          <h3>Documents this stage owns</h3>
+          <div class="doc">Lead sheet with a status field: new, quoted, won, lost, and a lost-reason note</div>
+        </div>
+      </div>
+
+      <div class="connector"></div>
+
+      <div class="decision">
+        <div class="diamond"><span>Quote from photos or site visit?</span></div>
+      </div>
+      <div class="branches">
+        <div class="branch yes">
+          <span class="branch-tag">PHOTOS OK</span>
+          <p>Flat lot, clear access, standard work. Quote same day from photos and the pin drop.</p>
+        </div>
+        <div class="branch no">
+          <span class="branch-tag">SITE VISIT</span>
+          <p>Slopes, washes, unknown access, or anything over a day of work. Visit before a number leaves your mouth.</p>
+        </div>
+      </div>
+
+      <div class="connector"></div>
+
+      <div class="node" data-node>
+        <button class="node-head" aria-expanded="false">
+          <span class="stage">S-04</span>
+          <span class="node-title">Pricing &amp; Quote</span>
+          <span class="chev">&gt;</span>
+        </button>
+        <div class="node-body">
+          <h3>Price from a formula, not a gut feeling</h3>
+          <p>Estimated machine hours times your loaded hourly rate, plus mobilization, plus materials at cost plus markup, plus a contingency line for jobs with unknowns underground.</p>
+          <div class="check">Loaded hourly rate recalculated quarterly: fuel, maintenance reserve, insurance, wear, and your wage all inside it</div>
+          <div class="check">Gravel priced per ton delivered, with supplier quote attached, marked up a stated percentage</div>
+          <div class="check">Quote sent in writing every time, even for small jobs, with an expiration date</div>
+          <div class="tip">Driveway jobs quote cleanest by length and width. Keep a small table of your last ten driveways with dimensions, hours, and tons of gravel, and quoting becomes a lookup instead of a guess.</div>
+          <h3>Documents this stage owns</h3>
+          <div class="doc">Quote template: scope, price, what is included, what is excluded, terms, expiration</div>
+          <div class="doc">Pricing calculator sheet with the hourly-rate formula visible so it can be updated when fuel moves</div>
+        </div>
+      </div>
+
+      <div class="connector"></div>
+
+      <div class="decision">
+        <div class="diamond"><span>Quote accepted?</span></div>
+      </div>
+      <div class="branches">
+        <div class="branch yes">
+          <span class="branch-tag">YES</span>
+          <p>Deposit collected on material-heavy jobs, then straight into scheduling.</p>
+        </div>
+        <div class="branch no">
+          <span class="branch-tag">NO / SILENT</span>
+          <p>One follow-up text at day three, one at day ten, then the lead sheet gets a lost reason and you stop.</p>
+        </div>
+      </div>
+
+      <div class="connector"></div>
+
+      <div class="node" data-node>
+        <button class="node-head" aria-expanded="false">
+          <span class="stage">S-05</span>
+          <span class="node-title">Scheduling &amp; Job Prep</span>
+          <span class="chev">&gt;</span>
+        </button>
+        <div class="node-body">
+          <h3>Between the yes and the first pass</h3>
+          <div class="check">Weather window checked; grading and gravel do not get scheduled onto saturated ground or into a wind advisory</div>
+          <div class="check">Gravel or fill ordered from the supplier with delivery timed to your arrival, confirmation number saved</div>
+          <div class="check">Transport plan: trailer route, any width or weight constraints, fuel topped off the night before</div>
+          <div class="check">Client confirmation text the evening before with arrival window and a reminder to unlock gates and move vehicles</div>
+          <div class="warn"><strong>Dig rule:</strong> any work that cuts below existing grade near structures or utility corridors gets an 811 locate request first, and the ticket number goes on the job sheet. Free, and it is the one step that prevents the worst day of your career.</div>
+          <h3>Documents this stage owns</h3>
+          <div class="doc">Job sheet: address, scope, materials ordered, locate ticket number, access notes</div>
+        </div>
+      </div>
+
+      <div class="connector"></div>
+
+      <div class="node" data-node>
+        <button class="node-head" aria-expanded="false">
+          <span class="stage">S-06</span>
+          <span class="node-title">Job Execution</span>
+          <span class="chev">&gt;</span>
+        </button>
+        <div class="node-body">
+          <h3>Pre-start, every job, no exceptions</h3>
+          <div class="check">Walk the site with the client or their pin notes; flag anything that does not match the quote before the engine starts</div>
+          <div class="check">Machine check: fluids, grease points, tire pressure, implement pins, ten minutes total</div>
+          <div class="check">Before photos from the two standard spots</div>
+          <h3>Mid-job variation rule</h3>
+          <p>When the ground surprises you, the machine stops and the client gets a call before extra hours happen.</p>
+          <div class="script"><em>Variation line:</em> "I hit solid caliche about eight inches down across the north section. Staying on plan adds about X hours at my rate, or I can regrade around it. Which way do you want to go? I will text this so we both have it in writing."</div>
+          <h3>Close-out on site</h3>
+          <div class="check">Final walkthrough with the client whenever they are on the property</div>
+          <div class="check">After photos, same two spots</div>
+          <div class="check">Site left clean: no ruts at the entrance, no gravel in the road</div>
+        </div>
+      </div>
+
+      <div class="connector"></div>
+
+      <div class="node" data-node>
+        <button class="node-head" aria-expanded="false">
+          <span class="stage">S-07</span>
+          <span class="node-title">Invoice &amp; Payment</span>
+          <span class="chev">&gt;</span>
+        </button>
+        <div class="node-body">
+          <h3>Same day, before the trailer leaves the street</h3>
+          <div class="check">Invoice sent from the truck, not from the couch three days later</div>
+          <div class="check">Material receipts attached when the job included delivered gravel or fill</div>
+          <div class="check">Payment terms stated on the invoice and matching the quote: due on receipt for residential</div>
+          <h3>If unpaid</h3>
+          <p>Day three, friendly text. Day seven, call. Day fourteen, formal notice referencing the signed quote. The sequence is written down so it happens automatically instead of emotionally.</p>
+          <h3>Documents this stage owns</h3>
+          <div class="doc">Invoice template numbered sequentially</div>
+          <div class="doc">Collections sequence with the exact wording for each step</div>
+        </div>
+      </div>
+
+      <div class="connector"></div>
+
+      <div class="node" data-node>
+        <button class="node-head" aria-expanded="false">
+          <span class="stage">S-08</span>
+          <span class="node-title">Follow-Up &amp; Repeat Work</span>
+          <span class="chev">&gt;</span>
+        </button>
+        <div class="node-body">
+          <h3>The stage everyone skips, where the margin lives</h3>
+          <div class="check">Review request text two days after payment, with the direct Google review link</div>
+          <div class="check">Every gravel driveway goes on a seasonal list; desert monsoons wash out driveways on a schedule you can set a calendar by</div>
+          <div class="script"><em>Seasonal text:</em> "Monsoon season is coming up. I graded your driveway last fall, and a touch-up pass now costs a lot less than a rebuild after the washouts. Want me to put you on the list for this month?"</div>
+          <div class="check">Lost quotes from S-04 get one revival text at the start of the busy season</div>
+          <h3>Documents this stage owns</h3>
+          <div class="doc">Client list with last-service date and a next-touch date</div>
+        </div>
+      </div>
+
+      <div class="connector"></div>
+
+      <div class="node" data-node>
+        <button class="node-head" aria-expanded="false">
+          <span class="stage">S-09</span>
+          <span class="node-title">Machine &amp; Money</span>
+          <span class="chev">&gt;</span>
+        </button>
+        <div class="node-body">
+          <h3>Monthly, thirty minutes, non-negotiable</h3>
+          <div class="check">Hour meter logged monthly; service items tracked against hours, not memory</div>
+          <div class="check">True cost per machine hour recalculated: fuel, maintenance, insurance, depreciation divided by hours run</div>
+          <div class="check">Monthly numbers on one page: revenue, fuel, maintenance, materials, net, and hours billed versus hours run</div>
+          <div class="tip">Hours billed divided by hours run is the single most revealing number in this business. If the machine runs 60 hours and you billed 38, the leak is transport, prep, or free work, and this sheet is what finds it.</div>
+          <h3>Documents this stage owns</h3>
+          <div class="doc">Maintenance log per machine keyed to hour meter readings</div>
+          <div class="doc">One-page monthly financial summary</div>
+        </div>
+      </div>
+
+      <div class="loopnote">
+        <strong>Improvement Loop</strong>
+        Once a month, one question per stage: what broke, what got skipped, what did a client complain about. The fix goes back into the checklist or script for that stage, so the system gets smarter and the same mistake never costs you twice. That loop feeds back to S-01 and the sheet gets a new revision letter.
+      </div>
+
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>TRACTOR SERVICES SYSTEMS BLUEPRINT</span>
+    <span>REV B // OCT 2026 // FIELD ISSUE</span>
+  </div>
+</div>
+  </section>
+
+  <section class="panel" id="panelRate" role="tabpanel">
+<section class="tool-sheet">
+  <div class="tool-eyebrow">Tool T-01 // Feeds stage S-09</div>
+  <h2>Loaded Hourly Rate</h2>
+  <p class="tool-intro">What one machine hour truly costs you, then what to bill so a margin survives. Change any number and everything below recalculates. This is the formula from the Machine &amp; Money stage, made live.</p>
+  <div class="grid2">
+    <div class="field"><label for="rWage">Your wage per hour ($)</label><input id="rWage" type="number" inputmode="decimal" value="35"></div>
+    <div class="field"><label for="rFuel">Fuel per hour ($)</label><input id="rFuel" type="number" inputmode="decimal" value="14"></div>
+    <div class="field"><label for="rMaint">Maintenance reserve per hour ($)</label><input id="rMaint" type="number" inputmode="decimal" value="8"><div class="hint">Filters, grease, tires, repairs, saved every hour</div></div>
+    <div class="field"><label for="rIns">Insurance per year ($)</label><input id="rIns" type="number" inputmode="decimal" value="2400"></div>
+    <div class="field"><label for="rDep">Machine payment or depreciation per year ($)</label><input id="rDep" type="number" inputmode="decimal" value="6000"></div>
+    <div class="field"><label for="rHours">Billable hours per year</label><input id="rHours" type="number" inputmode="decimal" value="600"><div class="hint">Hours a client pays for, not hours the machine runs</div></div>
+    <div class="field"><label for="rMargin">Profit margin (%)</label><input id="rMargin" type="number" inputmode="decimal" value="25"></div>
+  </div>
+  <div class="readout">
+    <div class="row"><span>Direct cost per hour (wage + fuel + maintenance)</span><span class="num" id="rDirect">$0</span></div>
+    <div class="row"><span>Overhead per hour (insurance + machine, spread over billable hours)</span><span class="num" id="rOverhead">$0</span></div>
+    <div class="row"><span>Break-even cost per hour</span><span class="num" id="rCost">$0</span></div>
+    <div class="row total"><span>BILL THIS PER HOUR</span><span class="num" id="rBill">$0</span></div>
+  </div>
+  <button class="tool-btn" id="sendRate">USE THIS RATE IN QUOTE</button>
+</section>
+  </section>
+
+  <section class="panel" id="panelQuote" role="tabpanel">
+<section class="tool-sheet">
+  <div class="tool-eyebrow">Tool T-02 // Feeds stage S-04</div>
+  <h2>Quote Builder</h2>
+  <p class="tool-intro">Machine hours times your rate, plus mobilization, materials with markup, and a contingency line for what the ground hides. The finished quote below is a printable document.</p>
+  <div class="grid2">
+    <div class="field"><label for="qClient">Client name</label><input id="qClient" type="text" placeholder="xxxxxxxx"></div>
+    <div class="field"><label for="qAddr">Job address</label><input id="qAddr" type="text" placeholder="xxxxxxxx"></div>
+  </div>
+  <div class="field"><label for="qScope">Scope of work</label><textarea id="qScope" rows="2" placeholder="Grade 400 ft driveway, spread 20 tons 3/4 minus"></textarea></div>
+  <div class="grid2">
+    <div class="field"><label for="qHrs">Machine hours</label><input id="qHrs" type="number" inputmode="decimal" value="6"></div>
+    <div class="field"><label for="qRate">Rate per hour ($)</label><input id="qRate" type="number" inputmode="decimal" value="120"></div>
+    <div class="field"><label for="qMob">Mobilization fee ($)</label><input id="qMob" type="number" inputmode="decimal" value="100"></div>
+    <div class="field"><label for="qMat">Materials cost ($)</label><input id="qMat" type="number" inputmode="decimal" value="0"><div class="hint">Supplier quote for gravel or fill, delivered</div></div>
+    <div class="field"><label for="qMark">Material markup (%)</label><input id="qMark" type="number" inputmode="decimal" value="15"></div>
+    <div class="field"><label for="qCont">Contingency (%)</label><input id="qCont" type="number" inputmode="decimal" value="10"><div class="hint">Covers rock, caliche, and surprises below grade</div></div>
+  </div>
+  <div class="readout">
+    <div class="row"><span>Machine work</span><span class="num" id="qLabor">$0</span></div>
+    <div class="row"><span>Mobilization</span><span class="num" id="qMobOut">$0</span></div>
+    <div class="row"><span>Materials, delivered and placed</span><span class="num" id="qMatOut">$0</span></div>
+    <div class="row"><span>Contingency</span><span class="num" id="qContOut">$0</span></div>
+    <div class="row total"><span>QUOTE TOTAL</span><span class="num" id="qTotal">$0</span></div>
+  </div>
+  <div class="quote-doc" id="quoteDoc">
+    <h3>Estimate</h3>
+    <div class="qd-meta" id="qdMeta">FIELD ESTIMATE // LAND &amp; TRACTOR SERVICES</div>
+    <p><strong>Prepared for:</strong> <span id="qdClient">&nbsp;</span></p>
+    <p><strong>Job address:</strong> <span id="qdAddr">&nbsp;</span></p>
+    <p><strong>Scope:</strong> <span id="qdScope">&nbsp;</span></p>
+    <p><strong>Total: <span id="qdTotal">$0</span></strong></p>
+    <p class="qd-terms">Valid 14 days. Price assumes clear access for equipment. Work below existing grade subject to utility locate. Hidden rock, caliche, or buried debris beyond the contingency line will be priced by written variation before extra hours begin. Materials billed as delivered per supplier ticket.</p>
+  </div>
+  <button class="tool-btn" id="printQuote">PRINT QUOTE</button>
+</section>
+  </section>
+
+  <section class="panel" id="panelGame" role="tabpanel">
+<section class="tool-sheet">
+  <div class="tool-eyebrow">Tool T-03 // Operator training, allegedly</div>
+  <h2>Gravel Run</h2>
+  <p class="tool-intro">A washed-out desert driveway scrolls under your tractor. Press and hold anywhere on the screen to drop the box blade: it cuts the high spots, carries the spoil, and fills the low spots. Let off before you dig a hole. Smoothest grade wins.</p>
+  <div class="game-wrap">
+    <canvas id="gameCanvas" width="720" height="300" aria-label="Gravel Run grading game"></canvas>
+    <div class="game-hud">
+      <span class="stat">GRADE <span id="gScore">0</span>%</span>
+      <span class="stat">CARRYING <span id="gCarry">0</span></span>
+      <span class="stat">TIME <span id="gTime">45</span>s</span>
+      <button class="tool-btn quiet" id="gReset" style="margin:0">RESTART</button>
+    </div>
+    <div class="game-msg" id="gMsg">Hold to lower the blade. Release to raise it. The dashed line is target grade.</div>
+  </div>
+</section>
+  </section>
+
+  <section class="panel" id="panelLead" role="tabpanel">
+<section class="tool-sheet">
+  <div class="tool-eyebrow">Tool T-04 // Feeds stage S-03, live intake</div>
+  <h2>Get A Quote</h2>
+  <p class="tool-intro">This is the live intake form. Every step saves as it goes, so even a form someone abandons halfway through leaves you a partial lead with whatever they entered.</p>
+
+  <div class="lead-steps" id="leadSteps">
+    <span class="lead-step-dot active" data-step="1">1</span>
+    <span class="lead-step-line"></span>
+    <span class="lead-step-dot" data-step="2">2</span>
+    <span class="lead-step-line"></span>
+    <span class="lead-step-dot" data-step="3">3</span>
+  </div>
+
+  <div class="lead-page" id="leadPage1">
+    <div class="field">
+      <label>What do you need done?</label>
+      <div class="chip-row" id="leadServiceChips">
+        <button type="button" class="chip" data-val="Land clearing">Land clearing</button>
+        <button type="button" class="chip" data-val="Grading">Grading</button>
+        <button type="button" class="chip" data-val="Gravel">Gravel</button>
+        <button type="button" class="chip" data-val="Driveway">Driveway</button>
+        <button type="button" class="chip" data-val="Other">Other</button>
+      </div>
+    </div>
+    <div class="field"><label for="leadSize">Rough size of the area</label><input id="leadSize" type="text" placeholder="e.g. 400 ft driveway, or half acre"></div>
+    <button class="tool-btn" id="leadNext1">NEXT</button>
+  </div>
+
+  <div class="lead-page" id="leadPage2" style="display:none">
+    <div class="field">
+      <label>Drop a pin on the property</label>
+      <div id="leadMap"></div>
+      <div class="hint" id="leadPinHint">Tap the map to place a pin. Drag it to adjust.</div>
+    </div>
+    <button class="tool-btn quiet" id="leadUseGps" type="button">USE MY CURRENT LOCATION</button>
+    <button class="tool-btn" id="leadNext2">NEXT</button>
+  </div>
+
+  <div class="lead-page" id="leadPage3" style="display:none">
+    <div class="field"><label for="leadName">Name</label><input id="leadName" type="text" placeholder="xxxxxxxx"></div>
+    <div class="field"><label for="leadPhone">Phone</label><input id="leadPhone" type="tel" placeholder="xxxxxxxxxx"></div>
+    <div class="field"><label for="leadEmail">Email (optional)</label><input id="leadEmail" type="email" placeholder="xxxxxxxx"></div>
+    <div class="field"><label for="leadNotes">Anything else we should know</label><textarea id="leadNotes" rows="2"></textarea></div>
+    <button class="tool-btn" id="leadSubmit">SEND REQUEST</button>
+  </div>
+
+  <div class="lead-done" id="leadDone" style="display:none">
+    <h3>Request sent.</h3>
+    <p>Your info is in and the operator will reach out to confirm the job.</p>
+  </div>
+</section>
+  </section>
+</main>
+
+<div class="info-overlay" id="infoOverlay" role="dialog" aria-modal="true" aria-labelledby="infoTitle">
+  <div class="info-card">
+    <div class="info-eyebrow">Sheet Notes // How to read this drawing</div>
+    <h2 id="infoTitle">About This Blueprint</h2>
+    <p>This sheet maps the complete operating system for a one-operator tractor and land services business: clearing, grading, driveways, and gravel. It is laid out like a civil drawing because that is what it is, a drawing of how the business flows from first phone call to money in the bank.</p>
+    <p>Yellow-tagged boxes are system stages. Tap one to open its checklists, the documents that stage owns, and word-for-word scripts you can read straight off the phone. Diamonds are decision points where the path splits.</p>
+    <p>The intent is simple: nothing important lives only in your head. When every stage has its checklist and its script, the business runs the same on your worst day as it does on your best, and it can eventually run with someone else in the seat.</p>
+    <p>Work the improvement loop at the bottom once a month and bump the revision letter in the title block when the sheet changes.</p>
+    <button class="close-info" id="closeInfo">CLOSE</button>
+  </div>
+</div>
+
+<script>
+
+  const nodes = document.querySelectorAll('[data-node]');
+  nodes.forEach(function(node) {
+    const head = node.querySelector('.node-head');
+    head.addEventListener('click', function() {
+      const isOpen = node.classList.toggle('open');
+      head.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    });
+  });
+  document.getElementById('expandAll').addEventListener('click', function() {
+    nodes.forEach(function(node) {
+      node.classList.add('open');
+      node.querySelector('.node-head').setAttribute('aria-expanded', 'true');
+    });
+  });
+  document.getElementById('collapseAll').addEventListener('click', function() {
+    nodes.forEach(function(node) {
+      node.classList.remove('open');
+      node.querySelector('.node-head').setAttribute('aria-expanded', 'false');
+    });
+  });
+
+  var checks = document.querySelectorAll('.check');
+  checks.forEach(function(box) {
+    box.setAttribute('role', 'checkbox');
+    box.setAttribute('tabindex', '0');
+    box.setAttribute('aria-checked', 'false');
+    function toggle() {
+      var done = box.classList.toggle('done');
+      box.setAttribute('aria-checked', done ? 'true' : 'false');
+    }
+    box.addEventListener('click', toggle);
+    box.addEventListener('keydown', function(e) {
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        toggle();
+      }
+    });
+  });
+
+  function openAll() {
+    nodes.forEach(function(node) {
+      node.classList.add('open');
+      node.querySelector('.node-head').setAttribute('aria-expanded', 'true');
+    });
+  }
+  document.getElementById('printBtn').addEventListener('click', function() {
+    openAll();
+    setTimeout(function() { window.print(); }, 60);
+  });
+  window.addEventListener('beforeprint', openAll);
+
+  var infoOverlay = document.getElementById('infoOverlay');
+  document.getElementById('infoBtn').addEventListener('click', function() {
+    infoOverlay.classList.add('show');
+    document.getElementById('closeInfo').focus();
+  });
+  document.getElementById('closeInfo').addEventListener('click', function() {
+    infoOverlay.classList.remove('show');
+    document.getElementById('infoBtn').focus();
+  });
+  infoOverlay.addEventListener('click', function(e) {
+    if (e.target === infoOverlay) { infoOverlay.classList.remove('show'); }
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') { infoOverlay.classList.remove('show'); }
+  });
+
+  /* ===== Tab switching ===== */
+  var tabs = document.querySelectorAll('.tab');
+  var panels = document.querySelectorAll('.panel');
+  tabs.forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      tabs.forEach(function(t) { t.setAttribute('aria-selected', 'false'); });
+      panels.forEach(function(p) { p.classList.remove('show'); });
+      tab.setAttribute('aria-selected', 'true');
+      document.getElementById(tab.dataset.panel).classList.add('show');
+    });
+  });
+
+  function money(n) {
+    if (!isFinite(n)) { n = 0; }
+    return '$' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+  function num(id) { return parseFloat(document.getElementById(id).value) || 0; }
+
+  /* ===== Rate calculator ===== */
+  var rateIds = ['rWage','rFuel','rMaint','rIns','rDep','rHours','rMargin'];
+  var currentBillRate = 0;
+  function calcRate() {
+    var direct = num('rWage') + num('rFuel') + num('rMaint');
+    var hours = Math.max(num('rHours'), 1);
+    var overhead = (num('rIns') + num('rDep')) / hours;
+    var cost = direct + overhead;
+    var margin = Math.min(num('rMargin'), 90) / 100;
+    currentBillRate = cost / (1 - margin);
+    document.getElementById('rDirect').textContent = money(direct);
+    document.getElementById('rOverhead').textContent = money(overhead);
+    document.getElementById('rCost').textContent = money(cost);
+    document.getElementById('rBill').textContent = money(currentBillRate);
+  }
+  rateIds.forEach(function(id) {
+    document.getElementById(id).addEventListener('input', calcRate);
+  });
+  calcRate();
+  document.getElementById('sendRate').addEventListener('click', function() {
+    document.getElementById('qRate').value = Math.ceil(currentBillRate);
+    calcQuote();
+    document.getElementById('tabQuote').click();
+  });
+
+  /* ===== Quote builder ===== */
+  var quoteIds = ['qHrs','qRate','qMob','qMat','qMark','qCont','qClient','qAddr','qScope'];
+  function calcQuote() {
+    var labor = num('qHrs') * num('qRate');
+    var mob = num('qMob');
+    var mat = num('qMat') * (1 + num('qMark') / 100);
+    var cont = (labor + mat) * (num('qCont') / 100);
+    var total = labor + mob + mat + cont;
+    document.getElementById('qLabor').textContent = money(labor);
+    document.getElementById('qMobOut').textContent = money(mob);
+    document.getElementById('qMatOut').textContent = money(mat);
+    document.getElementById('qContOut').textContent = money(cont);
+    document.getElementById('qTotal').textContent = money(total);
+    document.getElementById('qdTotal').textContent = money(total);
+    document.getElementById('qdClient').textContent = document.getElementById('qClient').value || 'xxxxxxxx';
+    document.getElementById('qdAddr').textContent = document.getElementById('qAddr').value || 'xxxxxxxx';
+    document.getElementById('qdScope').textContent = document.getElementById('qScope').value || 'xxxxxxxx';
+  }
+  quoteIds.forEach(function(id) {
+    document.getElementById(id).addEventListener('input', calcQuote);
+  });
+  calcQuote();
+  document.getElementById('printQuote').addEventListener('click', function() {
+    window.print();
+  });
+
+  /* ===== Gravel Run ===== */
+  (function() {
+    var cv = document.getElementById('gameCanvas');
+    var cx = cv.getContext('2d');
+    var W = cv.width, H = cv.height;
+    var COLS = 240;
+    var target = 200;
+    var terrain, tractorX, carry, bladeDown, timeLeft, running, lastT;
+
+    function reset() {
+      terrain = [];
+      var h = target;
+      for (var i = 0; i < COLS; i++) {
+        h += (Math.random() - 0.5) * 14;
+        h = Math.max(target - 42, Math.min(target + 42, h));
+        terrain.push(h);
+      }
+      tractorX = 12;
+      carry = 0;
+      bladeDown = false;
+      timeLeft = 45;
+      running = true;
+      lastT = performance.now();
+      document.getElementById('gMsg').textContent = 'Hold to lower the blade. Release to raise it. The dashed line is target grade.';
+      requestAnimationFrame(loop);
+    }
+
+    function smoothness() {
+      var dev = 0;
+      for (var i = 0; i < COLS; i++) { dev += Math.abs(terrain[i] - target); }
+      dev = dev / COLS;
+      return Math.max(0, Math.round(100 - dev * 4));
+    }
+
+    function step(dt) {
+      tractorX += 34 * dt;
+      if (tractorX > COLS - 2) { tractorX = 2; }
+      var i = Math.floor(tractorX);
+      if (bladeDown) {
+        for (var k = i; k < Math.min(i + 3, COLS); k++) {
+          var d = terrain[k] - target;
+          if (d < 0) {
+            var cut = Math.min(-d, 60 * dt);
+            terrain[k] += cut;
+            carry += cut;
+          } else if (d > 0 && carry > 0) {
+            var fill = Math.min(d, carry, 80 * dt);
+            terrain[k] -= fill;
+            carry -= fill;
+          } else if (carry <= 0) {
+            terrain[k] += 25 * dt;
+            carry += 25 * dt;
+          }
+        }
+      }
+      timeLeft -= dt;
+      if (timeLeft <= 0) {
+        running = false;
+        var sc = smoothness();
+        var word = sc > 90 ? 'Inspection passed. Send the invoice.' :
+                   sc > 70 ? 'Client is satisfied. A neighbor is watching over the fence.' :
+                   sc > 45 ? 'Drivable, but the truck spills its coffee.' :
+                   'That is not a driveway, that is a motocross track.';
+        document.getElementById('gMsg').textContent = 'FINAL GRADE ' + sc + '%. ' + word;
+      }
+    }
+
+    function draw() {
+      cx.clearRect(0, 0, W, H);
+      cx.strokeStyle = '#CABFA3';
+      cx.setLineDash([6, 6]);
+      cx.beginPath();
+      cx.moveTo(0, target);
+      cx.lineTo(W, target);
+      cx.stroke();
+      cx.setLineDash([]);
+      var colW = W / COLS;
+      cx.fillStyle = '#C7A46B';
+      cx.beginPath();
+      cx.moveTo(0, H);
+      for (var i = 0; i < COLS; i++) { cx.lineTo(i * colW, terrain[i]); }
+      cx.lineTo(W, H);
+      cx.closePath();
+      cx.fill();
+      cx.strokeStyle = '#8A6A3B';
+      cx.lineWidth = 2;
+      cx.beginPath();
+      for (var j = 0; j < COLS; j++) {
+        if (j === 0) { cx.moveTo(0, terrain[0]); } else { cx.lineTo(j * colW, terrain[j]); }
+      }
+      cx.stroke();
+
+      var tx = tractorX * colW;
+      var ti = Math.floor(tractorX);
+      var ground = terrain[Math.min(ti, COLS - 1)];
+      cx.save();
+      cx.translate(tx, ground);
+      cx.fillStyle = '#D97B2A';
+      cx.fillRect(-26, -34, 34, 18);
+      cx.fillRect(-4, -46, 16, 30);
+      cx.fillStyle = '#2B2620';
+      cx.beginPath(); cx.arc(-18, -8, 9, 0, 7); cx.fill();
+      cx.beginPath(); cx.arc(6, -10, 12, 0, 7); cx.fill();
+      cx.fillStyle = '#FCF9F1';
+      cx.beginPath(); cx.arc(-18, -8, 4, 0, 7); cx.fill();
+      cx.beginPath(); cx.arc(6, -10, 5, 0, 7); cx.fill();
+      cx.strokeStyle = '#7A2E28';
+      cx.lineWidth = 4;
+      cx.beginPath();
+      cx.moveTo(-30, -20);
+      cx.lineTo(-42, bladeDown ? 0 : -14);
+      cx.stroke();
+      cx.fillStyle = '#7A2E28';
+      cx.fillRect(-48, bladeDown ? -4 : -18, 12, 8);
+      cx.restore();
+
+      document.getElementById('gScore').textContent = smoothness();
+      document.getElementById('gCarry').textContent = Math.round(carry);
+      document.getElementById('gTime').textContent = Math.max(0, Math.ceil(timeLeft));
+    }
+
+    function loop(now) {
+      if (!running) { draw(); return; }
+      var dt = Math.min((now - lastT) / 1000, 0.05);
+      lastT = now;
+      step(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function down(e) { e.preventDefault(); bladeDown = true; }
+    function up() { bladeDown = false; }
+    cv.addEventListener('pointerdown', down);
+    window.addEventListener('pointerup', up);
+    cv.addEventListener('pointercancel', up);
+
+    document.getElementById('gReset').addEventListener('click', reset);
+    var gameStarted = false;
+    document.getElementById('tabGame').addEventListener('click', function() {
+      if (!gameStarted) { gameStarted = true; reset(); }
+    });
+  })();
+
+  /* ===== Lead form: wired to the live Material Operators backend ===== */
+  (function() {
+    var API = 'https://matop-railway-production.up.railway.app/api/lead';
+    var sessionId = 'w-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+    var leadData = {};
+    var map, marker, mapBuilt = false;
+
+    function sendLead(page) {
+      fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: sessionId, page: page, data: leadData })
+      }).catch(function() { /* silent: a failed background save should never block the visitor */ });
+    }
+
+    function setStep(n) {
+      document.querySelectorAll('.lead-step-dot').forEach(function(dot) {
+        var d = parseInt(dot.dataset.step, 10);
+        dot.classList.toggle('active', d === n);
+        dot.classList.toggle('done', d < n);
+      });
+      document.getElementById('leadPage1').style.display = n === 1 ? 'block' : 'none';
+      document.getElementById('leadPage2').style.display = n === 2 ? 'block' : 'none';
+      document.getElementById('leadPage3').style.display = n === 3 ? 'block' : 'none';
+      if (n === 2) { buildMap(); }
+    }
+
+    document.querySelectorAll('#leadServiceChips .chip').forEach(function(chip) {
+      chip.addEventListener('click', function() {
+        document.querySelectorAll('#leadServiceChips .chip').forEach(function(c) { c.classList.remove('picked'); });
+        chip.classList.add('picked');
+        leadData.service = chip.dataset.val;
+      });
+    });
+
+    document.getElementById('leadNext1').addEventListener('click', function() {
+      leadData.size = document.getElementById('leadSize').value;
+      sendLead(1);
+      setStep(2);
+    });
+
+    function buildMap() {
+      if (mapBuilt) { map.invalidateSize(); return; }
+      mapBuilt = true;
+      map = L.map('leadMap').setView([35.4, -114.1], 9);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 18
+      }).addTo(map);
+      map.on('click', function(e) {
+        dropPin(e.latlng.lat, e.latlng.lng);
+      });
+    }
+
+    function dropPin(lat, lng) {
+      leadData.lat = lat;
+      leadData.lng = lng;
+      if (marker) { marker.setLatLng([lat, lng]); }
+      else {
+        marker = L.marker([lat, lng], { draggable: true }).addTo(map);
+        marker.on('dragend', function() {
+          var p = marker.getLatLng();
+          leadData.lat = p.lat;
+          leadData.lng = p.lng;
+        });
+      }
+      map.setView([lat, lng], 15);
+      document.getElementById('leadPinHint').textContent = 'Pin set. Drag it to fine-tune the spot.';
+    }
+
+    document.getElementById('leadUseGps').addEventListener('click', function() {
+      if (!navigator.geolocation) { return; }
+      document.getElementById('leadPinHint').textContent = 'Finding your location...';
+      navigator.geolocation.getCurrentPosition(function(pos) {
+        dropPin(pos.coords.latitude, pos.coords.longitude);
+      }, function() {
+        document.getElementById('leadPinHint').textContent = 'Could not get location. Tap the map to drop a pin instead.';
+      });
+    });
+
+    document.getElementById('leadNext2').addEventListener('click', function() {
+      sendLead(2);
+      setStep(3);
+    });
+
+    document.getElementById('leadSubmit').addEventListener('click', function() {
+      leadData.name = document.getElementById('leadName').value;
+      leadData.phone = document.getElementById('leadPhone').value;
+      leadData.email = document.getElementById('leadEmail').value;
+      leadData.notes = document.getElementById('leadNotes').value;
+      sendLead(3);
+      document.getElementById('leadPage3').style.display = 'none';
+      document.getElementById('leadSteps').style.display = 'none';
+      document.getElementById('leadDone').style.display = 'block';
+    });
+
+    document.getElementById('tabLead').addEventListener('click', function() {
+      if (document.getElementById('leadPage2').style.display === 'block') { buildMap(); }
+    });
+  })();
+
+</script>
+
+<!-- =====================================================================
+       MOHAVE TECHNOLOGY GROUP // CREATOR SEAL
+       Drop this ONE block into any HTML page, anywhere before </body>.
+       The only thing you edit is the CONFIG object on the next few lines.
+       ===================================================================== -->
+  <script>
+  (function () {
+
+    /* ---------- CONFIG: the only part you change ---------- */
+    var CONFIG = {
+      org:      "Mohave Technology Group",
+      monogram: "MTG",                       // shown in the center of the seal
+      mission:  "Practical software and hardware, built in the field.",
+      github:   "https://github.com/sudosilo",
+      linkedin: "https://www.linkedin.com/in/dicktemple"
+    };
+    /* ----------------------------------------------------- */
+
+
+    /* ---------- LAYER 1: the signature pressed into the source ----------
+       This runs once and writes your identity into the page head so that
+       anyone viewing source, and any machine reading the page, can find
+       the maker even if the footer is removed. */
+    var head = document.head || document.getElementsByTagName("head")[0];
+
+    // A plain comment banner, visible in View Source.
+    head.appendChild(document.createComment(
+      " Made by " + CONFIG.org + " // " + CONFIG.github + " // " + CONFIG.linkedin + " "
+    ));
+
+    // Standard "author" tag set to the group, not a personal name.
+    var metaAuthor = document.createElement("meta");
+    metaAuthor.setAttribute("name", "author");
+    metaAuthor.setAttribute("content", CONFIG.org);
+    head.appendChild(metaAuthor);
+
+    // rel="me" links: the web standard for saying "these profiles are mine".
+    [CONFIG.github, CONFIG.linkedin].forEach(function (url) {
+      var l = document.createElement("link");
+      l.setAttribute("rel", "me");
+      l.setAttribute("href", url);
+      head.appendChild(l);
+    });
+
+    // Structured data block, so search engines and crawlers can read it.
+    var ld = document.createElement("script");
+    ld.type = "application/ld+json";
+    ld.textContent = JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": CONFIG.org,
+      "sameAs": [CONFIG.github, CONFIG.linkedin]
+    });
+    head.appendChild(ld);
+
+
+    /* ---------- LAYER 2: the visible seal ---------- */
+
+    // The look of the seal. All self contained, no fonts to download.
+    var css = ''
+      + '.mtg-seal{box-sizing:border-box;width:100%;background:#efe9da;'
+      + 'border-top:1px solid #cabfa3;color:#2b2620;'
+      + 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;'
+      + 'padding:18px 20px;display:flex;flex-direction:column;align-items:center;gap:12px;}'
+      + '.mtg-seal-row{display:flex;align-items:center;gap:14px;}'
+      + '.mtg-seal-btn{background:none;border:0;padding:0;margin:0;cursor:pointer;'
+      + 'display:flex;align-items:center;gap:14px;color:inherit;font:inherit;}'
+      + '.mtg-seal-svg{display:block;transition:transform .18s ease;}'
+      + '.mtg-seal.open .mtg-seal-svg{transform:scale(.94);}'
+      + '.mtg-seal-label{text-align:left;line-height:1.3;}'
+      + '.mtg-seal-org{font-family:Georgia,"Times New Roman",serif;font-size:14px;'
+      + 'letter-spacing:.3px;color:#2b2620;}'
+      + '.mtg-seal-ask{font-size:12px;color:#7a2e28;text-decoration:underline;}'
+      + '.mtg-seal-panel{overflow:hidden;max-height:0;opacity:0;'
+      + 'transition:max-height .25s ease,opacity .25s ease;width:100%;max-width:360px;}'
+      + '.mtg-seal.open .mtg-seal-panel{max-height:200px;opacity:1;}'
+      + '.mtg-seal-mission{font-style:italic;color:#4a443b;font-size:13px;'
+      + 'text-align:center;margin:0 0 12px;line-height:1.5;}'
+      + '.mtg-seal-links{display:flex;justify-content:center;gap:10px;}'
+      + '.mtg-seal-links a{flex:1;text-align:center;text-decoration:none;'
+      + 'font-size:13px;color:#2b2620;background:#faf7ef;border:1px solid #cabfa3;'
+      + 'border-radius:6px;padding:8px 10px;transition:background .15s ease;}'
+      + '.mtg-seal-links a:hover{background:#fff;}'
+      + '.mtg-seal-btn:focus-visible{outline:2px solid #7a2e28;outline-offset:3px;border-radius:4px;}'
+      + '.mtg-seal-links a:focus-visible{outline:2px solid #7a2e28;outline-offset:2px;}'
+      + '@media (prefers-reduced-motion: reduce){'
+      + '.mtg-seal-svg,.mtg-seal-panel{transition:none;}}';
+
+    var style = document.createElement("style");
+    style.textContent = css;
+    head.appendChild(style);
+
+    // The seal artwork. An SVG circle with the org name around the ring,
+    // the monogram in the center, and a small diamond mark at the bottom.
+    function buildSeal() {
+      var org = CONFIG.org.toUpperCase();
+      return ''
+        + '<svg class="mtg-seal-svg" viewBox="0 0 120 120" width="58" height="58" '
+        +   'role="img" aria-label="' + CONFIG.org + ' seal">'
+        +   '<defs>'
+        +     '<path id="mtgTop" d="M 23,60 A 37,37 0 0 1 97,60" fill="none"/>'
+        +   '</defs>'
+        +   '<circle cx="60" cy="60" r="55" fill="none" stroke="#7a2e28" stroke-width="2.5"/>'
+        +   '<circle cx="60" cy="60" r="48" fill="none" stroke="#7a2e28" stroke-width="1"/>'
+        +   '<text font-family="Georgia,serif" font-size="8" fill="#7a2e28">'
+        +     '<textPath href="#mtgTop" startOffset="50%" text-anchor="middle" '
+        +     'textLength="106" lengthAdjust="spacingAndGlyphs">'
+        +     org + '</textPath>'
+        +   '</text>'
+        +   '<text x="60" y="60" text-anchor="middle" dominant-baseline="central" '
+        +     'font-family="Georgia,serif" font-weight="700" font-size="27" '
+        +     'fill="#7a2e28">' + CONFIG.monogram + '</text>'
+        +   '<g fill="#7a2e28">'
+        +     '<rect x="58" y="83.5" width="4" height="4"/>'
+        +     '<rect x="63" y="88.5" width="4" height="4"/>'
+        +     '<rect x="53" y="93.5" width="4" height="4"/>'
+        +     '<rect x="58" y="93.5" width="4" height="4"/>'
+        +     '<rect x="63" y="93.5" width="4" height="4"/>'
+        +   '</g>'
+        + '</svg>';
+    }
+
+    // Build the footer element.
+    var seal = document.createElement("footer");
+    seal.className = "mtg-seal";
+    seal.innerHTML = ''
+      + '<div class="mtg-seal-row">'
+      +   '<button class="mtg-seal-btn" type="button" aria-expanded="false">'
+      +     buildSeal()
+      +     '<span class="mtg-seal-label">'
+      +       '<span class="mtg-seal-org">' + CONFIG.org + '</span><br>'
+      +       '<span class="mtg-seal-ask">Who made this?</span>'
+      +     '</span>'
+      +   '</button>'
+      + '</div>'
+      + '<div class="mtg-seal-panel">'
+      +   '<p class="mtg-seal-mission">' + CONFIG.mission + '</p>'
+      +   '<div class="mtg-seal-links">'
+      +     '<a href="' + CONFIG.github + '" target="_blank" rel="noopener me">GitHub</a>'
+      +     '<a href="' + CONFIG.linkedin + '" target="_blank" rel="noopener me">LinkedIn</a>'
+      +   '</div>'
+      + '</div>';
+
+    // Tapping the seal opens or closes the panel.
+    var btn = seal.querySelector(".mtg-seal-btn");
+    btn.addEventListener("click", function () {
+      var nowOpen = seal.classList.toggle("open");
+      btn.setAttribute("aria-expanded", nowOpen ? "true" : "false");
+    });
+
+    // Place the seal at the very bottom of the page.
+    document.body.appendChild(seal);
+
+  })();
+  </script>
+  <!-- ===================== END CREATOR SEAL ===================== -->
+
+</body>
+</html>

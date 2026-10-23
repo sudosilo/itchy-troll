@@ -1,0 +1,1 @@
+2026-09-25, v2026.09.25. Created the spot pattern maker. Added the 447 color standard and smaller patterns and pages. Sheets now fill exactly with a centered crop and a true size PDF. Millimeter rulers now run along the top and left edges.

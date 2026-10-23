@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<!--
+  Momentum engine companion app.
+  Single page, no build step, deployed as one HTML file.
+
+  What this is: the monitoring and control surface for the live momentum engine. The engine
+  itself runs on a local machine against the broker gateway and is the only thing that can
+  place or close an order. This app never touches the broker. It reads state the engine
+  publishes to the backend, and queues commands the engine picks up on its next loop.
+
+  Backend routes used, all under /engine on the Railway service:
+    GET  /engine/snapshot   current position state plus whether the engine is live
+    GET  /engine/ledger     completed trades, newest first
+    GET  /engine/heartbeat  liveness and current status detail
+    GET  /engine/commands   commands queued but not yet consumed
+    POST /engine/commands   queue pause, resume, or flatten
+
+  The engine secret is entered once and kept in this browser's local storage only. It is
+  sent as the x-engine-secret header on command posts. Reads need no secret.
+
+  Commands are queued, not applied. A queued command sits pending until the engine drains
+  it, and expires unconsumed after five minutes server side so a stale flatten cannot fire
+  against a position it was never meant for.
+-->
+<html lang="en">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>engine companion</title>
+<style>
+  body { margin: 0; font-family: -apple-system, system-ui, sans-serif; background: #ffffff; color: #111827; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 14px; }
+  .topbar { display: flex; align-items: center; gap: 8px; position: relative; margin-bottom: 14px; }
+  .topbar h1 { font-size: 15px; font-weight: 600; margin: 0; flex: 1; }
+  button { border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 12px; font-size: 13px; background: #fff; cursor: pointer; color: #374151; font-family: inherit; }
+  button:hover { background: #f9fafb; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button.primary { background: #111827; color: #fff; border-color: #111827; }
+  button.danger { border-color: #dc2626; color: #dc2626; }
+  button.danger:hover { background: #fef2f2; }
+  input { border: 1px solid #d1d5db; border-radius: 6px; padding: 8px 10px; font-size: 13px; font-family: inherit; width: 100%; box-sizing: border-box; }
+  .hamburger { border: 1px solid #d1d5db; border-radius: 6px; padding: 6px 10px; font-size: 14px; background: #fff; cursor: pointer; }
+  #settingsMenu { display: none; position: absolute; top: 38px; right: 0; z-index: 10; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; width: min(340px, 90vw); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  #settingsMenu label { font-size: 11px; color: #6b7280; display: block; margin-bottom: 4px; }
+  #settingsMenu p { font-size: 10px; color: #9ca3af; margin: 8px 0 0 0; line-height: 1.5; }
+  .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+  .card h2 { font-size: 11px; font-weight: 500; color: #6b7280; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 0.04em; }
+  .statusline { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .dot.live { background: #16a34a; }
+  .dot.stale { background: #dc2626; }
+  .dot.unknown { background: transparent; border: 1px solid #9ca3af; }
+  .statustext { font-size: 13px; color: #111827; }
+  .substatus { font-size: 11px; color: #9ca3af; margin-left: 14px; }
+  .stateBadge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; }
+  .stateBadge.long { background: rgba(22,163,74,0.12); color: #16a34a; }
+  .stateBadge.short { background: rgba(220,38,38,0.12); color: #dc2626; }
+  .stateBadge.flat { background: rgba(107,114,128,0.12); color: #6b7280; }
+  .stateBadge.pending { background: rgba(37,99,235,0.12); color: #2563eb; }
+  .kv { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 0; border-bottom: 1px solid #f3f4f6; }
+  .kv:last-child { border-bottom: none; }
+  .kv .k { color: #6b7280; }
+  .kv .v { color: #111827; font-variant-numeric: tabular-nums; }
+  .empty { font-size: 12px; color: #9ca3af; line-height: 1.6; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pendingRow { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 6px 0; border-bottom: 1px solid #f3f4f6; }
+  .pendingRow:last-child { border-bottom: none; }
+  .pendingRow .cmd { color: #2563eb; }
+  .pendingRow .age { color: #9ca3af; font-size: 11px; }
+  .tradeRow { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; padding: 7px 0; border-bottom: 1px solid #f3f4f6; gap: 8px; }
+  .tradeRow:last-child { border-bottom: none; }
+  .tradeRow .side { width: 48px; flex-shrink: 0; }
+  .tradeRow .side.long { color: #16a34a; }
+  .tradeRow .side.short { color: #dc2626; }
+  .tradeRow .when { color: #9ca3af; font-size: 11px; flex: 1; }
+  .tradeRow .pnl { font-variant-numeric: tabular-nums; }
+  .tradeRow .pnl.up { color: #16a34a; }
+  .tradeRow .pnl.down { color: #dc2626; }
+  .totals { display: flex; gap: 14px; font-size: 11px; color: #6b7280; margin-bottom: 8px; }
+  .totals span { font-variant-numeric: tabular-nums; }
+  .foot { font-size: 11px; color: #9ca3af; margin-top: 12px; line-height: 1.6; }
+  .err { font-size: 11px; color: #dc2626; margin-top: 6px; }
+  .notice { font-size: 11px; color: #6b7280; margin-top: 6px; }
+</style>
+</head>
+
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <h1>engine companion</h1>
+    <button class="hamburger" id="settingsBtn">settings</button>
+    <div id="settingsMenu">
+      <label for="secretInput">engine secret</label>
+      <input id="secretInput" type="password" placeholder="xxxxxxxxxxxxxxxx" autocomplete="off">
+      <p>Required to send commands. Reads work without it. Stored in this browser only, never sent anywhere except as a header to the backend.</p>
+      <div style="margin-top:10px; display:flex; gap:8px;">
+        <button class="primary" id="saveSecret">save</button>
+        <button id="clearSecret">clear</button>
+      </div>
+      <p id="secretState"></p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>engine</h2>
+    <div class="statusline">
+      <span class="dot unknown" id="liveDot"></span>
+      <span class="statustext" id="liveText">checking</span>
+    </div>
+    <div class="substatus" id="liveDetail"></div>
+    <div class="err" id="liveErr"></div>
+  </div>
+
+  <div class="card">
+    <h2>position</h2>
+    <div id="positionBody">
+      <div class="empty">loading</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>control</h2>
+    <div class="controls">
+      <button id="pauseBtn">pause</button>
+      <button id="resumeBtn">resume</button>
+      <button class="danger" id="flattenBtn">flatten</button>
+    </div>
+    <div class="notice" id="controlNotice"></div>
+    <div class="err" id="controlErr"></div>
+    <div id="pendingBody" style="margin-top:10px;"></div>
+  </div>
+
+  <div class="card">
+    <h2>trades</h2>
+    <div id="ledgerBody">
+      <div class="empty">loading</div>
+    </div>
+  </div>
+
+  <div class="foot">
+    Commands are queued for the engine, not applied here. This app has no broker connection.
+    A queued command is picked up on the engine's next loop, and expires unconsumed after
+    five minutes.
+  </div>
+
+</div>
+
+<script>
+const BACKEND_URL = "https://qsr-tracker-backend-production.up.railway.app";
+const POLL_MS = 10000;
+const SECRET_STORAGE_KEY = "engineCompanionSecret";
+
+let secret = "";
+try { secret = localStorage.getItem(SECRET_STORAGE_KEY) || ""; } catch (e) { secret = ""; }
+
+const el = (id) => document.getElementById(id);
+
+function setText(id, text) { el(id).textContent = text || ""; }
+
+function relativeAge(seconds) {
+  if (seconds === null || seconds === undefined) return "never";
+  if (seconds < 60) return seconds + "s ago";
+  if (seconds < 3600) return Math.floor(seconds / 60) + "m ago";
+  if (seconds < 86400) return Math.floor(seconds / 3600) + "h ago";
+  return Math.floor(seconds / 86400) + "d ago";
+}
+
+function formatTime(epochSeconds) {
+  if (!epochSeconds) return "";
+  const d = new Date(epochSeconds * 1000);
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function money(n) {
+  if (typeof n !== "number" || !isFinite(n)) return "";
+  const sign = n < 0 ? "-" : "";
+  return sign + "$" + Math.abs(n).toFixed(2);
+}
+
+// Settings panel
+
+el("settingsBtn").addEventListener("click", () => {
+  const menu = el("settingsMenu");
+  menu.style.display = menu.style.display === "block" ? "none" : "block";
+  if (menu.style.display === "block") {
+    el("secretInput").value = secret;
+    renderSecretState();
+  }
+});
+
+function renderSecretState() {
+  setText("secretState", secret ? "secret is set, commands enabled" : "no secret set, commands disabled");
+  const disabled = !secret;
+  el("pauseBtn").disabled = disabled;
+  el("resumeBtn").disabled = disabled;
+  el("flattenBtn").disabled = disabled;
+  setText("controlNotice", disabled ? "enter the engine secret in settings to enable commands" : "");
+}
+
+el("saveSecret").addEventListener("click", () => {
+  secret = el("secretInput").value.trim();
+  try { localStorage.setItem(SECRET_STORAGE_KEY, secret); } catch (e) {}
+  renderSecretState();
+  el("settingsMenu").style.display = "none";
+});
+
+el("clearSecret").addEventListener("click", () => {
+  secret = "";
+  el("secretInput").value = "";
+  try { localStorage.removeItem(SECRET_STORAGE_KEY); } catch (e) {}
+  renderSecretState();
+});
+
+// Reads
+
+async function refreshSnapshot() {
+  try {
+    const res = await fetch(BACKEND_URL + "/engine/snapshot");
+    if (!res.ok) throw new Error("backend returned " + res.status);
+    const data = await res.json();
+    setText("liveErr", "");
+    renderLiveness(data.engineLive, data.heartbeatAgeSeconds);
+    renderPosition(data);
+  } catch (e) {
+    setText("liveErr", "could not reach the backend, " + e.message);
+    el("liveDot").className = "dot unknown";
+    setText("liveText", "unknown");
+    setText("liveDetail", "");
+  }
+}
+
+async function refreshHeartbeatDetail() {
+  try {
+    const res = await fetch(BACKEND_URL + "/engine/heartbeat");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.heartbeat) {
+      setText("liveDetail", "the engine has never reported in");
+      return;
+    }
+    const status = data.heartbeat.status || "unknown";
+    const detail = data.heartbeat.detail ? ", " + data.heartbeat.detail : "";
+    setText("liveDetail", status + detail + ", last seen " + relativeAge(data.ageSeconds));
+  } catch (e) {}
+}
+
+function renderLiveness(live, ageSeconds) {
+  const dot = el("liveDot");
+  if (ageSeconds === null || ageSeconds === undefined) {
+    dot.className = "dot unknown";
+    setText("liveText", "no heartbeat yet");
+    return;
+  }
+  dot.className = live ? "dot live" : "dot stale";
+  setText("liveText", live ? "running" : "not responding");
+}
+
+function renderPosition(data) {
+  const body = el("positionBody");
+  if (!data.snapshot) {
+    body.innerHTML = '<div class="empty">The engine has not published a position snapshot yet. This stays empty until the engine starts writing to the backend.</div>';
+    return;
+  }
+  const s = data.snapshot;
+  const state = (s.state || "unknown").toString().toLowerCase();
+  const badgeClass = state === "long" ? "long" : state === "short" ? "short" : state === "flat" ? "flat" : "pending";
+  let html = '<div style="margin-bottom:8px;"><span class="stateBadge ' + badgeClass + '">' + state + "</span></div>";
+
+  const rows = [
+    ["symbol", s.symbol],
+    ["quantity", s.quantity],
+    ["entry price", s.entry_price],
+    ["entry time", s.entry_timestamp],
+    ["deadline", s.deadline],
+    ["target", s.profit_target_price],
+    ["stop", s.stop_loss_price],
+    ["paused", s.paused === true ? "yes" : s.paused === false ? "no" : undefined],
+  ];
+  rows.forEach(([k, v]) => {
+    if (v === undefined || v === null || v === "") return;
+    html += '<div class="kv"><span class="k">' + k + '</span><span class="v">' + v + "</span></div>";
+  });
+  html += '<div class="kv"><span class="k">snapshot written</span><span class="v">' + formatTime(data.storedAt) + "</span></div>";
+  body.innerHTML = html;
+}
+
+async function refreshLedger() {
+  const body = el("ledgerBody");
+  try {
+    const res = await fetch(BACKEND_URL + "/engine/ledger?limit=25");
+    if (!res.ok) throw new Error("backend returned " + res.status);
+    const data = await res.json();
+    if (!data.trades || data.trades.length === 0) {
+      body.innerHTML = '<div class="empty">No completed trades recorded yet. Trades appear here as the engine closes them.</div>';
+      return;
+    }
+    let wins = 0;
+    let net = 0;
+    data.trades.forEach((row) => {
+      const p = Number(row.trade && row.trade.net_pnl);
+      if (isFinite(p)) { net += p; if (p > 0) wins++; }
+    });
+    const rate = data.trades.length ? Math.round((wins / data.trades.length) * 100) : 0;
+    let html = '<div class="totals"><span>' + data.total + " total</span><span>" + rate + "% win, last " + data.trades.length + "</span><span>" + money(net) + " net, last " + data.trades.length + "</span></div>";
+    data.trades.forEach((row) => {
+      const t = row.trade || {};
+      const side = (t.direction || t.side || "").toString().toLowerCase();
+      const sideClass = side === "long" ? "long" : side === "short" ? "short" : "";
+      const p = Number(t.net_pnl);
+      const pnlClass = isFinite(p) ? (p >= 0 ? "up" : "down") : "";
+      html += '<div class="tradeRow">' +
+        '<span class="side ' + sideClass + '">' + (side || "trade") + "</span>" +
+        '<span class="when">' + formatTime(row.recordedAt) + "</span>" +
+        '<span class="pnl ' + pnlClass + '">' + (isFinite(p) ? money(p) : "") + "</span>" +
+        "</div>";
+    });
+    body.innerHTML = html;
+  } catch (e) {
+    body.innerHTML = '<div class="err">could not load trades, ' + e.message + "</div>";
+  }
+}
+
+async function refreshPending() {
+  const body = el("pendingBody");
+  try {
+    const res = await fetch(BACKEND_URL + "/engine/commands");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.pending || data.pending.length === 0) { body.innerHTML = ""; return; }
+    const now = Math.floor(Date.now() / 1000);
+    let html = "";
+    data.pending.forEach((c) => {
+      const age = now - c.issuedAt;
+      const expired = age > 300;
+      html += '<div class="pendingRow"><span class="cmd">' + c.command + " queued</span><span class=\"age\">" +
+        (expired ? "expired, will not run" : relativeAge(age)) + "</span></div>";
+    });
+    body.innerHTML = html;
+  } catch (e) {}
+}
+
+// Commands
+
+async function sendCommand(command) {
+  setText("controlErr", "");
+  if (!secret) { setText("controlErr", "no engine secret set"); return; }
+  if (command === "flatten" && !confirm("Queue a flatten command? The engine will close any open position on its next loop.")) return;
+  try {
+    const res = await fetch(BACKEND_URL + "/engine/commands", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-engine-secret": secret },
+      body: JSON.stringify({ command })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "backend returned " + res.status);
+    setText("controlNotice", command + " queued, waiting for the engine to pick it up");
+    refreshPending();
+  } catch (e) {
+    setText("controlErr", "could not queue " + command + ", " + e.message);
+  }
+}
+
+el("pauseBtn").addEventListener("click", () => sendCommand("pause"));
+el("resumeBtn").addEventListener("click", () => sendCommand("resume"));
+el("flattenBtn").addEventListener("click", () => sendCommand("flatten"));
+
+// Polling
+
+function refreshAll() {
+  refreshSnapshot();
+  refreshHeartbeatDetail();
+  refreshLedger();
+  refreshPending();
+}
+
+renderSecretState();
+refreshAll();
+setInterval(refreshAll, POLL_MS);
+</script>
+
+</body>
+</html>

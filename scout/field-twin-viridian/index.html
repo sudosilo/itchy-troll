@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Field Twin Viridian</title>
+<meta name="theme-color" content="#ffffff">
+<link rel="icon" type="image/svg+xml" href="/field-twin-viridian-icon-v1.svg">
+<link rel="manifest" href="/field-twin-viridian-v1.webmanifest">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://fonts.bunny.net/css?family=overpass:400,600,800">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
+<style>
+  /* Field Twin Viridian v3. Same skin as Field Twin: road sign legibility for outdoor use, light only. */
+  :root {
+    --bg: #eef2f6;
+    --panel: #ffffff;
+    --line: #b8c2cc;
+    --accent: #17694f;
+    --accent-dim: #5e9c86;
+    --text: #0a1b2e;
+    --text-dim: #44556a;
+    --signal: #7fcbae;
+    --tint: #dcefe7;
+    --warn: #b86e00;
+    --bad: #b3261e;
+    --dock-h: 66px;
+    --head-h: 64px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: 'Overpass', 'Segoe UI', Roboto, Arial, sans-serif;
+    font-size: 16px; font-variant-numeric: tabular-nums;
+    -webkit-tap-highlight-color: transparent;
+  }
+  header {
+    position: fixed; top: 0; left: 0; right: 0; height: var(--head-h);
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 10px; background: var(--panel);
+    border-bottom: 2px solid var(--text); z-index: 1000;
+  }
+  .brand { flex: 1 1 auto; min-width: 0; }
+  .title { font-size: 18px; font-weight: 800; letter-spacing: 3px; color: var(--text); }
+  .title span { color: var(--accent); }
+  .status {
+    font-size: 13px; font-weight: 600; color: var(--text-dim); margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  button {
+    font-family: inherit; font-size: 15px; font-weight: 800; letter-spacing: 0.2px;
+    text-transform: lowercase; min-height: 48px; padding: 0 16px; border-radius: 8px;
+    background: var(--accent); color: #ffffff; border: 2px solid var(--accent); cursor: pointer;
+  }
+  button::first-letter { text-transform: uppercase; }
+  button.secondary { background: #ffffff; color: var(--accent); }
+  button:disabled { opacity: 0.5; }
+  button:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 3px solid var(--signal); outline-offset: 2px;
+  }
+  #menuBtn {
+    min-height: 44px; width: 44px; padding: 0; font-size: 20px;
+    background: #ffffff; color: var(--text); border: 2px solid var(--text);
+  }
+
+  main {
+    position: fixed; top: var(--head-h); bottom: var(--dock-h); left: 0; right: 0;
+    overflow-y: auto; padding: 10px 10px 16px 10px;
+  }
+  #camBox {
+    position: relative; width: 100%; aspect-ratio: 16 / 9; background: #d9dee4;
+    border: 2px solid var(--text); border-radius: 8px; overflow: hidden;
+  }
+  #camBox video, #camBox canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #camBox.hidden video, #camBox.hidden canvas { visibility: hidden; }
+  #camNote {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    padding: 16px; text-align: center; font-size: 15px; font-weight: 600; color: var(--text-dim);
+  }
+  #camBox.live #camNote { display: none; }
+  #camBox.live.hidden #camNote { display: flex; }
+
+  #gauges { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .g {
+    background: var(--panel); border: 2px solid var(--text); border-radius: 8px;
+    padding: 8px 8px 6px 8px; min-width: 0;
+  }
+  .g b { display: block; font-size: 26px; font-weight: 800; line-height: 1.1; }
+  .g small { display: block; font-size: 12px; font-weight: 600; color: var(--text-dim); }
+  .g.rough-ok b { color: var(--accent); }
+  .g.rough-mid b { color: var(--warn); }
+  .g.rough-bad b { color: var(--bad); }
+
+  #trace {
+    display: block; width: 100%; height: 90px; margin-top: 10px; background: var(--panel);
+    border: 2px solid var(--text); border-radius: 8px;
+  }
+  h3 { font-size: 15px; font-weight: 800; margin: 16px 2px 6px 2px; }
+  .feed { background: var(--panel); border: 2px solid var(--text); border-radius: 8px; }
+  .feed .row {
+    display: flex; justify-content: space-between; gap: 10px; padding: 10px 12px;
+    border-top: 1px solid var(--line); font-size: 15px;
+  }
+  .feed .row:first-child { border-top: none; }
+  .feed .row .plate {
+    font-weight: 800; letter-spacing: 2px; background: var(--tint);
+    border: 2px solid var(--text); border-radius: 4px; padding: 1px 8px;
+  }
+  .feed .row span { color: var(--text-dim); font-size: 14px; }
+  .feed .empty { padding: 12px; color: var(--text-dim); font-size: 15px; }
+  .plate-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 16px 2px 6px 2px; }
+  .plate-head h3 { margin: 0; }
+  .plate-head button { min-height: 40px; padding: 0 12px; font-size: 14px; border: 2px solid var(--text); }
+  .plate-head button.on { background: var(--accent); color: #ffffff; }
+  #plateState { font-size: 14px; font-weight: 600; color: var(--text-dim); margin: 0 2px 8px 2px; }
+  #plateState.bad { color: var(--bad); }
+  #radar { cursor: pointer; }
+  .feed .row.tap { cursor: pointer; }
+  .feed .row .who { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .feed .row .who small { color: var(--text-dim); font-size: 13px; font-weight: 600; }
+  .pp-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .pp-plate { font-size: 28px; font-weight: 800; letter-spacing: 3px; background: var(--tint); border: 2px solid var(--text); border-radius: 6px; padding: 2px 12px; }
+  .pp-sub { font-size: 14px; font-weight: 600; color: var(--text-dim); }
+  #ppMap { height: 200px; border: 2px solid var(--text); border-radius: 8px; margin: 10px 0; }
+  .sight { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .sight .ph { flex: 0 0 120px; height: 60px; background: #d9dee4; border: 2px solid var(--text); border-radius: 4px; overflow: hidden; }
+  .sight .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .sight .tx { font-size: 14px; line-height: 1.4; min-width: 0; }
+  .sight .tx b { font-size: 15px; }
+  .chip { display: inline-block; width: 12px; height: 12px; border-radius: 6px; border: 1px solid var(--text); vertical-align: -1px; margin-right: 4px; }
+
+  #dock {
+    position: fixed; left: 0; right: 0; bottom: 0; height: var(--dock-h); z-index: 1000;
+    display: flex; align-items: center; gap: 10px; padding: 0 12px;
+    background: var(--panel); border-top: 2px solid var(--text);
+  }
+  .radar { display: flex; align-items: flex-end; height: 26px; gap: 3px; margin-right: auto; }
+  .radar div { width: 5px; height: 100%; background: var(--line); }
+  .radar div.on { background: var(--accent); }
+  .radar div:nth-child(1) { height: 30%; } .radar div:nth-child(2) { height: 55%; }
+  .radar div:nth-child(3) { height: 80%; } .radar div:nth-child(4) { height: 100%; }
+  #startBtn, #mapBtn {
+    min-height: 46px; padding: 0 20px; font-size: 16px;
+    border: 2px solid var(--text); box-shadow: 3px 3px 0 var(--text);
+  }
+  #mapBtn { background: #ffffff; color: var(--text); }
+  #startBtn.on { background: var(--bad); border-color: var(--text); }
+  #startBtn:active, #mapBtn:active { box-shadow: none; transform: translate(3px, 3px); }
+
+  #mapView {
+    position: fixed; top: var(--head-h); bottom: var(--dock-h); left: 0; right: 0;
+    z-index: 900; display: none; background: var(--bg);
+  }
+  #mapView.open { display: block; }
+  #map { position: absolute; inset: 0; }
+  #mapKey {
+    position: absolute; left: 8px; bottom: 8px; z-index: 950; background: var(--panel);
+    border: 2px solid var(--text); border-radius: 8px; padding: 6px 10px; font-size: 13px; font-weight: 600;
+  }
+  #mapKey i { display: inline-block; width: 12px; height: 12px; border-radius: 6px; margin: 0 4px 0 8px; vertical-align: -1px; }
+  #mapKey i:first-child { margin-left: 0; }
+
+  #scrim { position: fixed; inset: 0; background: rgba(10, 27, 46, 0.25); z-index: 1005; display: none; }
+  #scrim.open { display: block; }
+  #sideMenu {
+    position: fixed; top: 0; bottom: 0; right: 0; width: min(320px, 88vw); z-index: 1010;
+    background: var(--panel); border-left: 2px solid var(--text); overflow-y: auto;
+    transform: translateX(105%); transition: transform 0.2s ease; padding-bottom: 20px;
+  }
+  #sideMenu.open { transform: none; }
+  #sideMenu h3 { margin: 18px 14px 4px 14px; color: var(--text-dim); font-size: 13px; }
+  #sideMenu > button { display: block; width: calc(100% - 28px); margin: 6px 14px; text-align: left; }
+  .ext-row { display: flex; gap: 8px; padding: 6px 14px 10px 14px; }
+  .ext-row button {
+    flex: 1 1 0; text-transform: none; min-height: 46px; padding: 6px 8px; font-size: 14px; line-height: 1.15;
+    border: 2px solid var(--text); box-shadow: 3px 3px 0 var(--text);
+  }
+  .ext-row button:active { box-shadow: none; transform: translate(3px, 3px); }
+
+  #panel {
+    position: fixed; left: 0; right: 0; bottom: 0; max-height: 78%; overflow-y: auto; z-index: 1010;
+    background: var(--panel); border-top: 2px solid var(--text); border-radius: 16px 16px 0 0;
+    padding: 18px 16px 22px 16px; box-shadow: 0 -6px 0 rgba(10, 27, 46, 0.08);
+    transform: translateY(105%); transition: transform 0.2s ease;
+  }
+  #panel.open { transform: none; }
+  #panel h2 { font-size: 22px; font-weight: 800; margin: 0 0 8px 0; }
+  #panel p { font-size: 15px; line-height: 1.45; margin: 8px 0; color: var(--text); }
+  #panel .dim { color: var(--text-dim); }
+  #panel label { display: block; font-size: 13px; font-weight: 600; color: var(--text-dim); margin: 14px 0 4px 0; }
+  #panel input, #panel select {
+    width: 100%; font-family: inherit; font-size: 16px; padding: 10px; border: 2px solid var(--text);
+    border-radius: 8px; background: #ffffff; color: var(--text);
+  }
+  #panel .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  #panel .actions button { flex: 1 1 auto; }
+  .meter { height: 14px; border: 2px solid var(--text); border-radius: 4px; background: #ffffff; margin: 4px 0 10px 0; }
+  .meter div { height: 100%; background: var(--accent); }
+  .meter.full div { background: var(--bad); }
+  .stat { display: flex; justify-content: space-between; font-size: 15px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .stat b { font-weight: 800; }
+  .tg { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .tg input { width: 26px !important; height: 26px; flex: 0 0 auto; accent-color: var(--accent); }
+  .plate-pop img { width: 240px; max-width: 70vw; border: 2px solid var(--text); border-radius: 6px; display: block; margin-top: 6px; }
+  #toast {
+    position: fixed; left: 50%; bottom: calc(var(--dock-h) + 12px); transform: translateX(-50%);
+    background: var(--text); color: #ffffff; font-weight: 600; font-size: 14px; padding: 10px 14px;
+    border-radius: 8px; z-index: 1100; display: none; max-width: 90vw; text-align: center;
+  }
+  @media (prefers-reduced-motion: reduce) { #sideMenu, #panel { transition: none; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="title">FIELD TWIN <span>VIRIDIAN</span></div>
+    <div class="status" id="status">Ready to drive</div>
+  </div>
+  <button id="menuBtn" aria-label="Menu">&#9776;</button>
+</header>
+
+<main id="drive">
+  <div id="camBox">
+    <video id="video" playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    <div id="camNote">Press start drive. The rear camera, motion sensors and location turn on together.</div>
+  </div>
+
+  <section id="gauges">
+    <div class="g"><b id="gSpeed">0</b><small>mph</small></div>
+    <div class="g" id="gRoughBox"><b id="gRough">0.00</b><small>roughness, g</small></div>
+    <div class="g"><b id="gHz">0</b><small>main shake, Hz</small></div>
+    <div class="g"><b id="gSpace">0</b><small>ridge spacing, m</small></div>
+    <div class="g"><b id="gJit">0.0</b><small>camera shake, %</small></div>
+    <div class="g"><b id="gPlates">0</b><small>plates this drive</small></div>
+  </section>
+
+  <canvas id="trace"></canvas>
+
+  <div class="plate-head"><h3>Latest plates</h3><button class="secondary" id="parkedBtn">READ WHILE PARKED</button></div>
+  <div id="plateState">Plate reader starts with the drive.</div>
+  <div class="feed" id="plateFeed"><div class="empty">Plates show up here as they are read.</div></div>
+</main>
+
+<div id="mapView">
+  <div id="map"></div>
+  <div id="mapKey"><i style="background:#17694f"></i>smooth<i style="background:#b86e00"></i>rough<i style="background:#b3261e"></i>very rough</div>
+</div>
+
+<nav id="dock">
+  <div class="radar" id="radar" aria-label="Upload signal"><div></div><div></div><div></div><div></div></div>
+  <button id="mapBtn">MAP</button>
+  <button id="startBtn">START DRIVE</button>
+</nav>
+
+<div id="scrim"></div>
+<aside id="sideMenu" aria-label="Menu">
+  <h3>This drive</h3>
+  <button class="secondary" id="previewBtn">HIDE PREVIEW</button>
+  <button class="secondary" id="uploadBtn">UPLOAD NOW</button>
+  <h3>Records</h3>
+  <button class="secondary" id="platesBtn">PLATE LOG</button>
+  <button class="secondary" id="bumpsBtn">BUMP PHOTOS</button>
+  <h3>Your data</h3>
+  <button class="secondary" id="accountBtn">ACCOUNT</button>
+  <button class="secondary" id="dataBtn">DATA AND LIMITS</button>
+  <button class="secondary" id="settingsBtn">SETTINGS</button>
+  <button class="secondary" id="aboutBtn">HOW IT WORKS</button>
+  <h3>Other apps</h3>
+  <div class="ext-row">
+    <button id="openCqBtn">Chassisquiver</button>
+    <button id="openVioletBtn">Field Twin Violet</button>
+  </div>
+</aside>
+<section id="panel" aria-live="polite"></section>
+<div id="toast"></div>
+
+<script id="plateWorker" type="text/worker">
+// Plate reader worker. Runs both models off the main thread so motion readings stay on time.
+importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js');
+ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+ort.env.wasm.numThreads = 1;
+const ALPHA = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_';
+let find = null, read = null;
+self.onmessage = async (e) => {
+  const m = e.data;
+  try {
+    if (m.type === 'load') {
+      find = await ort.InferenceSession.create(m.findUrl, { executionProviders: ['wasm'] });
+      read = await ort.InferenceSession.create(m.readUrl, { executionProviders: ['wasm'] });
+      self.postMessage({ type: 'ready' });
+      return;
+    }
+    if (m.type === 'frame') {
+      const t0 = performance.now();
+      const S = 384;
+      const px = new Uint8ClampedArray(m.pixels);
+      const plane = S * S;
+      const input = new Float32Array(3 * plane);
+      for (let i = 0, j = 0; i < plane; i++, j += 4) {
+        input[i] = px[j] / 255;
+        input[plane + i] = px[j + 1] / 255;
+        input[2 * plane + i] = px[j + 2] / 255;
+      }
+      const out = await find.run({ images: new ort.Tensor('float32', input, [1, 3, S, S]) });
+      const det = out.output0;
+      const rows = det.dims[0];
+      const boxes = [];
+      for (let r = 0; r < rows; r++) {
+        const o = r * 7;
+        const score = det.data[o + 6];
+        if (score < m.minFind) continue;
+        boxes.push({ x1: det.data[o + 1], y1: det.data[o + 2], x2: det.data[o + 3], y2: det.data[o + 4], score });
+      }
+      self.postMessage({ type: 'boxes', id: m.id, boxes, ms: performance.now() - t0 });
+      return;
+    }
+    if (m.type === 'crops') {
+      const n = m.count;
+      if (!n) { self.postMessage({ type: 'reads', id: m.id, reads: [] }); return; }
+      const out = await read.run({ input: new ort.Tensor('uint8', new Uint8Array(m.pixels), [n, 64, 128, 3]) });
+      const p = out.plate;
+      const slots = p.dims[1], classes = p.dims[2];
+      const reads = [];
+      for (let k = 0; k < n; k++) {
+        let text = '', confSum = 0, used = 0, minP = 1;
+        for (let s = 0; s < slots; s++) {
+          let best = 0, bi = 0;
+          const base = (k * slots + s) * classes;
+          for (let c = 0; c < classes; c++) { const v = p.data[base + c]; if (v > best) { best = v; bi = c; } }
+          const ch = ALPHA[bi];
+          if (ch !== '_') { text += ch; confSum += best; used++; if (best < minP) minP = best; }
+        }
+        reads.push({ text, conf: used ? confSum / used : 0, min: used ? minP : 0 });
+      }
+      self.postMessage({ type: 'reads', id: m.id, reads });
+    }
+  } catch (err) {
+    self.postMessage({ type: 'error', message: String(err && err.message || err) });
+  }
+};
+</script>
+
+<script>
+// Field Twin Viridian v3. Camera, motion and location companion to Field Twin.
+// Everything is measured on the phone. Only small results leave it, in one batch a minute.
+
+const SUPABASE_URL = 'https://zasyjjoypkpvyqdueums.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inphc3lqam95cGtwdnlxZHVldW1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMjk1NjQsImV4cCI6MjEwNjgwNTU2NH0.PZrUvG4qsTpMQeihXbbzaFYUAAJ9YV7FtxLTkcQGFVI';
+const CQ_SITE = 'https://chassisquiver.vercel.app/';
+const VIOLET_SITE = 'https://field-twin-violet.vercel.app/';
+const PHOTO_BUCKET = 'viridian-photos';
+const G = 9.80665;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = (p) => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const today = () => new Date().toISOString().slice(0, 10);
+const month = () => new Date().toISOString().slice(0, 7);
+
+// ---------- settings ----------
+const DEFAULTS = {
+  readPlates: true, readParked: false, plateRate: 2, minMph: 5, lookArea: 'center', camRes: '720',
+  keepCrops: true, uploadCrops: true, readDetails: true,
+  bumpPhotos: true, bumpG: 0.35, photosPerHour: 40,
+  dayCapMb: 20, monthCapMb: 300, uploadEvery: 60
+};
+let CFG = Object.assign({}, DEFAULTS);
+try { CFG = Object.assign(CFG, JSON.parse(localStorage.getItem('viridian-cfg') || '{}')); } catch (e) {}
+function saveCfg() { try { localStorage.setItem('viridian-cfg', JSON.stringify(CFG)); } catch (e) {} }
+
+let DEVICE = localStorage.getItem('viridian-device');
+if (!DEVICE) { DEVICE = uid('d'); try { localStorage.setItem('viridian-device', DEVICE); } catch (e) {} }
+
+// ---------- small ui helpers ----------
+let toastTimer = null;
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.style.display = 'block';
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3200);
+}
+function setStatus(s) { $('status').textContent = s; }
+function openMenu(on) { $('sideMenu').classList.toggle('open', on); $('scrim').classList.toggle('open', on); }
+function openPanel(html) {
+  openMenu(false);
+  $('panel').innerHTML = html; $('panel').classList.add('open'); $('scrim').classList.add('open');
+}
+function closePanel() { $('panel').classList.remove('open'); $('scrim').classList.remove('open'); }
+$('menuBtn').onclick = () => openMenu(!$('sideMenu').classList.contains('open'));
+$('scrim').onclick = () => { openMenu(false); closePanel(); };
+
+// ---------- local queue in IndexedDB ----------
+const DB_NAME = 'field-twin-viridian';
+let dbp = null;
+function db() {
+  if (dbp) return dbp;
+  dbp = new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, 2);
+    r.onupgradeneeded = () => {
+      const d = r.result;
+      // pending holds closed plate sightings waiting for the detail pass. crops keeps the best
+      // plate photo of every sighting on this phone, whether or not it uploads.
+      ['samples', 'plates', 'bumps', 'photos', 'log', 'pending', 'crops'].forEach((s) => {
+        if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, { keyPath: 'id' });
+      });
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+  return dbp;
+}
+async function idb(store, mode, fn) {
+  const d = await db();
+  return new Promise((res, rej) => {
+    const tx = d.transaction(store, mode);
+    const st = tx.objectStore(store);
+    let out;
+    Promise.resolve(fn(st)).then((v) => { out = v; });
+    tx.oncomplete = () => res(out);
+    tx.onerror = () => rej(tx.error);
+  });
+}
+function reqP(r) { return new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); }
+const qPut = (store, row) => idb(store, 'readwrite', (st) => { st.put(row); });
+const qTake = (store, n) => idb(store, 'readonly', (st) => reqP(st.getAll(null, n)));
+const qCount = (store) => idb(store, 'readonly', (st) => reqP(st.count()));
+const qDel = (store, ids) => idb(store, 'readwrite', (st) => { ids.forEach((id) => st.delete(id)); });
+
+// The log keeps the last 2000 plate reads and bump records on the phone for the plate log and map,
+// whether or not they have uploaded yet.
+async function logPut(kind, row) {
+  await qPut('log', Object.assign({ kind }, row));
+}
+async function logAll() {
+  const rows = await idb('log', 'readonly', (st) => reqP(st.getAll()));
+  rows.sort((a, b) => (a.at < b.at ? 1 : -1));
+  if (rows.length > 4000) await qDel('log', rows.slice(4000).map((r) => r.id));
+  return rows.slice(0, 4000);
+}
+// Plate photos on the phone are capped at the newest 3000, about 20 MB.
+async function trimCrops() {
+  const keys = await idb('crops', 'readonly', (st) => reqP(st.getAllKeys()));
+  if (keys.length <= 3000) return;
+  const rows = await idb('crops', 'readonly', (st) => reqP(st.getAll()));
+  rows.sort((a, b) => (a.at < b.at ? 1 : -1));
+  await qDel('crops', rows.slice(3000).map((r) => r.id));
+}
+
+// ---------- byte meter and caps ----------
+function meter() {
+  let m = {};
+  try { m = JSON.parse(localStorage.getItem('viridian-meter') || '{}'); } catch (e) {}
+  if (m.day !== today()) { m.day = today(); m.dayBytes = 0; }
+  if (m.month !== month()) { m.month = month(); m.monthBytes = 0; }
+  m.total = m.total || 0;
+  return m;
+}
+function addBytes(n) {
+  const m = meter();
+  m.dayBytes += n; m.monthBytes += n; m.total += n;
+  try { localStorage.setItem('viridian-meter', JSON.stringify(m)); } catch (e) {}
+}
+function capLeft() {
+  const m = meter();
+  return Math.min(CFG.dayCapMb * 1e6 - m.dayBytes, CFG.monthCapMb * 1e6 - m.monthBytes);
+}
+function fmtBytes(b) {
+  if (b < 1000) return Math.round(b) + ' B';
+  if (b < 1e6) return (b / 1000).toFixed(1) + ' KB';
+  return (b / 1e6).toFixed(2) + ' MB';
+}
+
+// ---------- account ----------
+let sb = null, USER = null;
+function initCloud() {
+  if (!window.supabase) return;
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: 'field-twin-viridian-auth' }
+  });
+  sb.auth.onAuthStateChange((ev, session) => { USER = session ? session.user : null; paintIdle(); });
+  sb.auth.getSession().then((r) => { USER = r.data && r.data.session ? r.data.session.user : null; paintIdle(); });
+}
+function accountPanel() {
+  if (!sb) { openPanel('<h2>Account</h2><p>The account service did not load. Check your signal and reopen the app.</p>'); return; }
+  if (USER) {
+    openPanel('<h2>Account</h2><p>Signed in as <b>' + esc(USER.email) + '</b>. This is the same account as Field Twin and Field Twin Violet.</p>' +
+      '<div class="actions"><button class="secondary" id="outBtn">SIGN OUT</button><button id="closeBtn">DONE</button></div>');
+    $('outBtn').onclick = async () => { await sb.auth.signOut(); USER = null; closePanel(); toast('Signed out. Readings keep saving on this phone.'); };
+    $('closeBtn').onclick = closePanel;
+    return;
+  }
+  openPanel('<h2>Account</h2><p>Sign in with the same email and password you use in Field Twin. Until you sign in, readings save on this phone and wait.</p>' +
+    '<label for="aEmail">Email</label><input id="aEmail" type="email" autocomplete="email">' +
+    '<label for="aPass">Password</label><input id="aPass" type="password" autocomplete="current-password">' +
+    '<p class="dim" id="aMsg"></p>' +
+    '<div class="actions"><button id="inBtn">SIGN IN</button><button class="secondary" id="closeBtn">CLOSE</button></div>');
+  $('closeBtn').onclick = closePanel;
+  $('inBtn').onclick = async () => {
+    const email = $('aEmail').value.trim(), pass = $('aPass').value;
+    if (!email || !pass) { $('aMsg').textContent = 'Type your email and password.'; return; }
+    $('inBtn').disabled = true; $('inBtn').textContent = 'SIGNING IN';
+    const r = await sb.auth.signInWithPassword({ email, password: pass });
+    if (r.error) {
+      $('inBtn').disabled = false; $('inBtn').textContent = 'SIGN IN';
+      $('aMsg').textContent = /invalid/i.test(r.error.message) ? 'That email and password did not match the Field Twin account.' : r.error.message;
+      return;
+    }
+    USER = r.data.user; closePanel(); toast('Signed in. Waiting readings upload within a minute.'); uploadNow();
+  };
+}
+
+// ---------- drive state ----------
+const S = {
+  on: false, trip: null, startedAt: 0,
+  stream: null, wake: null, geoWatch: null,
+  pos: null, mph: 0, heading: null,
+  g: null, motionRate: 0, motionCount: 0, motionT0: 0,
+  win: [], spec: [], trace: [],
+  jit: { prev: null, shifts: [], last: 0 },
+  frames: [], lastFrameGrab: 0, photoTimes: [], lastBump: 0,
+  plates: 0, recentPlates: new Map(), worker: null, workerReady: false, workerError: null, plateBusy: false, lastPlate: 0, checks: 0, found: 0,
+  lastUpload: null, uploadError: null,
+  open: new Map(), detailBusy: false
+};
+
+// ---------- motion ----------
+// Gravity comes from a slow average of the raw readings. Vertical is the part of each reading
+// along gravity, so the phone can sit at any angle in the mount.
+function onMotion(e) {
+  const a = e.accelerationIncludingGravity;
+  if (!a || a.x == null) return;
+  const now = performance.now();
+  const v = [a.x, a.y, a.z];
+  if (!S.g) S.g = v.slice();
+  else for (let i = 0; i < 3; i++) S.g[i] += 0.02 * (v[i] - S.g[i]);
+  const gm = Math.hypot(S.g[0], S.g[1], S.g[2]) || G;
+  const vert = ((v[0] - S.g[0]) * S.g[0] + (v[1] - S.g[1]) * S.g[1] + (v[2] - S.g[2]) * S.g[2]) / gm / G;
+  S.win.push(vert); S.spec.push(vert); S.trace.push(vert);
+  if (S.spec.length > 512) S.spec.splice(0, S.spec.length - 512);
+  if (S.trace.length > 2400) S.trace.splice(0, S.trace.length - 2400);
+  S.motionCount++;
+  if (!S.motionT0) S.motionT0 = now;
+  if (now - S.motionT0 > 2000) { S.motionRate = S.motionCount * 1000 / (now - S.motionT0); S.motionCount = 0; S.motionT0 = now; }
+  if (Math.abs(vert) > CFG.bumpG) onBump(Math.abs(vert));
+}
+
+// Strongest shake frequency between 1 and half the sample rate, from the last 512 readings.
+function dominantHz(x, rate) {
+  const N = 1 << Math.floor(Math.log2(x.length));
+  if (N < 64 || !rate) return 0;
+  const re = new Float32Array(N), im = new Float32Array(N);
+  let mean = 0;
+  for (let i = 0; i < N; i++) mean += x[x.length - N + i];
+  mean /= N;
+  for (let i = 0; i < N; i++) {
+    const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (N - 1));
+    re[i] = (x[x.length - N + i] - mean) * w;
+  }
+  for (let i = 1, j = 0; i < N; i++) {
+    let bit = N >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+  }
+  for (let len = 2; len <= N; len <<= 1) {
+    const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    for (let i = 0; i < N; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const ar = re[i + k + len / 2] * cr - im[i + k + len / 2] * ci;
+        const ai = re[i + k + len / 2] * ci + im[i + k + len / 2] * cr;
+        re[i + k + len / 2] = re[i + k] - ar; im[i + k + len / 2] = im[i + k] - ai;
+        re[i + k] += ar; im[i + k] += ai;
+        const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
+      }
+    }
+  }
+  let best = 0, bk = 0;
+  const lo = Math.max(1, Math.ceil(1 * N / rate));
+  for (let k = lo; k < N / 2; k++) {
+    const p = re[k] * re[k] + im[k] * im[k];
+    if (p > best) { best = p; bk = k; }
+  }
+  return bk * rate / N;
+}
+
+// ---------- camera shake ----------
+// Each frame is shrunk to 64 by 36, each row is averaged, and the row pattern is lined up with the
+// last frame's. How far it slides is how far the camera bounced, in percent of frame height.
+const jc = document.createElement('canvas'); jc.width = 64; jc.height = 36;
+const jx = jc.getContext('2d', { willReadFrequently: true });
+function jitterTick() {
+  const v = $('video');
+  if (!v.videoWidth) return;
+  jx.drawImage(v, 0, 0, 64, 36);
+  const d = jx.getImageData(0, 0, 64, 36).data;
+  const prof = new Float32Array(36);
+  for (let y = 0; y < 36; y++) {
+    let s = 0;
+    for (let x = 16; x < 48; x++) { const o = (y * 64 + x) * 4; s += d[o] + d[o + 1] + d[o + 2]; }
+    prof[y] = s / 96;
+  }
+  let m = 0; for (let y = 0; y < 36; y++) m += prof[y]; m /= 36;
+  for (let y = 0; y < 36; y++) prof[y] -= m;
+  if (S.jit.prev) {
+    const scores = [];
+    for (let sh = -6; sh <= 6; sh++) {
+      let s = 0, n = 0;
+      for (let y = 6; y < 30; y++) { s += prof[y] * S.jit.prev[y + sh]; n++; }
+      scores.push(s / n);
+    }
+    let bi = 0; for (let i = 1; i < scores.length; i++) if (scores[i] > scores[bi]) bi = i;
+    let off = 0;
+    if (bi > 0 && bi < scores.length - 1) {
+      const a = scores[bi - 1], b = scores[bi], c = scores[bi + 1], den = a - 2 * b + c;
+      if (den) off = 0.5 * (a - c) / den;
+    }
+    S.jit.shifts.push((bi - 6 + off) / 36 * 100);
+  }
+  S.jit.prev = prof;
+}
+function jitterSummary() {
+  const s = S.jit.shifts; S.jit.shifts = [];
+  if (s.length < 3) return { px: 0, hz: 0 };
+  let mean = 0; s.forEach((x) => { mean += x; }); mean /= s.length;
+  let ss = 0, zc = 0;
+  for (let i = 0; i < s.length; i++) { ss += (s[i] - mean) ** 2; if (i && (s[i] - mean) * (s[i - 1] - mean) < 0) zc++; }
+  return { px: Math.sqrt(ss / s.length), hz: zc / 2 };
+}
+
+// ---------- bump photos ----------
+// The last 1.5 seconds of small frames stay in memory. A hard hit saves the frame from about
+// three quarters of a second earlier, when the bump was still ahead of the car.
+const fc = document.createElement('canvas'); fc.width = 480; fc.height = 270;
+function grabFrame(now) {
+  if (!CFG.bumpPhotos || now - S.lastFrameGrab < 250) return;
+  const v = $('video');
+  if (!v.videoWidth) return;
+  S.lastFrameGrab = now;
+  const c = S.frames.length >= 6 ? S.frames.shift().c : document.createElement('canvas');
+  c.width = 480; c.height = 270;
+  c.getContext('2d').drawImage(v, 0, 0, 480, 270);
+  S.frames.push({ c, t: now });
+}
+function onBump(peak) {
+  const now = performance.now();
+  if (!S.on || now - S.lastBump < 5000) return;
+  S.lastBump = now;
+  const at = new Date().toISOString();
+  const id = uid('b');
+  const p = S.pos;
+  const row = { id, device: DEVICE, trip: S.trip, at, lat: p ? p.lat : null, lon: p ? p.lon : null, mph: Math.round(S.mph), peak_g: +peak.toFixed(2), photo: null };
+  const hourAgo = Date.now() - 3600e3;
+  S.photoTimes = S.photoTimes.filter((t) => t > hourAgo);
+  const fr = S.frames.slice().reverse().find((f) => now - f.t >= 600) || S.frames[0];
+  if (CFG.bumpPhotos && fr && S.photoTimes.length < CFG.photosPerHour) {
+    S.photoTimes.push(Date.now());
+    fr.c.toBlob(async (blob) => {
+      if (blob) {
+        row.photo = id + '.jpg';
+        await qPut('photos', { id, blob, trip: S.trip, path: S.trip + '/' + id + '.jpg' });
+      }
+      await qPut('bumps', row); await logPut('bump', row);
+    }, 'image/jpeg', 0.6);
+  } else {
+    qPut('bumps', row); logPut('bump', row);
+  }
+}
+
+// ---------- plate reading ----------
+const pc = document.createElement('canvas'); pc.width = 384; pc.height = 384;
+const px = pc.getContext('2d', { willReadFrequently: true });
+const cc = document.createElement('canvas'); cc.width = 128; cc.height = 64;
+const cx = cc.getContext('2d', { willReadFrequently: true });
+let plateJob = null;
+
+function startWorker() {
+  if (S.worker) return;
+  const src = $('plateWorker').textContent;
+  S.worker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+  S.worker.onmessage = onWorker;
+  S.worker.postMessage({
+    type: 'load',
+    findUrl: location.origin + '/models/field-twin-viridian-plate-find-v1.onnx',
+    readUrl: location.origin + '/models/field-twin-viridian-plate-read-v1.onnx'
+  });
+}
+function onWorker(e) {
+  const m = e.data;
+  if (m.type === 'ready') { S.workerReady = true; S.workerError = null; paintPlateState(); return; }
+  if (m.type === 'error') { S.plateBusy = false; if (!S.workerReady) S.workerError = m.message; paintPlateState(); return; }
+  if (!plateJob || m.id !== plateJob.id) return;
+  if (m.type === 'boxes') {
+    const j = plateJob;
+    j.boxes = m.boxes.slice(0, 4);
+    S.checks++; if (j.boxes.length) S.found++;
+    drawBoxes(j);
+    if (!j.boxes.length) { S.plateBusy = false; return; }
+    const out = new Uint8Array(j.boxes.length * 64 * 128 * 3);
+    j.src_boxes = [];
+    j.boxes.forEach((b, k) => {
+      const x1 = (b.x1 - j.dw) / j.r, y1 = (b.y1 - j.dh) / j.r, x2 = (b.x2 - j.dw) / j.r, y2 = (b.y2 - j.dh) / j.r;
+      j.src_boxes.push({ x1, y1, x2, y2 });
+      // Light padding only. Wider padding pulled characters in from plates parked right beside this one.
+      const padX = (x2 - x1) * 0.015, padY = (y2 - y1) * 0.06;
+      cx.drawImage(j.src, Math.max(0, x1 - padX), Math.max(0, y1 - padY), (x2 - x1) + 2 * padX, (y2 - y1) + 2 * padY, 0, 0, 128, 64);
+      const d = cx.getImageData(0, 0, 128, 64).data;
+      for (let i = 0, o = k * 64 * 128 * 3; i < 64 * 128; i++) { out[o++] = d[i * 4]; out[o++] = d[i * 4 + 1]; out[o++] = d[i * 4 + 2]; }
+    });
+    S.worker.postMessage({ type: 'crops', id: j.id, count: j.boxes.length, pixels: out.buffer }, [out.buffer]);
+    return;
+  }
+  if (m.type === 'reads') {
+    S.plateBusy = false;
+    const j = plateJob;
+    m.reads.forEach((r, k) => {
+      // A read must look like a plate: 2 to 8 characters, sure overall and sure of every character.
+      if (r.text.length < 2 || r.text.length > 8 || r.conf < 0.75 || r.min < 0.4) return;
+      onPlate(r.text, r.conf, j.src, j.src_boxes[k]);
+    });
+  }
+}
+// One line under Latest plates says exactly what the plate reader is doing right now.
+function paintPlateState() {
+  const el = $('plateState');
+  let t = '', bad = false;
+  if (!CFG.readPlates) t = 'Plate reading is off in settings.';
+  else if (!S.on) t = 'Plate reader starts with the drive.';
+  else if (S.workerError) { t = 'Plate reader did not load: ' + S.workerError; bad = true; }
+  else if (!S.workerReady) t = 'Loading the plate reader, about 11 MB the first time.';
+  else if (!CFG.readParked && S.mph < CFG.minMph) t = 'Paused until ' + CFG.minMph + ' mph. Press read while parked to test now.';
+  else t = 'Reading. ' + S.checks + ' frames checked, plates found in ' + S.found + '.';
+  el.textContent = t; el.className = bad ? 'bad' : '';
+  const b = $('parkedBtn');
+  b.textContent = CFG.readParked ? 'PARKED READING ON' : 'READ WHILE PARKED';
+  b.classList.toggle('on', !!CFG.readParked);
+}
+$('parkedBtn').onclick = () => { CFG.readParked = !CFG.readParked; saveCfg(); if (S.on && CFG.readPlates) startWorker(); paintPlateState(); };
+
+function plateTick(now) {
+  if (!CFG.readPlates || !S.workerReady || S.plateBusy) return;
+  if (now - S.lastPlate < 1000 / CFG.plateRate) return;
+  if (!CFG.readParked && S.mph < CFG.minMph) return;
+  const v = $('video');
+  if (!v.videoWidth) return;
+  S.lastPlate = now; S.plateBusy = true;
+  // Keep a full size copy of this frame so the plate crop comes from sharp pixels.
+  const src = document.createElement('canvas');
+  src.width = v.videoWidth; src.height = v.videoHeight;
+  src.getContext('2d').drawImage(v, 0, 0);
+  // The finder looks at the middle of the frame, where the cars ahead sit. Cropping there gives
+  // plates almost twice the pixels they would get from the whole frame at the same speed.
+  const wide = CFG.lookArea === 'full';
+  const sx = wide ? 0 : Math.round(src.width * 0.2), sy = wide ? 0 : Math.round(src.height * 0.25);
+  const sw = wide ? src.width : Math.round(src.width * 0.6), sh = wide ? src.height : Math.round(src.height * 0.6);
+  const r = Math.min(384 / sw, 384 / sh);
+  const w = Math.round(sw * r), h = Math.round(sh * r);
+  const dw = (384 - w) / 2 - sx * r, dh = (384 - h) / 2 - sy * r;
+  px.fillStyle = 'rgb(114,114,114)'; px.fillRect(0, 0, 384, 384);
+  px.drawImage(src, sx, sy, sw, sh, (384 - w) / 2, (384 - h) / 2, w, h);
+  const pixels = px.getImageData(0, 0, 384, 384).data.buffer;
+  plateJob = { id: uid('j'), src, r, dw, dh, boxes: [] };
+  S.worker.postMessage({ type: 'frame', id: plateJob.id, pixels, minFind: 0.45 }, [pixels]);
+  setTimeout(() => { if (plateJob && plateJob.src === src && S.plateBusy) S.plateBusy = false; }, 4000);
+}
+function drawBoxes(j) {
+  const ov = $('overlay'), v = $('video');
+  ov.width = ov.clientWidth; ov.height = ov.clientHeight;
+  const c = ov.getContext('2d');
+  c.clearRect(0, 0, ov.width, ov.height);
+  const scale = Math.max(ov.width / v.videoWidth, ov.height / v.videoHeight);
+  const ox = (ov.width - v.videoWidth * scale) / 2, oy = (ov.height - v.videoHeight * scale) / 2;
+  c.lineWidth = 3; c.strokeStyle = '#7fcbae';
+  j.boxes.forEach((b) => {
+    const x1 = (b.x1 - j.dw) / j.r * scale + ox, y1 = (b.y1 - j.dh) / j.r * scale + oy;
+    const x2 = (b.x2 - j.dw) / j.r * scale + ox, y2 = (b.y2 - j.dh) / j.r * scale + oy;
+    c.strokeRect(x1, y1, x2 - x1, y2 - y1);
+  });
+}
+// ---------- plate sightings ----------
+// A sighting is one plate seen continuously, with no gap longer than 30 seconds. While it is open,
+// every read is scored and only the best photo of the plate is kept. When it closes it goes to the
+// detail pass, which reads the state and records colors, then to the upload queue.
+function sharpness(c) {
+  const t = document.createElement('canvas'); t.width = 96; t.height = 48;
+  const x = t.getContext('2d', { willReadFrequently: true });
+  x.drawImage(c, 0, 0, 96, 48);
+  const d = x.getImageData(0, 0, 96, 48).data;
+  let sum = 0;
+  for (let y = 0; y < 48; y++) for (let i = 1; i < 96; i++) {
+    const o = (y * 96 + i) * 4, q = o - 4;
+    sum += Math.abs((d[o] + d[o + 1] + d[o + 2]) - (d[q] + d[q + 1] + d[q + 2])) / 3;
+  }
+  return Math.min(1, sum / (48 * 95) / 30);
+}
+function cutPlate(src, b) {
+  const w = b.x2 - b.x1, h = b.y2 - b.y1;
+  const x1 = Math.max(0, b.x1 - w * 0.06), y1 = Math.max(0, b.y1 - h * 0.12);
+  const x2 = Math.min(src.width, b.x2 + w * 0.06), y2 = Math.min(src.height, b.y2 + h * 0.12);
+  const scale = Math.min(1, 360 / (x2 - x1));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round((x2 - x1) * scale)); c.height = Math.max(1, Math.round((y2 - y1) * scale));
+  c.getContext('2d').drawImage(src, x1, y1, x2 - x1, y2 - y1, 0, 0, c.width, c.height);
+  return c;
+}
+// Named colors from hue, saturation and brightness. Dusk and streetlights blur silver, white and gray,
+// so every color also carries the share of pixels that agreed with it.
+const COLOR_HEX = { white: '#f4f4f4', silver: '#c0c4c8', gray: '#7a7f86', black: '#1a1a1a', red: '#c0322b', orange: '#e07b1f', yellow: '#e8c547', brown: '#7a5230', green: '#2f7d46', blue: '#2a5bb8', purple: '#6c3fa0' };
+function nameColor(r, g, b) {
+  const mx = Math.max(r, g, b) / 255, mn = Math.min(r, g, b) / 255, v = mx, sat = mx ? (mx - mn) / mx : 0;
+  if (v < 0.2) return 'black';
+  if (sat < 0.16) return v > 0.8 ? 'white' : v > 0.55 ? 'silver' : v > 0.3 ? 'gray' : 'black';
+  let h;
+  const R = r / 255, Gc = g / 255, B = b / 255, d = mx - mn;
+  if (mx === R) h = 60 * (((Gc - B) / d) % 6); else if (mx === Gc) h = 60 * ((B - R) / d + 2); else h = 60 * ((R - Gc) / d + 4);
+  if (h < 0) h += 360;
+  if ((h < 15 || h >= 340)) return 'red';
+  if (h < 45) return v < 0.55 ? 'brown' : 'orange';
+  if (h < 70) return v < 0.45 ? 'brown' : 'yellow';
+  if (h < 170) return 'green';
+  if (h < 260) return 'blue';
+  if (h < 300) return 'purple';
+  return 'red';
+}
+function regionColor(src, x, y, w, h) {
+  x = Math.max(0, x); y = Math.max(0, y);
+  w = Math.min(src.width - x, w); h = Math.min(src.height - y, h);
+  if (w < 4 || h < 4) return null;
+  const t = document.createElement('canvas'); t.width = 24; t.height = 12;
+  const c = t.getContext('2d', { willReadFrequently: true });
+  c.drawImage(src, x, y, w, h, 0, 0, 24, 12);
+  const d = c.getImageData(0, 0, 24, 12).data;
+  const votes = {};
+  for (let i = 0; i < d.length; i += 4) { const n = nameColor(d[i], d[i + 1], d[i + 2]); votes[n] = (votes[n] || 0) + 1; }
+  let best = null, n = 0;
+  for (const k in votes) if (votes[k] > n) { n = votes[k]; best = k; }
+  return { name: best, conf: +(n / (d.length / 4)).toFixed(2) };
+}
+function onPlate(text, conf, src, box) {
+  // A read that finishes after stop drive belongs to no drive and is dropped.
+  if (!S.on) return;
+  const now = Date.now();
+  let sg = S.open.get(text);
+  if (sg && now - sg.last > 30000) { closeSighting(sg); sg = null; }
+  const w = box.x2 - box.x1, h = box.y2 - box.y1;
+  const crop = cutPlate(src, box);
+  const score = conf * (0.4 + 0.6 * sharpness(crop)) * Math.min(1, w / 180);
+  if (!sg) {
+    const p = S.pos;
+    sg = { id: uid('p'), plate: text, first: now, last: now, reads: 0, bestScore: -1, conf: 0, crop: null,
+      lat: p ? p.lat : null, lon: p ? p.lon : null, mph: Math.round(S.mph), vehicle: null, plateColor: null };
+    S.open.set(text, sg);
+    S.plates++; $('gPlates').textContent = S.plates;
+  }
+  sg.last = now; sg.reads++;
+  if (score > sg.bestScore) {
+    sg.bestScore = score; sg.conf = conf; sg.crop = crop;
+    // The car's paint sits in a band above the plate, wider than the plate itself.
+    sg.vehicle = regionColor(src, box.x1 - w * 0.3, box.y1 - h * 1.1, w * 1.6, h * 0.9);
+    sg.plateColor = regionColor(src, box.x1 + w * 0.08, box.y1 + h * 0.3, w * 0.84, h * 0.45);
+  }
+  paintFeed();
+}
+async function closeSighting(sg) {
+  S.open.delete(sg.plate);
+  const row = { id: sg.id, device: DEVICE, trip: S.trip, at: new Date(sg.first).toISOString(), seen_to: new Date(sg.last).toISOString(),
+    lat: sg.lat, lon: sg.lon, mph: sg.mph, plate: sg.plate, conf: +sg.conf.toFixed(3), reads: sg.reads,
+    vehicle_color: sg.vehicle ? sg.vehicle.name : null, vehicle_color_conf: sg.vehicle ? sg.vehicle.conf : null,
+    plate_color: sg.plateColor ? sg.plateColor.name : null, state: null, state_conf: null, state_raw: null, photo: null };
+  let blob = null;
+  if (CFG.keepCrops && sg.crop) blob = await new Promise((res) => sg.crop.toBlob(res, 'image/jpeg', 0.82));
+  if (blob) {
+    row.photo = 'plates/' + sg.id + '.jpg';
+    await qPut('crops', { id: sg.id, at: row.at, blob });
+    trimCrops();
+  }
+  await qPut('pending', row);
+  await logPut('plate', row);
+}
+function closeStale(all) {
+  const now = Date.now();
+  [...S.open.values()].forEach((sg) => { if (all || now - sg.last > 30000) closeSighting(sg); });
+}
+
+// ---------- detail pass ----------
+// Runs on one closed sighting at a time, in the gaps between live reads. It reads the state name
+// printed along the top of the saved plate photo and matches it to the 50 states.
+const STATES = ['ALABAMA','ALASKA','ARIZONA','ARKANSAS','CALIFORNIA','COLORADO','CONNECTICUT','DELAWARE','FLORIDA','GEORGIA','HAWAII','IDAHO','ILLINOIS','INDIANA','IOWA','KANSAS','KENTUCKY','LOUISIANA','MAINE','MARYLAND','MASSACHUSETTS','MICHIGAN','MINNESOTA','MISSISSIPPI','MISSOURI','MONTANA','NEBRASKA','NEVADA','NEWHAMPSHIRE','NEWJERSEY','NEWMEXICO','NEWYORK','NORTHCAROLINA','NORTHDAKOTA','OHIO','OKLAHOMA','OREGON','PENNSYLVANIA','RHODEISLAND','SOUTHCAROLINA','SOUTHDAKOTA','TENNESSEE','TEXAS','UTAH','VERMONT','VIRGINIA','WASHINGTON','WESTVIRGINIA','WISCONSIN','WYOMING','DISTRICTOFCOLUMBIA'];
+const STATE_NAMES = { NEWHAMPSHIRE: 'New Hampshire', NEWJERSEY: 'New Jersey', NEWMEXICO: 'New Mexico', NEWYORK: 'New York', NORTHCAROLINA: 'North Carolina', NORTHDAKOTA: 'North Dakota', RHODEISLAND: 'Rhode Island', SOUTHCAROLINA: 'South Carolina', SOUTHDAKOTA: 'South Dakota', WESTVIRGINIA: 'West Virginia', DISTRICTOFCOLUMBIA: 'District of Columbia' };
+function stateLabel(k) { return k ? (STATE_NAMES[k] || (k[0] + k.slice(1).toLowerCase())) : null; }
+function lev(a, b) {
+  const m = a.length, n = b.length, d = [];
+  for (let i = 0; i <= m; i++) { d[i] = [i]; }
+  for (let j = 1; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[m][n];
+}
+// Best state for the letters read, allowing partial reads like CALIFORN and stray letters around it.
+function matchState(raw) {
+  const t = raw.toUpperCase().replace(/[^A-Z]/g, '');
+  if (t.length < 4) return null;
+  let best = null, bestSim = 0;
+  for (const st of STATES) {
+    for (let len = Math.max(4, Math.min(st.length, t.length) - 2); len <= Math.min(st.length + 2, t.length); len++) {
+      for (let i = 0; i + len <= t.length; i++) {
+        const piece = t.slice(i, i + len);
+        const target = len < st.length ? st.slice(0, len) : st;
+        const sim = (1 - lev(piece, target) / Math.max(piece.length, target.length)) * Math.min(1, len / Math.min(st.length, 7));
+        if (sim > bestSim) { bestSim = sim; best = st; }
+      }
+    }
+  }
+  return bestSim >= 0.62 ? { state: best, conf: +bestSim.toFixed(2) } : null;
+}
+let tess = null, tessFailed = false;
+async function getTess() {
+  if (tess || tessFailed) return tess;
+  try {
+    tess = await Tesseract.createWorker('eng');
+    await tess.setParameters({ tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz ', tessedit_pageseg_mode: '7' });
+  } catch (e) { tessFailed = true; tess = null; }
+  return tess;
+}
+async function readStateFrom(blob) {
+  const w = await getTess();
+  if (!w) return null;
+  const img = await createImageBitmap(blob);
+  // The state name sits in the top quarter of the plate. Enlarge it three times in grayscale.
+  const bandH = Math.round(img.height * 0.32);
+  const c = document.createElement('canvas'); c.width = img.width * 3; c.height = bandH * 3;
+  const x = c.getContext('2d');
+  x.filter = 'grayscale(1) contrast(1.4)';
+  x.drawImage(img, 0, 0, img.width, bandH, 0, 0, c.width, c.height);
+  const r = await w.recognize(c);
+  const raw = (r && r.data && r.data.text || '').trim();
+  return { raw, hit: matchState(raw) };
+}
+async function detailTick() {
+  if (S.detailBusy) return;
+  if (S.on && S.plateBusy) return;
+  const rows = await qTake('pending', 1);
+  if (!rows.length) return;
+  S.detailBusy = true;
+  const row = rows[0];
+  try {
+    if (CFG.readDetails && row.photo && typeof Tesseract !== 'undefined') {
+      const c = await idb('crops', 'readonly', (st) => reqP(st.get(row.id)));
+      if (c) {
+        const res = await readStateFrom(c.blob);
+        if (res) { row.state_raw = res.raw.slice(0, 60); if (res.hit) { row.state = res.hit.state; row.state_conf = res.hit.conf; } }
+      }
+    }
+  } catch (e) {}
+  if (row.photo && CFG.uploadCrops) {
+    const c = await idb('crops', 'readonly', (st) => reqP(st.get(row.id)));
+    if (c) await qPut('photos', { id: row.id, blob: c.blob, path: row.photo });
+  }
+  await qPut('plates', row);
+  await logPut('plate', row);
+  await qDel('pending', [row.id]);
+  S.detailBusy = false;
+  paintFeed();
+}
+setInterval(detailTick, 1500);
+
+// ---------- live feed ----------
+async function paintFeed() {
+  const open = [...S.open.values()].map((sg) => ({ plate: sg.plate, at: new Date(sg.first).toISOString(), mph: sg.mph, reads: sg.reads, live: true }));
+  const done = (await logAll()).filter((r) => r.kind === 'plate' && r.trip === S.trip && !S.open.has(r.plate));
+  const rows = open.concat(done).sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 8);
+  if (!rows.length) { $('plateFeed').innerHTML = '<div class="empty">Plates show up here as they are read. Tap one to see every sighting.</div>'; return; }
+  $('plateFeed').innerHTML = rows.map((r) => '<div class="row tap" data-plate="' + esc(r.plate) + '"><div class="who"><b class="plate">' + esc(r.plate) + '</b><small>' +
+    (r.live ? 'in view, ' + r.reads + ' read' + (r.reads === 1 ? '' : 's') : esc(detailLine(r))) + '</small></div><span>' +
+    new Date(r.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' }) + (r.mph ? ', ' + r.mph + ' mph' : '') + '</span></div>').join('');
+}
+function detailLine(r) {
+  const parts = [];
+  if (r.state) parts.push(stateLabel(r.state)); else if (r.state_raw != null) parts.push('state unread');
+  if (r.vehicle_color) parts.push(r.vehicle_color + ' car');
+  if (r.plate_color) parts.push(r.plate_color + ' plate');
+  if (!parts.length) parts.push('reading details');
+  return parts.join(', ');
+}
+$('plateFeed').onclick = (e) => { const r = e.target.closest('[data-plate]'); if (r) platePage(r.dataset.plate); };
+
+// ---------- location ----------
+function onPos(p) {
+  const c = p.coords;
+  const prev = S.pos;
+  const now = { lat: c.latitude, lon: c.longitude, t: p.timestamp, acc: c.accuracy };
+  let mps = c.speed;
+  if ((mps == null || isNaN(mps)) && prev) {
+    const dt = (now.t - prev.t) / 1000;
+    if (dt > 0) mps = haversine(prev, now) / dt;
+  }
+  S.mph = mps != null && !isNaN(mps) ? mps * 2.23694 : 0;
+  S.heading = c.heading != null && !isNaN(c.heading) ? c.heading : S.heading;
+  S.pos = now;
+}
+function haversine(a, b) {
+  const R = 6371000, toR = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * toR, dLon = (b.lon - a.lon) * toR;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * toR) * Math.cos(b.lat * toR) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+// ---------- the one second summary ----------
+function secondTick() {
+  if (!S.on) return;
+  const w = S.win; S.win = [];
+  let ss = 0, peak = 0;
+  w.forEach((x) => { ss += x * x; if (Math.abs(x) > peak) peak = Math.abs(x); });
+  const rms = w.length ? Math.sqrt(ss / w.length) : 0;
+  const hz = dominantHz(S.spec, S.motionRate);
+  const mps = S.mph / 2.23694;
+  const spacing = hz > 0 && mps > 3 ? mps / hz : null;
+  const jit = jitterSummary();
+  const p = S.pos;
+  const row = {
+    id: uid('s'), device: DEVICE, trip: S.trip, at: new Date().toISOString(),
+    lat: p ? p.lat : null, lon: p ? p.lon : null, mph: +S.mph.toFixed(1), heading: S.heading == null ? null : Math.round(S.heading),
+    rms_v: +rms.toFixed(4), peak_v: +peak.toFixed(3), dom_hz: +hz.toFixed(2), spacing_m: spacing == null ? null : +spacing.toFixed(2),
+    jitter_px: +jit.px.toFixed(3), jitter_hz: +jit.hz.toFixed(2)
+  };
+  if (w.length) qPut('samples', row);
+  $('gSpeed').textContent = Math.round(S.mph);
+  $('gRough').textContent = rms.toFixed(2);
+  $('gRoughBox').className = 'g ' + roughClass(rms);
+  $('gHz').textContent = hz ? hz.toFixed(1) : '0';
+  $('gSpace').textContent = spacing == null ? '0' : spacing.toFixed(1);
+  $('gJit').textContent = jit.px.toFixed(1);
+  closeStale(false);
+  const mins = Math.floor((Date.now() - S.startedAt) / 60000);
+  setStatus('Driving ' + mins + ' min' + (S.motionRate ? ', motion ' + Math.round(S.motionRate) + ' per s' : ', waiting on motion') + (S.pos ? '' : ', waiting on location') + ', ' + uploadNote());
+  paintPlateState();
+}
+function roughClass(r) { return r < 0.06 ? 'rough-ok' : r < 0.14 ? 'rough-mid' : 'rough-bad'; }
+function roughColor(r) { return r < 0.06 ? '#17694f' : r < 0.14 ? '#b86e00' : '#b3261e'; }
+
+// ---------- frame loop ----------
+let lastJit = 0;
+function loop(now) {
+  if (!S.on) return;
+  if (now - lastJit >= 66) { lastJit = now; jitterTick(); }
+  grabFrame(now);
+  plateTick(now);
+  drawTrace();
+  requestAnimationFrame(loop);
+}
+function drawTrace() {
+  const c = $('trace');
+  const w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== w) { c.width = w; c.height = h; }
+  const x = c.getContext('2d');
+  x.clearRect(0, 0, w, h);
+  x.strokeStyle = '#b8c2cc'; x.lineWidth = 1;
+  x.beginPath(); x.moveTo(0, h / 2); x.lineTo(w, h / 2); x.stroke();
+  const t = S.trace;
+  if (t.length < 2) return;
+  const n = Math.min(t.length, Math.max(60, Math.round((S.motionRate || 60) * 10)));
+  x.strokeStyle = '#17694f'; x.lineWidth = 2;
+  x.beginPath();
+  for (let i = 0; i < n; i++) {
+    const v = t[t.length - n + i];
+    const yy = h / 2 - Math.max(-1, Math.min(1, v / 0.5)) * (h / 2 - 4);
+    const xx = i / (n - 1) * w;
+    if (i) x.lineTo(xx, yy); else x.moveTo(xx, yy);
+  }
+  x.stroke();
+}
+
+// ---------- start and stop ----------
+let secTimer = null;
+async function startDrive() {
+  try {
+    S.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: CFG.camRes === '1080' ? 1920 : 1280 }, height: { ideal: CFG.camRes === '1080' ? 1080 : 720 }, frameRate: { ideal: 30 } },
+      audio: false
+    });
+  } catch (e) {
+    toast('The camera did not open. Allow camera access for this site and press start again.');
+    return;
+  }
+  const v = $('video');
+  v.srcObject = S.stream;
+  try { await v.play(); } catch (e) {}
+  $('camBox').classList.add('live');
+  if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+    try { await DeviceMotionEvent.requestPermission(); } catch (e) {}
+  }
+  window.addEventListener('devicemotion', onMotion);
+  if (navigator.geolocation) S.geoWatch = navigator.geolocation.watchPosition(onPos, () => {}, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
+  await keepAwake();
+  S.on = true; S.trip = uid('t'); S.startedAt = Date.now(); S.plates = 0; S.checks = 0; S.found = 0;
+  S.g = null; S.win = []; S.spec = []; S.trace = []; S.jit = { prev: null, shifts: [], last: 0 }; S.frames = [];
+  $('gPlates').textContent = '0'; paintFeed();
+  if (CFG.readPlates) startWorker();
+  $('startBtn').textContent = 'STOP DRIVE'; $('startBtn').classList.add('on');
+  secTimer = setInterval(secondTick, 1000);
+  requestAnimationFrame(loop);
+  setStatus('Driving 0 min');
+}
+async function stopDrive() {
+  closeStale(true);
+  S.on = false;
+  clearInterval(secTimer);
+  window.removeEventListener('devicemotion', onMotion);
+  if (S.geoWatch != null) navigator.geolocation.clearWatch(S.geoWatch);
+  if (S.stream) S.stream.getTracks().forEach((t) => t.stop());
+  S.stream = null;
+  $('video').srcObject = null;
+  $('camBox').classList.remove('live');
+  const ov = $('overlay'); ov.getContext('2d').clearRect(0, 0, ov.width, ov.height);
+  if (S.wake) { try { await S.wake.release(); } catch (e) {} S.wake = null; }
+  $('startBtn').textContent = 'START DRIVE'; $('startBtn').classList.remove('on');
+  uploadNow();
+  paintIdle();
+}
+async function keepAwake() {
+  if (!('wakeLock' in navigator)) return;
+  try { S.wake = await navigator.wakeLock.request('screen'); } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (S.on && document.visibilityState === 'visible') keepAwake(); });
+$('startBtn').onclick = () => (S.on ? stopDrive() : startDrive());
+
+async function paintIdle() {
+  paintPlateState();
+  if (S.on) return;
+  const n = (await qCount('samples')) + (await qCount('plates')) + (await qCount('bumps')) + (await qCount('pending'));
+  setStatus((USER ? 'Signed in' : 'Not signed in') + (n ? ', ' + n + ' readings waiting' : ', nothing waiting') + ', ' + uploadNote());
+}
+function clock(t) { return new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
+function uploadNote() {
+  if (!USER) return 'sign in to upload';
+  if (S.uploadError) return 'upload failed ' + clock(S.uploadError.at);
+  if (S.lastUpload) return 'uploaded ' + clock(S.lastUpload.at);
+  return 'first upload within a minute';
+}
+
+// ---------- uploads ----------
+let uploading = false;
+async function uploadNow(manual) {
+  if (uploading) return;
+  if (!sb || !USER) { if (manual) toast('Sign in first. Readings keep saving on this phone.'); return; }
+  if (!navigator.onLine) { if (manual) toast('No signal. Readings keep saving on this phone.'); return; }
+  uploading = true; radar(1);
+  let sent = 0, capped = false;
+  try {
+    for (const table of ['samples', 'plates', 'bumps']) {
+      const rows = await qTake(table, 500);
+      if (!rows.length) continue;
+      const body = JSON.stringify(rows);
+      const cost = body.length + 900;
+      if (capLeft() < cost) { capped = true; break; }
+      const { error } = await sb.from('viridian_' + table).upsert(rows, { onConflict: 'id', ignoreDuplicates: true });
+      addBytes(cost);
+      if (error) {
+        if (/limit reached/i.test(error.message)) { capped = true; break; }
+        throw error;
+      }
+      await qDel(table, rows.map((r) => r.id)); sent += rows.length; radar(2);
+    }
+    if (!capped) {
+      const photos = await qTake('photos', 20);
+      for (const ph of photos) {
+        const cost = ph.blob.size + 900;
+        if (capLeft() < cost) { capped = true; break; }
+        const path = USER.id + '/' + (ph.path || (ph.trip + '/' + ph.id + '.jpg'));
+        const { error } = await sb.storage.from(PHOTO_BUCKET).upload(path, ph.blob, { contentType: 'image/jpeg', upsert: false });
+        addBytes(cost);
+        if (error && !/exists|duplicate/i.test(error.message)) throw error;
+        await qDel('photos', [ph.id]); sent++; radar(3);
+      }
+    }
+    radar(capped ? 0 : 4);
+    S.uploadError = null;
+    S.lastUpload = { at: Date.now(), sent, capped, total: (S.lastUpload ? S.lastUpload.total : 0) + sent };
+    if (manual) toast(capped ? 'Data limit reached. Readings keep saving on this phone until the limit resets.' : sent ? 'Uploaded ' + sent + ' items.' : 'Nothing waiting.');
+  } catch (e) {
+    radar(0);
+    S.uploadError = { at: Date.now(), message: String(e.message || e) };
+    if (manual) toast('Upload failed: ' + (e.message || e) + '. It tries again next minute.');
+  } finally {
+    uploading = false;
+    paintIdle();
+  }
+}
+function radar(n) { [...$('radar').children].forEach((d, i) => d.classList.toggle('on', i < n)); }
+$('radar').onclick = () => dataPanel();
+setInterval(() => uploadNow(false), Math.max(30, CFG.uploadEvery) * 1000);
+window.addEventListener('online', () => uploadNow(false));
+$('uploadBtn').onclick = () => { openMenu(false); uploadNow(true); };
+
+// ---------- map ----------
+let map = null, mapLayer = null;
+async function openMap() {
+  const mv = $('mapView');
+  if (mv.classList.contains('open')) { mv.classList.remove('open'); $('mapBtn').textContent = 'MAP'; return; }
+  mv.classList.add('open'); $('mapBtn').textContent = 'GAUGES';
+  if (!map) {
+    map = L.map('map', { zoomControl: false }).setView([39.5, -98.35], 4);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: 'map data openstreetmap contributors' }).addTo(map);
+    mapLayer = L.layerGroup().addTo(map);
+  }
+  setTimeout(() => map.invalidateSize(), 50);
+  await paintMap();
+}
+async function paintMap() {
+  mapLayer.clearLayers();
+  const pts = [];
+  let samples = await qTake('samples', 5000);
+  let plates = [], bumps = [];
+  const log = await logAll();
+  log.forEach((r) => { (r.kind === 'plate' ? plates : bumps).push(r); });
+  if (sb && USER && navigator.onLine) {
+    const since = new Date(Date.now() - 30 * 864e5).toISOString();
+    try {
+      const a = await sb.from('viridian_samples').select('lat,lon,rms_v,dom_hz,spacing_m,mph,at').gte('at', since).not('lat', 'is', null).order('at', { ascending: false }).limit(8000);
+      if (a.data) samples = samples.concat(a.data);
+      const b = await sb.from('viridian_bumps').select('id,trip,lat,lon,peak_g,mph,at,photo').gte('at', since).order('at', { ascending: false }).limit(1500);
+      if (b.data) { const have = new Set(bumps.map((x) => x.id)); b.data.forEach((x) => { if (!have.has(x.id)) bumps.push(x); }); }
+    } catch (e) {}
+  }
+  samples.forEach((s) => {
+    if (s.lat == null) return;
+    pts.push([s.lat, s.lon]);
+    L.circleMarker([s.lat, s.lon], { radius: 4, stroke: false, fillOpacity: 0.85, fillColor: roughColor(s.rms_v || 0) })
+      .bindPopup('<b>' + (s.rms_v || 0).toFixed(2) + ' g</b> roughness<br>' + (s.dom_hz ? s.dom_hz.toFixed(1) + ' Hz main shake' : 'no main shake') +
+        (s.spacing_m ? '<br>ridges about ' + s.spacing_m.toFixed(1) + ' m apart' : '') + '<br>' + Math.round(s.mph || 0) + ' mph, ' + new Date(s.at).toLocaleString())
+      .addTo(mapLayer);
+  });
+  bumps.forEach((b) => {
+    if (b.lat == null) return;
+    const m = L.circleMarker([b.lat, b.lon], { radius: 8, color: '#0a1b2e', weight: 2, fillColor: '#b3261e', fillOpacity: 1 }).addTo(mapLayer);
+    m.bindPopup('<div class="plate-pop"><b>Bump ' + b.peak_g + ' g</b><br>' + new Date(b.at).toLocaleString() + '<div id="bp-' + esc(b.id) + '">' + (b.photo ? 'loading photo' : 'no photo') + '</div></div>');
+    m.on('popupopen', () => showBumpPhoto(b));
+  });
+  plates.forEach((p) => {
+    if (p.lat == null) return;
+    L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', html: '<div style="background:#dcefe7;border:2px solid #0a1b2e;border-radius:4px;padding:0 4px;font:800 11px Overpass,Arial;letter-spacing:1px;white-space:nowrap">' + esc(p.plate) + '</div>' }) })
+      .on('click', () => platePage(p.plate))
+      .addTo(mapLayer);
+  });
+  if (S.pos) map.setView([S.pos.lat, S.pos.lon], 15);
+  else if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.1));
+}
+async function showBumpPhoto(b) {
+  const el = document.getElementById('bp-' + b.id);
+  if (!el || !b.photo) return;
+  const local = await idb('photos', 'readonly', (st) => reqP(st.get(b.id)));
+  let url = null;
+  if (local) url = URL.createObjectURL(local.blob);
+  else if (sb && USER) {
+    const r = await sb.storage.from(PHOTO_BUCKET).createSignedUrl(USER.id + '/' + b.trip + '/' + b.id + '.jpg', 600);
+    if (r.data) url = r.data.signedUrl;
+  }
+  el.innerHTML = url ? '<img alt="Road just before the bump" src="' + url + '">' : 'photo not available';
+}
+$('mapBtn').onclick = openMap;
+
+// ---------- plate log and bump list ----------
+async function allSightings(plate) {
+  let rows = (await logAll()).filter((r) => r.kind === 'plate' && (!plate || r.plate === plate));
+  if (sb && USER && navigator.onLine) {
+    try {
+      let q = sb.from('viridian_plates').select('*').order('at', { ascending: false }).limit(plate ? 1000 : 5000);
+      if (plate) q = q.eq('plate', plate);
+      const r = await q;
+      if (r.data) { const have = new Set(rows.map((x) => x.id)); rows = rows.concat(r.data.filter((x) => !have.has(x.id))); }
+    } catch (e) {}
+  }
+  return rows.sort((a, b) => (a.at < b.at ? 1 : -1));
+}
+function mode(list) {
+  const c = {}; let best = null, n = 0;
+  list.forEach((x) => { if (x) { c[x] = (c[x] || 0) + 1; if (c[x] > n) { n = c[x]; best = x; } } });
+  return best;
+}
+async function platesPanel() {
+  const rows = await allSightings(null);
+  const by = new Map();
+  rows.forEach((r) => {
+    const g = by.get(r.plate) || { plate: r.plate, n: 0, last: r.at, days: new Set(), states: [], colors: [] };
+    g.n++; if (r.at > g.last) g.last = r.at; g.days.add(r.at.slice(0, 10)); g.states.push(r.state); g.colors.push(r.vehicle_color);
+    by.set(r.plate, g);
+  });
+  const list = [...by.values()].sort((a, b) => b.days.size - a.days.size || b.n - a.n || (a.last < b.last ? 1 : -1));
+  openPanel('<h2>Plate log</h2><p class="dim">' + rows.length + ' sighting' + (rows.length === 1 ? '' : 's') + ' of ' + list.length + ' plate' + (list.length === 1 ? '' : 's') + '. Plates seen on more than one day are listed first. Tap a plate to see every sighting.</p>' +
+    '<label for="plFind">Find a plate</label><input id="plFind" autocapitalize="characters" autocomplete="off">' +
+    '<div class="feed" id="plList" style="margin-top:10px"></div>' +
+    '<div class="actions"><button id="closeBtn">DONE</button></div>');
+  const paint = () => {
+    const f = $('plFind').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const shown = list.filter((g) => !f || g.plate.indexOf(f) >= 0).slice(0, 300);
+    $('plList').innerHTML = shown.length ? shown.map((g) => {
+      const st = mode(g.states), col = mode(g.colors);
+      return '<div class="row tap" data-plate="' + esc(g.plate) + '"><div class="who"><b class="plate">' + esc(g.plate) + '</b><small>' +
+        esc([st ? stateLabel(st) : null, col ? col + ' car' : null].filter(Boolean).join(', ') || 'no details yet') + '</small></div><span>' +
+        g.n + ' sighting' + (g.n === 1 ? '' : 's') + ', ' + g.days.size + ' day' + (g.days.size === 1 ? '' : 's') + '<br>last ' + new Date(g.last).toLocaleDateString() + '</span></div>';
+    }).join('') : '<div class="empty">' + (f ? 'No plate matches that.' : 'No plates read yet.') + '</div>';
+  };
+  paint();
+  $('plFind').oninput = paint;
+  $('plList').onclick = (e) => { const r = e.target.closest('[data-plate]'); if (r) platePage(r.dataset.plate); };
+  $('closeBtn').onclick = closePanel;
+}
+
+// ---------- plate page ----------
+// Everything known about one plate: its details, a map of every sighting joined in time order,
+// and a timeline with the best photo from each sighting.
+let ppMap = null;
+async function platePage(plate) {
+  const rows = await allSightings(plate);
+  const st = mode(rows.map((r) => r.state)), col = mode(rows.map((r) => r.vehicle_color)), pcol = mode(rows.map((r) => r.plate_color));
+  const days = new Set(rows.map((r) => r.at.slice(0, 10)));
+  const reads = rows.reduce((a, r) => a + (r.reads || 1), 0);
+  const first = rows.length ? rows[rows.length - 1].at : null, last = rows.length ? rows[0].at : null;
+  if (ppMap) { ppMap.remove(); ppMap = null; }
+  openPanel('<div class="pp-head"><span class="pp-plate">' + esc(plate) + '</span><div class="pp-sub">' +
+    esc(st ? stateLabel(st) : 'State not read yet') + '<br>' +
+    (col ? '<i class="chip" style="background:' + COLOR_HEX[col] + '"></i>' + esc(col) + ' car' : 'Car color unknown') +
+    (pcol ? ', ' + esc(pcol) + ' plate' : '') + '</div></div>' +
+    '<div class="stat"><span>Sightings</span><b>' + rows.length + ' on ' + days.size + ' day' + (days.size === 1 ? '' : 's') + ', ' + reads + ' reads</b></div>' +
+    (first ? '<div class="stat"><span>First seen</span><b>' + new Date(first).toLocaleString() + '</b></div><div class="stat"><span>Last seen</span><b>' + new Date(last).toLocaleString() + '</b></div>' : '') +
+    '<div id="ppMap"></div>' +
+    '<div id="ppList">' + rows.map((r) => {
+      const dur = r.seen_to ? Math.max(0, Math.round((new Date(r.seen_to) - new Date(r.at)) / 1000)) : 0;
+      return '<div class="sight"><div class="ph" id="ph-' + esc(r.id) + '"></div><div class="tx"><b>' + new Date(r.at).toLocaleString() + '</b><br>' +
+        (dur ? 'in view ' + dur + ' s, ' : '') + (r.reads || 1) + ' read' + ((r.reads || 1) === 1 ? '' : 's') + (r.mph ? ', ' + r.mph + ' mph' : '') + '<br>' +
+        esc(detailLine(r)) + (r.lat != null ? '<br><span class="dim">' + r.lat.toFixed(5) + ', ' + r.lon.toFixed(5) + '</span>' : '') + '</div></div>';
+    }).join('') + '</div>' +
+    '<div class="actions"><button class="secondary" id="backBtn">PLATE LOG</button><button id="closeBtn">DONE</button></div>');
+  $('closeBtn').onclick = closePanel;
+  $('backBtn').onclick = platesPanel;
+  const pts = rows.filter((r) => r.lat != null).map((r) => [r.lat, r.lon]).reverse();
+  if (pts.length) {
+    ppMap = L.map('ppMap', { zoomControl: false, attributionControl: false });
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(ppMap);
+    if (pts.length > 1) L.polyline(pts, { color: '#17694f', weight: 3 }).addTo(ppMap);
+    pts.forEach((p, i) => L.circleMarker(p, { radius: i === pts.length - 1 ? 8 : 6, color: '#0a1b2e', weight: 2, fillColor: i === pts.length - 1 ? '#17694f' : '#ffffff', fillOpacity: 1 }).addTo(ppMap));
+    if (pts.length > 1) ppMap.fitBounds(L.latLngBounds(pts).pad(0.2)); else ppMap.setView(pts[0], 16);
+    setTimeout(() => ppMap && ppMap.invalidateSize(), 250);
+  } else {
+    $('ppMap').outerHTML = '<p class="dim">No location was recorded for these sightings.</p>';
+  }
+  for (const r of rows) await showPlatePhoto(r);
+}
+async function showPlatePhoto(r) {
+  const el = document.getElementById('ph-' + r.id);
+  if (!el || !r.photo) return;
+  const local = await idb('crops', 'readonly', (st) => reqP(st.get(r.id)));
+  let url = null;
+  if (local) url = URL.createObjectURL(local.blob);
+  else if (sb && USER) {
+    const s2 = await sb.storage.from(PHOTO_BUCKET).createSignedUrl(USER.id + '/' + r.photo, 600);
+    if (s2.data) url = s2.data.signedUrl;
+  }
+  if (url) el.innerHTML = '<img alt="Best view of ' + esc(r.plate) + ' in this sighting" src="' + url + '">';
+}
+async function bumpsPanel() {
+  const log = (await logAll()).filter((r) => r.kind === 'bump').slice(0, 60);
+  openPanel('<h2>Bump photos</h2><p class="dim">The hardest hits from this phone, newest first. Each photo is the road just before the hit.</p>' +
+    '<div class="feed" id="bumpList">' + (log.length ? log.map((b) => '<div class="row" style="display:block"><b>' + b.peak_g + ' g</b> <span>' + new Date(b.at).toLocaleString() + (b.mph ? ', ' + b.mph + ' mph' : '') +
+      '</span><div class="plate-pop" id="bp-' + esc(b.id) + '">' + (b.photo ? '' : '<span>no photo</span>') + '</div></div>').join('') : '<div class="empty">No hard hits yet.</div>') + '</div>' +
+    '<div class="actions"><button id="closeBtn">DONE</button></div>');
+  $('closeBtn').onclick = closePanel;
+  for (const b of log) if (b.photo) await showBumpPhoto(b);
+}
+$('platesBtn').onclick = platesPanel;
+$('bumpsBtn').onclick = bumpsPanel;
+
+// ---------- data and limits ----------
+async function dataPanel() {
+  const m = meter();
+  const dayPct = Math.min(100, m.dayBytes / (CFG.dayCapMb * 1e6) * 100);
+  const monPct = Math.min(100, m.monthBytes / (CFG.monthCapMb * 1e6) * 100);
+  const cs = await qCount('samples'), cp = await qCount('plates'), cb = await qCount('bumps'), cph = await qCount('photos');
+  let quota = '', inAccount = '', recent = '';
+  if (sb && USER && navigator.onLine) {
+    try {
+      const r = await sb.from('viridian_quota').select('kind,n').eq('day', today());
+      if (r.data && r.data.length) quota = r.data.map((q) => q.kind.replace('viridian_', '') + ' ' + q.n).join(', ');
+      const c = await Promise.all(['samples', 'plates', 'bumps'].map((t) => sb.from('viridian_' + t).select('id', { count: 'exact', head: true })));
+      inAccount = c[0].count + ' seconds, ' + c[1].count + ' plates, ' + c[2].count + ' bumps';
+      const lp = await sb.from('viridian_plates').select('plate,at').order('at', { ascending: false }).limit(5);
+      if (lp.data && lp.data.length) recent = lp.data.map((x) => esc(x.plate) + ' ' + clock(x.at)).join(', ');
+    } catch (e) {}
+  }
+  const up = S.uploadError ? 'Failed at ' + clock(S.uploadError.at) + ': ' + esc(S.uploadError.message)
+    : S.lastUpload ? clock(S.lastUpload.at) + ', ' + S.lastUpload.sent + ' items' : USER ? 'None yet since the app opened' : 'Sign in to upload';
+  openPanel('<h2>Data and limits</h2>' +
+    '<div class="stat"><span>Sent today</span><b>' + fmtBytes(m.dayBytes) + ' of ' + CFG.dayCapMb + ' MB</b></div><div class="meter' + (dayPct >= 100 ? ' full' : '') + '"><div style="width:' + dayPct + '%"></div></div>' +
+    '<div class="stat"><span>Sent this month</span><b>' + fmtBytes(m.monthBytes) + ' of ' + CFG.monthCapMb + ' MB</b></div><div class="meter' + (monPct >= 100 ? ' full' : '') + '"><div style="width:' + monPct + '%"></div></div>' +
+    '<div class="stat"><span>Sent since install</span><b>' + fmtBytes(m.total) + '</b></div>' +
+    '<div class="stat"><span>Account</span><b>' + (USER ? esc(USER.email) : 'not signed in') + '</b></div>' +
+    '<div class="stat"><span>Last upload</span><b>' + up + '</b></div>' +
+    (inAccount ? '<div class="stat"><span>Saved in your account</span><b>' + inAccount + '</b></div>' : '') +
+    (recent ? '<div class="stat"><span>Newest plates in your account</span><b>' + recent + '</b></div>' : '') +
+    '<div class="stat"><span>Waiting on this phone</span><b>' + cs + ' seconds, ' + cp + ' plates, ' + cb + ' bumps, ' + cph + ' photos, ' + (await qCount('pending')) + ' in the detail pass</b></div>' +
+    (quota ? '<div class="stat"><span>Added today</span><b>' + esc(quota) + '</b></div>' : '') +
+    '<label for="capDay">Daily upload limit, MB</label><input id="capDay" type="number" min="1" max="2000" value="' + CFG.dayCapMb + '">' +
+    '<label for="capMon">Monthly upload limit, MB</label><input id="capMon" type="number" min="1" max="20000" value="' + CFG.monthCapMb + '">' +
+    '<label for="upEvery">Upload every, seconds</label><input id="upEvery" type="number" min="30" max="900" value="' + CFG.uploadEvery + '">' +
+    '<p class="dim">An hour of driving sends about 1 to 3 MB. When a limit is reached, uploads pause and readings keep saving on this phone until the limit resets. The account also refuses more than 40000 seconds, 20000 plates and 1500 bumps a day, whatever this phone says.</p>' +
+    '<div class="actions"><button id="saveBtn">SAVE LIMITS</button><button class="secondary" id="closeBtn">CLOSE</button></div>');
+  $('closeBtn').onclick = closePanel;
+  $('saveBtn').onclick = () => {
+    CFG.dayCapMb = Math.max(1, +$('capDay').value || DEFAULTS.dayCapMb);
+    CFG.monthCapMb = Math.max(1, +$('capMon').value || DEFAULTS.monthCapMb);
+    CFG.uploadEvery = Math.max(30, +$('upEvery').value || DEFAULTS.uploadEvery);
+    saveCfg(); closePanel(); toast('Limits saved. Upload timing changes on the next app open.');
+  };
+}
+$('dataBtn').onclick = dataPanel;
+
+// ---------- settings ----------
+function settingsPanel() {
+  const tg = (id, label, on) => '<div class="tg"><span>' + label + '</span><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '></div>';
+  openPanel('<h2>Settings</h2>' +
+    tg('sPlates', 'Read plates', CFG.readPlates) +
+    tg('sParked', 'Read plates while parked', CFG.readParked) +
+    tg('sPhotos', 'Save a photo of each hard bump', CFG.bumpPhotos) +
+    tg('sCrops', 'Keep the best plate photo from each sighting', CFG.keepCrops) +
+    tg('sUpCrops', 'Upload plate photos to your account', CFG.uploadCrops) +
+    tg('sDetails', 'Read the state from plate photos', CFG.readDetails) +
+    '<label for="sRes">Camera detail</label><select id="sRes"><option value="720"' + (CFG.camRes !== '1080' ? ' selected' : '') + '>1280 by 720, cooler</option><option value="1080"' + (CFG.camRes === '1080' ? ' selected' : '') + '>1920 by 1080, sharper plates and tags, warmer</option></select>' +
+    '<label for="sRate">Plate checks per second</label><select id="sRate">' + [1, 2, 3, 4].map((n) => '<option' + (n === CFG.plateRate ? ' selected' : '') + '>' + n + '</option>').join('') + '</select>' +
+    '<label for="sLook">Where to look for plates</label><select id="sLook"><option value="center"' + (CFG.lookArea !== 'full' ? ' selected' : '') + '>Middle of the view, reads farther</option><option value="full"' + (CFG.lookArea === 'full' ? ' selected' : '') + '>Whole view, reads wider but closer</option></select>' +
+    '<label for="sMin">Read plates above this speed, mph</label><input id="sMin" type="number" min="0" max="40" value="' + CFG.minMph + '">' +
+    '<label for="sBump">Hard bump, g</label><input id="sBump" type="number" step="0.05" min="0.15" max="1.5" value="' + CFG.bumpG + '">' +
+    '<label for="sPh">Most bump photos per hour</label><input id="sPh" type="number" min="0" max="200" value="' + CFG.photosPerHour + '">' +
+    '<p class="dim">Fewer plate checks per second and a higher speed floor keep the phone cooler. Motion and camera shake readings run the whole drive either way.</p>' +
+    '<div class="actions"><button id="saveBtn">SAVE SETTINGS</button><button class="secondary" id="closeBtn">CLOSE</button></div>');
+  $('closeBtn').onclick = closePanel;
+  $('saveBtn').onclick = () => {
+    CFG.readPlates = $('sPlates').checked; CFG.readParked = $('sParked').checked; CFG.bumpPhotos = $('sPhotos').checked;
+    CFG.keepCrops = $('sCrops').checked; CFG.uploadCrops = $('sUpCrops').checked; CFG.readDetails = $('sDetails').checked; CFG.camRes = $('sRes').value;
+    CFG.plateRate = +$('sRate').value; CFG.lookArea = $('sLook').value; CFG.minMph = Math.max(0, +$('sMin').value || 0);
+    CFG.bumpG = Math.max(0.15, +$('sBump').value || DEFAULTS.bumpG); CFG.photosPerHour = Math.max(0, +$('sPh').value || 0);
+    saveCfg(); if (S.on && CFG.readPlates) startWorker(); closePanel(); toast(S.on ? 'Settings saved. Camera detail changes on the next drive.' : 'Settings saved.');
+  };
+}
+$('settingsBtn').onclick = settingsPanel;
+
+// ---------- about ----------
+$('aboutBtn').onclick = () => {
+  openPanel('<h2>How it works</h2>' +
+    '<p>Mount the phone behind the windshield with the rear camera facing the road, plug it in, and press start drive. The camera, motion sensors and location run together until you press stop.</p>' +
+    '<p>Roughness is how hard the car shakes up and down, in g, averaged each second. Green is smooth, amber is rough, red is very rough. Main shake is the strongest rhythm in that shaking. Ridge spacing divides your speed by the main shake, so washboard gravel or evenly spaced joints show up as a steady distance.</p>' +
+    '<p>Camera shake is how far the picture bounces between frames, in percent of the frame height. It measures pitch, which the motion sensors read poorly when the phone sits upright, and it lets the two be compared against each other and against Chassisquiver runs on the same road.</p>' +
+    '<p>Plates are found and read on this phone. A sighting is one plate in view with no gap longer than 30 seconds. Each sighting keeps its best photo of the plate, about 8 KB, then a second pass reads the state name off that photo and records the car and plate colors. Tap any plate to see every sighting on a map and a timeline. A hard bump saves the frame from just before the hit, so the photo shows what you drove over.</p>' +
+    '<p>Registration stickers are too small to read at 1280 by 720 unless the car is very close. Camera detail at 1920 by 1080 in settings makes close range sticker photos sharp enough to inspect by eye.</p>' +
+    '<p>Nothing streams. Readings save on the phone and upload once a minute, about 1 to 3 MB an hour. Rules on storing plate reads vary by state, so check yours before keeping or sharing them.</p>' +
+    '<div class="actions"><button id="closeBtn">DONE</button></div>');
+  $('closeBtn').onclick = closePanel;
+};
+
+// ---------- preview and other apps ----------
+$('previewBtn').onclick = () => {
+  const hid = $('camBox').classList.toggle('hidden');
+  $('previewBtn').textContent = hid ? 'SHOW PREVIEW' : 'HIDE PREVIEW';
+  $('camNote').textContent = hid ? 'Preview hidden. Reading continues.' : 'Press start drive. The rear camera, motion sensors and location turn on together.';
+  openMenu(false);
+};
+$('openCqBtn').onclick = () => { location.href = CQ_SITE; };
+$('openVioletBtn').onclick = () => { location.href = VIOLET_SITE; };
+$('accountBtn').onclick = accountPanel;
+
+initCloud();
+paintIdle();
+</script>
+</body>
+</html>

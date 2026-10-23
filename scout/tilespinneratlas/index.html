@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Atlas of Tiles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --bg: #f4ede2; --bg-deep: #ebe0cc;
+    --ink: #2a1f17; --stone: #cdbfa7; --stone-dark: #8a7558;
+    --grout: #a89478; --accent: #b8552e; --glow: #e8c66a;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: 'Inter Tight', sans-serif;
+    overflow: hidden; height: 100vh; width: 100vw;
+    overscroll-behavior: none; touch-action: manipulation;
+    color: var(--ink); background: var(--bg);
+    transition: background 0.5s, color 0.5s;
+  }
+  body { display: flex; flex-direction: column; }
+
+  .topbar { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px 6px; flex-shrink: 0; }
+  .menu-btn { background: transparent; border: none; width: 36px; height: 36px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 5px; cursor: pointer; padding: 0; }
+  .menu-btn span { display: block; width: 20px; height: 1.5px; background: var(--ink); transition: background 0.3s; }
+  .title { font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 600; font-size: 20px; color: var(--ink); transition: color 0.5s; }
+  .stats { display: flex; gap: 14px; align-items: baseline; }
+  .stat { display: flex; flex-direction: column; align-items: flex-end; line-height: 1; }
+  .stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.18em; color: var(--stone-dark); margin-bottom: 3px; transition: color 0.5s; }
+  .stat-value { font-family: 'Cormorant Garamond', serif; font-weight: 600; font-size: 22px; color: var(--ink); font-variant-numeric: tabular-nums; transition: color 0.5s; }
+  .stat-value.flash { color: var(--accent); transition: color 0.6s; }
+
+  .style-strip { padding: 0 16px 6px; display: flex; justify-content: space-between; align-items: baseline; flex-shrink: 0; }
+  .style-name { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 14px; color: var(--stone-dark); transition: color 0.5s; }
+  .style-origin { font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--stone-dark); transition: color 0.5s; }
+
+  .board-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 4px; min-height: 0; }
+  .board { width: 100%; height: 100%; max-width: 100vw; }
+
+  .bottombar { padding: 8px 16px 16px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; gap: 12px; }
+  .hint { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 13px; line-height: 1.2; color: var(--stone-dark); transition: color 0.5s; }
+  .btn { background: var(--ink); color: var(--bg); border: none; padding: 9px 14px; font-family: 'Inter Tight', sans-serif; font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; font-weight: 500; cursor: pointer; border-radius: 1px; transition: background 0.5s, color 0.5s; }
+  .btn:active { transform: translateY(1px); }
+  .btn.alt { background: transparent; color: var(--ink); border: 1px solid var(--ink); }
+
+  .tile-base { fill: var(--stone); stroke: var(--grout); stroke-width: 0.8; transition: fill 0.5s, stroke 0.5s; }
+  .tile-base-alt { fill: var(--bg); stroke: var(--grout); stroke-width: 0.8; transition: fill 0.5s, stroke 0.5s; }
+  .arc { fill: none; stroke: var(--ink); pointer-events: none; opacity: 0.7; transition: stroke 0.5s; stroke-linecap: round; }
+  .arc-band { fill: none; stroke: var(--accent); stroke-width: 4; pointer-events: none; opacity: 0; transition: opacity 0.4s, stroke 0.5s; stroke-linecap: round; }
+  .arc-band.lit { opacity: 0.7; stroke: var(--glow); }
+  .arc-band.subtle { stroke-width: 2.5; }
+  .arc-band.subtle.lit { opacity: 0.9; stroke: var(--accent); }
+  .creature { stroke: var(--ink); stroke-width: 0.6; stroke-linejoin: round; pointer-events: none; transition: fill 0.5s, stroke 0.5s; }
+  .creature-eye { pointer-events: none; }
+  .vertex-glow { fill: var(--glow); opacity: 0; transition: opacity 0.4s; pointer-events: none; }
+  .vertex-glow.lit { opacity: 0.5; }
+  .wang-edge-band { fill: none; stroke: var(--accent); stroke-width: 3; opacity: 0; transition: opacity 0.4s, stroke 0.5s; pointer-events: none; }
+  .wang-edge-band.lit { opacity: 0.6; stroke: var(--glow); }
+  .tile-group { transition: transform 0.32s cubic-bezier(0.34, 1.56, 0.64, 1); cursor: pointer; }
+  .tile-hit { fill: transparent; cursor: pointer; }
+  .deco { pointer-events: none; }
+  .knot-under { stroke: var(--bg); stroke-linecap: butt; }
+
+  .drawer-backdrop { position: fixed; inset: 0; background: rgba(20, 14, 8, 0.4); opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 10; }
+  .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+  .drawer { position: fixed; top: 0; left: 0; bottom: 0; width: 86%; max-width: 360px; background: var(--bg); transform: translateX(-100%); transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), background 0.5s; z-index: 20; display: flex; flex-direction: column; box-shadow: 4px 0 24px rgba(0,0,0,0.15); }
+  .drawer.open { transform: translateX(0); }
+  .drawer-header { padding: 22px 22px 14px; border-bottom: 1px solid var(--stone); flex-shrink: 0; transition: border-color 0.5s; }
+  .drawer-title { font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 600; font-size: 26px; color: var(--ink); margin: 0; line-height: 1; }
+  .drawer-sub { font-size: 10px; text-transform: uppercase; letter-spacing: 0.22em; color: var(--stone-dark); margin-top: 8px; }
+  .drawer-list { flex: 1; overflow-y: auto; padding: 6px 0 20px; }
+  .section-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.22em; color: var(--stone-dark); padding: 14px 22px 6px; border-bottom: 1px solid rgba(0,0,0,0.05); font-weight: 500; }
+  .style-row { padding: 14px 22px; border-bottom: 1px solid rgba(0,0,0,0.06); cursor: pointer; display: flex; align-items: center; gap: 14px; transition: background 0.2s; }
+  .style-row:active { background: rgba(0,0,0,0.04); }
+  .style-row.active { background: rgba(0,0,0,0.05); }
+  .swatch { width: 38px; height: 38px; border-radius: 2px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); position: relative; overflow: hidden; }
+  .swatch-stripe { position: absolute; inset: 0; display: flex; }
+  .swatch-stripe > div { flex: 1; }
+  .style-row-text { flex: 1; min-width: 0; }
+  .style-row-name { font-family: 'Cormorant Garamond', serif; font-size: 19px; font-weight: 600; line-height: 1.1; color: var(--ink); }
+  .style-row-origin { font-size: 9px; text-transform: uppercase; letter-spacing: 0.22em; color: var(--stone-dark); margin-top: 3px; }
+  .style-row-desc { font-size: 12px; color: var(--stone-dark); margin-top: 4px; font-style: italic; font-family: 'Cormorant Garamond', serif; line-height: 1.3; }
+  .check { width: 16px; height: 16px; flex-shrink: 0; opacity: 0; transition: opacity 0.2s; }
+  .style-row.active .check { opacity: 1; }
+  .check::after { content: '◆'; color: var(--accent); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <button class="menu-btn" id="menuBtn" aria-label="Menu"><span></span><span></span><span></span></button>
+  <div class="title">Atlas</div>
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Matches</div><div class="stat-value" id="loops">0</div></div>
+    <div class="stat"><div class="stat-label">Score</div><div class="stat-value" id="score">0</div></div>
+  </div>
+</div>
+
+<div class="style-strip">
+  <div class="style-name" id="styleName">Andalusian</div>
+  <div class="style-origin" id="styleOrigin">Granada · Spain</div>
+</div>
+
+<div class="board-wrap">
+  <svg class="board" id="board" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+
+<div class="bottombar">
+  <div class="hint" id="hint">Tap a tile to rotate.<br/>Close the curves into loops.</div>
+  <div style="display:flex; gap:8px;">
+    <button class="btn alt" id="shuffle">Shuffle</button>
+    <button class="btn" id="reset">Reset</button>
+  </div>
+</div>
+
+<div class="drawer-backdrop" id="backdrop"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <div class="drawer-title">Tile Traditions</div>
+    <div class="drawer-sub">Select a style</div>
+  </div>
+  <div class="drawer-list" id="styleList"></div>
+</div>
+
+<script>
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/* ═════════════════════════════════════════════════════════════════
+   STYLE CATALOG
+   ═════════════════════════════════════════════════════════════════ */
+const STYLES = [
+  { section: 'Traditions', id: 'andalusian', name: 'Andalusian', origin: 'Granada · Spain',
+    desc: 'Moorish hex tiles, tight corner curves.',
+    kind: 'arc', gridType: 'hex', tilePattern: 'hex-corner-tight', rotations: 6,
+    palette: { bg: '#f4ede2', bgDeep: '#ebe0cc', ink: '#2a1f17', stone: '#cdbfa7', stoneDark: '#8a7558', grout: '#a89478', accent: '#b8552e', glow: '#e8c66a' }},
+  { section: 'Traditions', id: 'andalusian-sweep', name: 'Andalusian Sweep', origin: 'Granada · Spain',
+    desc: 'Long sweeping curves like the Alhambra floor.',
+    kind: 'arc', gridType: 'hex', tilePattern: 'hex-corner-deep', rotations: 6,
+    palette: { bg: '#f2ebe0', bgDeep: '#e8dcc8', ink: '#241812', stone: '#c8b89e', stoneDark: '#7a6448', grout: '#a08c6c', accent: '#c25a30', glow: '#e8b842' }},
+  { section: 'Traditions', id: 'azulejo', name: 'Azulejo', origin: 'Lisbon · Portugal',
+    desc: 'Square Truchet, cobalt on white.',
+    kind: 'arc', gridType: 'square', tilePattern: 'square-quarter', rotations: 4,
+    palette: { bg: '#f5f4ee', bgDeep: '#e6e7e0', ink: '#1c3a6e', stone: '#ffffff', stoneDark: '#5a7aa6', grout: '#c8d2dd', accent: '#1c3a6e', glow: '#f0b942' }},
+  { section: 'Traditions', id: 'azulejo-diag', name: 'Azulejo Lines', origin: 'Lisbon · Portugal',
+    desc: 'Straight diagonals, geometric variant.',
+    kind: 'arc', gridType: 'square', tilePattern: 'square-line-diag', rotations: 4,
+    palette: { bg: '#f5f4ee', bgDeep: '#e6e7e0', ink: '#1c3a6e', stone: '#ffffff', stoneDark: '#5a7aa6', grout: '#c8d2dd', accent: '#1c3a6e', glow: '#f0b942' }},
+  { section: 'Traditions', id: 'maiolica', name: 'Maiolica', origin: 'Deruta · Italy',
+    desc: 'Diagonal split squares, Tuscan paint.',
+    kind: 'arc', gridType: 'square', tilePattern: 'square-diagonal', rotations: 4,
+    subtleLoops: true,
+    palette: { bg: '#fbf3d8', bgDeep: '#f0e3b5', ink: '#4a3110', stone: '#f5e08c', stoneDark: '#8c6a2a', grout: '#c8a85a', accent: '#8c6a2a', glow: '#5a7d3a' }},
+  { section: 'Traditions', id: 'zellij', name: 'Zellij', origin: 'Fez · Morocco',
+    desc: 'Star-pointed hex, jewel tones.',
+    kind: 'arc', gridType: 'hex', tilePattern: 'hex-star', rotations: 6,
+    palette: { bg: '#f0ebe0', bgDeep: '#e0d8c5', ink: '#0e2a3a', stone: '#1c4d6e', stoneDark: '#0e2a3a', grout: '#d8cdb5', accent: '#c4502e', glow: '#e8b842' }},
+  { section: 'Traditions', id: 'delft', name: 'Delft', origin: 'Delft · Netherlands',
+    desc: 'Small quarter circles, deep blue.',
+    kind: 'arc', gridType: 'square', tilePattern: 'square-quarter-small', rotations: 4,
+    palette: { bg: '#fbfaf6', bgDeep: '#ecebe3', ink: '#1a3a78', stone: '#ffffff', stoneDark: '#6a82ac', grout: '#d4dae4', accent: '#1a3a78', glow: '#c9a13a' }},
+  { section: 'Traditions', id: 'seigaiha', name: 'Seigaiha', origin: 'Kyoto · Japan',
+    desc: 'Nested fan arcs, wave pattern.',
+    kind: 'arc', gridType: 'square', tilePattern: 'square-fan', rotations: 4,
+    palette: { bg: '#f6f1e6', bgDeep: '#ebe3cf', ink: '#1a3447', stone: '#f8f2e2', stoneDark: '#6a7a8a', grout: '#cdc4ad', accent: '#2a5878', glow: '#c4682e' }},
+  { section: 'Traditions', id: 'iznik', name: 'İznik', origin: 'Bursa · Türkiye',
+    desc: 'Six-fold floral hex, turquoise & red.',
+    kind: 'arc', gridType: 'hex', tilePattern: 'hex-floral', rotations: 6,
+    palette: { bg: '#faf4e6', bgDeep: '#eee5cc', ink: '#0e4a5a', stone: '#5cb8b8', stoneDark: '#0e4a5a', grout: '#d8c8a8', accent: '#c4282e', glow: '#e8a83a' }},
+  { section: 'Traditions', id: 'talavera', name: 'Talavera', origin: 'Puebla · Mexico',
+    desc: 'Geometric line tiles, terracotta & cobalt.',
+    kind: 'arc', gridType: 'square', tilePattern: 'square-cross', rotations: 4,
+    palette: { bg: '#f8f0e0', bgDeep: '#ede2c8', ink: '#2a3a6a', stone: '#f8f0e0', stoneDark: '#8a5a3a', grout: '#c8a878', accent: '#c4522e', glow: '#e8a832' }},
+  { section: 'Traditions', id: 'jali', name: 'Jali', origin: 'Agra · India',
+    desc: 'Mughal latticework, delicate hex mesh.',
+    kind: 'arc', gridType: 'hex', tilePattern: 'hex-mesh', rotations: 6,
+    palette: { bg: '#f4ecd8', bgDeep: '#e8dcbc', ink: '#4a3a1a', stone: '#e0d0a8', stoneDark: '#8a6a3a', grout: '#b89858', accent: '#7a5228', glow: '#c88a3a' }},
+  { section: 'Traditions', id: 'celtic', name: 'Celtic Knot', origin: 'Ireland',
+    desc: 'Interlacing knotwork with over-under.',
+    kind: 'arc', gridType: 'square', tilePattern: 'square-knot', rotations: 4,
+    palette: { bg: '#f0ebd8', bgDeep: '#e0d8bc', ink: '#1a3a2a', stone: '#f0ebd8', stoneDark: '#4a6a4a', grout: '#a8b088', accent: '#1a4a2a', glow: '#c4a83a' }},
+  { section: 'Traditions', id: 'aboriginal', name: 'Dot Circles', origin: 'Central Australia',
+    desc: 'Concentric rings, ochre earth palette.',
+    kind: 'arc', gridType: 'hex', tilePattern: 'hex-rings', rotations: 6,
+    palette: { bg: '#ede0c8', bgDeep: '#d8c8a8', ink: '#3a2010', stone: '#d4a878', stoneDark: '#7a4a1a', grout: '#a87848', accent: '#c4581e', glow: '#e8b03a' }},
+  { section: 'Traditions', id: 'cuerdaseca', name: 'Cuerda Seca', origin: 'Sevilla · Spain',
+    desc: 'Bold outlined tiles, dry-cord technique.',
+    kind: 'arc', gridType: 'square', tilePattern: 'square-outlined', rotations: 4,
+    palette: { bg: '#f4e8c8', bgDeep: '#e8d8a8', ink: '#2a1a0a', stone: '#d8a838', stoneDark: '#4a2a0a', grout: '#7a5028', accent: '#1c5878', glow: '#c4381e' }},
+  { section: 'Traditions', id: 'victorian', name: 'Victorian', origin: 'London · England',
+    desc: 'Encaustic geometry, strong contrast.',
+    kind: 'arc', gridType: 'square', tilePattern: 'square-encaustic', rotations: 4,
+    palette: { bg: '#f0e8d8', bgDeep: '#d8c8a8', ink: '#1a1a1a', stone: '#3a2a1a', stoneDark: '#4a3a2a', grout: '#8a7858', accent: '#8a1a1a', glow: '#c8a04a' }},
+
+  { section: 'Truchet', id: 'triangle-tri', name: 'Triangle Truchet', origin: 'Abstract',
+    desc: 'Three-fold curves on triangle grid.',
+    kind: 'arc', gridType: 'triangle', tilePattern: 'tri-arc', rotations: 3,
+    palette: { bg: '#f0ede8', bgDeep: '#e0dcd0', ink: '#1a2a3a', stone: '#c8d0c0', stoneDark: '#4a5a4a', grout: '#a8b0a0', accent: '#8a3a2a', glow: '#d4a83a' }},
+  { section: 'Truchet', id: 'smith', name: 'Smith Truchet', origin: 'Abstract',
+    desc: 'Three curves meeting at each hex vertex.',
+    kind: 'arc', gridType: 'hex', tilePattern: 'hex-smith', rotations: 6,
+    palette: { bg: '#f0e8d8', bgDeep: '#e0d8c0', ink: '#1a1a2a', stone: '#c8b898', stoneDark: '#5a4a3a', grout: '#a89878', accent: '#5a3a8a', glow: '#c8a83a' }},
+  { section: 'Truchet', id: 'wang', name: 'Wang Tiles', origin: 'Abstract',
+    desc: 'Match colored edges, no rotation.',
+    kind: 'wang', gridType: 'square', rotations: 1,
+    palette: { bg: '#f0ede4', bgDeep: '#e0dcd0', ink: '#1a1a1a', stone: '#e8e0d0', stoneDark: '#5a5040', grout: '#a89878', accent: '#c4522e', glow: '#e8b842',
+               w1: '#c4522e', w2: '#2e6ac4', w3: '#5a8a3a', w4: '#c4a032' }},
+
+  { section: 'Escher', id: 'escher-reptiles', name: 'Reptiles', origin: 'Escher · No. 25',
+    desc: 'Lizards interlock, three at every vertex.',
+    kind: 'escher', motif: 'lizard', gridType: 'hex', rotations: 3, colors: 3,
+    edgeSpec: 'lizard',
+    palette: { bg: '#f4ede2', bgDeep: '#ebe0cc', ink: '#1a1a1a', stone: '#cdbfa7', stoneDark: '#7a6a52', grout: '#b8a888',
+               accent: '#c4502e', glow: '#e8b842', c1: '#c46438', c2: '#5a8478', c3: '#d4a83a' }},
+  { section: 'Escher', id: 'escher-butterflies', name: 'Butterflies', origin: 'Escher · No. 70',
+    desc: 'Wings interlock around six-fold points.',
+    kind: 'escher', motif: 'butterfly', gridType: 'hex', rotations: 6, colors: 3,
+    edgeSpec: 'butterfly',
+    palette: { bg: '#f8f2e8', bgDeep: '#ede4d0', ink: '#1a1a1a', stone: '#e8ddc8', stoneDark: '#7a6a52', grout: '#b8a888',
+               accent: '#a83a7a', glow: '#e8b842', c1: '#a83a7a', c2: '#3a78a8', c3: '#d8a83a' }},
+  { section: 'Escher', id: 'escher-swans', name: 'Swans', origin: 'Escher · No. 96',
+    desc: 'Interlocking swans on a square lattice.',
+    kind: 'escher', motif: 'swan', gridType: 'square', rotations: 4, colors: 2,
+    edgeSpec: 'swan',
+    palette: { bg: '#f5f3ed', bgDeep: '#e8e3d4', ink: '#1a1a1a', stone: '#f5f3ed', stoneDark: '#5a5648', grout: '#a89878',
+               accent: '#3a4a6a', glow: '#d4a83a', c1: '#1f2230', c2: '#f5f0e2' }},
+  { section: 'Escher', id: 'escher-skywater', name: 'Sky & Water', origin: 'Escher · 1938',
+    desc: 'Fish and birds interlocking.',
+    kind: 'escher', motif: 'fish', gridType: 'square', rotations: 4, colors: 2,
+    edgeSpec: 'fish',
+    palette: { bg: '#f0eee4', bgDeep: '#e0ddd0', ink: '#1a1a1a', stone: '#f0eee4', stoneDark: '#5a5648', grout: '#a89878',
+               accent: '#2a4a6a', glow: '#d4a83a', c1: '#1f2a3a', c2: '#e8e0c8' }},
+  { section: 'Escher', id: 'escher-gargoyles', name: 'Gargoyles', origin: 'Escher · imps',
+    desc: 'Winged imps locked six-fold.',
+    kind: 'escher', motif: 'gargoyle', gridType: 'hex', rotations: 6, colors: 3,
+    edgeSpec: 'gargoyle',
+    palette: { bg: '#ebe5d6', bgDeep: '#d8d0bc', ink: '#0a0a0a', stone: '#cdbfa7', stoneDark: '#5a4838', grout: '#9a8868',
+               accent: '#7a2a2a', glow: '#d4a83a', c1: '#3a2a1a', c2: '#7a2a2a', c3: '#4a5838' }},
+  { section: 'Escher', id: 'escher-bats', name: 'Bats', origin: 'Escher · night',
+    desc: 'Wing membranes on a six-fold hex.',
+    kind: 'escher', motif: 'bat', gridType: 'hex', rotations: 6, colors: 3,
+    edgeSpec: 'bat',
+    palette: { bg: '#e8e0d0', bgDeep: '#d0c8b8', ink: '#0a0a0a', stone: '#c0b8a8', stoneDark: '#3a3020', grout: '#88806a',
+               accent: '#4a2a4a', glow: '#c8a83a', c1: '#1a1a2a', c2: '#4a2a4a', c3: '#5a4a3a' }},
+  { section: 'Escher', id: 'escher-crabs', name: 'Crabs', origin: 'Escher · sea',
+    desc: 'Claws and legs on a square lattice.',
+    kind: 'escher', motif: 'crab', gridType: 'square', rotations: 4, colors: 2,
+    edgeSpec: 'crab',
+    palette: { bg: '#f0e8d8', bgDeep: '#d8ccb0', ink: '#1a1a1a', stone: '#e8dcc0', stoneDark: '#5a4830', grout: '#a89060',
+               accent: '#a83828', glow: '#d4a83a', c1: '#a83828', c2: '#3a5a6a' }},
+  { section: 'Escher', id: 'escher-horsemen', name: 'Horsemen', origin: 'Escher · No. 67',
+    desc: 'Alternating riders, glide reflection.',
+    kind: 'escher', motif: 'horseman', gridType: 'square', rotations: 2, colors: 2, glide: true,
+    edgeSpec: 'horseman',
+    palette: { bg: '#f0e8d0', bgDeep: '#d8ccb0', ink: '#1a1a1a', stone: '#f0e8d0', stoneDark: '#5a4838', grout: '#a89878',
+               accent: '#8a2a2a', glow: '#d4a83a', c1: '#3a2818', c2: '#a86438' }},
+  { section: 'Escher', id: 'escher-pegasus', name: 'Pegasus', origin: 'Escher · No. 105',
+    desc: 'Winged horses, four-fold rotation.',
+    kind: 'escher', motif: 'pegasus', gridType: 'square', rotations: 4, colors: 2,
+    edgeSpec: 'pegasus',
+    palette: { bg: '#e8e4d8', bgDeep: '#d8d0c0', ink: '#1a1a1a', stone: '#e8e4d8', stoneDark: '#5a5040', grout: '#a89878',
+               accent: '#3a4a8a', glow: '#d4a83a', c1: '#2a3a5a', c2: '#c8a840' }},
+  { section: 'Escher', id: 'escher-tri-fish', name: 'Triangular Fish', origin: 'Escher · triangle',
+    desc: 'Three fish meet at every point.',
+    kind: 'escher', motif: 'trifish', gridType: 'triangle', rotations: 3, colors: 3,
+    edgeSpec: 'trifish',
+    palette: { bg: '#e8ede8', bgDeep: '#d0d8d0', ink: '#0a1a2a', stone: '#c8d0d8', stoneDark: '#3a5060', grout: '#889098',
+               accent: '#2a5a7a', glow: '#c8a83a', c1: '#2a5a7a', c2: '#7a3a4a', c3: '#3a6a4a' }}
+];
+
+let currentStyle = STYLES[0];
+
+const board = document.getElementById('board');
+const scoreEl = document.getElementById('score');
+const loopsEl = document.getElementById('loops');
+const styleNameEl = document.getElementById('styleName');
+const styleOriginEl = document.getElementById('styleOrigin');
+const hintEl = document.getElementById('hint');
+
+let TILE_SIZE, COLS, ROWS;
+let tiles = [];
+let tileMap = new Map();
+let vertexGlows = new Map();
+let score = 0, loopCount = 0, totalLoops = 0;
+
+function applyStylePalette(s) {
+  const p = s.palette;
+  const r = document.documentElement.style;
+  for (const [k, v] of Object.entries({ bg: p.bg, 'bg-deep': p.bgDeep, ink: p.ink, stone: p.stone, 'stone-dark': p.stoneDark, grout: p.grout, accent: p.accent, glow: p.glow })) {
+    r.setProperty('--' + k, v);
+  }
+  document.body.style.background = `radial-gradient(ellipse at top, ${p.bg} 0%, ${p.bg} 45%, ${p.bgDeep} 100%)`;
+  styleNameEl.textContent = s.name;
+  styleOriginEl.textContent = s.origin;
+  if (s.kind === 'escher') {
+    hintEl.innerHTML = 'Tap a creature to spin it.<br/>Match colors at each vertex.';
+  } else if (s.kind === 'wang') {
+    hintEl.innerHTML = 'Tap to cycle. Match colored<br/>edges with neighbors.';
+  } else {
+    hintEl.innerHTML = 'Tap a tile to rotate.<br/>Close the curves into loops.';
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   HEX MATH
+   ═══════════════════════════════════════════════════════ */
+function hexToPixel(col, row, size) {
+  return { x: size * Math.sqrt(3) * (col + 0.5 * (row & 1)), y: size * 1.5 * row };
+}
+function hexVertex(cx, cy, size, i) {
+  const a = (Math.PI / 180) * (-90 + 60 * i);
+  return { x: cx + size * Math.cos(a), y: cy + size * Math.sin(a) };
+}
+function hexEdgeMid(cx, cy, size, i) {
+  const v1 = hexVertex(cx, cy, size, i);
+  const v2 = hexVertex(cx, cy, size, (i + 1) % 6);
+  return { x: (v1.x + v2.x) / 2, y: (v1.y + v2.y) / 2 };
+}
+function hexNeighbor(col, row, edgeIdx) {
+  const odd = row & 1;
+  const offsetsEven = [[0,-1],[1,0],[0,1],[-1,1],[-1,0],[-1,-1]];
+  const offsetsOdd  = [[1,-1],[1,0],[1,1],[0,1],[-1,0],[0,-1]];
+  const off = odd ? offsetsOdd[edgeIdx] : offsetsEven[edgeIdx];
+  return { col: col + off[0], row: row + off[1] };
+}
+function hexPolygon(size) {
+  let pts = '';
+  for (let i = 0; i < 6; i++) {
+    const v = hexVertex(0, 0, size, i);
+    pts += `${v.x.toFixed(2)},${v.y.toFixed(2)} `;
+  }
+  return pts.trim();
+}
+
+/* ═══════════════════════════════════════════════════════
+   SQUARE MATH
+   ═══════════════════════════════════════════════════════ */
+function sqEdgeMid(size, edgeIdx) {
+  const h = size / 2;
+  switch (edgeIdx) {
+    case 0: return { x: 0, y: -h }; case 1: return { x: h, y: 0 };
+    case 2: return { x: 0, y: h };  case 3: return { x: -h, y: 0 };
+  }
+}
+function sqNeighbor(col, row, edgeIdx) {
+  switch (edgeIdx) {
+    case 0: return { col, row: row - 1 };  case 1: return { col: col + 1, row };
+    case 2: return { col, row: row + 1 };  case 3: return { col: col - 1, row };
+  }
+}
+function sqOpposite(i) { return (i + 2) % 4; }
+
+/* ═══════════════════════════════════════════════════════
+   TRIANGLE MATH
+   Triangles alternate up-pointing and down-pointing.
+   In offset coords, (col, row) with (col + row) even = up-pointing,
+   otherwise down-pointing. Each triangle has 3 edges.
+   ═══════════════════════════════════════════════════════ */
+function triIsUp(col, row) {
+  return ((col + row) & 1) === 0;
+}
+function triToPixel(col, row, size) {
+  // size = edge length; triangle height = size * sqrt(3) / 2
+  const h = size * Math.sqrt(3) / 2;
+  const x = col * size / 2;
+  const y = row * h + h * (triIsUp(col, row) ? (2/3) : (1/3));
+  return { x, y };
+}
+function triVertex(cx, cy, size, i, isUp) {
+  // For up-pointing: vertex 0 at top, 1 at bottom-right, 2 at bottom-left
+  // For down-pointing: vertex 0 at bottom, 1 at top-left, 2 at top-right
+  const h = size * Math.sqrt(3) / 2;
+  const r = size / Math.sqrt(3); // distance from centroid to vertex
+  if (isUp) {
+    switch (i) {
+      case 0: return { x: cx, y: cy - r };
+      case 1: return { x: cx + size/2, y: cy + r/2 };
+      case 2: return { x: cx - size/2, y: cy + r/2 };
+    }
+  } else {
+    switch (i) {
+      case 0: return { x: cx, y: cy + r };
+      case 1: return { x: cx - size/2, y: cy - r/2 };
+      case 2: return { x: cx + size/2, y: cy - r/2 };
+    }
+  }
+}
+function triEdgeMid(cx, cy, size, i, isUp) {
+  const v1 = triVertex(cx, cy, size, i, isUp);
+  const v2 = triVertex(cx, cy, size, (i + 1) % 3, isUp);
+  return { x: (v1.x + v2.x) / 2, y: (v1.y + v2.y) / 2 };
+}
+function triNeighbor(col, row, edgeIdx, isUp) {
+  // For up-pointing triangle: edge 0 = right, edge 1 = bottom, edge 2 = left
+  // Wait let me reconsider. Vertices 0(top), 1(BR), 2(BL). Edges are 0-1(right), 1-2(bottom), 2-0(left)
+  // Neighbor across edge 0 (right) = down-pointing to right
+  // Neighbor across edge 1 (bottom) = down-pointing below (same col)? No, it's the down-triangle sharing bottom edge
+  // Neighbor across edge 2 (left) = down-pointing to left
+  if (isUp) {
+    switch (edgeIdx) {
+      case 0: return { col: col + 1, row };  // right neighbor (down-tri)
+      case 1: return { col, row: row + 1 };  // below (down-tri, shares bottom)
+      case 2: return { col: col - 1, row };  // left neighbor (down-tri)
+    }
+  } else {
+    // Down-pointing: vertex 0(bottom), 1(TL), 2(TR), edges 0-1(left), 1-2(top), 2-0(right)
+    switch (edgeIdx) {
+      case 0: return { col: col - 1, row };
+      case 1: return { col, row: row - 1 };
+      case 2: return { col: col + 1, row };
+    }
+  }
+}
+function triOppositeEdge(edgeIdx, thisIsUp) {
+  // If up-tri edge 0 (right) borders down-tri, that neighbor's edge is 0 (left? or 2 right?)
+  // Down-tri edges: 0=left, 1=top, 2=right
+  // Up-tri edge 0(right) borders down-tri edge 2(right)... no wait, borders down-tri edge 0(left)
+  // Actually it depends on layout. Let me use: shared edges have matching indices in this simple layout.
+  // For simplicity: opposite of edge i on up-tri = edge (i+? ) on down-tri
+  // Empirically: up.edge0 (right) = down.edge0 (left)? Both are on the right of the up-tri, so up's right = down's left. Yes.
+  // up.edge1 (bottom) = down.edge1 (top)
+  // up.edge2 (left) = down.edge2 (right)
+  return edgeIdx;
+}
+function triPolygon(size, isUp) {
+  let pts = '';
+  for (let i = 0; i < 3; i++) {
+    const v = triVertex(0, 0, size, i, isUp);
+    pts += `${v.x.toFixed(2)},${v.y.toFixed(2)} `;
+  }
+  return pts.trim();
+}
+
+/* ═══════════════════════════════════════════════════════
+   ARC PATTERNS
+   ═══════════════════════════════════════════════════════ */
+function basePairsForPattern(pat) {
+  switch (pat) {
+    case 'hex-corner-tight': case 'hex-corner-deep': case 'hex-star': case 'hex-floral': case 'hex-mesh': case 'hex-rings':
+      return [[0,1],[2,3],[4,5]];
+    case 'hex-smith':
+      return [[0,3],[1,4],[2,5]]; // opposite edges connected through center
+    case 'square-quarter': case 'square-quarter-small': case 'square-fan': case 'square-outlined':
+      return [[0,3],[1,2]];
+    case 'square-diagonal': case 'square-line-diag': case 'square-encaustic':
+      return [[0,1],[2,3]];
+    case 'square-cross':
+      return [[0,2],[1,3]]; // straight through center
+    case 'square-knot':
+      return [[0,3],[1,2]]; // like quarter but with over-under styling
+    case 'tri-arc':
+      return [[0,1],[1,2]]; // 2 arcs on each triangle
+  }
+}
+function worldPairs(pat, rot, rotations) {
+  const base = basePairsForPattern(pat);
+  return base.map(([a, b]) => [(a + rot) % rotations, (b + rot) % rotations]);
+}
+
+function renderHexArc(g, edgeA, edgeB, size, pat, isBand, subtleLoops) {
+  const pA = hexEdgeMid(0, 0, size, edgeA);
+  const pB = hexEdgeMid(0, 0, size, edgeB);
+  const sharedVertex = (Math.min(edgeA, edgeB) + 1) % 6;
+  const v = hexVertex(0, 0, size, sharedVertex);
+  const path = document.createElementNS(SVG_NS, 'path');
+  let bandClass = 'arc-band';
+  if (subtleLoops) bandClass += ' subtle';
+  path.setAttribute('class', isBand ? bandClass : 'arc');
+  let d;
+  if (pat === 'hex-star') {
+    d = `M ${pA.x} ${pA.y} L ${v.x * 0.25} ${v.y * 0.25} L ${pB.x} ${pB.y}`;
+  } else if (pat === 'hex-floral') {
+    d = `M ${pA.x} ${pA.y} Q 0 0 ${pB.x} ${pB.y}`;
+  } else if (pat === 'hex-corner-deep') {
+    d = `M ${pA.x} ${pA.y} Q ${v.x * 0.3} ${v.y * 0.3} ${pB.x} ${pB.y}`;
+  } else if (pat === 'hex-mesh') {
+    // Multiple thin arcs for lattice feel
+    d = `M ${pA.x} ${pA.y} Q ${v.x * 0.7} ${v.y * 0.7} ${pB.x} ${pB.y}`;
+  } else if (pat === 'hex-rings') {
+    // Concentric arc from vertex
+    d = `M ${pA.x} ${pA.y} Q ${v.x * 0.9} ${v.y * 0.9} ${pB.x} ${pB.y}`;
+  } else if (pat === 'hex-smith') {
+    // Opposite edges connected via center — straight through
+    d = `M ${pA.x} ${pA.y} Q 0 0 ${pB.x} ${pB.y}`;
+  } else {
+    d = `M ${pA.x} ${pA.y} Q ${v.x * 0.55} ${v.y * 0.55} ${pB.x} ${pB.y}`;
+  }
+  path.setAttribute('d', d);
+  if (!isBand) {
+    let sw = 1.4;
+    if (pat === 'hex-floral' || pat === 'hex-mesh') sw = 1.0;
+    if (pat === 'hex-rings') sw = 1.6;
+    path.setAttribute('stroke-width', sw);
+  }
+  g.appendChild(path);
+
+  // Extras for specific patterns
+  if (!isBand) {
+    if (pat === 'hex-mesh') {
+      // Add ghost arc for lattice
+      const ghost = document.createElementNS(SVG_NS, 'path');
+      ghost.setAttribute('class', 'arc');
+      ghost.setAttribute('d', `M ${pA.x * 0.8} ${pA.y * 0.8} Q ${v.x * 0.5} ${v.y * 0.5} ${pB.x * 0.8} ${pB.y * 0.8}`);
+      ghost.setAttribute('stroke-width', 0.7);
+      ghost.setAttribute('opacity', 0.5);
+      g.appendChild(ghost);
+    }
+    if (pat === 'hex-rings') {
+      // Add nested arc
+      for (let k = 1; k <= 2; k++) {
+        const shrink = 1 - k * 0.25;
+        const nested = document.createElementNS(SVG_NS, 'path');
+        nested.setAttribute('class', 'arc');
+        nested.setAttribute('d', `M ${pA.x * shrink} ${pA.y * shrink} Q ${v.x * 0.9 * shrink} ${v.y * 0.9 * shrink} ${pB.x * shrink} ${pB.y * shrink}`);
+        nested.setAttribute('stroke-width', 1.2);
+        nested.setAttribute('opacity', 0.6 - k * 0.15);
+        g.appendChild(nested);
+      }
+    }
+  }
+  return path;
+}
+
+function renderSquareArc(g, edgeA, edgeB, size, pat, isBand, subtleLoops) {
+  const pA = sqEdgeMid(size, edgeA);
+  const pB = sqEdgeMid(size, edgeB);
+  const h = size / 2;
+  const path = document.createElementNS(SVG_NS, 'path');
+  let bandClass = 'arc-band';
+  if (subtleLoops) bandClass += ' subtle';
+  path.setAttribute('class', isBand ? bandClass : 'arc');
+
+  if (pat === 'square-diagonal' || pat === 'square-line-diag' || pat === 'square-encaustic') {
+    path.setAttribute('d', `M ${pA.x} ${pA.y} L ${pB.x} ${pB.y}`);
+    path.setAttribute('stroke-width', isBand ? (subtleLoops ? 2 : 4) : (pat === 'square-encaustic' ? 2.0 : 1.6));
+    g.appendChild(path);
+    return path;
+  }
+  if (pat === 'square-cross') {
+    // Straight through center: pA -- 0,0 -- pB
+    path.setAttribute('d', `M ${pA.x} ${pA.y} L 0 0 L ${pB.x} ${pB.y}`);
+    path.setAttribute('stroke-width', isBand ? 4 : 1.8);
+    g.appendChild(path);
+    return path;
+  }
+
+  // Quarter-arc based
+  let cornerX, cornerY;
+  if ((edgeA === 0 && edgeB === 3) || (edgeA === 3 && edgeB === 0)) { cornerX = -h; cornerY = -h; }
+  else { cornerX = h; cornerY = h; }
+  const r = h;
+
+  if (pat === 'square-quarter-small') {
+    const fade = 0.55;
+    const fA = { x: pA.x + (cornerX - pA.x) * (1 - fade), y: pA.y + (cornerY - pA.y) * (1 - fade) };
+    const fB = { x: pB.x + (cornerX - pB.x) * (1 - fade), y: pB.y + (cornerY - pB.y) * (1 - fade) };
+    path.setAttribute('d', `M ${fA.x} ${fA.y} A ${r * fade} ${r * fade} 0 0 1 ${fB.x} ${fB.y}`);
+    path.setAttribute('stroke-width', isBand ? 4 : 1.5);
+    g.appendChild(path);
+    return path;
+  }
+  if (pat === 'square-knot') {
+    // Draw the arc with over-under styling
+    path.setAttribute('d', `M ${pA.x} ${pA.y} A ${r} ${r} 0 0 1 ${pB.x} ${pB.y}`);
+    path.setAttribute('stroke-width', isBand ? 5 : 3.5);
+    g.appendChild(path);
+    if (!isBand) {
+      // Under-crossing marker: bg-colored gap in the middle
+      // (Approximate by adding a thin bg-colored line on top at midpoint)
+      const midT = 0.5;
+      // Just draw thinner ink line inside for a ribbon look
+      const inner = document.createElementNS(SVG_NS, 'path');
+      inner.setAttribute('class', 'arc');
+      inner.setAttribute('d', `M ${pA.x} ${pA.y} A ${r} ${r} 0 0 1 ${pB.x} ${pB.y}`);
+      inner.setAttribute('stroke-width', 1.2);
+      inner.setAttribute('opacity', 0.9);
+      inner.style.stroke = 'var(--bg)';
+      g.appendChild(inner);
+    }
+    return path;
+  }
+  if (pat === 'square-outlined') {
+    // Bold outlined arc
+    path.setAttribute('d', `M ${pA.x} ${pA.y} A ${r} ${r} 0 0 1 ${pB.x} ${pB.y}`);
+    path.setAttribute('stroke-width', isBand ? 5 : 2.4);
+    g.appendChild(path);
+    return path;
+  }
+
+  path.setAttribute('d', `M ${pA.x} ${pA.y} A ${r} ${r} 0 0 1 ${pB.x} ${pB.y}`);
+  path.setAttribute('stroke-width', isBand ? 5 : (pat === 'square-fan' ? 1.2 : 1.8));
+  g.appendChild(path);
+  if (pat === 'square-fan' && !isBand) {
+    for (let k = 1; k <= 2; k++) {
+      const shrink = 1 - k * 0.28;
+      const sA = { x: cornerX + (pA.x - cornerX) * shrink, y: cornerY + (pA.y - cornerY) * shrink };
+      const sB = { x: cornerX + (pB.x - cornerX) * shrink, y: cornerY + (pB.y - cornerY) * shrink };
+      const nested = document.createElementNS(SVG_NS, 'path');
+      nested.setAttribute('class', 'arc');
+      nested.setAttribute('d', `M ${sA.x} ${sA.y} A ${r * shrink} ${r * shrink} 0 0 1 ${sB.x} ${sB.y}`);
+      nested.setAttribute('stroke-width', 1.0);
+      nested.setAttribute('opacity', 0.5 - k * 0.1);
+      g.appendChild(nested);
+    }
+  }
+  return path;
+}
+
+function renderTriArc(g, edgeA, edgeB, size, pat, isBand, isUp) {
+  const pA = triEdgeMid(0, 0, size, edgeA, isUp);
+  const pB = triEdgeMid(0, 0, size, edgeB, isUp);
+  const sharedVertex = (Math.min(edgeA, edgeB) + 1) % 3;
+  const v = triVertex(0, 0, size, sharedVertex, isUp);
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('class', isBand ? 'arc-band' : 'arc');
+  const d = `M ${pA.x} ${pA.y} Q ${v.x * 0.5} ${v.y * 0.5} ${pB.x} ${pB.y}`;
+  path.setAttribute('d', d);
+  if (!isBand) path.setAttribute('stroke-width', 1.4);
+  g.appendChild(path);
+  return path;
+}
+
+/* ═══════════════════════════════════════════════════════
+   COLOR ASSIGNMENT
+   ═══════════════════════════════════════════════════════ */
+function tileColorIndex(col, row, numColors, gridType) {
+  if (gridType === 'triangle' && numColors === 3) return ((col + row) % 3 + 3) % 3;
+  if (gridType === 'hex' && numColors === 3) return ((col + 2 * row) % 3 + 3) % 3;
+  if (numColors === 2) return ((col + row) % 2 + 2) % 2;
+  if (gridType === 'hex' && numColors === 6) return ((col + 2 * row) % 6 + 6) % 6;
+  return 0;
+}
+function tileColor(style, col, row) {
+  const idx = tileColorIndex(col, row, style.colors, style.gridType);
+  return style.palette[`c${idx + 1}`];
+}
+
+/* ═══════════════════════════════════════════════════════
+   ESCHER EDGE-SUBSTITUTION SILHOUETTES
+   ═══════════════════════════════════════════════════════ */
+const CREATURE_EDGES = {
+  head: [{x:0,y:0},{x:.15,y:.12},{x:.30,y:.28},{x:.42,y:.42},{x:.55,y:.48},{x:.68,y:.40},{x:.78,y:.22},{x:.88,y:.08},{x:1,y:0}],
+  legFront: [{x:0,y:0},{x:.18,y:.06},{x:.32,y:.16},{x:.42,y:.32},{x:.50,y:.36},{x:.58,y:.28},{x:.68,y:.12},{x:.84,y:.04},{x:1,y:0}],
+  legBack: [{x:0,y:0},{x:.14,y:.08},{x:.28,y:.22},{x:.40,y:.34},{x:.52,y:.32},{x:.64,y:.18},{x:.78,y:.06},{x:.90,y:.02},{x:1,y:0}],
+  butterfly: [{x:0,y:0},{x:.15,y:.20},{x:.30,y:.32},{x:.45,y:.28},{x:.55,y:.28},{x:.70,y:.32},{x:.85,y:.20},{x:1,y:0}],
+  gargoyle: [{x:0,y:0},{x:.10,y:.08},{x:.20,y:.28},{x:.32,y:.18},{x:.42,y:.38},{x:.50,y:.30},{x:.62,y:.34},{x:.72,y:.20},{x:.84,y:.18},{x:1,y:0}],
+  swan: [{x:0,y:0},{x:.08,y:-.05},{x:.18,y:-.12},{x:.30,y:-.04},{x:.40,y:.06},{x:.50,y:.14},{x:.58,y:.22},{x:.66,y:.30},{x:.74,y:.28},{x:.80,y:.22},{x:.82,y:.14},{x:.78,y:.10},{x:.86,y:.04},{x:.94,y:.02},{x:1,y:0}],
+  fish: [{x:0,y:0},{x:.08,y:.04},{x:.16,y:.14},{x:.30,y:.22},{x:.45,y:.24},{x:.60,y:.18},{x:.72,y:.10},{x:.80,y:.16},{x:.88,y:.10},{x:.94,y:.02},{x:1,y:0}],
+  bat: [{x:0,y:0},{x:.08,y:.06},{x:.18,y:.32},{x:.28,y:.18},{x:.38,y:.42},{x:.48,y:.28},{x:.58,y:.42},{x:.68,y:.18},{x:.78,y:.32},{x:.88,y:.08},{x:1,y:0}],
+  crab: [{x:0,y:0},{x:.08,y:.10},{x:.15,y:.28},{x:.22,y:.22},{x:.30,y:.36},{x:.42,y:.28},{x:.50,y:.18},{x:.58,y:.28},{x:.70,y:.36},{x:.78,y:.22},{x:.85,y:.28},{x:.92,y:.10},{x:1,y:0}],
+  horseman: [{x:0,y:0},{x:.12,y:.08},{x:.22,y:.20},{x:.32,y:.14},{x:.42,y:.28},{x:.52,y:.24},{x:.62,y:.32},{x:.72,y:.18},{x:.82,y:.10},{x:.92,y:.04},{x:1,y:0}],
+  pegasus: [{x:0,y:0},{x:.10,y:.12},{x:.20,y:.28},{x:.30,y:.20},{x:.40,y:.32},{x:.50,y:.26},{x:.60,y:.34},{x:.70,y:.22},{x:.80,y:.12},{x:.90,y:.06},{x:1,y:0}],
+  trifish: [{x:0,y:0},{x:.15,y:.15},{x:.30,y:.28},{x:.45,y:.22},{x:.55,y:.30},{x:.70,y:.20},{x:.85,y:.10},{x:1,y:0}]
+};
+
+function scalePts(points, ySc) {
+  return points.map(p => ({ x: p.x, y: p.y * ySc }));
+}
+function reversePts(points) {
+  return points.slice().reverse().map(p => ({ x: 1 - p.x, y: p.y }));
+}
+
+function edgeSpecFor(name, size) {
+  const yScale = 0.5;
+  switch (name) {
+    case 'lizard':
+      return [
+        { points: scalePts(CREATURE_EDGES.head, yScale), flip: false },
+        { points: scalePts(reversePts(CREATURE_EDGES.legBack), yScale), flip: true },
+        { points: scalePts(CREATURE_EDGES.legFront, yScale), flip: false },
+        { points: scalePts(reversePts(CREATURE_EDGES.head), yScale), flip: true },
+        { points: scalePts(CREATURE_EDGES.legBack, yScale), flip: false },
+        { points: scalePts(reversePts(CREATURE_EDGES.legFront), yScale), flip: true }
+      ];
+    case 'butterfly':
+    case 'gargoyle':
+    case 'bat': {
+      const src = CREATURE_EDGES[name];
+      return [0,1,2,3,4,5].map(i => ({ points: scalePts(src, yScale), flip: (i % 2 === 1) }));
+    }
+    case 'trifish': {
+      const src = CREATURE_EDGES.trifish;
+      return [0,1,2].map(i => ({ points: scalePts(src, yScale), flip: (i % 2 === 1) }));
+    }
+    case 'swan':
+    case 'fish':
+    case 'crab':
+    case 'pegasus': {
+      const src = CREATURE_EDGES[name];
+      return [0,1,2,3].map(() => ({ points: scalePts(src, yScale), flip: false }));
+    }
+    case 'horseman': {
+      // 2-fold rotation with glide: pairs of edges use flipped versions
+      const src = CREATURE_EDGES.horseman;
+      return [
+        { points: scalePts(src, yScale), flip: false },
+        { points: scalePts(reversePts(src), yScale), flip: false },
+        { points: scalePts(src, yScale), flip: true },
+        { points: scalePts(reversePts(src), yScale), flip: true }
+      ];
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   BUILD BOARD
+   ═══════════════════════════════════════════════════════ */
+function buildBoard() {
+  board.innerHTML = '';
+  tiles = [];
+  tileMap.clear();
+  vertexGlows.clear();
+  score = 0; loopCount = 0; totalLoops = 0;
+  scoreEl.textContent = '0';
+  loopsEl.textContent = '0';
+
+  const rect = board.getBoundingClientRect();
+  const W = rect.width, H = rect.height;
+  const gt = currentStyle.gridType;
+
+  if (gt === 'hex') {
+    COLS = 6; ROWS = 10;
+    const widthBudget = W / (COLS * Math.sqrt(3) + Math.sqrt(3) / 2);
+    const heightBudget = H / (1.5 * ROWS + 0.5);
+    TILE_SIZE = Math.min(widthBudget, heightBudget) * 0.98;
+    const totalW = TILE_SIZE * Math.sqrt(3) * (COLS + 0.5);
+    const totalH = TILE_SIZE * (1.5 * ROWS + 0.5);
+    board.setAttribute('viewBox', `${-TILE_SIZE} ${-TILE_SIZE * 0.5} ${totalW + TILE_SIZE} ${totalH + TILE_SIZE}`);
+  } else if (gt === 'square') {
+    COLS = 7; ROWS = 12;
+    const widthBudget = W / COLS;
+    const heightBudget = H / ROWS;
+    TILE_SIZE = Math.min(widthBudget, heightBudget) * 0.98;
+    const totalW = TILE_SIZE * COLS, totalH = TILE_SIZE * ROWS, pad = TILE_SIZE * 0.5;
+    board.setAttribute('viewBox', `${-pad} ${-pad} ${totalW + pad * 2} ${totalH + pad * 2}`);
+  } else if (gt === 'triangle') {
+    // Triangle grid: many small triangles fill the space
+    COLS = 13; ROWS = 14; // triangles are half-columns
+    const h = W / (COLS / 2 + 0.5);
+    const v = H / ROWS * (2 / Math.sqrt(3));
+    TILE_SIZE = Math.min(h, v) * 0.95;
+    const th = TILE_SIZE * Math.sqrt(3) / 2;
+    const totalW = TILE_SIZE * (COLS / 2 + 0.5);
+    const totalH = th * ROWS + th;
+    const pad = TILE_SIZE * 0.3;
+    board.setAttribute('viewBox', `${-pad} ${-pad} ${totalW + pad * 2} ${totalH + pad * 2}`);
+  }
+  board.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      const tile = createTile(col, row);
+      tiles.push(tile);
+      tileMap.set(`${col},${row}`, tile);
+    }
+  }
+  tiles.forEach(t => {
+    t.rot = Math.floor(Math.random() * currentStyle.rotations);
+    if (currentStyle.kind === 'wang') t.wangConfig = Math.floor(Math.random() * 8);
+    applyRotation(t, false);
+  });
+
+  if (currentStyle.kind === 'escher') {
+    buildVertexGlows();
+    detectVertexMatches();
+  } else if (currentStyle.kind === 'wang') {
+    detectWangMatches();
+  } else {
+    detectLoops();
+  }
+}
+
+/* Wang tile configs: 8 preset variants, each has colors on 4 edges */
+const WANG_CONFIGS = [
+  [0, 1, 0, 1], // top, right, bot, left
+  [1, 0, 1, 0],
+  [0, 0, 1, 1],
+  [1, 1, 0, 0],
+  [2, 3, 2, 3],
+  [3, 2, 3, 2],
+  [0, 2, 1, 3],
+  [1, 3, 0, 2]
+];
+
+function createTile(col, row) {
+  const gt = currentStyle.gridType;
+  let cx, cy, isUp = true;
+  if (gt === 'hex') {
+    const p = hexToPixel(col, row, TILE_SIZE);
+    cx = p.x; cy = p.y;
+  } else if (gt === 'square') {
+    cx = col * TILE_SIZE + TILE_SIZE / 2;
+    cy = row * TILE_SIZE + TILE_SIZE / 2;
+  } else { // triangle
+    isUp = triIsUp(col, row);
+    const p = triToPixel(col, row, TILE_SIZE);
+    cx = p.x; cy = p.y;
+  }
+  const g = document.createElementNS(SVG_NS, 'g');
+  g.setAttribute('class', 'tile-group');
+  g.setAttribute('transform', `translate(${cx} ${cy})`);
+
+  let arcEls = [], bandEls = [], wangEdgeEls = [];
+
+  if (currentStyle.kind === 'escher') {
+    // Edge-substituted creature tile
+    let verts;
+    if (gt === 'hex') {
+      verts = [];
+      for (let i = 0; i < 6; i++) verts.push(hexVertex(0, 0, TILE_SIZE, i));
+    } else if (gt === 'square') {
+      const h = TILE_SIZE / 2;
+      verts = [{x: -h, y: -h}, {x: h, y: -h}, {x: h, y: h}, {x: -h, y: h}];
+    } else {
+      verts = [];
+      for (let i = 0; i < 3; i++) verts.push(triVertex(0, 0, TILE_SIZE, i, isUp));
+    }
+    const spec = edgeSpecFor(currentStyle.edgeSpec, TILE_SIZE);
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', buildPathCW(verts, spec));
+    path.setAttribute('class', 'creature');
+    path.setAttribute('fill', tileColor(currentStyle, col, row));
+    g.appendChild(path);
+
+    if (currentStyle.motif === 'lizard' || currentStyle.motif === 'horseman') {
+      const A = verts[0], B = verts[1];
+      const midX = (A.x + B.x) / 2, midY = (A.y + B.y) / 2;
+      const dx = B.x - A.x, dy = B.y - A.y;
+      const nx = -dy, ny = dx;
+      const len = Math.sqrt(nx*nx + ny*ny);
+      const ex = midX + (nx / len) * TILE_SIZE * 0.18;
+      const ey = midY + (ny / len) * TILE_SIZE * 0.18;
+      const eye = document.createElementNS(SVG_NS, 'circle');
+      eye.setAttribute('cx', ex); eye.setAttribute('cy', ey);
+      eye.setAttribute('r', TILE_SIZE * 0.035);
+      eye.setAttribute('class', 'creature-eye');
+      eye.setAttribute('fill', currentStyle.palette.ink);
+      g.appendChild(eye);
+    }
+  } else if (currentStyle.kind === 'wang') {
+    // Wang tile: 4 colored edge segments, no rotation, but tap cycles config
+    const h = TILE_SIZE / 2;
+    const sq = document.createElementNS(SVG_NS, 'rect');
+    sq.setAttribute('x', -h); sq.setAttribute('y', -h);
+    sq.setAttribute('width', TILE_SIZE); sq.setAttribute('height', TILE_SIZE);
+    sq.setAttribute('class', 'tile-base-alt');
+    g.appendChild(sq);
+    // Edge color strips (will be updated on rotate)
+    for (let e = 0; e < 4; e++) {
+      const edge = document.createElementNS(SVG_NS, 'line');
+      edge.setAttribute('class', 'wang-edge');
+      edge.setAttribute('stroke-width', 8);
+      edge.setAttribute('stroke-linecap', 'butt');
+      // Endpoint positions per edge (with inset for aesthetics)
+      const inset = TILE_SIZE * 0.15;
+      let x1, y1, x2, y2;
+      if (e === 0) { x1 = -h + inset; y1 = -h + 4; x2 = h - inset; y2 = -h + 4; }
+      else if (e === 1) { x1 = h - 4; y1 = -h + inset; x2 = h - 4; y2 = h - inset; }
+      else if (e === 2) { x1 = -h + inset; y1 = h - 4; x2 = h - inset; y2 = h - 4; }
+      else { x1 = -h + 4; y1 = -h + inset; x2 = -h + 4; y2 = h - inset; }
+      edge.setAttribute('x1', x1); edge.setAttribute('y1', y1);
+      edge.setAttribute('x2', x2); edge.setAttribute('y2', y2);
+      g.appendChild(edge);
+      wangEdgeEls.push(edge);
+      // Match highlight
+      const band = document.createElementNS(SVG_NS, 'line');
+      band.setAttribute('class', 'wang-edge-band');
+      band.setAttribute('x1', x1); band.setAttribute('y1', y1);
+      band.setAttribute('x2', x2); band.setAttribute('y2', y2);
+      g.appendChild(band);
+      bandEls.push(band);
+    }
+  } else {
+    // Arc tile
+    if (gt === 'hex') {
+      const hex = document.createElementNS(SVG_NS, 'polygon');
+      hex.setAttribute('points', hexPolygon(TILE_SIZE));
+      hex.setAttribute('class', 'tile-base');
+      g.appendChild(hex);
+      if (currentStyle.tilePattern === 'hex-star') {
+        const inner = document.createElementNS(SVG_NS, 'polygon');
+        inner.setAttribute('points', hexPolygon(TILE_SIZE * 0.45));
+        inner.setAttribute('class', 'deco');
+        inner.setAttribute('fill', 'var(--stone-dark)');
+        inner.setAttribute('opacity', '0.18');
+        inner.setAttribute('transform', 'rotate(30)');
+        g.appendChild(inner);
+      }
+      if (currentStyle.tilePattern === 'hex-floral') {
+        const dot = document.createElementNS(SVG_NS, 'circle');
+        dot.setAttribute('r', TILE_SIZE * 0.06);
+        dot.setAttribute('class', 'deco');
+        dot.setAttribute('fill', 'var(--accent)');
+        dot.setAttribute('opacity', '0.7');
+        g.appendChild(dot);
+      }
+      if (currentStyle.tilePattern === 'hex-rings') {
+        // Add a central dot
+        const dot = document.createElementNS(SVG_NS, 'circle');
+        dot.setAttribute('r', TILE_SIZE * 0.05);
+        dot.setAttribute('class', 'deco');
+        dot.setAttribute('fill', 'var(--accent)');
+        dot.setAttribute('opacity', '0.8');
+        g.appendChild(dot);
+      }
+      if (currentStyle.tilePattern === 'hex-mesh') {
+        // Add tiny center hex
+        const inner = document.createElementNS(SVG_NS, 'polygon');
+        inner.setAttribute('points', hexPolygon(TILE_SIZE * 0.15));
+        inner.setAttribute('class', 'deco');
+        inner.setAttribute('fill', 'none');
+        inner.setAttribute('stroke', 'var(--stone-dark)');
+        inner.setAttribute('stroke-width', 0.6);
+        inner.setAttribute('opacity', '0.7');
+        g.appendChild(inner);
+      }
+    } else if (gt === 'square') {
+      const sq = document.createElementNS(SVG_NS, 'rect');
+      const h = TILE_SIZE / 2;
+      sq.setAttribute('x', -h); sq.setAttribute('y', -h);
+      sq.setAttribute('width', TILE_SIZE); sq.setAttribute('height', TILE_SIZE);
+      sq.setAttribute('class', 'tile-base-alt');
+      g.appendChild(sq);
+      if (currentStyle.tilePattern === 'square-diagonal') {
+        const tri = document.createElementNS(SVG_NS, 'polygon');
+        tri.setAttribute('points', `${-h},${-h} ${h},${-h} ${-h},${h}`);
+        tri.setAttribute('class', 'deco');
+        tri.setAttribute('fill', 'var(--stone)');
+        tri.setAttribute('opacity', '0.55');
+        g.appendChild(tri);
+      }
+      if (currentStyle.tilePattern === 'square-encaustic') {
+        // Half fill in accent color
+        const tri = document.createElementNS(SVG_NS, 'polygon');
+        tri.setAttribute('points', `${-h},${-h} ${h},${h} ${-h},${h}`);
+        tri.setAttribute('class', 'deco');
+        tri.setAttribute('fill', 'var(--stone)');
+        tri.setAttribute('opacity', '0.75');
+        g.appendChild(tri);
+      }
+      if (currentStyle.tilePattern === 'square-outlined') {
+        // Colored corner blocks
+        const c1 = document.createElementNS(SVG_NS, 'polygon');
+        c1.setAttribute('points', `${-h},${-h} ${-h + TILE_SIZE*0.3},${-h} ${-h},${-h + TILE_SIZE*0.3}`);
+        c1.setAttribute('class', 'deco');
+        c1.setAttribute('fill', 'var(--accent)');
+        c1.setAttribute('opacity', '0.85');
+        g.appendChild(c1);
+        const c2 = document.createElementNS(SVG_NS, 'polygon');
+        c2.setAttribute('points', `${h},${h} ${h - TILE_SIZE*0.3},${h} ${h},${h - TILE_SIZE*0.3}`);
+        c2.setAttribute('class', 'deco');
+        c2.setAttribute('fill', 'var(--accent)');
+        c2.setAttribute('opacity', '0.85');
+        g.appendChild(c2);
+      }
+    } else { // triangle
+      const tri = document.createElementNS(SVG_NS, 'polygon');
+      tri.setAttribute('points', triPolygon(TILE_SIZE, isUp));
+      tri.setAttribute('class', isUp ? 'tile-base' : 'tile-base-alt');
+      g.appendChild(tri);
+    }
+
+    const pat = currentStyle.tilePattern;
+    const basePairs = basePairsForPattern(pat);
+    basePairs.forEach(([a, b]) => {
+      let band, arc;
+      if (gt === 'hex') {
+        band = renderHexArc(g, a, b, TILE_SIZE, pat, true, currentStyle.subtleLoops);
+        arc = renderHexArc(g, a, b, TILE_SIZE, pat, false, currentStyle.subtleLoops);
+      } else if (gt === 'square') {
+        band = renderSquareArc(g, a, b, TILE_SIZE, pat, true, currentStyle.subtleLoops);
+        arc = renderSquareArc(g, a, b, TILE_SIZE, pat, false, currentStyle.subtleLoops);
+      } else {
+        band = renderTriArc(g, a, b, TILE_SIZE, pat, true, isUp);
+        arc = renderTriArc(g, a, b, TILE_SIZE, pat, false, isUp);
+      }
+      bandEls.push(band); arcEls.push(arc);
+    });
+  }
+
+  // Hit area
+  let hit;
+  if (gt === 'hex') {
+    hit = document.createElementNS(SVG_NS, 'polygon');
+    hit.setAttribute('points', hexPolygon(TILE_SIZE));
+  } else if (gt === 'square') {
+    hit = document.createElementNS(SVG_NS, 'rect');
+    const h = TILE_SIZE / 2;
+    hit.setAttribute('x', -h); hit.setAttribute('y', -h);
+    hit.setAttribute('width', TILE_SIZE); hit.setAttribute('height', TILE_SIZE);
+  } else {
+    hit = document.createElementNS(SVG_NS, 'polygon');
+    hit.setAttribute('points', triPolygon(TILE_SIZE, isUp));
+  }
+  hit.setAttribute('class', 'tile-hit');
+  g.appendChild(hit);
+
+  board.appendChild(g);
+  const tile = { col, row, cx, cy, rot: 0, isUp, el: g, arcEls, bandEls, wangEdgeEls, wangConfig: 0 };
+  hit.addEventListener('click', e => { e.stopPropagation(); rotateTile(tile); });
+
+  // Set initial Wang colors
+  if (currentStyle.kind === 'wang') {
+    updateWangColors(tile);
+  }
+  return tile;
+}
+
+function updateWangColors(tile) {
+  const cfg = WANG_CONFIGS[tile.wangConfig];
+  for (let e = 0; e < 4; e++) {
+    tile.wangEdgeEls[e].setAttribute('stroke', currentStyle.palette[`w${cfg[e] + 1}`]);
+  }
+}
+
+function buildPathCW(verts, edgeSpec) {
+  let d = `M ${verts[0].x.toFixed(2)} ${verts[0].y.toFixed(2)}`;
+  for (let i = 0; i < verts.length; i++) {
+    const A = verts[i];
+    const B = verts[(i + 1) % verts.length];
+    const dx = B.x - A.x, dy = B.y - A.y;
+    const nx = -dy, ny = dx;
+    const pts = edgeSpec[i].points;
+    const flip = edgeSpec[i].flip;
+    for (let j = 1; j < pts.length; j++) {
+      const py = flip ? -pts[j].y : pts[j].y;
+      const x = A.x + pts[j].x * dx + py * nx;
+      const y = A.y + pts[j].x * dy + py * ny;
+      d += ` L ${x.toFixed(2)} ${y.toFixed(2)}`;
+    }
+  }
+  d += ' Z';
+  return d;
+}
+
+function applyRotation(tile, animate = true) {
+  const step = 360 / currentStyle.rotations;
+  const deg = tile.rot * step;
+  tile.el.style.transition = animate ? '' : 'none';
+  tile.el.setAttribute('transform', `translate(${tile.cx} ${tile.cy}) rotate(${deg})`);
+  if (!animate) {
+    void tile.el.getBoundingClientRect();
+    tile.el.style.transition = '';
+  }
+}
+
+function rotateTile(tile) {
+  if (currentStyle.kind === 'wang') {
+    tile.wangConfig = (tile.wangConfig + 1) % WANG_CONFIGS.length;
+    updateWangColors(tile);
+    setTimeout(() => detectWangMatches(), 200);
+    return;
+  }
+  tile.rot = (tile.rot + 1) % currentStyle.rotations;
+  applyRotation(tile, true);
+  if (currentStyle.kind === 'escher') {
+    setTimeout(() => detectVertexMatches(), 340);
+  } else {
+    setTimeout(() => detectLoops(), 340);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   LOOP DETECTION
+   ═══════════════════════════════════════════════════════ */
+function detectLoops() {
+  const gt = currentStyle.gridType;
+  const rotations = currentStyle.rotations;
+
+  let neighborFn, oppositeFn, edgeCount;
+  if (gt === 'hex') {
+    neighborFn = hexNeighbor;
+    oppositeFn = (i) => (i + 3) % 6;
+    edgeCount = 6;
+  } else if (gt === 'square') {
+    neighborFn = sqNeighbor;
+    oppositeFn = sqOpposite;
+    edgeCount = 4;
+  } else {
+    // triangle - need to pass isUp info via tile
+    edgeCount = 3;
+    neighborFn = null;
+    oppositeFn = null;
+  }
+
+  const tileEdges = new Map();
+  tiles.forEach(t => tileEdges.set(`${t.col},${t.row}`, worldPairs(currentStyle.tilePattern, t.rot, rotations)));
+  function edgeKey(col, row, e) { return `${col},${row},${e}`; }
+  function arcPartner(col, row, edge) {
+    const pairs = tileEdges.get(`${col},${row}`);
+    if (!pairs) return null;
+    for (const [a, b] of pairs) {
+      if (a === edge) return b;
+      if (b === edge) return a;
+    }
+    return null;
+  }
+  function neighborPartner(col, row, edge) {
+    let n;
+    if (gt === 'triangle') {
+      const t = tileMap.get(`${col},${row}`);
+      if (!t) return null;
+      n = triNeighbor(col, row, edge, t.isUp);
+    } else {
+      n = neighborFn(col, row, edge);
+    }
+    if (!tileMap.has(`${n.col},${n.row}`)) return null;
+    let oppEdge;
+    if (gt === 'triangle') {
+      const t = tileMap.get(`${col},${row}`);
+      oppEdge = triOppositeEdge(edge, t.isUp);
+    } else {
+      oppEdge = oppositeFn(edge);
+    }
+    return { col: n.col, row: n.row, edge: oppEdge };
+  }
+  const visited = new Set();
+  const loopsFound = [];
+  for (const tile of tiles) {
+    for (let e = 0; e < edgeCount; e++) {
+      const startKey = edgeKey(tile.col, tile.row, e);
+      if (visited.has(startKey)) continue;
+      let curCol = tile.col, curRow = tile.row, curEdge = e;
+      const tileArcsInLoop = [];
+      let closed = false;
+      const localVisited = new Set();
+      while (true) {
+        const k = edgeKey(curCol, curRow, curEdge);
+        if (localVisited.has(k)) { if (k === startKey) closed = true; break; }
+        localVisited.add(k);
+        const partner = arcPartner(curCol, curRow, curEdge);
+        if (partner === null) break;
+        localVisited.add(edgeKey(curCol, curRow, partner));
+        tileArcsInLoop.push({ col: curCol, row: curRow, edges: [curEdge, partner] });
+        const np = neighborPartner(curCol, curRow, partner);
+        if (!np) break;
+        const npKey = edgeKey(np.col, np.row, np.edge);
+        if (npKey === startKey) { closed = true; break; }
+        if (localVisited.has(npKey)) break;
+        curCol = np.col; curRow = np.row; curEdge = np.edge;
+      }
+      localVisited.forEach(k => visited.add(k));
+      if (closed && tileArcsInLoop.length >= 2) loopsFound.push(tileArcsInLoop);
+    }
+  }
+  tiles.forEach(t => t.bandEls.forEach(b => b.classList.remove('lit')));
+  loopsFound.forEach(loop => {
+    loop.forEach(arc => {
+      const t = tileMap.get(`${arc.col},${arc.row}`);
+      if (!t) return;
+      const pairs = worldPairs(currentStyle.tilePattern, t.rot, rotations);
+      for (let i = 0; i < pairs.length; i++) {
+        const [a, b] = pairs[i];
+        if ((a === arc.edges[0] && b === arc.edges[1]) || (a === arc.edges[1] && b === arc.edges[0])) {
+          if (t.bandEls[i]) t.bandEls[i].classList.add('lit');
+          break;
+        }
+      }
+    });
+  });
+  const newCount = loopsFound.length;
+  if (newCount > loopCount) {
+    const gained = newCount - loopCount;
+    const arcsInLoops = loopsFound.reduce((s, l) => s + l.length, 0);
+    score += gained * 10 + arcsInLoops;
+    scoreEl.textContent = score;
+    scoreEl.classList.add('flash');
+    setTimeout(() => scoreEl.classList.remove('flash'), 600);
+    totalLoops += gained;
+    loopsEl.textContent = totalLoops;
+  }
+  loopCount = newCount;
+}
+
+/* ═══════════════════════════════════════════════════════
+   VERTEX MATCH (Escher)
+   ═══════════════════════════════════════════════════════ */
+function buildVertexGlows() {
+  const gt = currentStyle.gridType;
+  if (gt === 'hex') {
+    const vertSet = new Map();
+    tiles.forEach(t => {
+      for (let i = 0; i < 6; i++) {
+        const v = hexVertex(t.cx, t.cy, TILE_SIZE, i);
+        const key = `${v.x.toFixed(1)},${v.y.toFixed(1)}`;
+        if (!vertSet.has(key)) vertSet.set(key, { x: v.x, y: v.y, count: 0, tiles: [] });
+        const ent = vertSet.get(key);
+        ent.count++;
+        ent.tiles.push({ col: t.col, row: t.row, vertexIdx: i });
+      }
+    });
+    vertSet.forEach((v, key) => {
+      if (v.count >= 3) {
+        const glow = document.createElementNS(SVG_NS, 'circle');
+        glow.setAttribute('cx', v.x); glow.setAttribute('cy', v.y);
+        glow.setAttribute('r', TILE_SIZE * 0.18);
+        glow.setAttribute('class', 'vertex-glow');
+        board.appendChild(glow);
+        vertexGlows.set(key, { el: glow, tiles: v.tiles, pos: { x: v.x, y: v.y } });
+      }
+    });
+  } else if (gt === 'square') {
+    for (let row = 1; row < ROWS; row++) {
+      for (let col = 1; col < COLS; col++) {
+        const x = col * TILE_SIZE, y = row * TILE_SIZE;
+        const key = `${x.toFixed(1)},${y.toFixed(1)}`;
+        const glow = document.createElementNS(SVG_NS, 'circle');
+        glow.setAttribute('cx', x); glow.setAttribute('cy', y);
+        glow.setAttribute('r', TILE_SIZE * 0.18);
+        glow.setAttribute('class', 'vertex-glow');
+        board.appendChild(glow);
+        const tilesHere = [
+          { col: col - 1, row: row - 1 }, { col: col, row: row - 1 },
+          { col: col - 1, row: row }, { col: col, row: row }
+        ];
+        vertexGlows.set(key, { el: glow, tiles: tilesHere, pos: { x, y } });
+      }
+    }
+  } else if (gt === 'triangle') {
+    // Triangle vertices - 6 triangles meet at each interior vertex
+    const vertSet = new Map();
+    tiles.forEach(t => {
+      for (let i = 0; i < 3; i++) {
+        const v = triVertex(t.cx, t.cy, TILE_SIZE, i, t.isUp);
+        const key = `${v.x.toFixed(1)},${v.y.toFixed(1)}`;
+        if (!vertSet.has(key)) vertSet.set(key, { x: v.x, y: v.y, count: 0, tiles: [] });
+        const ent = vertSet.get(key);
+        ent.count++;
+        ent.tiles.push({ col: t.col, row: t.row, vertexIdx: i });
+      }
+    });
+    vertSet.forEach((v, key) => {
+      if (v.count >= 3) {
+        const glow = document.createElementNS(SVG_NS, 'circle');
+        glow.setAttribute('cx', v.x); glow.setAttribute('cy', v.y);
+        glow.setAttribute('r', TILE_SIZE * 0.15);
+        glow.setAttribute('class', 'vertex-glow');
+        board.appendChild(glow);
+        vertexGlows.set(key, { el: glow, tiles: v.tiles, pos: { x: v.x, y: v.y } });
+      }
+    });
+  }
+}
+
+function detectVertexMatches() {
+  let matches = 0;
+  vertexGlows.forEach((vg, key) => {
+    let isMatch = false;
+    const gt = currentStyle.gridType;
+    if (gt === 'hex' && currentStyle.colors === 3) {
+      const colors = new Set();
+      let allPointing = true;
+      for (const tref of vg.tiles) {
+        const t = tileMap.get(`${tref.col},${tref.row}`);
+        if (!t) { allPointing = false; break; }
+        colors.add(tileColorIndex(t.col, t.row, 3, 'hex'));
+        const headVertex = (t.rot * 2) % 6;
+        if (headVertex !== tref.vertexIdx) allPointing = false;
+      }
+      isMatch = (colors.size === 3) && allPointing;
+    } else if (gt === 'hex') {
+      const colors = new Set();
+      for (const tref of vg.tiles) {
+        const t = tileMap.get(`${tref.col},${tref.row}`);
+        if (!t) continue;
+        colors.add(tileColorIndex(t.col, t.row, currentStyle.colors, 'hex'));
+      }
+      isMatch = colors.size >= 3;
+    } else if (gt === 'square' && currentStyle.colors === 2) {
+      const rots = vg.tiles.map(tref => {
+        const t = tileMap.get(`${tref.col},${tref.row}`);
+        return t ? t.rot : -1;
+      });
+      if (rots.every(r => r >= 0)) {
+        isMatch = (rots[0] === rots[3]) && (rots[1] === rots[2]) && (rots[0] !== rots[1]);
+      }
+    } else if (gt === 'triangle') {
+      const colors = new Set();
+      for (const tref of vg.tiles) {
+        const t = tileMap.get(`${tref.col},${tref.row}`);
+        if (!t) continue;
+        colors.add(tileColorIndex(t.col, t.row, 3, 'triangle'));
+      }
+      isMatch = colors.size === 3;
+    }
+    if (isMatch) { vg.el.classList.add('lit'); matches++; }
+    else vg.el.classList.remove('lit');
+  });
+  if (matches > loopCount) {
+    const gained = matches - loopCount;
+    score += gained * 15;
+    scoreEl.textContent = score;
+    scoreEl.classList.add('flash');
+    setTimeout(() => scoreEl.classList.remove('flash'), 600);
+    totalLoops += gained;
+    loopsEl.textContent = totalLoops;
+  }
+  loopCount = matches;
+}
+
+/* ═══════════════════════════════════════════════════════
+   WANG MATCH DETECTION
+   ═══════════════════════════════════════════════════════ */
+function detectWangMatches() {
+  let matches = 0;
+  tiles.forEach(t => t.bandEls.forEach(b => b.classList.remove('lit')));
+  tiles.forEach(t => {
+    const cfg = WANG_CONFIGS[t.wangConfig];
+    for (let e = 0; e < 4; e++) {
+      const n = sqNeighbor(t.col, t.row, e);
+      const neighbor = tileMap.get(`${n.col},${n.row}`);
+      if (!neighbor) continue;
+      const nCfg = WANG_CONFIGS[neighbor.wangConfig];
+      const nEdge = sqOpposite(e);
+      if (cfg[e] === nCfg[nEdge]) {
+        t.bandEls[e].classList.add('lit');
+        matches++;
+      }
+    }
+  });
+  matches = Math.floor(matches / 2); // each match counted twice
+  if (matches > loopCount) {
+    const gained = matches - loopCount;
+    score += gained * 5;
+    scoreEl.textContent = score;
+    scoreEl.classList.add('flash');
+    setTimeout(() => scoreEl.classList.remove('flash'), 600);
+    totalLoops += gained;
+    loopsEl.textContent = totalLoops;
+  }
+  loopCount = matches;
+}
+
+/* ═══════════════════════════════════════════════════════
+   DRAWER
+   ═══════════════════════════════════════════════════════ */
+const drawer = document.getElementById('drawer');
+const backdrop = document.getElementById('backdrop');
+const styleList = document.getElementById('styleList');
+
+function buildDrawer() {
+  styleList.innerHTML = '';
+  let lastSection = null;
+  STYLES.forEach(s => {
+    if (s.section !== lastSection) {
+      const label = document.createElement('div');
+      label.className = 'section-label';
+      label.textContent = s.section;
+      styleList.appendChild(label);
+      lastSection = s.section;
+    }
+    const row = document.createElement('div');
+    row.className = 'style-row' + (s.id === currentStyle.id ? ' active' : '');
+    const sw = document.createElement('div');
+    sw.className = 'swatch';
+    const stripe = document.createElement('div');
+    stripe.className = 'swatch-stripe';
+    let swatchKeys;
+    if (s.kind === 'escher' && s.colors === 3) swatchKeys = ['c1', 'c2', 'c3', 'ink'];
+    else if (s.kind === 'escher' && s.colors === 2) swatchKeys = ['c1', 'c2', 'accent', 'ink'];
+    else if (s.kind === 'wang') swatchKeys = ['w1', 'w2', 'w3', 'w4'];
+    else swatchKeys = ['stone', 'accent', 'ink', 'glow'];
+    swatchKeys.forEach(k => {
+      const d = document.createElement('div');
+      d.style.background = s.palette[k];
+      stripe.appendChild(d);
+    });
+    sw.appendChild(stripe);
+    const text = document.createElement('div');
+    text.className = 'style-row-text';
+    text.innerHTML = `<div class="style-row-name">${s.name}</div><div class="style-row-origin">${s.origin}</div><div class="style-row-desc">${s.desc}</div>`;
+    const check = document.createElement('div');
+    check.className = 'check';
+    row.appendChild(sw); row.appendChild(text); row.appendChild(check);
+    row.addEventListener('click', () => {
+      currentStyle = s;
+      applyStylePalette(s);
+      buildBoard();
+      buildDrawer();
+      closeDrawer();
+    });
+    styleList.appendChild(row);
+  });
+}
+
+function openDrawer() { drawer.classList.add('open'); backdrop.classList.add('open'); }
+function closeDrawer() { drawer.classList.remove('open'); backdrop.classList.remove('open'); }
+
+document.getElementById('menuBtn').addEventListener('click', openDrawer);
+backdrop.addEventListener('click', closeDrawer);
+document.getElementById('shuffle').addEventListener('click', () => {
+  tiles.forEach(t => {
+    if (currentStyle.kind === 'wang') {
+      t.wangConfig = Math.floor(Math.random() * WANG_CONFIGS.length);
+      updateWangColors(t);
+    } else {
+      t.rot = Math.floor(Math.random() * currentStyle.rotations);
+      applyRotation(t, true);
+    }
+  });
+  setTimeout(() => {
+    if (currentStyle.kind === 'escher') detectVertexMatches();
+    else if (currentStyle.kind === 'wang') detectWangMatches();
+    else detectLoops();
+  }, 350);
+});
+document.getElementById('reset').addEventListener('click', () => buildBoard());
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => buildBoard(), 150);
+});
+
+applyStylePalette(currentStyle);
+buildDrawer();
+buildBoard();
+</script>
+</body>
+</html>

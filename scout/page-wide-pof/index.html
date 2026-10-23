@@ -1,0 +1,1811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fold pattern generator</title>
+<style>
+:root{
+  --bg:#edf1f3; --surface:#ffffff; --ink:#16202b; --muted:#56646f; --rule:#cfd8de;
+  --accent:#0088c2; --accent-ink:#ffffff; --mountain:#d0342c; --valley:#1f5fbf; --canvas:#f7f9fa;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1100px;margin:0 auto;padding:20px 16px 48px}
+header{padding:8px 0 20px;border-bottom:3px solid var(--ink);margin-bottom:20px;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+h1{font-size:clamp(28px,7vw,44px);line-height:1.05;margin:0;letter-spacing:-0.02em;font-weight:800}
+header p{margin:6px 0 0;color:var(--muted);max-width:52ch}
+.legend{display:flex;gap:16px;font-size:14px;color:var(--muted);align-items:center}
+.legend svg{vertical-align:middle;margin-right:6px}
+.grid{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:820px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:16px}
+.panel + .panel{margin-top:16px}
+h2{font-size:17px;margin:0 0 12px;font-weight:700}
+label{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
+input[type=number],select{width:100%;font:inherit;color:var(--ink);background:#fff;border:1px solid var(--rule);border-radius:4px;padding:8px 10px;min-height:42px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+input[type=color]{width:100%;height:42px;border:1px solid var(--rule);border-radius:4px;background:#fff;padding:3px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+button{font:inherit;font-weight:600;border-radius:4px;border:1px solid var(--ink);background:#fff;color:var(--ink);padding:10px 14px;min-height:44px;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button:disabled{opacity:.5;cursor:default}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.note{font-size:13px;color:var(--muted);margin:8px 0 0}
+.info{font-size:14px;color:var(--ink);background:var(--canvas);border-left:4px solid var(--accent);padding:8px 10px;margin-top:12px}
+.hidden{display:none !important}
+.stage{position:relative;background:var(--canvas);border:1px solid var(--rule);border-radius:4px;overflow:hidden}
+#flat{display:block;width:100%}
+#three{display:block;width:100%;height:380px;touch-action:none}
+.controls3d{display:flex;gap:10px;align-items:center;margin-top:10px}
+.controls3d input{flex:1}
+.slot{border-top:1px solid var(--rule);margin-top:14px;padding-top:12px}
+h3{font-size:15px;margin:0 0 4px;font-weight:700}
+input[type=file]{width:100%;font:inherit;font-size:14px;padding:8px 0}
+.full{position:fixed;inset:0;z-index:20;background:#e9edf0;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.fullbar{display:flex;gap:8px;align-items:center;padding:8px 10px;background:#ffffff;border-bottom:1px solid var(--rule);flex-wrap:wrap}
+.fullbar span{font-size:14px;color:var(--muted);margin-left:auto}
+#fullCv{flex:1;display:block;width:100%;min-height:0;touch-action:none;cursor:grab}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;padding:8px}
+.tile{display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px;border-radius:4px;background:#ffffff;border:1px solid var(--rule);touch-action:pan-y;user-select:none;-webkit-user-select:none;cursor:grab}
+.tile canvas{display:block}
+.tile span{font-size:11px;color:var(--muted);text-align:center;line-height:1.25}
+.tile.lifted{opacity:.3}
+.tile.target{outline:3px solid var(--accent);outline-offset:1px}
+.ghost{position:fixed;z-index:30;pointer-events:none;box-shadow:0 8px 24px rgba(22,32,43,.25);transform:translate(-50%,-50%) scale(1.05);background:#ffffff;border:1px solid var(--ink);border-radius:4px;padding:4px}
+.dropzone{position:fixed;left:0;right:0;bottom:0;z-index:25;padding:18px 12px calc(18px + env(safe-area-inset-bottom,0px));text-align:center;font-weight:700;background:#fde8f1;color:#8a1450;border-top:3px dashed #c8217a}
+.dropzone.hot{background:#c8217a;color:#ffffff}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chips button{min-height:36px;padding:6px 10px;font-size:13px;font-weight:500}
+.err{color:var(--mountain);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>Fold pattern generator</h1>
+    <p>Crease patterns and fold-matched artwork for long format paper. Patterns repeat for any length and export as print-ready PDF panels.</p>
+  </div>
+  <div class="legend">
+    <span><svg width="34" height="6"><line x1="0" y1="3" x2="34" y2="3" stroke="#ff80ff" stroke-width="2" stroke-dasharray="8 3 1.5 3"/></svg>Mountain</span>
+    <span><svg width="34" height="6"><line x1="0" y1="3" x2="34" y2="3" stroke="#808080" stroke-width="2" stroke-dasharray="6 4"/></svg>Valley</span>
+  </div>
+</header>
+<div class="grid">
+<div>
+  <section class="panel">
+    <h2>Paper</h2>
+    <div class="row2">
+      <div><label for="units">Units</label><select id="units"><option value="in">Inches</option><option value="mm">Millimeters</option></select></div>
+      <div><label for="sheet">Sheet</label><select id="sheet"><option value="roll">Endless roll</option><option value="square">Square</option><option value="origami">Origami squares</option><option value="demo">Test print, long format</option></select></div>
+    </div>
+    <div class="row2">
+      <div><label for="W">Paper width (<span class="u">in</span>)</label><input id="W" class="len" type="number" inputmode="decimal" step="any" value="36"></div>
+      <div id="Lbox"><label for="L">Length (<span class="u">in</span>)</label><input id="L" class="len" type="number" inputmode="decimal" step="any" value="360"></div>
+      <div id="Sbox"><label for="S">Square size (<span class="u">in</span>)</label><input id="S" class="len" type="number" inputmode="decimal" step="any" value="36"></div>
+    </div>
+    <p class="note" id="sheetNote"></p>
+  </section>
+  <section class="panel" id="letterPanel">
+    <h2>Origami squares</h2>
+    <label for="charset">Squares to print</label>
+    <select id="charset"><option value="all">Everything</option><option value="models">Origami models</option><option value="az">Letters A to Z</option><option value="n09">Numbers 0 to 9</option><option value="sym">Keyboard symbols</option><option value="custom">My own text</option></select>
+    <div id="customBox"><label for="ctext">Text</label><input id="ctext" type="text" value="HELLO 2026" style="width:100%;font:inherit;border:1px solid var(--rule);border-radius:4px;padding:8px 10px;min-height:42px"></div>
+    <label for="carrier">Model that carries each character</label>
+    <select id="carrier"><option value="mix">Mix of all models, one after another</option><option value="dog">Dog face</option><option value="cat">Cat face</option><option value="cup">Cup</option><option value="helmet">Samurai helmet</option><option value="plane">Dart plane</option><option value="fortune">Fortune teller</option></select>
+    <div class="row2">
+      <div><label for="sqmode">Square size</label><select id="sqmode"><option value="small">Small squares</option><option value="full">Full page</option></select></div>
+      <div id="sqBox"><label for="across">Small squares side by side</label><select id="across"><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5" selected>5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option></select></div>
+    </div>
+    <label for="charc">Character color</label><input id="charc" type="color" value="#16202b">
+    <label for="shows">Printed design</label>
+    <select id="shows"><option value="shows">Only where it shows on the finished model</option><option value="whole">Whole square</option></select>
+    <p class="note">Every square is a real traditional model. Its fold lines come from folding it step by step, so mountain and valley match the real folds. Each character is printed only on the parts that face out once folded, so it reads upright on the finished model. Printing the design only where it shows also saves ink.</p>
+  </section>
+  <section class="panel" id="patternPanel">
+    <h2>Fold pattern</h2>
+    <label for="pattern">Pattern</label>
+    <select id="pattern"><option value="miura">Miura-ori (zigzag tessellation)</option><option value="pleat">Pleat (accordion)</option><option value="hypar">Hypar (twisting saddle of square rings)</option></select>
+    <div class="tess-only">
+      <label for="dir">Main fold lines run</label>
+      <select id="dir"><option value="along">Along the length</option><option value="across">Across the width</option></select>
+      <div class="row2">
+        <div><label for="w">Fold spacing (<span class="u">in</span>)</label><input id="w" class="len" type="number" inputmode="decimal" step="any" value="1"></div>
+        <div class="miura-only"><label for="h">Row height (<span class="u">in</span>)</label><input id="h" class="len" type="number" inputmode="decimal" step="any" value="0.75"></div>
+      </div>
+      <div class="miura-only"><label for="angle">Zigzag angle: <span id="angleV">20</span> degrees</label><input id="angle" type="range" min="5" max="60" value="20"></div>
+    </div>
+    <div class="hyp-only"><label for="rings">Rings from edge to center</label><input id="rings" type="number" inputmode="numeric" min="2" max="60" value="8"></div>
+  </section>
+  <section class="panel" id="varyPanel">
+    <h2>Endless variation</h2>
+    <label for="vary">Change along the length</label>
+    <select id="vary"><option value="none">Regular repeat</option><option value="wave">Wave</option><option value="random">Random, never repeats</option></select>
+    <div id="varyOpts">
+      <label for="strength">Strength: <span id="strengthV">40</span>%</label><input id="strength" type="range" min="5" max="80" value="40">
+      <div class="row2">
+        <div id="periodBox"><label for="period">Wave length (<span class="u">in</span>)</label><input id="period" class="len" type="number" inputmode="decimal" step="any" value="24"></div>
+        <div id="seedBox"><label for="seed">Seed</label><input id="seed" type="number" inputmode="numeric" value="1"></div>
+      </div>
+      <button id="newSeed" type="button" style="margin-top:10px">New random seed</button>
+    </div>
+    <p class="note" id="varyNote"></p>
+  </section>
+  <section class="panel">
+    <h2>Printed design</h2>
+    <div id="artBox"><label for="art">Layout</label>
+    <select id="art">
+      <option value="face">Two designs, one for each facing direction</option>
+      <option value="face4">Four designs, one for each facing direction</option>
+      <option value="whole">One design over the whole sheet</option>
+      <option value="rows">Two designs in alternating rows</option>
+      <option value="none">No design, fold lines only</option>
+    </select></div>
+    <p class="note" id="artNote"></p>
+    <div id="slots"></div>
+    <h2 style="margin-top:18px">Fold lines</h2>
+    <div class="row4">
+      <div><label for="mc">Mountain</label><input id="mc" type="color" value="#ff00ff"></div>
+      <div><label for="vc">Valley</label><input id="vc" type="color" value="#000000"></div>
+      <div style="grid-column:span 2"><label for="lw">Line width (<span class="u">in</span>)</label><input id="lw" class="len" type="number" inputmode="decimal" step="any" value="0.012"></div>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>Export PDF</h2>
+    <label for="ink">Ink limit: <span id="inkV">50</span>% total coverage at any spot</label>
+    <input id="ink" type="range" min="20" max="300" step="5" value="50">
+    <p class="note">The PDF is written in CMYK. Every color, pattern, gradient and photo pixel is scaled so cyan, magenta, yellow and black added together never pass this limit. The preview shows the colors as they will print.</p>
+    <label for="layers">Include</label>
+    <select id="layers"><option value="both">Design and fold lines</option><option value="art">Design only</option><option value="lines">Fold lines only</option></select>
+    <label for="panel">Frame length (<span class="u">in</span>), up to 72 inches</label>
+    <input id="panel" class="len" type="number" inputmode="decimal" step="any" value="72">
+    <p class="note" id="frameNote"></p>
+    <button id="dl" class="primary" type="button" style="width:100%;margin-top:12px">Download PDF</button>
+    <p class="note" id="dlStatus"></p>
+  </section>
+</div>
+<div>
+  <section class="panel">
+    <h2>Folded view</h2>
+    <div class="stage" id="threeBox"><canvas id="three" aria-label="3D view of the folded paper. Drag to turn, pinch to zoom."></canvas></div>
+    <div class="stage hidden" id="glyphBox"><div id="tiles" class="tiles" aria-label="Finished models. Press and hold a model, then drag it off the list to take it off the print, or onto another model to move it there."></div>
+      <div id="removedBox" class="hidden" style="padding:10px;border-top:1px solid var(--rule)"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><strong style="font-size:14px">Taken off the print, tap to put back</strong><button id="restoreAll" type="button">Put all back</button></div><div id="removedList" class="chips"></div></div></div>
+    <div class="controls3d" id="foldControls">
+      <button id="play" type="button">Play</button>
+      <input id="fold" type="range" min="0" max="100" value="45" aria-label="Fold amount">
+    </div>
+    <p class="note" id="foldNote">Drag to turn the paper, pinch or scroll to zoom. The printed side faces you at the start.</p>
+  </section>
+  <section class="panel">
+    <h2>Flat sheet</h2>
+    <div id="posBox"><label for="pos">Preview position: <span id="posV"></span></label>
+    <input id="pos" type="range" min="0" max="0" value="0"></div>
+    <button id="fullOpen" type="button" style="width:100%;margin-top:10px">Full screen preview</button>
+    <div class="stage" style="margin-top:10px"><canvas id="flat" aria-label="Crease pattern preview"></canvas></div>
+    <div class="info" id="info"></div>
+  </section>
+</div>
+</div>
+</div>
+<div id="dropzone" class="dropzone hidden">Drop here to take it off the print</div>
+<div id="full" class="full hidden" role="dialog" aria-label="Full screen preview">
+  <div class="fullbar">
+    <button id="fullClose" type="button">Close</button>
+    <button id="zoomOut" type="button" aria-label="Zoom out">Zoom out</button>
+    <button id="zoomIn" type="button" aria-label="Zoom in">Zoom in</button>
+    <button id="zoomFit" type="button">Fit</button>
+    <span id="zoomV"></span>
+  </div>
+  <canvas id="fullCv" aria-label="Whole print. Drag to move, pinch to zoom."></canvas>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+function rnd01(seed, idx){
+  let a = (seed ^ Math.imul(idx + 1, 0x9E3779B1)) | 0;
+  for (let k = 0; k < 2; k++){
+    a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    if (k === 1) return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+}
+
+function buildPattern(P){
+  const rot = P.dir === 'across';
+  const U = rot ? P.L : P.W, V = rot ? P.W : P.L;
+  const pleat = P.pattern === 'pleat';
+  const k = P.strength;
+  const vf = (pos, idx, lane) => {
+    if (P.vary === 'wave') return Math.sin(2 * Math.PI * pos / P.period + lane * 1.3);
+    if (P.vary === 'random') return rnd01(P.seed, idx * 2 + lane) * 2 - 1;
+    return 0;
+  };
+  const baseS = pleat ? 0 : P.h * Math.tan(P.angle * Math.PI / 180);
+  const hBase = pleat ? V : P.h;
+  const rowH = [], rowS = [];
+  let Y = 0, i = 0;
+  while (Y < V - 1e-9){
+    let hi = hBase, si = baseS;
+    if (!rot && !pleat){ hi = P.h * (1 + 0.5 * k * vf(Y, i, 0)); si = baseS * (1 + k * vf(Y, i, 1)); }
+    rowH.push(hi); rowS.push(si); Y += hi; i++;
+    if (rowH.length > 2e6) break;
+  }
+  const R = rowH.length;
+  const Yv = [0]; for (let r = 0; r < R; r++) Yv.push(Yv[r] + rowH[r]);
+  const o = []; for (let r = 0; r <= R; r++) o.push(r % 2 ? rowS[Math.min(r, R - 1)] : 0);
+  const d = [], a = []; let tmax = Math.PI / 2;
+  for (let r = 0; r < R; r++){
+    d.push(o[r + 1] - o[r]); a.push(Math.hypot(d[r], rowH[r]));
+    tmax = Math.min(tmax, Math.acos(Math.min(1, Math.abs(d[r]) / a[r])));
+  }
+  const smax = Math.max(0, ...o.slice(0, 5000), ...(R > 5000 ? [baseS * (1 + k)] : []));
+  const colW = [], Xv = [-smax - P.w];
+  let j = 0;
+  while (Xv[j] < U - 1e-9){
+    let wj = P.w;
+    if (rot) wj = P.w * (1 + k * vf(Xv[j], j, 0));
+    colW.push(wj); Xv.push(Xv[j] + wj); j++;
+    if (colW.length > 2e6) break;
+  }
+  const C = colW.length;
+  return { P, rot, U, V, R, C, rowH, d, a, o, Yv, Xv, colW, tmax };
+}
+
+function frameAB(G, t, i0, i1, j0, j1){
+  // returns A (pattern 3D) for vertex rows i0..i1 and B for vertex cols j0..j1 relative to anchor
+  const c = Math.cos(t), s = Math.sin(t);
+  const A = new Float64Array((i1 - i0 + 1) * 3), B = new Float64Array((j1 - j0 + 1) * 3);
+  const dA = new Float64Array((i1 - i0) * 3), dB = new Float64Array((j1 - j0) * 3);
+  A[0] = G.o[i0]; A[1] = G.Yv[i0];
+  for (let r = i0; r < i1; r++){
+    const p = Math.abs(G.d[r]) < 1e-12 ? 0 : G.d[r] / c;
+    const q = Math.sqrt(Math.max(0, G.a[r] * G.a[r] - p * p));
+    const n = (r - i0) * 3;
+    dA[n] = p; dA[n + 1] = q; dA[n + 2] = 0;
+    A[n + 3] = A[n] + p; A[n + 4] = A[n + 1] + q; A[n + 5] = 0;
+  }
+  B[0] = G.Xv[j0];
+  for (let col = j0; col < j1; col++){
+    const w = G.colW[col], e = col % 2 ? -1 : 1;
+    const n = (col - j0) * 3;
+    dB[n] = w * c; dB[n + 1] = 0; dB[n + 2] = e * w * s;
+    B[n + 3] = B[n] + dB[n]; B[n + 4] = 0; B[n + 5] = B[n + 2] + dB[n + 2];
+  }
+  return { A, B, dA, dB, i0, j0 };
+}
+
+function cross(ax, ay, az, bx, by, bz){ return [ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx]; }
+
+// front (printed side) normal of facet (i,j) in pattern 3D, normalized
+function facetFront(G, F, i, j){
+  const a = (i - F.i0) * 3, b = (j - F.j0) * 3;
+  const n = cross(F.dB[b], F.dB[b + 1], F.dB[b + 2], F.dA[a], F.dA[a + 1], F.dA[a + 2]);
+  const L = Math.hypot(n[0], n[1], n[2]) || 1;
+  return [-n[0] / L, -n[1] / L, -n[2] / L];
+}
+
+function clipPolyRect(pts, x0, y0, x1, y1){
+  let poly = pts;
+  const edges = [[0, x0, 1], [0, x1, -1], [1, y0, 1], [1, y1, -1]];
+  for (const [ax, v, sg] of edges){
+    const out = []; const n = poly.length;
+    if (!n) return out;
+    for (let m = 0; m < n; m++){
+      const p = poly[m], q = poly[(m + 1) % n];
+      const pin = (p[ax] - v) * sg >= -1e-9, qin = (q[ax] - v) * sg >= -1e-9;
+      if (pin) out.push(p);
+      if (pin !== qin){
+        const tt = (v - p[ax]) / (q[ax] - p[ax]);
+        out.push([p[0] + (q[0] - p[0]) * tt, p[1] + (q[1] - p[1]) * tt]);
+      }
+    }
+    poly = out;
+  }
+  return poly;
+}
+
+function clipSeg(x1, y1, x2, y2, xa, ya, xb, yb){
+  let t0 = 0, t1 = 1; const dx = x2 - x1, dy = y2 - y1;
+  const p = [-dx, dx, -dy, dy], q = [x1 - xa, xb - x1, y1 - ya, yb - y1];
+  for (let m = 0; m < 4; m++){
+    if (Math.abs(p[m]) < 1e-12){ if (q[m] < 0) return null; }
+    else { const r = q[m] / p[m]; if (p[m] < 0){ if (r > t1) return null; if (r > t0) t0 = r; } else { if (r < t0) return null; if (r < t1) t1 = r; } }
+  }
+  if (t1 - t0 < 1e-9) return null;
+  return [x1 + dx * t0, y1 + dy * t0, x1 + dx * t1, y1 + dy * t1];
+}
+
+function hexRGB(h){ const n = parseInt(h.slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; }
+
+// full-sheet analysis: facets (paper coords) with design slot, crease segments with type
+function analyze(G, mode){
+  const rot = G.rot;
+  const tm = G.tmax * 0.4;
+  const F = frameAB(G, tm, 0, G.R, 0, G.C);
+  const facets = [], creases = [];
+  const toPaper = (x, y) => rot ? [y, x] : [x, y];
+  const m = mode === 'face' ? (rot ? 'tb' : 'lr') : mode;
+  for (let i = 0; i < G.R; i++){
+    const y0 = G.Yv[i], y1 = G.Yv[i + 1];
+    for (let j = 0; j < G.C; j++){
+      const x0 = G.o[i] + G.Xv[j], x1 = G.o[i] + G.Xv[j + 1];
+      if (Math.max(x1, G.o[i + 1] + G.Xv[j + 1]) < 0 || Math.min(x0, G.o[i + 1] + G.Xv[j]) > G.U) continue;
+      const quad = [[x0, y0], [x1, y0], [G.o[i + 1] + G.Xv[j + 1], y1], [G.o[i + 1] + G.Xv[j], y1]];
+      const cp = clipPolyRect(quad, 0, 0, G.U, G.V);
+      if (cp.length < 3) continue;
+      const poly = cp.map(p => toPaper(p[0], p[1]));
+      let slot = -1;
+      if (m !== 'none'){
+        let n = facetFront(G, F, i, j);
+        if (rot) n = [n[1], n[0], n[2]];
+        const nx = Math.abs(n[0]) < 1e-9 ? 0 : n[0], ny = Math.abs(n[1]) < 1e-9 ? 0 : n[1];
+        if (m === 'whole') slot = 0;
+        else if (m === 'lr') slot = nx <= 0 ? 0 : 1;
+        else if (m === 'tb') slot = ny <= 0 ? 0 : 1;
+        else if (m === 'face4') slot = (nx <= 0 ? 0 : 1) + (ny <= 0 ? 0 : 2);
+        else if (m === 'rows') slot = (rot ? j : i) % 2;
+      }
+      let ymin = Infinity, ymax = -Infinity; for (const p of poly){ if (p[1] < ymin) ymin = p[1]; if (p[1] > ymax) ymax = p[1]; }
+      facets.push({ i, j, poly, slot, ymin, ymax });
+    }
+  }
+  const addSeg = (xa, ya, xb, yb, dot) => {
+    if (Math.abs(dot) < 1e-7) return;
+    const s = clipSeg(xa, ya, xb, yb, 0, 0, G.U, G.V);
+    if (!s) return;
+    const on = (u, lim) => Math.abs(u - lim) < 1e-6;
+    if ((on(s[0], 0) && on(s[2], 0)) || (on(s[0], G.U) && on(s[2], G.U)) || (on(s[1], 0) && on(s[3], 0)) || (on(s[1], G.V) && on(s[3], G.V))) return;
+    const p1 = toPaper(s[0], s[1]), p2 = toPaper(s[2], s[3]);
+    creases.push({ x1: p1[0], y1: p1[1], x2: p2[0], y2: p2[1], v: dot > 0 });
+  };
+  for (let i = 0; i < G.R; i++){
+    for (let j = 1; j < G.C; j++){
+      const n1 = facetFront(G, F, i, j - 1), b = j * 3;
+      addSeg(G.o[i] + G.Xv[j], G.Yv[i], G.o[i + 1] + G.Xv[j], G.Yv[i + 1], 0.5 * (F.dB[b] * n1[0] + F.dB[b + 1] * n1[1] + F.dB[b + 2] * n1[2]));
+    }
+  }
+  for (let i = 1; i < G.R; i++){
+    for (let j = 0; j < G.C; j++){
+      const n1 = facetFront(G, F, i - 1, j), a = i * 3;
+      addSeg(G.o[i] + G.Xv[j], G.Yv[i], G.o[i] + G.Xv[j + 1], G.Yv[i], 0.5 * (F.dA[a] * n1[0] + F.dA[a + 1] * n1[1] + F.dA[a + 2] * n1[2]));
+    }
+  }
+  return { facets, creases, slots: { none: 0, whole: 1, face: 2, face4: 4, rows: 2 }[mode] || 0 };
+}
+
+
+/* hypar: concentric squares alternating mountain and valley, with creased diagonals */
+function analyzeHypar(P, mode){
+  const S = P.W, n = P.rings, c = S / 2, sp = c / n;
+  const cs = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+  const pt = (k, q) => { const r = c - k * sp; return [c + cs[q][0] * r, c + cs[q][1] * r]; };
+  const Tv = k => k % 2 === 0;
+  const facets = [], creases = [];
+  for (let k = 0; k < n; k++){
+    for (let s = 0; s < 4; s++){
+      const a = s, b = (s + 1) % 4;
+      let poly = [pt(k, a), pt(k, b), pt(k + 1, b), pt(k + 1, a)];
+      let keys = [[k, a], [k, b], [k + 1, b], [k + 1, a]];
+      if (k + 1 === n){ poly = poly.slice(0, 3); keys = keys.slice(0, 3); }
+      let slot = -1;
+      if (mode === 'whole') slot = 0;
+      else if (mode === 'face' || mode === 'rows') slot = k % 2;
+      else if (mode === 'face4') slot = (k % 2) + 2 * (s % 2);
+      let ymin = Infinity, ymax = -Infinity; for (const p of poly){ ymin = Math.min(ymin, p[1]); ymax = Math.max(ymax, p[1]); }
+      facets.push({ i: k, j: s, poly, keys, slot, ymin, ymax });
+    }
+  }
+  const seg = (p, q, v) => creases.push({ x1: p[0], y1: p[1], x2: q[0], y2: q[1], v });
+  for (let k = 1; k < n; k++) for (let s = 0; s < 4; s++) seg(pt(k, s), pt(k, (s + 1) % 4), Tv(k));
+  for (let k = 0; k < n; k++){
+    const v = k + 1 <= n - 1 ? Tv(k + 1) : !Tv(n - 1);
+    for (let q = 0; q < 4; q++) seg(pt(k, q), pt(k + 1, q), v);
+  }
+  return { facets, creases, slots: { none: 0, whole: 1, face: 2, face4: 4, rows: 2 }[mode] || 0, hypar: { n, sp, c } };
+}
+
+/* ink limit: every color is converted to CMYK and scaled so C+M+Y+K never exceeds the limit */
+let INK = 0.5;
+function toCMYK(rgb){
+  const k = 1 - Math.max(rgb[0], rgb[1], rgb[2]);
+  if (k >= 1 - 1e-9) return [0, 0, 0, 1];
+  return [(1 - rgb[0] - k) / (1 - k), (1 - rgb[1] - k) / (1 - k), (1 - rgb[2] - k) / (1 - k), k];
+}
+function limitCMYK(c){ const t = c[0] + c[1] + c[2] + c[3]; if (t <= INK) return c; const f = INK / t; return c.map(v => v * f); }
+const inkHex = h => limitCMYK(toCMYK(hexRGB(h)));
+const cmykRGB = c => [(1 - c[0]) * (1 - c[3]), (1 - c[1]) * (1 - c[3]), (1 - c[2]) * (1 - c[3])];
+const cssC = c => { const r = cmykRGB(c); return 'rgb(' + r.map(v => Math.round(v * 255)).join(',') + ')'; };
+const dispHex = h => cssC(inkHex(h));
+
+function processPhoto(src){
+  const w = src.width, h = src.height;
+  const id = src.getContext('2d').getImageData(0, 0, w, h);
+  const d = id.data, cm = new Uint8Array(w * h * 4);
+  for (let p = 0, q = 0; p < d.length; p += 4, q += 4){
+    const c = limitCMYK(toCMYK([d[p] / 255, d[p + 1] / 255, d[p + 2] / 255]));
+    cm[q] = c[0] * 255 + 0.5; cm[q + 1] = c[1] * 255 + 0.5; cm[q + 2] = c[2] * 255 + 0.5; cm[q + 3] = c[3] * 255 + 0.5;
+    const r = cmykRGB(c);
+    d[p] = r[0] * 255 + 0.5; d[p + 1] = r[1] * 255 + 0.5; d[p + 2] = r[2] * 255 + 0.5;
+  }
+  const disp = document.createElement('canvas'); disp.width = w; disp.height = h;
+  disp.getContext('2d').putImageData(id, 0, 0);
+  return { disp, cmyk: cm, pw: w, ph: h, z: null };
+}
+
+/* printed patterns, one cell of size s, shapes in second color over first color */
+function patternCell(type, s){
+  const h = s / 2, t = s * 0.12;
+  switch (type){
+    case 'stripes': return [{ t: 'r', x: 0, y: 0, w: h, h: s }];
+    case 'hstripes': return [{ t: 'r', x: 0, y: 0, w: s, h: h }];
+    case 'diag': return [{ t: 'p', p: [[0, 0], [s, s], [h, s], [0, h]] }, { t: 'p', p: [[h, 0], [s, 0], [s, h]] }];
+    case 'checks': return [{ t: 'r', x: 0, y: 0, w: h, h: h }, { t: 'r', x: h, y: h, w: h, h: h }];
+    case 'dots': return [{ t: 'c', x: h, y: h, r: s * 0.28 }];
+    case 'grid': return [{ t: 'r', x: 0, y: 0, w: s, h: t }, { t: 'r', x: 0, y: 0, w: t, h: s }];
+    case 'chevron': return [{ t: 'p', p: [[0, 0], [h, h], [s, 0], [s, h], [h, s], [0, h]] }];
+  }
+  return [];
+}
+function gradC(fill, y){
+  let f = (y / fill.period) % 2; if (f < 0) f += 2; if (f > 1) f = 2 - f;
+  const a = inkHex(fill.c1), b = inkHex(fill.c2);
+  return [0, 1, 2, 3].map(m => a[m] + (b[m] - a[m]) * f);
+}
+function photoTiles(fill, box, y0, y1){
+  const out = [];
+  if (fill.fit === 'stretch'){ out.push([box.x, box.y, box.w, box.h]); return out; }
+  const tw = box.w * fill.pct, th = tw * fill.photo.ph / fill.photo.pw;
+  for (let ty = box.y + Math.floor((y0 - box.y) / th) * th; ty < y1; ty += th)
+    for (let tx = box.x; tx < box.x + box.w - 1e-6; tx += tw) out.push([tx, ty, tw, th]);
+  return out;
+}
+
+/* scene: { W, L, regions:[{polys:[{pts,ymin,ymax}] or null, fill, box}], creases, cuts, labels } */
+function sceneFromAN(AN, W, L, fillOf){
+  const sc = { W, L, regions: [], creases: AN.creases, cuts: [], labels: [] };
+  if (!AN.slots) return sc;
+  const box = { x: 0, y: 0, w: W, h: L };
+  sc.regions.push({ polys: null, fill: fillOf(0), box });
+  for (let k = 1; k < AN.slots; k++){
+    const polys = AN.facets.filter(f => f.slot === k).map(f => ({ pts: f.poly, ymin: f.ymin, ymax: f.ymax }));
+    if (polys.length) sc.regions.push({ polys, fill: fillOf(k), box });
+  }
+  return sc;
+}
+
+function paintFill(ctx, fill, box, y0, y1){
+  const ya = Math.max(y0, box.y), yb = Math.min(y1, box.y + box.h);
+  if (yb <= ya) return;
+  ctx.fillStyle = dispHex(fill.c1);
+  ctx.fillRect(box.x, ya, box.w, yb - ya);
+  if (fill.type === 'photo' && fill.photo){
+    for (const [x, y, w, h] of photoTiles(fill, box, ya, yb)) ctx.drawImage(fill.photo.disp, x, y, w, h);
+  } else if (fill.type === 'pattern'){
+    const s = fill.size, cell = patternCell(fill.pat, s);
+    ctx.fillStyle = dispHex(fill.c2);
+    const path = new Path2D();
+    for (let cy = Math.floor(ya / s) * s; cy < yb; cy += s){
+      for (let cx = Math.floor(box.x / s) * s; cx < box.x + box.w; cx += s){
+        for (const sh of cell){
+          if (sh.t === 'r') path.rect(cx + sh.x, cy + sh.y, sh.w, sh.h);
+          else if (sh.t === 'c'){ path.moveTo(cx + sh.x + sh.r, cy + sh.y); path.arc(cx + sh.x, cy + sh.y, sh.r, 0, Math.PI * 2); }
+          else { path.moveTo(cx + sh.p[0][0], cy + sh.p[0][1]); for (let k = 1; k < sh.p.length; k++) path.lineTo(cx + sh.p[k][0], cy + sh.p[k][1]); path.closePath(); }
+        }
+      }
+    }
+    ctx.save(); ctx.beginPath(); ctx.rect(box.x, ya, box.w, yb - ya); ctx.clip(); ctx.fill(path); ctx.restore();
+  } else if (fill.type === 'grad' && fill.across){
+    const bw = Math.max(0.5, fill.period / 200);
+    for (let x = box.x; x < box.x + box.w; x += bw){
+      ctx.fillStyle = cssC(gradC(fill, x - box.x + bw / 2));
+      ctx.fillRect(x, ya, Math.min(bw + 0.05, box.x + box.w - x), yb - ya);
+    }
+  } else if (fill.type === 'grad'){
+    const bh = Math.max(0.5, fill.period / 200);
+    for (let y = ya; y < yb; y += bh){
+      ctx.fillStyle = cssC(gradC(fill, y - box.y + bh / 2));
+      ctx.fillRect(box.x, y, box.w, Math.min(bh + 0.05, yb - y));
+    }
+  }
+}
+
+function drawScene(ctx, sc, y0, y1){
+  for (const r of sc.regions){
+    if (r.box.y > y1 || r.box.y + r.box.h < y0) continue;
+    ctx.save();
+    ctx.beginPath();
+    if (r.polys){
+      let any = false;
+      for (const p of r.polys){
+        if (p.ymax < y0 || p.ymin > y1) continue;
+        any = true;
+        ctx.moveTo(p.pts[0][0], p.pts[0][1]);
+        for (let q = 1; q < p.pts.length; q++) ctx.lineTo(p.pts[q][0], p.pts[q][1]);
+        ctx.closePath();
+      }
+      if (!any){ ctx.restore(); continue; }
+    } else ctx.rect(r.box.x, r.box.y, r.box.w, r.box.h);
+    ctx.clip();
+    paintFill(ctx, r.fill, r.box, y0, y1);
+    ctx.restore();
+  }
+}
+
+function drawTexts(ctx, sc, y0, y1){
+  for (const t of sc.texts || []){
+    if (t.ymax < y0 || t.ymin > y1) continue;
+    ctx.save();
+    ctx.beginPath(); t.clip.forEach((p, k) => k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath(); ctx.clip();
+    ctx.transform(t.T.a, t.T.b, t.T.c, t.T.d, t.T.e, t.T.f);
+    ctx.translate(t.x, t.y); ctx.scale(1, -1);
+    ctx.fillStyle = dispHex(t.color); ctx.font = 'bold ' + t.size + 'px Helvetica, Arial, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(t.ch, 0, 0);
+    ctx.restore();
+  }
+}
+function drawLines(ctx, sc, y0, y1, opt, pxmm){
+  const near = c => !(Math.max(c.y1, c.y2) < y0 || Math.min(c.y1, c.y2) > y1);
+  ctx.lineWidth = Math.max(opt.lineWidth, 1 / pxmm);
+  for (const valley of [false, true]){
+    ctx.strokeStyle = dispHex(valley ? opt.valleyColor : opt.mountainColor);
+    ctx.setLineDash((valley ? [6, 4] : [8, 3, 1.5, 3]).map(v => v / pxmm));
+    ctx.beginPath();
+    for (const c of sc.creases){ if (c.v === valley && near(c)){ ctx.moveTo(c.x1, c.y1); ctx.lineTo(c.x2, c.y2); } }
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  if (sc.cuts.length){
+    ctx.strokeStyle = dispHex(opt.cutColor); ctx.lineWidth = Math.max(0.2, 1 / pxmm);
+    ctx.beginPath();
+    for (const c of sc.cuts){ if (near(c)){ ctx.moveTo(c.x1, c.y1); ctx.lineTo(c.x2, c.y2); } }
+    ctx.stroke();
+  }
+  ctx.fillStyle = dispHex(opt.cutColor); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const t of sc.labels){
+    if (t.y < y0 - 20 || t.y > y1 + 20) continue;
+    ctx.font = t.size + 'px Helvetica, Arial, sans-serif';
+    ctx.textAlign = t.align || 'center';
+    ctx.fillText(t.text, t.x, t.y);
+  }
+}
+
+/* PDF */
+const MM = 72 / 25.4;
+function fnum(n){ const r = Math.round(n * 1000) / 1000; return (Object.is(r, -0) ? 0 : r).toString(); }
+const kStr = c => c.map(v => v.toFixed(3)).join(' ');
+const pdfEsc = t => t.replace(/[\\()]/g, m => '\\' + m);
+
+function pdfShapes(cell){
+  const o = [], c = 0.5523;
+  for (const sh of cell){
+    if (sh.t === 'r') o.push(fnum(sh.x) + ' ' + fnum(sh.y) + ' ' + fnum(sh.w) + ' ' + fnum(sh.h) + ' re');
+    else if (sh.t === 'c'){
+      const x = sh.x, y = sh.y, r = sh.r, k = r * c;
+      o.push(fnum(x + r) + ' ' + fnum(y) + ' m',
+        [x + r, y + k, x + k, y + r, x, y + r].map(fnum).join(' ') + ' c',
+        [x - k, y + r, x - r, y + k, x - r, y].map(fnum).join(' ') + ' c',
+        [x - r, y - k, x - k, y - r, x, y - r].map(fnum).join(' ') + ' c',
+        [x + k, y - r, x + r, y - k, x + r, y].map(fnum).join(' ') + ' c h');
+    } else {
+      o.push(fnum(sh.p[0][0]) + ' ' + fnum(sh.p[0][1]) + ' m');
+      for (let q = 1; q < sh.p.length; q++) o.push(fnum(sh.p[q][0]) + ' ' + fnum(sh.p[q][1]) + ' l');
+      o.push('h');
+    }
+  }
+  return o.join('\n');
+}
+
+async function deflateBytes(bytes){
+  if (typeof CompressionStream === 'undefined') return null;
+  const st = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'));
+  return new Uint8Array(await new Response(st).arrayBuffer());
+}
+
+async function buildPDF(sc, opt){
+  const enc = new TextEncoder();
+  const W = sc.W, L = sc.L;
+  const pages = [];
+  for (let x = 0; x < W - 1e-6; x += opt.paperW)
+    for (let y = 0; y < L - 1e-6; y += opt.frame) pages.push([x, Math.min(W, x + opt.paperW), y, Math.min(L, y + opt.frame)]);
+  const chunks = []; let pos = 0; const offs = []; let next = 3;
+  const add = b => { if (typeof b === 'string') b = enc.encode(b); chunks.push(b); pos += b.length; };
+  const stream = async (id, dict, bytes, compress, preZ) => {
+    let body = bytes, filt = '';
+    if (preZ){ body = preZ; filt = ' /Filter /FlateDecode'; }
+    else if (compress){ const z = await deflateBytes(bytes); if (z){ body = z; filt = ' /Filter /FlateDecode'; } }
+    offs[id] = pos;
+    add(id + ' 0 obj\n<< ' + dict + ' /Length ' + body.length + filt + ' >>\nstream\n'); add(body); add('\nendstream\nendobj\n');
+  };
+  add(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34, 0x0A, 0x25, 0xE2, 0xE3, 0xCF, 0xD3, 0x0A]));
+  let fontId = 0, boldId = 0;
+  if (opt.lines && sc.labels.length){
+    fontId = next++; offs[fontId] = pos;
+    add(fontId + ' 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n');
+  }
+  if (opt.art && sc.texts && sc.texts.length){
+    boldId = next++; offs[boldId] = pos;
+    add(boldId + ' 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\nendobj\n');
+  }
+  const imgIds = new Map();
+  const pageIds = [];
+  const cutC = limitCMYK(toCMYK(hexRGB(opt.cutColor)));
+  for (let n = 0; n < pages.length; n++){
+    const [x0, x1, y0, y1] = pages[n], PW = x1 - x0, H = y1 - y0;
+    const out = [], patIds = new Map(), usedImg = new Set();
+    out.push('q', fnum(MM) + ' 0 0 ' + fnum(-MM) + ' 0 ' + fnum(H * MM) + ' cm', '1 0 0 1 ' + fnum(-x0) + ' ' + fnum(-y0) + ' cm');
+    if (opt.art){
+      for (const r of sc.regions){
+        const bx0 = Math.max(x0, r.box.x), bx1 = Math.min(x1, r.box.x + r.box.w);
+        const by0 = Math.max(y0, r.box.y), by1 = Math.min(y1, r.box.y + r.box.h);
+        if (bx1 <= bx0 || by1 <= by0) continue;
+        const clip = [];
+        if (r.polys){
+          for (const p of r.polys){
+            if (p.ymax < by0 || p.ymin > by1) continue;
+            const cp = clipPolyRect(p.pts, bx0, by0, bx1, by1);
+            if (cp.length < 3) continue;
+            clip.push(fnum(cp[0][0]) + ' ' + fnum(cp[0][1]) + ' m');
+            for (let q = 1; q < cp.length; q++) clip.push(fnum(cp[q][0]) + ' ' + fnum(cp[q][1]) + ' l');
+            clip.push('h');
+          }
+          if (!clip.length) continue;
+        } else clip.push(fnum(bx0) + ' ' + fnum(by0) + ' ' + fnum(bx1 - bx0) + ' ' + fnum(by1 - by0) + ' re');
+        out.push('q', clip.join('\n'), 'W n');
+        const f = r.fill, rect = fnum(bx0) + ' ' + fnum(by0) + ' ' + fnum(bx1 - bx0) + ' ' + fnum(by1 - by0) + ' re f';
+        out.push(kStr(inkHex(f.c1)) + ' k ' + rect);
+        if (f.type === 'photo' && f.photo){
+          if (!imgIds.has(f.photo)){
+            const id = next++;
+            if (!f.photo.z) f.photo.z = await deflateBytes(f.photo.cmyk);
+            await stream(id, '/Type /XObject /Subtype /Image /Width ' + f.photo.pw + ' /Height ' + f.photo.ph + ' /ColorSpace /DeviceCMYK /BitsPerComponent 8', f.photo.cmyk, !f.photo.z, f.photo.z);
+            imgIds.set(f.photo, id);
+          }
+          const nm = 'Im' + imgIds.get(f.photo); usedImg.add(f.photo);
+          for (const [x, y, w, h] of photoTiles(f, r.box, by0, by1))
+            out.push('q ' + fnum(w) + ' 0 0 ' + fnum(-h) + ' ' + fnum(x) + ' ' + fnum(y + h) + ' cm /' + nm + ' Do Q');
+        } else if (f.type === 'pattern'){
+          const key = f.pat + '|' + f.size + '|' + f.c1 + '|' + f.c2;
+          if (!patIds.has(key)){
+            const id = next++, s = f.size;
+            const body = kStr(inkHex(f.c1)) + ' k 0 0 ' + fnum(s) + ' ' + fnum(s) + ' re f\n' + kStr(inkHex(f.c2)) + ' k\n' + pdfShapes(patternCell(f.pat, s)) + '\nf';
+            await stream(id, '/Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 ' + fnum(s) + ' ' + fnum(s) + '] /XStep ' + fnum(s) + ' /YStep ' + fnum(s) + ' /Resources << >> /Matrix [' + fnum(MM) + ' 0 0 ' + fnum(-MM) + ' ' + fnum(-x0 * MM) + ' ' + fnum(H * MM + y0 * MM) + ']', enc.encode(body), true);
+            patIds.set(key, id);
+          }
+          out.push('/Pattern cs /P' + patIds.get(key) + ' scn ' + rect);
+        } else if (f.type === 'grad' && f.across){
+          const bw = Math.max(0.5, f.period / 200);
+          for (let x = r.box.x; x < r.box.x + r.box.w; x += bw){
+            const xa = Math.max(x, bx0), xb = Math.min(x + bw + 0.05, bx1);
+            if (xb > xa) out.push(kStr(gradC(f, x - r.box.x + bw / 2)) + ' k ' + fnum(xa) + ' ' + fnum(by0) + ' ' + fnum(xb - xa) + ' ' + fnum(by1 - by0) + ' re f');
+          }
+        } else if (f.type === 'grad'){
+          const bh = Math.max(0.5, f.period / 200);
+          for (let y = by0; y < by1; y += bh)
+            out.push(kStr(gradC(f, y - r.box.y + bh / 2)) + ' k ' + fnum(bx0) + ' ' + fnum(y) + ' ' + fnum(bx1 - bx0) + ' ' + fnum(Math.min(bh + 0.05, by1 - y)) + ' re f');
+        }
+        out.push('Q');
+      }
+      for (const t of sc.texts || []){
+        if (t.ymax < y0 || t.ymin > y1) continue;
+        const cp = clipPolyRect(t.clip, x0, y0, x1, y1);
+        if (cp.length < 3) continue;
+        out.push('q', fnum(cp[0][0]) + ' ' + fnum(cp[0][1]) + ' m', ...cp.slice(1).map(p => fnum(p[0]) + ' ' + fnum(p[1]) + ' l'), 'h W n',
+          [t.T.a, t.T.b, t.T.c, t.T.d, t.T.e, t.T.f].map(v => v.toFixed(6)).join(' ') + ' cm',
+          kStr(inkHex(t.color)) + ' k BT /F2 ' + t.size.toFixed(6) + ' Tf 1 0 0 1 ' + t.x.toFixed(6) + ' ' + t.y.toFixed(6) + ' Tm (' + pdfEsc(t.ch) + ') Tj ET Q');
+      }
+    }
+    if (opt.lines){
+      const segs = (list, pick) => {
+        const o = [];
+        for (const c of list){
+          if (!pick(c) || Math.max(c.y1, c.y2) < y0 || Math.min(c.y1, c.y2) > y1 || Math.max(c.x1, c.x2) < x0 || Math.min(c.x1, c.x2) > x1) continue;
+          const s = clipSeg(c.x1, c.y1, c.x2, c.y2, x0, y0, x1, y1);
+          if (s) o.push(fnum(s[0]) + ' ' + fnum(s[1]) + ' m ' + fnum(s[2]) + ' ' + fnum(s[3]) + ' l');
+        }
+        return o;
+      };
+      out.push(fnum(opt.lineWidth) + ' w 0 J 0 j');
+      for (const valley of [false, true]){
+        const o = segs(sc.creases, c => c.v === valley);
+        if (!o.length) continue;
+        out.push(kStr(inkHex(valley ? opt.valleyColor : opt.mountainColor)) + ' K', valley ? '[3 2] 0 d' : '[4 1.5 0.6 1.5] 0 d', o.join('\n'), 'S');
+      }
+      const oc = segs(sc.cuts, () => true);
+      if (oc.length) out.push('[] 0 d 0.2 w ' + kStr(cutC) + ' K', oc.join('\n'), 'S');
+      const tl = sc.labels.filter(t => t.y > y0 && t.y < y1 && t.x > x0 && t.x < x1);
+      if (tl.length && fontId){
+        out.push(kStr(cutC) + ' k');
+        for (const t of tl){
+          const wEst = t.text.length * t.size * 0.55;
+          const tx = t.align === 'left' ? t.x : t.x - wEst / 2;
+          out.push('BT /F1 ' + fnum(t.size) + ' Tf 1 0 0 -1 ' + fnum(tx) + ' ' + fnum(t.y + t.size * 0.35) + ' Tm (' + pdfEsc(t.text) + ') Tj ET');
+        }
+      }
+    }
+    out.push('Q');
+    const pid = next++, cid = next++;
+    pageIds.push(pid);
+    await stream(cid, '', enc.encode(out.join('\n')), true);
+    let res = '';
+    if (patIds.size) res += '/Pattern << ' + [...patIds.values()].map(id => '/P' + id + ' ' + id + ' 0 R').join(' ') + ' >> ';
+    if (usedImg.size) res += '/XObject << ' + [...usedImg].map(p => '/Im' + imgIds.get(p) + ' ' + imgIds.get(p) + ' 0 R').join(' ') + ' >> ';
+    if (fontId || boldId) res += '/Font << ' + (fontId ? '/F1 ' + fontId + ' 0 R ' : '') + (boldId ? '/F2 ' + boldId + ' 0 R ' : '') + '>> ';
+    offs[pid] = pos;
+    add(pid + ' 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + fnum(PW * MM) + ' ' + fnum(H * MM) + '] /Contents ' + cid + ' 0 R /Resources << ' + res + '>> >>\nendobj\n');
+    if (opt.progress) opt.progress(n + 1, pages.length);
+  }
+  offs[1] = pos; add('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  offs[2] = pos; add('2 0 obj\n<< /Type /Pages /Kids [' + pageIds.map(p => p + ' 0 R').join(' ') + '] /Count ' + pageIds.length + ' >>\nendobj\n');
+  const xref = pos;
+  let x = 'xref\n0 ' + next + '\n0000000000 65535 f \n';
+  for (let n = 1; n < next; n++) x += String(offs[n] || 0).padStart(10, '0') + (offs[n] ? ' 00000 n \n' : ' 65535 f \n');
+  add(x + 'trailer\n<< /Size ' + next + ' /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+  return { blob: new Blob(chunks, { type: 'application/pdf' }), pages: pages.length };
+}
+/* origami fold simulator: a square is folded step by step; each fold reflects the chosen layers across a line.
+   Faces keep their flat polygon, their folded transform and a layer height, so the final crease pattern,
+   mountain and valley, and what is visible on the finished model all come from the real folding. */
+const OM = {
+  id: { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 },
+  mul: (M, N) => ({ a: M.a * N.a + M.c * N.b, b: M.b * N.a + M.d * N.b, c: M.a * N.c + M.c * N.d, d: M.b * N.c + M.d * N.d, e: M.a * N.e + M.c * N.f + M.e, f: M.b * N.e + M.d * N.f + M.f }),
+  ap: (M, p) => [M.a * p[0] + M.c * p[1] + M.e, M.b * p[0] + M.d * p[1] + M.f],
+  inv: M => { const t = M.a * M.d - M.b * M.c; return { a: M.d / t, b: -M.b / t, c: -M.c / t, d: M.a / t, e: (M.c * M.f - M.d * M.e) / t, f: (M.b * M.e - M.a * M.f) / t }; },
+  det: M => M.a * M.d - M.b * M.c,
+  refl: (P, Q) => {
+    const dx = Q[0] - P[0], dy = Q[1] - P[1], L = dx * dx + dy * dy, c2 = (dx * dx - dy * dy) / L, s2 = 2 * dx * dy / L;
+    return { a: c2, b: s2, c: s2, d: -c2, e: P[0] - c2 * P[0] - s2 * P[1], f: P[1] - s2 * P[0] + c2 * P[1] };
+  }
+};
+const oSide = (P, Q, X) => (Q[0] - P[0]) * (X[1] - P[1]) - (Q[1] - P[1]) * (X[0] - P[0]);
+const oCent = poly => { let x = 0, y = 0; for (const p of poly){ x += p[0]; y += p[1]; } return [x / poly.length, y / poly.length]; };
+function oSplit(poly, P, Q){
+  const A = [], B = [], n = poly.length;
+  for (let k = 0; k < n; k++){
+    const p = poly[k], q = poly[(k + 1) % n], sp = oSide(P, Q, p), sq = oSide(P, Q, q);
+    if (sp >= -1e-9) A.push(p); if (sp <= 1e-9) B.push(p);
+    if ((sp > 1e-9 && sq < -1e-9) || (sp < -1e-9 && sq > 1e-9)){
+      const t = sp / (sp - sq), x = [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t];
+      A.push(x); B.push(x);
+    }
+  }
+  const area = pl => { let s = 0; for (let k = 0; k < pl.length; k++){ const p = pl[k], q = pl[(k + 1) % pl.length]; s += p[0] * q[1] - q[0] * p[1]; } return Math.abs(s) / 2; };
+  const clean = pl => { const o = []; for (const p of pl){ const l = o[o.length - 1]; if (!l || Math.hypot(l[0] - p[0], l[1] - p[1]) > 1e-9) o.push(p); } if (o.length > 1 && Math.hypot(o[0][0] - o[o.length - 1][0], o[0][1] - o[o.length - 1][1]) < 1e-9) o.pop(); return o; };
+  const a = clean(A), b = clean(B);
+  return [a.length >= 3 && area(a) > 1e-7 ? a : [], b.length >= 3 && area(b) > 1e-7 ? b : []];
+}
+function oArea(pl){ let s = 0; for (let k = 0; k < pl.length; k++){ const p = pl[k], q = pl[(k + 1) % pl.length]; s += p[0] * q[1] - q[0] * p[1]; } return s / 2; }
+
+function foldModel(model){
+  const c = Math.SQRT1_2;
+  let M0 = model.diamond ? { a: c, b: c, c: -c, d: c, e: 0, f: -c } : OM.id;
+  if (model.start === 'down') M0 = OM.mul({ a: -1, b: 0, c: 0, d: 1, e: model.diamond ? 0 : 1, f: 0 }, M0);
+  let faces = [{ poly: [[0, 0], [1, 0], [1, 1], [0, 1]], M: M0, z: 0, moved: [] }];
+  model.steps.forEach((st, si) => {
+    const step = si + 1;
+    if (st.turn !== undefined){
+      const T = { a: -1, b: 0, c: 0, d: 1, e: 2 * st.turn, f: 0 };
+      for (const f of faces){ f.M = OM.mul(T, f.M); f.z = -f.z; f.moved = f.moved.concat(step); }
+      return;
+    }
+    const [P, Q] = st.line, sS = oSide(P, Q, st.side), R = OM.refl(P, Q);
+    const keep = [], move = [];
+    for (const f of faces){
+      if (st.sel && !st.sel(f)){ keep.push(f); continue; }
+      const Mi = OM.inv(f.M), fp = OM.ap(Mi, P), fq = OM.ap(Mi, Q);
+      for (const part of oSplit(f.poly, fp, fq)){
+        if (part.length < 3) continue;
+        const nf = { poly: part, M: f.M, z: f.z, moved: f.moved };
+        (oSide(P, Q, OM.ap(f.M, oCent(part))) * sS > 0 ? move : keep).push(nf);
+      }
+    }
+    if (!move.length) return;
+    const all = keep.concat(move), zmax = Math.max(...all.map(f => f.z)), zmin = Math.min(...all.map(f => f.z));
+    const mmax = Math.max(...move.map(f => f.z)), mmin = Math.min(...move.map(f => f.z));
+    for (const f of move){
+      f.M = OM.mul(R, f.M);
+      f.z = st.dir === 'mountain' ? zmin - (f.z - mmin) - 1 : zmax + (mmax - f.z) + 1;
+      f.moved = f.moved.concat(step);
+    }
+    faces = keep.concat(move);
+  });
+  for (const f of faces){ f.o = OM.det(f.M) > 0 ? 1 : -1; if (oArea(f.poly) < 0) f.poly.reverse(); f.fold = f.poly.map(p => OM.ap(f.M, p)); }
+  // creases and tear check
+  const creases = []; let tear = 0;
+  for (let i = 0; i < faces.length; i++) for (let j = i + 1; j < faces.length; j++){
+    const A = faces[i], B = faces[j];
+    for (let a = 0; a < A.poly.length; a++){
+      const p1 = A.poly[a], p2 = A.poly[(a + 1) % A.poly.length];
+      const dx = p2[0] - p1[0], dy = p2[1] - p1[1], L = Math.hypot(dx, dy);
+      for (let b = 0; b < B.poly.length; b++){
+        const q1 = B.poly[b], q2 = B.poly[(b + 1) % B.poly.length];
+        const d1 = ((q1[0] - p1[0]) * dy - (q1[1] - p1[1]) * dx) / L, d2 = ((q2[0] - p1[0]) * dy - (q2[1] - p1[1]) * dx) / L;
+        if (Math.abs(d1) > 1e-9 || Math.abs(d2) > 1e-9) continue;
+        const t1 = ((q1[0] - p1[0]) * dx + (q1[1] - p1[1]) * dy) / (L * L), t2 = ((q2[0] - p1[0]) * dx + (q2[1] - p1[1]) * dy) / (L * L);
+        const lo = Math.max(0, Math.min(t1, t2)), hi = Math.min(1, Math.max(t1, t2));
+        if (hi - lo < 1e-9) continue;
+        const s1 = [p1[0] + dx * lo, p1[1] + dy * lo], s2 = [p1[0] + dx * hi, p1[1] + dy * hi];
+        for (const s of [s1, s2]){ const u = OM.ap(A.M, s), v = OM.ap(B.M, s); tear = Math.max(tear, Math.hypot(u[0] - v[0], u[1] - v[1])); }
+        if (A.o === B.o) continue;
+        creases.push({ p: s1, q: s2, v: (B.z > A.z) === (A.o > 0) });
+      }
+    }
+  }
+  // visible printed pieces, in folded coordinates, highest layers first
+  const sorted = faces.slice().sort((x, y) => y.z - x.z);
+  const ccw = pl => oArea(pl) < 0 ? pl.slice().reverse() : pl;
+  const visible = [];
+  sorted.forEach((f, k) => {
+    if (f.o < 0) return;
+    let pieces = [ccw(f.fold)];
+    for (let m = 0; m < k && pieces.length; m++){
+      const G = ccw(sorted[m].fold), out = [];
+      for (let pc of pieces){
+        let rest = pc;
+        for (let e = 0; e < G.length && rest.length >= 3; e++){
+          const P = G[e], Q = G[(e + 1) % G.length];
+          const [inside, outside] = oSplit(rest, P, Q);
+          if (outside.length >= 3) out.push(outside);
+          rest = inside;
+        }
+      }
+      pieces = out;
+    }
+    for (const pc of pieces) if (Math.abs(oArea(pc)) > 1e-7) visible.push({ face: f, pts: pc });
+  });
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const f of faces) for (const p of f.fold){ x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+  return { faces, creases, visible, tear, bounds: [x0, y0, x1, y1] };
+}
+
+const ORIGAMI = (() => {
+  const r = Math.SQRT1_2, h = r / 2;
+  const mv = s => f => f.moved.includes(s);
+  const notmv = (...s) => f => !s.some(k => f.moved.includes(k));
+  const L = [];
+  const bis = (A, B) => { const m = [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2]; return [m, [m[0] - (B[1] - A[1]), m[1] + (B[0] - A[0])]]; };
+  const q = Math.SQRT2 - 1;
+  L.push({ key: 'cup', name: 'Cup', diamond: true, start: 'up', art: [0, 0.29, 0.13], steps: [
+    { line: [[-1, 0], [1, 0]], side: [0, -0.5] },
+    { line: bis([r, 0], [r - 1, q]), side: [0.6, 0.05] },
+    { line: bis([-r, 0], [1 - r, q]), side: [-0.6, 0.05] },
+    { line: [[-1, q], [1, q]], side: [0, 0.6], sel: mv(1) },
+    { line: [[-1, q], [1, q]], side: [0, 0.6], sel: notmv(1), dir: 'mountain' }
+  ] });
+  L.push({ key: 'dog', name: 'Dog face', diamond: true, start: 'down', art: [0, -0.2, 0.2], steps: [
+    { line: [[-1, 0], [1, 0]], side: [0, 0.4] },
+    { line: [[-0.14, 0], [-0.45, -0.2571]], side: [-0.66, -0.02] },
+    { line: [[0.14, 0], [0.45, -0.2571]], side: [0.66, -0.02] },
+    { line: [[-1, -0.52], [1, -0.52]], side: [0, -0.65], sel: f => f.moved.includes(1) && !f.moved.includes(2) && !f.moved.includes(3) },
+    { line: [[-1, -0.52], [1, -0.52]], side: [0, -0.65], sel: notmv(1, 2, 3), dir: 'mountain' }
+  ] });
+  L.push({ key: 'cat', name: 'Cat face', diamond: true, start: 'down', art: [0, -0.2, 0.18], steps: [
+    { line: [[-1, 0], [1, 0]], side: [0, 0.4] },
+    { line: [[-0.4, 0], [-0.3, -0.25]], side: [-0.62, -0.02] },
+    { line: [[0.4, 0], [0.3, -0.25]], side: [0.62, -0.02] },
+    { line: [[-1, -0.56], [1, -0.56]], side: [0, -0.66], sel: f => f.moved.includes(1) && !f.moved.includes(2) && !f.moved.includes(3) },
+    { line: [[-1, -0.56], [1, -0.56]], side: [0, -0.66], sel: notmv(1, 2, 3), dir: 'mountain' }
+  ] });
+  L.push({ key: 'helmet', name: 'Samurai helmet', diamond: true, start: 'up', art: [0, -0.27, 0.1], steps: [
+    { line: [[-1, 0], [1, 0]], side: [0, 0.4] },
+    { line: [[0, 0], [-1, -1]], side: [-0.6, -0.05] },
+    { line: [[0, 0], [1, -1]], side: [0.6, -0.05] },
+    { line: [[-1, -h], [1, -h]], side: [0, -0.6], sel: f => f.moved.includes(2) || f.moved.includes(3) },
+    { line: [[0, -h], [-h * Math.tan(Math.PI / 8), 0]], side: [-0.01, -0.05], sel: f => f.moved.includes(4) && oCent(f.poly.map(p => OM.ap(f.M, p)))[0] < 0 },
+    { line: [[0, -h], [h * Math.tan(Math.PI / 8), 0]], side: [0.01, -0.05], sel: f => f.moved.includes(4) && oCent(f.poly.map(p => OM.ap(f.M, p)))[0] > 0 },
+    { line: [[-1, -0.53], [1, -0.53]], side: [0, -0.65], sel: f => f.moved.includes(1) && !f.moved.includes(2) && !f.moved.includes(3) },
+    { line: [[-1, -h], [1, -h]], side: [0, -0.45], sel: f => f.moved.includes(1) && !f.moved.includes(2) && !f.moved.includes(3) },
+    { line: [[-1, -h], [1, -h]], side: [0, -0.6], sel: notmv(1), dir: 'mountain' }
+  ] });
+  L.push({ key: 'plane', name: 'Dart plane', diamond: false, start: 'down', art: [0.6, 0.22, 0.13], steps: [
+    { line: [[0.5, 1], [0, 0.5]], side: [0.05, 0.95] },
+    { line: [[0.5, 1], [1, 0.5]], side: [0.95, 0.95] },
+    { line: [[0.5, 1], [0.5 - Math.tan(Math.PI / 8), 0]], side: [0.1, 0.6] },
+    { line: [[0.5, 1], [0.5 + Math.tan(Math.PI / 8), 0]], side: [0.9, 0.6] },
+    { line: [[0.5, 0], [0.5, 1]], side: [0.8, 0.5], dir: 'mountain' },
+    { line: [[0.42, 0], [0.42, 1]], side: [0.2, 0.5], sel: f => oCent(f.poly)[0] < 0.5 },
+    { line: [[0.42, 0], [0.42, 1]], side: [0.2, 0.5], sel: f => oCent(f.poly)[0] > 0.5, dir: 'mountain' }
+  ] });
+  L.push({ key: 'fortune', name: 'Fortune teller', diamond: false, start: 'down', art: [0.375, 0.375, 0.1], steps: [
+    { line: [[0.5, 0], [0, 0.5]], side: [0.05, 0.05] },
+    { line: [[1, 0.5], [0.5, 0]], side: [0.95, 0.05] },
+    { line: [[0.5, 1], [1, 0.5]], side: [0.95, 0.95] },
+    { line: [[0, 0.5], [0.5, 1]], side: [0.05, 0.95] },
+    { turn: 0.5 },
+    { line: [[0, 0.25], [1, 0.25]], side: [0.5, 0.05] },
+    { line: [[0, 0.75], [1, 0.75]], side: [0.5, 0.95] },
+    { line: [[0.25, 0], [0.25, 1]], side: [0.05, 0.5] },
+    { line: [[0.75, 0], [0.75, 1]], side: [0.95, 0.5] },
+    { line: [[0, 0.5], [1, 0.5]], side: [0.5, 0.6] }
+  ] });
+  return L;
+})();
+/* Helvetica-Bold advance widths (1000 units per em) for centering printed characters */
+const HBW = (() => {
+  const s = ' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`{|}~';
+  const w = [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,389,280,389,584];
+  const m = {}; for (let k = 0; k < s.length; k++) m[s[k]] = w[k]; return m;
+})();
+const MODEL_CACHE = {};
+function modelResult(key){
+  if (!MODEL_CACHE[key]){
+    const m = ORIGAMI.find(x => x.key === key);
+    MODEL_CACHE[key] = Object.assign({ model: m }, foldModel(m));
+  }
+  return MODEL_CACHE[key];
+}
+const CHARS = {
+  az: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
+  n09: '0123456789'.split(''),
+  sym: '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'.split('')
+};
+function squareItems(set, text, carrier){
+  const models = () => ORIGAMI.map(m => ({ id: m.key, key: m.key, label: m.name })).concat([{ id: 'hypar', key: 'hypar', label: 'Hypar' }]);
+  let n = 0;
+  const chars = list => list.map(ch => { const k = carrier === 'mix' ? ORIGAMI[n++ % ORIGAMI.length].key : carrier; return { id: 'ch' + ch.charCodeAt(0), key: k, ch, label: (/[A-Z]/.test(ch) ? 'Letter ' : /[0-9]/.test(ch) ? 'Number ' : 'Symbol ') + ch + ', ' + ORIGAMI.find(m => m.key === k).name.toLowerCase() }; });
+  if (set === 'models') return models();
+  if (set === 'az' || set === 'n09' || set === 'sym') return chars(CHARS[set]);
+  if (set === 'custom') return chars((text || '').toUpperCase().split('').filter(c => HBW[c] && c !== ' '));
+  return models().concat(chars(CHARS.az), chars(CHARS.n09), chars(CHARS.sym));
+}
+
+/* put one origami square on the sheet at X0, Y0 with side S */
+function placeSquare(sc, item, X0, Y0, S, o){
+  const F = { a: S, b: 0, c: 0, d: -S, e: X0, f: Y0 + S };
+  const box = { x: X0, y: Y0, w: S, h: S };
+  const rect = [[X0, Y0], [X0 + S, Y0], [X0 + S, Y0 + S], [X0, Y0 + S]];
+  for (let k = 0; k < 4; k++) sc.cuts.push({ x1: rect[k][0], y1: rect[k][1], x2: rect[(k + 1) % 4][0], y2: rect[(k + 1) % 4][1] });
+  sc.labels.push({ x: X0 + S / 2, y: Y0 + S + o.labelH / 2, size: Math.min(o.labelH * 0.7, 18), text: item.label });
+  if (item.key === 'hypar'){
+    const an = analyzeHypar({ W: 1, rings: 8 }, 'none');
+    if (o.fill) sc.regions.push({ polys: [{ pts: rect, ymin: Y0, ymax: Y0 + S }], fill: o.fill, box });
+    for (const c of an.creases) sc.creases.push({ x1: X0 + c.x1 * S, y1: Y0 + c.y1 * S, x2: X0 + c.x2 * S, y2: Y0 + c.y2 * S, v: c.v });
+    if (o.preview) o.preview.push({ item, R: null, hyp: an, F, box, fill: o.fill });
+    return;
+  }
+  const R = modelResult(item.key);
+  if (o.fill){
+    if (o.onlyShows){
+      const polys = R.visible.map(v => { const pts = v.pts.map(p => OM.ap(F, OM.ap(OM.inv(v.face.M), p))); let a = Infinity, b = -Infinity; for (const p of pts){ a = Math.min(a, p[1]); b = Math.max(b, p[1]); } return { pts, ymin: a, ymax: b }; });
+      if (polys.length) sc.regions.push({ polys, fill: o.fill, box });
+    } else sc.regions.push({ polys: [{ pts: rect, ymin: Y0, ymax: Y0 + S }], fill: o.fill, box });
+  }
+  for (const c of R.creases){ const p = OM.ap(F, c.p), q = OM.ap(F, c.q); sc.creases.push({ x1: p[0], y1: p[1], x2: q[0], y2: q[1], v: c.v }); }
+  if (item.ch){
+    const [cx, cy, h] = R.model.art;
+    const size = h / 0.72, w = size * (HBW[item.ch] || 600) / 1000;
+    for (const v of R.visible){
+      const T = OM.mul(F, OM.inv(v.face.M));
+      const clip = v.pts.map(p => OM.ap(T, p));
+      let a = Infinity, b = -Infinity; for (const p of clip){ a = Math.min(a, p[1]); b = Math.max(b, p[1]); }
+      sc.texts.push({ clip, ymin: a, ymax: b, T, ch: item.ch, x: cx - w / 2, y: cy - h / 2, size, color: o.charColor });
+    }
+  }
+  if (o.preview) o.preview.push({ item, R, F, box, fill: o.fill });
+}
+
+/* rows of squares down the roll; a row never crosses a frame edge */
+function layoutSquares(sc, items, S, y, frame, o){
+  const m = 12.7, g = o.gap || Math.max(8, S * 0.06), labelH = o.labelH || Math.max(14, S * 0.1);
+  const per = Math.max(1, Math.floor((sc.W - 2 * m + g) / (S + g)));
+  const rowH = S + labelH + g;
+  for (let k = 0; k < items.length; k += per){
+    const fEnd = (Math.floor(y / frame) + 1) * frame;
+    if (y + S + labelH > fEnd - m + 1e-6) y = fEnd + m;
+    items.slice(k, k + per).forEach((it, n) => placeSquare(sc, it, m + n * (S + g), y, S, Object.assign({ labelH }, o)));
+    y += rowH;
+  }
+  return y;
+}
+
+function smallSide(W, n){ const m = 12.7, g = 12; return (W - 2 * m - (n - 1) * g) / n; }
+function fullSide(W, frame){ const m = 12.7; return Math.min(W - 2 * m, (frame - 2 * m - 2 * 10 - 10) / 2); }
+function newScene(W){ return { W, L: 0, regions: [], creases: [], cuts: [], labels: [], texts: [] }; }
+
+/* long format test print: frame after frame of colors, patterns, fold patterns and every origami square */
+function buildLongDemo(W, frame, S, fills, carrier, onlyShows, charColor, preview){
+  const m = 12.7, gap = 10, w = W - 2 * m;
+  const sc = newScene(W);
+  let y = m;
+  const fit = h => { const fEnd = (Math.floor(y / frame) + 1) * frame; if (y + h > fEnd - m + 1e-6) y = fEnd + m; };
+  const title = (t, h) => { fit(h + 8); sc.labels.push({ x: m, y: y + 3, size: 5, text: t, align: 'left' }); y += 8; };
+  const col = c => ({ type: 'color', c1: c });
+  const hsl = (hh, l) => { const a = Math.min(l, 1 - l), f = n => { const k = (n + hh / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); }; return '#' + [f(0), f(8), f(4)].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join(''); };
+  sc.labels.push({ x: m, y: y + 4, size: 8, text: 'Test print. Ink limit ' + Math.round(INK * 100) + '% total coverage. Paper ' + Math.round(W) + ' mm wide, frames ' + Math.round(frame) + ' mm long.', align: 'left' });
+  y += 14;
+  if (fills[0].photo){
+    const hPh = Math.min(frame - 2 * m - 8, w * fills[0].photo.ph / fills[0].photo.pw);
+    title('Photo', hPh);
+    sc.regions.push({ polys: null, fill: Object.assign({}, fills[0], { type: 'photo', fit: 'repeat', pct: Math.min(1, hPh * fills[0].photo.pw / fills[0].photo.ph / w) }), box: { x: m, y, w, h: hPh } });
+    y += hPh + gap;
+  }
+  title('Origami squares. Cut on the gray lines, fold on the marked lines.', S + 20);
+  y = layoutSquares(sc, applyEdits(squareItems('all', '', carrier), 'small'), S, y, frame, { fill: fills[0], onlyShows, charColor, preview, gap: 12 });
+  const block = (label, P, mode, fA, fB) => {
+    title(label, P.L);
+    const An = analyze(buildPattern(P), mode), bx = m, by = y;
+    sc.regions.push({ polys: null, fill: fA, box: { x: bx, y: by, w: P.W, h: P.L } });
+    const polys = An.facets.filter(f => f.slot === 1).map(f => ({ pts: f.poly.map(p => [p[0] + bx, p[1] + by]), ymin: f.ymin + by, ymax: f.ymax + by }));
+    if (polys.length) sc.regions.push({ polys, fill: fB, box: { x: bx, y: by, w: P.W, h: P.L } });
+    for (const c of An.creases) sc.creases.push({ x1: c.x1 + bx, y1: c.y1 + by, x2: c.x2 + bx, y2: c.y2 + by, v: c.v });
+    y += P.L + gap;
+  };
+  const base = { dir: 'along', angle: 20, vary: 'none', strength: 0.4, period: 600, seed: 1 };
+  const full = frame - 2 * m - 8;
+  y = (Math.floor(y / frame) + 1) * frame + m;
+  block('Full frame Miura-ori, design A and design B by facing direction', Object.assign({}, base, { W: w, L: full, pattern: 'miura', w: 25.4, h: 19.05 }), 'face', fills[0], fills[1]);
+  block('Full frame pleats with random spacing, stripes one way and dots the other', Object.assign({}, base, { W: w, L: full, pattern: 'pleat', dir: 'across', w: 20, vary: 'random', seed: 7 }), 'face',
+    { type: 'pattern', pat: 'stripes', size: 6, c1: '#ffffff', c2: '#2b8a6e' }, { type: 'pattern', pat: 'dots', size: 8, c1: '#fff3c4', c2: '#c8217a' });
+  block('Full frame Miura-ori with a wave, gradient design', Object.assign({}, base, { W: w, L: full, pattern: 'miura', w: 30, h: 22, vary: 'wave', period: 500, strength: 0.6 }), 'whole', { type: 'grad', c1: '#7ec8e3', c2: '#e8a0bf', period: 400 }, null);
+  y = (Math.floor(y / frame) + 1) * frame + m;
+  const FS = fullSide(W, frame);
+  y = layoutSquares(sc, applyEdits(squareItems('models', '', carrier).map(it => Object.assign({}, it, { id: 'full-' + it.id, label: 'Full page ' + it.label.toLowerCase() })), 'full'), FS, y, frame, { fill: fills[0], onlyShows, charColor, labelH: 10, gap: 10, preview });
+  sc.L = Math.ceil((y + m) / frame) * frame;
+  return sc;
+}
+
+/* edits made by dragging in the folded view: squares taken off the print, and the order of the rest */
+const EDITS = { removed: new Map(), order: {} };
+function applyEdits(items, group){
+  let list = items.filter(it => !EDITS.removed.has(it.id));
+  const ord = EDITS.order[group];
+  if (ord){ const pos = new Map(ord.map((id, k) => [id, k])); list = list.map((it, k) => [it, pos.has(it.id) ? pos.get(it.id) : 1e6 + k]).sort((a, b) => a[1] - b[1]).map(x => x[0]); }
+  return list;
+}
+
+/* draw one finished model into a small canvas */
+function drawModelTile(cv, pv, cell){
+  const dpr = window.devicePixelRatio || 1;
+  cv.style.width = cell + 'px'; cv.style.height = cell + 'px';
+  cv.width = Math.round(cell * dpr); cv.height = Math.round(cell * dpr);
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cell, cell);
+  if (pv.hyp){
+    const sc = cell - 12;
+    ctx.save(); ctx.translate(6, 6); ctx.scale(sc, sc);
+    ctx.fillStyle = pv.fill ? dispHex(pv.fill.c1) : '#ffffff'; ctx.fillRect(0, 0, 1, 1);
+    ctx.lineWidth = 1.2 / sc;
+    for (const c of pv.hyp.creases){ ctx.strokeStyle = c.v ? '#808080' : '#ff80ff'; ctx.beginPath(); ctx.moveTo(c.x1, c.y1); ctx.lineTo(c.x2, c.y2); ctx.stroke(); }
+    ctx.restore();
+    return;
+  }
+  const [x0, y0, x1, y1] = pv.R.bounds, sc = (cell - 14) / Math.max(x1 - x0, y1 - y0);
+  const V = new DOMMatrix([dpr * sc, 0, 0, -dpr * sc, dpr * (cell / 2 - (x0 + x1) / 2 * sc), dpr * (cell / 2 + (y0 + y1) / 2 * sc)]);
+  for (const f of pv.R.faces.slice().sort((a, b) => a.z - b.z)){
+    ctx.save(); ctx.setTransform(V);
+    ctx.beginPath(); f.fold.forEach((p, k) => k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath();
+    if (f.o > 0 && pv.fill){
+      ctx.save(); ctx.clip();
+      const Fi = OM.mul(f.M, OM.inv(pv.F));
+      ctx.setTransform(V.multiply(new DOMMatrix([Fi.a, Fi.b, Fi.c, Fi.d, Fi.e, Fi.f])));
+      paintFill(ctx, pv.fill, pv.box, pv.box.y, pv.box.y + pv.box.h);
+      ctx.restore();
+    } else { ctx.fillStyle = f.o > 0 ? '#ffffff' : '#ecebe6'; ctx.fill(); }
+    ctx.lineWidth = 1 / sc; ctx.strokeStyle = 'rgba(22,32,43,0.45)'; ctx.stroke();
+    ctx.restore();
+  }
+  if (pv.item.ch){
+    const [cx, cy, h] = pv.R.model.art, size = h / 0.72, w = size * (HBW[pv.item.ch] || 600) / 1000;
+    ctx.save(); ctx.setTransform(V);
+    ctx.beginPath();
+    for (const v of pv.R.visible){ v.pts.forEach((p, k) => k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.closePath(); }
+    ctx.clip();
+    ctx.translate(cx - w / 2, cy - h / 2); ctx.scale(1, -1);
+    ctx.fillStyle = dispHex(pv.charColor || '#16202b'); ctx.font = 'bold ' + size + 'px Helvetica, Arial, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText(pv.item.ch, 0, 0);
+    ctx.restore();
+  }
+}
+
+const $ = id => document.getElementById(id);
+let G = null, AN = null, SC = null, LAY = null, PREVIEW = [], winY0 = 0, winLen = 0;
+const mode = () => $('sheet').value;
+const FRAME_MAX = 72 * 25.4;
+const num = (id, lo, hi, dflt) => { let v = parseFloat($(id).value); if (!isFinite(v)) v = dflt; return Math.min(hi, Math.max(lo, v)); };
+const unit = () => $('units').value === 'in' ? 25.4 : 1;
+const len = (id, lo, hi, dflt) => { let v = parseFloat($(id).value) * unit(); if (!isFinite(v)) v = dflt; return Math.min(hi, Math.max(lo, v)); };
+function fmt(mm){
+  if ($('units').value === 'in'){
+    const i = mm / 25.4;
+    return (Math.abs(i) >= 100 ? Math.round(i) : Math.round(i * 10) / 10) + ' in';
+  }
+  return Math.round(mm) + ' mm';
+}
+
+function readParams(){
+  const square = $('sheet').value === 'square';
+  const paperW = len('W', 20, 5000, 914.4);
+  const S = len('S', 20, 50000, paperW);
+  let pattern = $('pattern').value;
+  if (!square && pattern === 'hypar') pattern = 'miura';
+  return {
+    square, paperW, W: square ? S : paperW, L: square ? S : len('L', 20, 500000, 9144),
+    pattern, dir: $('dir').value,
+    w: len('w', 3, 2000, 25.4), h: len('h', 3, 2000, 19.05), angle: num('angle', 5, 60, 20),
+    vary: $('vary').value, strength: num('strength', 5, 80, 40) / 100,
+    period: len('period', 20, 1e6, 609.6), seed: Math.round(num('seed', -1e9, 1e9, 1)),
+    rings: Math.round(num('rings', 2, 60, 8))
+  };
+}
+
+const photos = [null, null, null, null];
+const slotDefaults = ['#7ec8e3', '#f4a259', '#9ad1a4', '#e8a0bf'];
+const slotTitles = {
+  face: ['Design A, seen from one side', 'Design B, seen from the other side'],
+  face4: ['Design A, facing left and up', 'Design B, facing right and up', 'Design C, facing left and down', 'Design D, facing right and down'],
+  whole: ['Design'],
+  rows: ['Design A, odd rows', 'Design B, even rows']
+};
+function buildSlotUI(){
+  const inch = $('units').value === 'in';
+  let html = '';
+  for (let k = 0; k < 4; k++){
+    html += '<div class="slot" id="slot' + k + '"><h3 id="st' + k + '"></h3>' +
+      '<label for="ty' + k + '">Fill</label><select id="ty' + k + '"><option value="color">Solid color</option><option value="photo">Photo</option><option value="pattern">Pattern</option><option value="grad">Gradient</option></select>' +
+      '<div class="photobox"><label for="pf' + k + '">Photo</label><input id="pf' + k + '" type="file" accept="image/*"><p class="note" id="pn' + k + '">No photo loaded yet.</p>' +
+      '<label for="pfit' + k + '">Placement</label><select id="pfit' + k + '"><option value="repeat">Repeat down the length</option><option value="stretch">Stretch over the full sheet</option></select>' +
+      '<div class="pctbox"><label for="pct' + k + '">Photo width: <span id="pctV' + k + '">100</span>% of the sheet</label><input id="pct' + k + '" type="range" min="10" max="100" value="100"></div></div>' +
+      '<div class="patbox row2"><div><label for="pt' + k + '">Pattern</label><select id="pt' + k + '"><option value="stripes">Stripes along</option><option value="hstripes">Stripes across</option><option value="diag">Diagonal stripes</option><option value="checks">Checks</option><option value="dots">Dots</option><option value="grid">Grid</option><option value="chevron">Chevrons</option></select></div>' +
+      '<div><label for="ps' + k + '">Size (<span class="u">' + (inch ? 'in' : 'mm') + '</span>)</label><input id="ps' + k + '" class="len" type="number" inputmode="decimal" step="any" value="' + (inch ? 0.5 : 12) + '"></div></div>' +
+      '<div class="row2"><div><label for="ca' + k + '" id="cal' + k + '">Color</label><input id="ca' + k + '" type="color" value="' + slotDefaults[k] + '"></div>' +
+      '<div class="c2box"><label for="cb' + k + '" id="cbl' + k + '">Second color</label><input id="cb' + k + '" type="color" value="#ffffff"></div></div>' +
+      '<div class="gradbox"><label for="gp' + k + '">Gradient length (<span class="u">' + (inch ? 'in' : 'mm') + '</span>)</label><input id="gp' + k + '" class="len" type="number" inputmode="decimal" step="any" value="' + (inch ? 72 : 2000) + '"></div>' +
+      '</div>';
+  }
+  $('slots').innerHTML = html;
+  for (let k = 0; k < 4; k++){
+    ['ty', 'pfit', 'pct', 'pt', 'ps', 'ca', 'cb', 'gp'].forEach(p => $(p + k).addEventListener('input', () => { syncUI(); laterDesign(); }));
+    $('pf' + k).addEventListener('change', e => { const f = e.target.files[0]; if (f) loadPhoto(k, f); });
+  }
+}
+async function loadPhoto(k, file){
+  $('pn' + k).textContent = 'Loading photo';
+  try {
+    const url = URL.createObjectURL(file);
+    const img = new Image(); img.src = url; await img.decode();
+    const s = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * s)), h = Math.max(1, Math.round(img.naturalHeight * s));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const x = c.getContext('2d'); x.fillStyle = '#ffffff'; x.fillRect(0, 0, w, h); x.drawImage(img, 0, 0, w, h);
+    URL.revokeObjectURL(url);
+    photos[k] = { src: c, proc: processPhoto(c) };
+    $('pn' + k).textContent = 'Photo loaded, ' + w + ' by ' + h + ' pixels.';
+    redrawDesign();
+  } catch (e) {
+    $('pn' + k).textContent = 'That file could not be opened as a photo. Choose a JPG or PNG image.';
+  }
+}
+function readFills(){
+  const out = [];
+  for (let k = 0; k < 4; k++){
+    const ph = photos[k];
+    out.push({
+      type: $('ty' + k).value, c1: $('ca' + k).value, c2: $('cb' + k).value,
+      pat: $('pt' + k).value, size: len('ps' + k, 3, 1000, 12),
+      fit: $('pfit' + k).value, pct: num('pct' + k, 10, 100, 100) / 100,
+      period: len('gp' + k, 50, 1e7, 2000),
+      photo: ph ? ph.proc : null
+    });
+  }
+  return out;
+}
+
+function syncUI(){
+  const md = mode(), square = md === 'square', tess = md === 'roll' || md === 'square';
+  $('letterPanel').classList.toggle('hidden', md !== 'origami' && md !== 'demo');
+  $('patternPanel').classList.toggle('hidden', !tess);
+  $('customBox').classList.toggle('hidden', $('charset').value !== 'custom');
+  $('sqBox').classList.toggle('hidden', md === 'origami' && $('sqmode').value === 'full');
+  $('sqmode').parentElement.classList.toggle('hidden', md === 'demo');
+  $('artBox').classList.toggle('hidden', !tess);
+  $('threeBox').classList.toggle('hidden', !tess);
+  $('foldControls').classList.toggle('hidden', !tess);
+  $('glyphBox').classList.toggle('hidden', tess);
+  $('foldNote').textContent = tess ? 'Drag to turn the paper, pinch or scroll to zoom. The printed side faces you at the start.' : 'Every square as it looks once folded. Press and hold a model, then drag it off the list to take it off the print, or drop it on another model to move it there.';
+  $('inkV').textContent = $('ink').value;
+  if (!square && $('pattern').value === 'hypar') $('pattern').value = 'miura';
+  $('pattern').querySelector('option[value=hypar]').disabled = !square;
+  const P = readParams();
+  const hyp = P.pattern === 'hypar';
+  $('Lbox').classList.toggle('hidden', md !== 'roll');
+  $('Sbox').classList.toggle('hidden', !square);
+  document.querySelectorAll('.tess-only').forEach(e => e.classList.toggle('hidden', hyp));
+  document.querySelectorAll('.hyp-only').forEach(e => e.classList.toggle('hidden', !hyp));
+  document.querySelectorAll('.miura-only').forEach(e => e.classList.toggle('hidden', P.pattern !== 'miura'));
+  $('varyPanel').classList.toggle('hidden', hyp || !tess);
+  $('posBox').classList.toggle('hidden', square);
+  if (square){
+    const strips = Math.ceil(P.W / P.paperW - 1e-9);
+    $('sheetNote').textContent = strips > 1
+      ? 'This square is wider than the paper, so it prints as ' + strips + ' strips side by side. Join the strips edge to edge before folding.'
+      : 'The whole square fits across the paper width.';
+  } else if (md === 'roll') $('sheetNote').textContent = 'The pattern continues for the full length of the roll.';
+  else if (md === 'origami') $('sheetNote').textContent = 'Squares run in rows down the roll. No square crosses from one frame to the next.';
+  else $('sheetNote').textContent = 'A long roll: colors at the ink limit, patterns, a gradient, your photo if one is loaded, three full frame fold patterns, then every origami model and every character on its own square.';
+  $('angleV').textContent = P.angle;
+  $('strengthV').textContent = Math.round(P.strength * 100);
+  $('varyOpts').classList.toggle('hidden', P.vary === 'none');
+  $('periodBox').classList.toggle('hidden', P.vary !== 'wave');
+  $('seedBox').classList.toggle('hidden', P.vary !== 'random');
+  $('newSeed').classList.toggle('hidden', P.vary !== 'random');
+  let note = '';
+  if (P.vary !== 'none'){
+    if (P.pattern === 'pleat' && P.dir === 'along') note = 'Pleats running along the length have no rows to vary. Switch the main fold lines to run across the width to vary the pleat spacing.';
+    else if (P.dir === 'across') note = 'The spacing between fold lines changes along the length.';
+    else note = 'The zigzag angle and row height change along the length.';
+  }
+  $('varyNote').textContent = note;
+  const m = $('art').value;
+  let titles = hyp ? { face: ['Design A, odd rings', 'Design B, even rings'], rows: ['Design A, odd rings', 'Design B, even rings'], face4: ['Design A', 'Design B', 'Design C', 'Design D'], whole: ['Design'] }[m] || [] : slotTitles[m] || [];
+  if (md === 'origami') titles = ['Design printed on each square'];
+  if (md === 'demo') titles = ['Design A, used on the squares, the first Miura block and the photo row', 'Design B, used on the first Miura block'];
+  for (let k = 0; k < 4; k++){
+    const on = k < titles.length;
+    $('slot' + k).classList.toggle('hidden', !on);
+    if (!on) continue;
+    $('st' + k).textContent = titles[k];
+    const ty = $('ty' + k).value;
+    const box = $('slot' + k);
+    box.querySelector('.photobox').classList.toggle('hidden', ty !== 'photo');
+    box.querySelector('.patbox').classList.toggle('hidden', ty !== 'pattern');
+    box.querySelector('.gradbox').classList.toggle('hidden', ty !== 'grad');
+    box.querySelector('.c2box').classList.toggle('hidden', ty !== 'pattern' && ty !== 'grad');
+    box.querySelector('.pctbox').classList.toggle('hidden', $('pfit' + k).value !== 'repeat');
+    $('pctV' + k).textContent = $('pct' + k).value;
+    $('cal' + k).textContent = ty === 'photo' || ty === 'pattern' ? 'Background color' : ty === 'grad' ? 'First color' : 'Color';
+    $('cbl' + k).textContent = ty === 'pattern' ? 'Pattern color' : 'Second color';
+  }
+  const notes = {
+    face: hyp ? 'Rings alternate between design A and design B, so each side of every pleat shows a different design.' : 'Each facet gets the design for the way it faces once folded, so the finished piece shows design A from one side and design B from the other.',
+    face4: 'Each facet gets one of four designs depending on its tilt once folded, so the piece changes as you walk around it.',
+    whole: 'One design runs across the whole sheet and folds up with the paper.',
+    rows: hyp ? 'The two designs alternate ring by ring.' : 'The two designs alternate row by row along the length.',
+    none: 'Only the mountain and valley lines are printed.'
+  };
+  $('artNote').textContent = tess ? notes[m] : md === 'origami' ? 'This design is printed on each square.' : 'Load a photo into design A to include a photo row in the test print.';
+  const fr = len('panel', 100, FRAME_MAX, FRAME_MAX);
+  $('frameNote').textContent = 'Each PDF page is one frame. Frames longer than ' + fmt(fr) + ' are split, and the design continues exactly from one frame to the next so they butt together seamlessly.';
+}
+
+function rebuild(){
+  syncUI();
+  INK = num('ink', 20, 300, 50) / 100;
+  const P = readParams(), md = mode(), fills = readFills();
+  const frame = len('panel', 100, FRAME_MAX, FRAME_MAX);
+  LAY = null;
+  if (md === 'origami' || md === 'demo'){
+    const S = smallSide(P.paperW, +$('across').value);
+    const onlyShows = $('shows').value === 'shows', charColor = $('charc').value, carrier = $('carrier').value;
+    PREVIEW = [];
+    if (md === 'origami'){
+      const items = applyEdits(squareItems($('charset').value, $('ctext').value, carrier), 'small');
+      if (!items.length){ $('info').textContent = 'Type some letters or numbers to print.'; G = null; return; }
+      SC = newScene(P.paperW);
+      const full = $('sqmode').value === 'full';
+      const y = layoutSquares(SC, items, full ? fullSide(P.paperW, frame) : S, 12.7, frame, Object.assign({ fill: fills[0], onlyShows, charColor, preview: PREVIEW }, full ? { labelH: 10, gap: 10 } : { gap: 12 }));
+      SC.L = Math.ceil((y + 12.7) / frame) * frame;
+    } else {
+      SC = buildLongDemo(P.paperW, frame, S, fills, carrier, onlyShows, charColor, PREVIEW);
+    }
+    PREVIEW.forEach(p => { p.charColor = charColor; });
+    G = { P: { W: P.paperW, L: SC.L, paperW: P.paperW, square: false }, flat: true };
+    AN = null;
+    winLen = Math.min(SC.L, Math.max(200, P.paperW * 1.6));
+    const frames = Math.round(SC.L / frame);
+    $('info').textContent = (md === 'demo' ? 'Long format test print. ' : '') + PREVIEW.filter(p => !String(p.item.id).startsWith('full-')).length + ' origami squares, ' + fmt(S) + ' each, ' + $('across').value + ' side by side' + (md === 'demo' ? ', plus every model at full page size' : '') + '. Total length ' + fmt(SC.L) + ' in ' + frames + (frames === 1 ? ' frame.' : ' frames.');
+  } else {
+    if (P.pattern === 'hypar'){
+      G = { P, hypar: true };
+      AN = analyzeHypar(P, $('art').value);
+    } else {
+      const U = P.dir === 'across' ? P.L : P.W, V = P.dir === 'across' ? P.W : P.L;
+      const rows = P.pattern === 'pleat' ? 1 : V / (P.h * (1 - 0.5 * P.strength));
+      const cols = U / (P.w * (P.dir === 'across' && P.vary !== 'none' ? 1 - P.strength : 1)) + 3;
+      if (rows * cols > 900000){
+        $('info').innerHTML = '<span class="err">This sheet needs about ' + Math.round(rows * cols).toLocaleString() + ' cells, which is too many. Make the fold spacing or row height bigger, or make the sheet smaller.</span>';
+        G = null; AN = null; return;
+      }
+      G = buildPattern(P);
+      AN = analyze(G, $('art').value);
+    }
+    SC = sceneFromAN(AN, P.W, P.L, k => fills[k]);
+    winLen = P.square ? P.L : Math.min(P.L, Math.max(200, P.W * 1.6));
+    const strips = Math.ceil(P.W / P.paperW - 1e-9), frames = Math.ceil(P.L / frame - 1e-9);
+    let txt = 'Cells: ' + AN.facets.length.toLocaleString() + '. Fold lines: ' + AN.creases.length.toLocaleString() + '. PDF: ' + strips * frames + (strips * frames === 1 ? ' page' : ' pages');
+    if (strips > 1) txt += ', ' + strips + ' strips of ' + frames + (frames === 1 ? ' frame' : ' frames') + ' each, in order strip by strip';
+    txt += '.';
+    if (!G.hypar) txt += ' Facets reach full fold at ' + (G.tmax * 180 / Math.PI).toFixed(0) + ' degrees.';
+    $('info').textContent = txt;
+  }
+  const pos = $('pos');
+  pos.max = Math.max(0, Math.floor(G.P.L - winLen));
+  pos.step = Math.max(1, Math.round(winLen / 20));
+  if (winLen >= G.P.L || +pos.value > +pos.max) pos.value = 0;
+  updateWindow();
+}
+
+function updateWindow(){
+  if (!G) return;
+  winY0 = +$('pos').value;
+  $('posV').textContent = fmt(winY0) + ' to ' + fmt(winY0 + winLen) + ' of ' + fmt(G.P.L);
+  drawFlat();
+  if (G.flat){ buildTiles(); }
+  else build3D();
+}
+
+function drawFlat(){
+  const cv = $('flat'), dpr = window.devicePixelRatio || 1;
+  const cssW = cv.parentElement.clientWidth;
+  const ruler = 40, W = G.P.W;
+  const sc = (cssW - ruler - 8) / W;
+  const cssH = Math.round(winLen * sc) + 8;
+  cv.style.height = cssH + 'px';
+  cv.width = Math.round(cssW * dpr); cv.height = Math.round(cssH * dpr);
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#f7f9fa'; ctx.fillRect(0, 0, cssW, cssH);
+  ctx.save(); ctx.translate(ruler, 4);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W * sc, winLen * sc);
+  ctx.beginPath(); ctx.rect(0, 0, W * sc, winLen * sc); ctx.clip();
+  const y0 = winY0, y1 = winY0 + winLen;
+  ctx.scale(sc, sc); ctx.translate(0, -y0);
+  drawScene(ctx, SC, y0, y1);
+  drawTexts(ctx, SC, y0, y1);
+  drawLines(ctx, SC, y0, y1, lineOpts(), sc);
+  const strips = Math.ceil(W / G.P.paperW - 1e-9);
+  if (G.P.square && strips > 1){
+    ctx.strokeStyle = '#16202b'; ctx.lineWidth = 1.5 / sc; ctx.setLineDash([2 / sc, 3 / sc]);
+    ctx.beginPath();
+    for (let s = 1; s < strips; s++){ ctx.moveTo(s * G.P.paperW, y0); ctx.lineTo(s * G.P.paperW, y1); }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  ctx.restore();
+  ctx.strokeStyle = '#16202b'; ctx.lineWidth = 1; ctx.strokeRect(ruler + 0.5, 4.5, W * sc, winLen * sc);
+  ctx.fillStyle = '#56646f'; ctx.font = '11px system-ui, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  const u = unit();
+  const steps = [0.5, 1, 2, 5, 10, 12, 24, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000];
+  const step = (steps.find(s => s * u * sc >= 36) || 20000) * u;
+  for (let y = Math.ceil(y0 / step) * step; y <= y1 + 1e-6; y += step){
+    const py = 4 + (y - y0) * sc;
+    ctx.beginPath(); ctx.moveTo(ruler - 6, py); ctx.lineTo(ruler, py); ctx.stroke();
+    ctx.fillText(String(Math.round(y / u * 10) / 10), ruler - 8, py);
+  }
+}
+
+/* 3D view */
+let renderer = null, scene, camera, geom, frontMesh, backMesh, mesh3 = null, texCanvas = null, tex = null;
+const view = { yaw: 0.35, pitch: -0.55, dist: 1000 };
+function init3D(){
+  if (renderer || typeof THREE === 'undefined') return;
+  const cv = $('three');
+  renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setClearColor(0xf7f9fa, 1);
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(35, 1, 1, 1e7);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xaab6be, 0.75));
+  const dl = new THREE.DirectionalLight(0xffffff, 0.55); dl.position.set(-0.6, 0.8, 1); camera.add(dl); scene.add(camera);
+  geom = new THREE.BufferGeometry();
+  texCanvas = document.createElement('canvas'); texCanvas.width = texCanvas.height = 4;
+  tex = new THREE.CanvasTexture(texCanvas);
+  frontMesh = new THREE.Mesh(geom, new THREE.MeshLambertMaterial({ map: tex, side: THREE.FrontSide }));
+  backMesh = new THREE.Mesh(geom, new THREE.MeshLambertMaterial({ color: 0xf4f4f0, side: THREE.BackSide }));
+  scene.add(frontMesh); scene.add(backMesh);
+  let pinch = null;
+  const pts = new Map();
+  cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); });
+  cv.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    const prev = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 1){
+      view.yaw -= (e.clientX - prev[0]) * 0.01;
+      view.pitch = Math.max(-1.5, Math.min(1.5, view.pitch + (e.clientY - prev[1]) * 0.01));
+    } else if (pts.size === 2){
+      const [a, b] = [...pts.values()];
+      const dNow = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if (pinch) view.dist = Math.max(20, view.dist * pinch / dNow);
+      pinch = dNow;
+    }
+    render3D();
+  });
+  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => { e.preventDefault(); view.dist = Math.max(20, view.dist * Math.exp(e.deltaY * 0.001)); render3D(); }, { passive: false });
+}
+
+function orient(cp, extra){
+  let area = 0;
+  for (let k = 0; k < cp.length; k++){ const p = cp[k], q = cp[(k + 1) % cp.length]; area += p[0] * (-q[1]) - q[0] * (-p[1]); }
+  if (area < 0){ cp = cp.slice().reverse(); if (extra) extra = extra.slice().reverse(); }
+  return [cp, extra];
+}
+
+function build3D(){
+  init3D();
+  if (!renderer || !G) return;
+  const y0 = winY0, y1 = winY0 + winLen, W = G.P.W;
+  const tri = [];
+  let i0 = Infinity, i1 = -1, j0 = Infinity, j1 = -1;
+  for (const f of AN.facets){
+    if (f.ymax <= y0 || f.ymin >= y1) continue;
+    if (G.hypar){
+      const [cp, keys] = orient(f.poly, f.keys);
+      const uv = cp.map(p => [p[0] / W, 1 - (p[1] - y0) / winLen]);
+      for (let k = 1; k < cp.length - 1; k++) tri.push([keys[0], keys[k], keys[k + 1], uv[0], uv[k], uv[k + 1]]);
+      continue;
+    }
+    let [cp] = orient(clipPolyRect(f.poly, 0, y0, W, y1));
+    if (cp.length < 3) continue;
+    const i = f.i, j = f.j, rot = G.rot;
+    i0 = Math.min(i0, i); i1 = Math.max(i1, i); j0 = Math.min(j0, j); j1 = Math.max(j1, j);
+    const px0 = G.o[i] + G.Xv[j], py0 = G.Yv[i], w = G.colW[j], d = G.d[i], h = G.rowH[i];
+    const ab = cp.map(p => { const x = rot ? p[1] : p[0], y = rot ? p[0] : p[1]; const b = (y - py0) / h; return [(x - px0 - b * d) / w, b]; });
+    const uv = cp.map(p => [p[0] / W, 1 - (p[1] - y0) / winLen]);
+    for (let k = 1; k < cp.length - 1; k++) tri.push([i, j, ab[0], ab[k], ab[k + 1], uv[0], uv[k], uv[k + 1]]);
+  }
+  if (!tri.length){ mesh3 = null; render3D(); return; }
+  let tm = Math.PI / 2;
+  if (!G.hypar) for (let r = i0; r <= i1; r++) tm = Math.min(tm, Math.acos(Math.min(1, Math.abs(G.d[r]) / G.a[r])));
+  const uo = G.hypar ? 3 : 5;
+  const pos = new Float32Array(tri.length * 9), uvs = new Float32Array(tri.length * 6);
+  tri.forEach((t, n) => { for (let v = 0; v < 3; v++) uvs.set(t[uo + v], n * 6 + v * 2); });
+  geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  mesh3 = { tri, i0, i1: i1 + 1, j0, j1: j1 + 1, tm, pos };
+  view.dist = Math.max(W, winLen) * 1.9;
+  updateTexture();
+  updateFold();
+}
+
+function updateTexture(){
+  if (!renderer || !G) return;
+  const W = G.P.W, p = Math.min(4, 2048 / W, 2048 / winLen);
+  texCanvas.width = Math.max(4, Math.round(W * p)); texCanvas.height = Math.max(4, Math.round(winLen * p));
+  const c = texCanvas.getContext('2d');
+  c.setTransform(1, 0, 0, 1, 0, 0); c.fillStyle = '#ffffff'; c.fillRect(0, 0, texCanvas.width, texCanvas.height);
+  c.setTransform(texCanvas.width / W, 0, 0, texCanvas.height / winLen, 0, -winY0 * texCanvas.height / winLen);
+  drawScene(c, SC, winY0, winY0 + winLen);
+  tex.dispose();
+  tex = new THREE.CanvasTexture(texCanvas); tex.anisotropy = 4;
+  frontMesh.material.map = tex; frontMesh.material.needsUpdate = true;
+  render3D();
+}
+function lineOpts(){ return { lineWidth: len('lw', 0.05, 5, 0.3), mountainColor: $('mc').value, valleyColor: $('vc').value, cutColor: '#000000' }; }
+function redrawDesign(){
+  if (!G) return;
+  if (G.flat){ rebuild(); return; }
+  const fills = readFills();
+  SC = sceneFromAN(AN, G.P.W, G.P.L, k => fills[k]);
+  drawFlat(); updateTexture();
+}
+let dTimer = null;
+function laterDesign(){ clearTimeout(dTimer); dTimer = setTimeout(redrawDesign, 200); }
+
+function hyparPoint(k, q, f){
+  const H = AN.hypar, cs = [[-1, -1], [1, -1], [1, 1], [-1, 1]][q];
+  const th = f * 1.3, rr = (H.n - k) * H.sp * Math.cos(th);
+  const pleat = (k % 2) * H.sp * Math.sin(th);
+  const saddle = cs[0] * cs[1] * rr * 0.9 * f;
+  return [cs[0] * rr, cs[1] * rr, pleat + saddle];
+}
+
+function updateFold(){
+  if (!mesh3){ render3D(); return; }
+  const frac = +$('fold').value / 100;
+  const pos = mesh3.pos;
+  let mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
+  const put = (o, x, y, z) => {
+    pos[o] = x; pos[o + 1] = -y; pos[o + 2] = -z;
+    for (let m = 0; m < 3; m++){ if (pos[o + m] < mn[m]) mn[m] = pos[o + m]; if (pos[o + m] > mx[m]) mx[m] = pos[o + m]; }
+  };
+  if (G.hypar){
+    mesh3.tri.forEach((tr, n) => { for (let v = 0; v < 3; v++){ const p = hyparPoint(tr[v][0], tr[v][1], frac); put(n * 9 + v * 3, p[0], p[1], p[2]); } });
+  } else {
+    const t = frac * mesh3.tm * 0.985;
+    const F = frameAB(G, t, mesh3.i0, mesh3.i1, mesh3.j0, mesh3.j1);
+    const rot = G.rot;
+    mesh3.tri.forEach((tr, n) => {
+      const a = (tr[0] - F.i0) * 3, b = (tr[1] - F.j0) * 3;
+      for (let v = 0; v < 3; v++){
+        const [al, be] = tr[2 + v];
+        let x = F.A[a] + F.B[b] + al * F.dB[b] + be * F.dA[a];
+        let y = F.A[a + 1] + F.B[b + 1] + al * F.dB[b + 1] + be * F.dA[a + 1];
+        const z = F.A[a + 2] + F.B[b + 2] + al * F.dB[b + 2] + be * F.dA[a + 2];
+        if (rot){ const s = x; x = y; y = s; }
+        put(n * 9 + v * 3, x, y, z);
+      }
+    });
+  }
+  const c = [0, 1, 2].map(m => (mn[m] + mx[m]) / 2);
+  for (let k = 0; k < pos.length; k += 3){ pos[k] -= c[0]; pos[k + 1] -= c[1]; pos[k + 2] -= c[2]; }
+  geom.attributes.position.needsUpdate = true;
+  geom.computeVertexNormals();
+  geom.computeBoundingSphere();
+  render3D();
+}
+
+function render3D(){
+  if (!renderer) return;
+  const cv = $('three');
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * renderer.getPixelRatio())) renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  frontMesh.visible = backMesh.visible = !!mesh3;
+  const cp = Math.cos(view.pitch);
+  camera.position.set(view.dist * cp * Math.sin(view.yaw), view.dist * Math.sin(view.pitch), view.dist * cp * Math.cos(view.yaw));
+  camera.lookAt(0, 0, 0);
+  renderer.render(scene, camera);
+}
+
+let playing = false, dirSign = 1, lastT = 0;
+function tick(ts){
+  if (!playing) return;
+  const dt = lastT ? (ts - lastT) / 1000 : 0; lastT = ts;
+  const f = $('fold');
+  let v = +f.value + dirSign * dt * 25;
+  if (v >= 100){ v = 100; dirSign = -1; } if (v <= 0){ v = 0; dirSign = 1; }
+  f.value = v; updateFold();
+  requestAnimationFrame(tick);
+}
+$('play').addEventListener('click', () => {
+  playing = !playing; $('play').textContent = playing ? 'Pause' : 'Play';
+  if (playing){ lastT = 0; requestAnimationFrame(tick); }
+});
+$('fold').addEventListener('input', updateFold);
+$('pos').addEventListener('input', updateWindow);
+
+let timer = null;
+const later = () => { clearTimeout(timer); timer = setTimeout(rebuild, 250); };
+['W', 'L', 'S', 'sheet', 'pattern', 'dir', 'w', 'h', 'angle', 'rings', 'vary', 'strength', 'period', 'seed', 'art', 'panel', 'charset', 'ctext', 'carrier', 'across', 'sqmode', 'charc', 'shows'].forEach(id => {
+  $(id).addEventListener('input', () => { syncUI(); later(); });
+});
+['mc', 'vc', 'lw'].forEach(id => $(id).addEventListener('input', () => { if (G) drawFlat(); }));
+$('ink').addEventListener('input', () => {
+  $('inkV').textContent = $('ink').value;
+  INK = num('ink', 20, 300, 50) / 100;
+  for (const p of photos) if (p) p.proc = processPhoto(p.src);
+  later();
+});
+$('newSeed').addEventListener('click', () => { $('seed').value = Math.floor(Math.random() * 1e6); later(); });
+let lastUnit = $('units').value;
+$('units').addEventListener('input', () => {
+  const nu = $('units').value;
+  if (nu === lastUnit) return;
+  const f = nu === 'in' ? 1 / 25.4 : 25.4;
+  document.querySelectorAll('input.len').forEach(el => {
+    const v = parseFloat(el.value);
+    if (isFinite(v)) el.value = String(Math.round(v * f * 1000) / 1000);
+  });
+  document.querySelectorAll('.u').forEach(el => { el.textContent = nu; });
+  lastUnit = nu;
+  rebuild();
+});
+
+$('dl').addEventListener('click', async () => {
+  if (!G) return;
+  const btn = $('dl'), st = $('dlStatus');
+  btn.disabled = true; st.textContent = 'Building PDF';
+  try {
+    const layers = $('layers').value;
+    const r = await buildPDF(SC, Object.assign(lineOpts(), {
+      art: layers !== 'lines', lines: layers !== 'art',
+      frame: len('panel', 100, FRAME_MAX, FRAME_MAX), paperW: G.P.paperW,
+      progress: (n, t) => { st.textContent = 'Building page ' + n + ' of ' + t; }
+    }));
+    const url = URL.createObjectURL(r.blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'fold-' + mode() + '-' + Math.round(G.P.W) + 'x' + Math.round(G.P.L) + 'mm.pdf';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    st.textContent = 'Saved ' + r.pages + (r.pages === 1 ? ' page' : ' pages') + ', ' + (r.blob.size / 1048576).toFixed(1) + ' MB.';
+  } catch (e) {
+    st.textContent = 'The PDF could not be built: ' + e.message;
+  }
+  btn.disabled = false;
+});
+
+/* folded view as tiles: press and hold, then drag off the list to remove, or onto another tile to move it */
+function buildTiles(){
+  const box = $('tiles');
+  box.innerHTML = '';
+  const cell = 96;
+  PREVIEW.forEach(pv => {
+    const t = document.createElement('div');
+    t.className = 'tile'; t.dataset.id = pv.item.id;
+    const cv = document.createElement('canvas');
+    drawModelTile(cv, pv, cell);
+    const lab = document.createElement('span'); lab.textContent = pv.item.label;
+    t.append(cv, lab);
+    box.append(t);
+  });
+  const rm = [...EDITS.removed.entries()];
+  $('removedBox').classList.toggle('hidden', !rm.length);
+  $('removedList').innerHTML = '';
+  for (const [id, label] of rm){
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
+    b.addEventListener('click', () => { EDITS.removed.delete(id); rebuild(); });
+    $('removedList').append(b);
+  }
+}
+$('restoreAll').addEventListener('click', () => { EDITS.removed.clear(); rebuild(); });
+(() => {
+  const box = $('tiles');
+  let press = null, drag = null;
+  const groupOf = id => String(id).startsWith('full-') ? 'full' : 'small';
+  const tileAt = (x, y) => { const el = document.elementFromPoint(x, y); return el ? el.closest('.tile') : null; };
+  const overZone = y => y > window.innerHeight - $('dropzone').offsetHeight;
+  const start = () => {
+    const t = press.tile;
+    const g = document.createElement('div'); g.className = 'ghost';
+    const cv = t.querySelector('canvas'), c2 = document.createElement('canvas');
+    c2.width = cv.width; c2.height = cv.height; c2.style.width = cv.style.width; c2.style.height = cv.style.height;
+    c2.getContext('2d').drawImage(cv, 0, 0);
+    g.append(c2); document.body.append(g);
+    t.classList.add('lifted');
+    $('dropzone').classList.remove('hidden');
+    drag = { tile: t, ghost: g, target: null, x: press.x, y: press.y, scroll: 0 };
+    if (navigator.vibrate) navigator.vibrate(15);
+    move(press.x, press.y);
+    autoScroll();
+  };
+  const move = (x, y) => {
+    drag.x = x; drag.y = y;
+    drag.ghost.style.left = x + 'px'; drag.ghost.style.top = y + 'px';
+    const zone = overZone(y), r = box.getBoundingClientRect();
+    const outside = x < r.left || x > r.right || y < r.top || y > r.bottom;
+    $('dropzone').classList.toggle('hot', zone || outside);
+    let tgt = zone ? null : tileAt(x, y);
+    if (tgt === drag.tile || (tgt && groupOf(tgt.dataset.id) !== groupOf(drag.tile.dataset.id))) tgt = null;
+    if (drag.target && drag.target !== tgt) drag.target.classList.remove('target');
+    if (tgt) tgt.classList.add('target');
+    drag.target = tgt;
+  };
+  const autoScroll = () => {
+    if (!drag) return;
+    const e = 70, y = drag.y;
+    const zoneTop = window.innerHeight - $('dropzone').offsetHeight;
+    let dy = 0;
+    if (y < e) dy = -Math.ceil((e - y) / 6);
+    else if (y > zoneTop - e && y < zoneTop) dy = Math.ceil((y - (zoneTop - e)) / 6);
+    if (dy){ window.scrollBy(0, dy); move(drag.x, drag.y); }
+    requestAnimationFrame(autoScroll);
+  };
+  const finish = commit => {
+    clearTimeout(press && press.timer);
+    if (drag){
+      const t = drag.tile, id = t.dataset.id, r = box.getBoundingClientRect();
+      const outside = drag.x < r.left || drag.x > r.right || drag.y < r.top || drag.y > r.bottom, zone = overZone(drag.y);
+      drag.ghost.remove(); t.classList.remove('lifted');
+      if (drag.target) drag.target.classList.remove('target');
+      $('dropzone').classList.add('hidden'); $('dropzone').classList.remove('hot');
+      const tgt = drag.target;
+      drag = null;
+      if (commit){
+        if (zone || outside){
+          const pv = PREVIEW.find(p => p.item.id == id);
+          EDITS.removed.set(id, pv ? pv.item.label : id);
+          rebuild();
+        } else if (tgt){
+          const g = groupOf(id);
+          const ids = PREVIEW.map(p => String(p.item.id)).filter(x => groupOf(x) === g && x !== String(id));
+          ids.splice(ids.indexOf(String(tgt.dataset.id)), 0, String(id));
+          EDITS.order[g] = ids.concat((EDITS.order[g] || []).filter(x => !ids.includes(x)));
+          rebuild();
+        }
+      }
+    }
+    press = null;
+  };
+  let lastY = 0;
+  box.addEventListener('pointerdown', e => {
+    const t = e.target.closest('.tile');
+    if (!t || e.button > 0) return;
+    press = { tile: t, x: e.clientX, y: e.clientY, id: e.pointerId };
+    lastY = e.clientY;
+    press.timer = setTimeout(() => { if (press && !drag) start(); }, e.pointerType === 'mouse' ? 120 : 350);
+  });
+  window.addEventListener('pointermove', e => {
+    if (!press || e.pointerId !== press.id) return;
+    lastY = e.clientY;
+    if (!drag){
+      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10){ if (e.pointerType === 'mouse'){ clearTimeout(press.timer); start(); } else { clearTimeout(press.timer); press = null; return; } }
+      else return;
+    }
+    move(e.clientX, e.clientY);
+  });
+  window.addEventListener('touchmove', e => { if (drag) e.preventDefault(); }, { passive: false });
+  window.addEventListener('pointerup', e => { if (press && e.pointerId === press.id){ lastY = e.clientY; finish(true); } });
+  window.addEventListener('pointercancel', e => { if (press && e.pointerId === press.id) finish(!!drag); });
+  box.addEventListener('contextmenu', e => { if (press || drag) e.preventDefault(); });
+})();
+
+/* full screen preview of the whole print */
+const FV = { scale: 1, ox: 0, oy: 0, queued: false };
+function fullSize(){ const cv = $('fullCv'); return [cv.clientWidth, cv.clientHeight]; }
+function fullFit(){
+  if (!SC) return;
+  const [w, h] = fullSize();
+  FV.scale = Math.min((w - 24) / SC.W, (h - 24) / SC.L);
+  FV.ox = (w - SC.W * FV.scale) / 2; FV.oy = 12;
+  fullDraw();
+}
+function fullDraw(){
+  if (FV.queued) return;
+  FV.queued = true;
+  requestAnimationFrame(() => {
+    FV.queued = false;
+    const cv = $('fullCv'), dpr = window.devicePixelRatio || 1;
+    const [w, h] = fullSize();
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)){ cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = '#e9edf0'; ctx.fillRect(0, 0, w, h);
+    if (!SC) return;
+    const s = FV.scale;
+    const y0 = Math.max(0, -FV.oy / s), y1 = Math.min(SC.L, (h - FV.oy) / s);
+    ctx.setTransform(dpr * s, 0, 0, dpr * s, dpr * FV.ox, dpr * FV.oy);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, y0, SC.W, y1 - y0);
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, SC.W, SC.L); ctx.clip();
+    drawScene(ctx, SC, y0, y1);
+    drawTexts(ctx, SC, y0, y1);
+    drawLines(ctx, SC, y0, y1, lineOpts(), s);
+    ctx.restore();
+    const frame = len('panel', 100, FRAME_MAX, FRAME_MAX), pw = G.P.paperW;
+    ctx.strokeStyle = '#0088c2'; ctx.lineWidth = 1.5 / s; ctx.setLineDash([8 / s, 5 / s]);
+    ctx.beginPath();
+    for (let y = frame; y < SC.L - 1e-6; y += frame){ ctx.moveTo(0, y); ctx.lineTo(SC.W, y); }
+    for (let x = pw; x < SC.W - 1e-6; x += pw){ ctx.moveTo(x, 0); ctx.lineTo(x, SC.L); }
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = '#16202b'; ctx.lineWidth = 1 / s; ctx.strokeRect(0, 0, SC.W, SC.L);
+    $('zoomV').textContent = Math.round(s * 25.4) + ' px per inch';
+  });
+}
+function fullZoom(f, cx, cy){
+  const [w, h] = fullSize();
+  if (cx === undefined){ cx = w / 2; cy = h / 2; }
+  const ns = Math.max(0.02, Math.min(80, FV.scale * f));
+  FV.ox = cx - (cx - FV.ox) * ns / FV.scale; FV.oy = cy - (cy - FV.oy) * ns / FV.scale; FV.scale = ns;
+  fullDraw();
+}
+$('fullOpen').addEventListener('click', () => {
+  if (!SC) return;
+  $('full').classList.remove('hidden'); document.body.style.overflow = 'hidden';
+  requestAnimationFrame(fullFit);
+});
+const fullClose = () => { $('full').classList.add('hidden'); document.body.style.overflow = ''; };
+$('fullClose').addEventListener('click', fullClose);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('full').classList.contains('hidden')) fullClose(); });
+$('zoomIn').addEventListener('click', () => fullZoom(1.6));
+$('zoomOut').addEventListener('click', () => fullZoom(1 / 1.6));
+$('zoomFit').addEventListener('click', fullFit);
+(() => {
+  const cv = $('fullCv'), pts = new Map(); let pinch = null;
+  cv.addEventListener('pointerdown', e => { cv.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); });
+  cv.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId)) return;
+    const prev = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 1){ FV.ox += e.clientX - prev[0]; FV.oy += e.clientY - prev[1]; fullDraw(); }
+    else if (pts.size === 2){
+      const [a, b] = [...pts.values()], r = cv.getBoundingClientRect();
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if (pinch) fullZoom(d / pinch, (a[0] + b[0]) / 2 - r.left, (a[1] + b[1]) / 2 - r.top);
+      pinch = d;
+    }
+  });
+  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', e => { e.preventDefault(); const r = cv.getBoundingClientRect(); fullZoom(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+})();
+
+let rz = null;
+window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (G){ drawFlat(); render3D(); if (!$('full').classList.contains('hidden')) fullDraw(); } }, 150); });
+buildSlotUI();
+rebuild();
+</script>
+</body>
+</html>

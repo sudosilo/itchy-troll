@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QSR Receipt Sim</title>
+<style>
+:root{
+  --bg:#f4f1ea;
+  --panel:#ffffff;
+  --soft:#fbf8f2;
+  --ink:#1f1e1b;
+  --muted:#6b675e;
+  --line:#d9d3c5;
+  --accent:#c2560c;
+  --accent-ink:#ffffff;
+  --paper:#fffffb;
+  --ok:#2f7a3b;
+  --err:#b42318;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Courier New",Courier,monospace;}
+button{font-family:inherit}
+header{background:var(--panel);border-bottom:1px solid var(--line);padding:14px 16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:5}
+.kicker{font-size:10px;letter-spacing:4px;color:var(--accent)}
+.title{font-size:17px;font-weight:bold;letter-spacing:1px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{background:var(--panel);border:1px solid var(--line);color:var(--ink);padding:9px 12px;font-size:11px;letter-spacing:2px;border-radius:3px;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.status{font-size:11px;color:var(--ok);min-width:60px}
+.status.err{color:var(--err)}
+main{display:grid;grid-template-columns:1fr 320px;max-width:1100px;margin:0 auto}
+@media (max-width:760px){main{grid-template-columns:1fr}}
+.form{padding:20px 16px}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:18px}
+.tab{background:var(--panel);border:1px solid var(--line);color:var(--muted);padding:9px 12px;font-size:11px;letter-spacing:2px;text-transform:uppercase;border-radius:3px;cursor:pointer}
+.tab.active{background:var(--ink);color:#ffffff;border-color:var(--ink)}
+.section{display:none}
+.section.active{display:block}
+.sec-head{font-size:10px;letter-spacing:3px;color:var(--accent);border-bottom:1px solid var(--line);padding-bottom:6px;margin:6px 0 16px}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:11px;letter-spacing:2px;color:var(--accent);margin-bottom:4px}
+.hint{font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.4}
+input[type=text]{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:3px;color:var(--ink);font-family:inherit;font-size:16px;padding:10px}
+input[type=text]:focus{outline:2px solid var(--accent);outline-offset:-1px}
+input[type=file]{width:100%;font-family:inherit;font-size:13px;padding:8px;background:var(--panel);border:1px solid var(--line);border-radius:3px}
+.toggle{display:flex;align-items:center;gap:10px;margin-bottom:14px;cursor:pointer;user-select:none;font-size:13px;color:var(--ink)}
+.toggle input{width:20px;height:20px;accent-color:var(--accent)}
+.seg{display:flex;gap:6px}
+.seg button{background:var(--panel);border:1px solid var(--line);color:var(--muted);padding:9px 16px;font-size:12px;border-radius:3px;cursor:pointer}
+.seg button.active{background:var(--ink);color:#ffffff;border-color:var(--ink)}
+.endpoint{background:var(--soft);border:1px solid var(--line);border-radius:3px;padding:12px;font-size:11px;color:var(--muted);line-height:1.6;word-break:break-all}
+.logo-row{display:none;margin-top:8px;align-items:center;gap:10px}
+.logo-row img{max-height:40px;max-width:120px;border:1px solid var(--line);background:#ffffff}
+aside{background:var(--soft);border-left:1px solid var(--line);padding:28px 16px;display:flex;flex-direction:column;align-items:center;gap:18px}
+@media (max-width:760px){aside{border-left:none;border-top:1px solid var(--line)}}
+.aside-label{font-size:10px;letter-spacing:3px;color:var(--muted)}
+.receipt{background:var(--paper);color:#111111;font-size:11px;padding:20px 16px;box-shadow:0 6px 24px rgba(60,50,30,0.18);position:relative}
+.receipt::before,.receipt::after{content:"";position:absolute;left:0;right:0;height:8px;background:radial-gradient(circle at 5px 0,transparent 4px,var(--paper) 4.5px) 0 0/10px 8px repeat-x}
+.receipt::before{top:-8px;transform:rotate(180deg)}
+.receipt::after{bottom:-8px}
+.center{text-align:center}
+.name{font-weight:bold;font-size:13px;letter-spacing:1px;margin-bottom:2px;word-break:break-word}
+.small{font-size:10px;color:#444444;word-break:break-word}
+.tiny{font-size:9px;color:#666666;word-break:break-word}
+.logo{display:block;max-width:120px;max-height:48px;margin:0 auto 6px}
+.rule{border-top:1px solid #bbbbbb;margin:6px 0}
+.rule.dash{border-top-style:dashed}
+.row{display:flex;justify-content:space-between;gap:8px;font-size:10px;margin:2px 0}
+.row.bold{font-weight:bold;font-size:11px}
+.qr{width:72px;height:72px;margin:10px auto 4px;border:4px solid #ffffff;outline:1px solid #111111;background:repeating-conic-gradient(#111111 0 25%,#ffffff 0 50%) 0 0/12px 12px}
+.aside-note{font-size:10px;color:var(--muted);text-align:center;line-height:1.6}
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="kicker">TM-T88 THERMAL</div>
+    <div class="title">RECEIPT CONFIGURATOR</div>
+  </div>
+  <div class="actions">
+    <span id="status" class="status"></span>
+    <button class="btn" id="btnImport">IMPORT</button>
+    <button class="btn" id="btnExport">EXPORT</button>
+    <button class="btn" id="btnReset">RESET</button>
+    <button class="btn primary" id="btnSave">SAVE</button>
+    <input type="file" id="importFile" accept=".json,application/json" hidden>
+  </div>
+</header>
+
+<main>
+  <section class="form">
+    <div class="tabs">
+      <button class="tab active" data-tab="identity">identity</button>
+      <button class="tab" data-tab="receipt">receipt</button>
+      <button class="tab" data-tab="printer">printer</button>
+      <button class="tab" data-tab="options">options</button>
+    </div>
+
+    <div class="section active" id="tab-identity">
+      <div class="sec-head">RESTAURANT IDENTITY</div>
+      <div class="field"><label>RESTAURANT NAME</label><input type="text" data-key="restaurantName" placeholder="xxxx"></div>
+      <div class="field"><label>ADDRESS</label><input type="text" data-key="address" placeholder="xxxx"></div>
+      <div class="field"><label>PHONE</label><input type="text" data-key="phone" placeholder="xxxx"></div>
+      <div class="field"><label>WEBSITE</label><input type="text" data-key="website" placeholder="xxxx"></div>
+      <div class="field">
+        <label>LOGO IMAGE</label>
+        <div class="hint">PNG or JPG under 300 KB. Black and white prints best on thermal paper.</div>
+        <input type="file" id="logoFile" accept="image/*">
+        <div class="logo-row" id="logoRow">
+          <img id="logoThumb" alt="logo preview">
+          <button class="btn" id="btnLogoRemove">REMOVE</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section" id="tab-receipt">
+      <div class="sec-head">RECEIPT CONTENT</div>
+      <div class="field"><label>HEADER MESSAGE</label><div class="hint">Printed below the restaurant name.</div><input type="text" data-key="header" placeholder="xxxx"></div>
+      <div class="field"><label>FOOTER MESSAGE</label><div class="hint">Printed at the bottom of every receipt.</div><input type="text" data-key="footer" placeholder="xxxx"></div>
+    </div>
+
+    <div class="section" id="tab-printer">
+      <div class="sec-head">PRINTER CONNECTION</div>
+      <div class="field"><label>PRINTER IP ADDRESS</label><div class="hint">Shown on the self test receipt. Hold FEED while powering on.</div><input type="text" data-key="printerIp" placeholder="xxxx" inputmode="decimal"></div>
+      <div class="field"><label>PORT</label><div class="hint">Default is 80.</div><input type="text" data-key="printerPort" placeholder="xxxx" inputmode="numeric"></div>
+      <div class="field">
+        <label>PAPER WIDTH</label>
+        <div class="seg" id="paperSeg">
+          <button data-width="58mm">58mm</button>
+          <button data-width="80mm">80mm</button>
+        </div>
+      </div>
+      <div class="endpoint">ENDPOINT<br><span id="endpoint"></span><br>The print engine will POST ePOS XML here.</div>
+    </div>
+
+    <div class="section" id="tab-options">
+      <div class="sec-head">RECEIPT OPTIONS</div>
+      <label class="toggle"><input type="checkbox" data-key="showTipLines">Show tip suggestion lines</label>
+      <div class="field" id="tipField"><label>TIP PERCENTAGES</label><div class="hint">Comma separated whole numbers.</div><input type="text" data-key="tipPercents" placeholder="xxxx" inputmode="numeric"></div>
+      <label class="toggle"><input type="checkbox" data-key="showWebsite">Show website on receipt</label>
+      <label class="toggle"><input type="checkbox" data-key="showQr">Print QR code linking to website</label>
+    </div>
+  </section>
+
+  <aside>
+    <div class="aside-label">LIVE PREVIEW</div>
+    <div class="receipt" id="receipt"></div>
+    <div class="aside-note">Preview uses sample order data.<br>Real receipts will carry live POS data.</div>
+  </aside>
+</main>
+
+<script>
+var STORAGE_KEY = "qsr_receipt_sim_config";
+var DEFAULTS = {
+  restaurantName: "RESTAURANT NAME",
+  address: "000 Street Name, City ST 00000",
+  phone: "(000) 000-0000",
+  website: "www.example.com",
+  header: "Thank you for dining with us.",
+  footer: "Please come again.",
+  printerIp: "192.168.1.100",
+  printerPort: "80",
+  paperWidth: "80mm",
+  showTipLines: true,
+  tipPercents: "18,20,25",
+  showWebsite: true,
+  showQr: true,
+  logoBase64: ""
+};
+var SAMPLE_ITEMS = [["Item one", 12.99], ["Item two", 2.49]];
+var TAX_RATE = 0.08;
+var MAX_LOGO_BYTES = 300000;
+
+function clean(obj) {
+  var out = {};
+  Object.keys(DEFAULTS).forEach(function (k) {
+    var v = obj && Object.prototype.hasOwnProperty.call(obj, k) ? obj[k] : DEFAULTS[k];
+    out[k] = typeof DEFAULTS[k] === "boolean" ? Boolean(v) : String(v == null ? "" : v);
+  });
+  return out;
+}
+
+function load() {
+  try {
+    var raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return clean(JSON.parse(raw));
+  } catch (e) {}
+  return clean(DEFAULTS);
+}
+
+var cfg = load();
+
+function persist() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function flash(msg, isErr) {
+  var s = document.getElementById("status");
+  s.textContent = msg;
+  s.className = "status" + (isErr ? " err" : "");
+  clearTimeout(flash.timer);
+  flash.timer = setTimeout(function () { s.textContent = ""; }, 2500);
+}
+
+function el(tag, cls, text) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function row(label, value, bold) {
+  var r = el("div", "row" + (bold ? " bold" : ""));
+  r.appendChild(el("span", null, label));
+  r.appendChild(el("span", null, value));
+  return r;
+}
+
+function money(n) {
+  return "$" + n.toFixed(2);
+}
+
+function tipList() {
+  return String(cfg.tipPercents).split(",")
+    .map(function (p) { return parseFloat(p.trim()); })
+    .filter(function (n) { return isFinite(n) && n > 0 && n <= 100; });
+}
+
+function render() {
+  var r = document.getElementById("receipt");
+  r.innerHTML = "";
+  r.style.width = cfg.paperWidth === "58mm" ? "200px" : "260px";
+
+  var top = el("div", "center");
+  if (cfg.logoBase64) {
+    var img = el("img", "logo");
+    img.src = cfg.logoBase64;
+    img.alt = "logo";
+    top.appendChild(img);
+  }
+  top.appendChild(el("div", "name", cfg.restaurantName || "RESTAURANT NAME"));
+  if (cfg.address) top.appendChild(el("div", "small", cfg.address));
+  if (cfg.phone) top.appendChild(el("div", "small", cfg.phone));
+  if (cfg.showWebsite && cfg.website) top.appendChild(el("div", "tiny", cfg.website));
+  r.appendChild(top);
+  r.appendChild(el("div", "rule"));
+
+  if (cfg.header) r.appendChild(el("div", "center small", cfg.header));
+  r.appendChild(el("div", "rule dash"));
+
+  var sub = 0;
+  SAMPLE_ITEMS.forEach(function (item) {
+    sub += item[1];
+    r.appendChild(row(item[0], money(item[1])));
+  });
+  var tax = Math.round(sub * TAX_RATE * 100) / 100;
+  var total = sub + tax;
+  r.appendChild(row("Tax", money(tax)));
+  r.appendChild(el("div", "rule"));
+  r.appendChild(row("TOTAL", money(total), true));
+  r.appendChild(el("div", "rule"));
+
+  var tips = tipList();
+  if (cfg.showTipLines && tips.length) {
+    r.appendChild(el("div", "tiny", "Suggested tip on " + money(total) + ":"));
+    tips.forEach(function (p) {
+      r.appendChild(row(p + "% tip", money(total * p / 100)));
+    });
+  }
+
+  if (cfg.showQr) {
+    var q = el("div", "center");
+    q.appendChild(el("div", "qr"));
+    if (cfg.website) q.appendChild(el("div", "tiny", cfg.website));
+    r.appendChild(q);
+  }
+
+  if (cfg.footer) {
+    var f = el("div", "center small", cfg.footer);
+    f.style.marginTop = "6px";
+    r.appendChild(f);
+  }
+
+  document.getElementById("endpoint").textContent =
+    "http://" + cfg.printerIp + ":" + cfg.printerPort + "/cgi-bin/epos/service.cgi";
+
+  document.getElementById("tipField").style.display = cfg.showTipLines ? "block" : "none";
+
+  var logoRow = document.getElementById("logoRow");
+  if (cfg.logoBase64) {
+    document.getElementById("logoThumb").src = cfg.logoBase64;
+    logoRow.style.display = "flex";
+  } else {
+    logoRow.style.display = "none";
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll("#paperSeg button"), function (b) {
+    b.classList.toggle("active", b.getAttribute("data-width") === cfg.paperWidth);
+  });
+}
+
+function fillInputs() {
+  Array.prototype.forEach.call(document.querySelectorAll("[data-key]"), function (input) {
+    var key = input.getAttribute("data-key");
+    if (input.type === "checkbox") input.checked = cfg[key];
+    else input.value = cfg[key];
+  });
+}
+
+function update(key, value) {
+  cfg[key] = value;
+  if (!persist()) flash("STORAGE FULL", true);
+  render();
+}
+
+Array.prototype.forEach.call(document.querySelectorAll("[data-key]"), function (input) {
+  var key = input.getAttribute("data-key");
+  var evt = input.type === "checkbox" ? "change" : "input";
+  input.addEventListener(evt, function () {
+    update(key, input.type === "checkbox" ? input.checked : input.value);
+  });
+});
+
+Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (tab) {
+  tab.addEventListener("click", function () {
+    var name = tab.getAttribute("data-tab");
+    Array.prototype.forEach.call(document.querySelectorAll(".tab"), function (t) {
+      t.classList.toggle("active", t === tab);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".section"), function (s) {
+      s.classList.toggle("active", s.id === "tab-" + name);
+    });
+  });
+});
+
+Array.prototype.forEach.call(document.querySelectorAll("#paperSeg button"), function (b) {
+  b.addEventListener("click", function () {
+    update("paperWidth", b.getAttribute("data-width"));
+  });
+});
+
+document.getElementById("logoFile").addEventListener("change", function (e) {
+  var file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  if (file.size > MAX_LOGO_BYTES) {
+    flash("LOGO TOO BIG", true);
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function (ev) {
+    var prev = cfg.logoBase64;
+    cfg.logoBase64 = ev.target.result;
+    if (!persist()) {
+      cfg.logoBase64 = prev;
+      flash("STORAGE FULL", true);
+    }
+    render();
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById("btnLogoRemove").addEventListener("click", function () {
+  update("logoBase64", "");
+});
+
+document.getElementById("btnSave").addEventListener("click", function () {
+  if (persist()) flash("SAVED", false);
+  else flash("SAVE FAILED", true);
+});
+
+document.getElementById("btnReset").addEventListener("click", function () {
+  if (!confirm("Reset all settings to defaults?")) return;
+  cfg = clean(DEFAULTS);
+  persist();
+  fillInputs();
+  render();
+  flash("RESET", false);
+});
+
+document.getElementById("btnExport").addEventListener("click", function () {
+  var blob = new Blob([JSON.stringify(cfg, null, 2)], { type: "application/json" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "receipt-config.json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  flash("EXPORTED", false);
+});
+
+document.getElementById("btnImport").addEventListener("click", function () {
+  document.getElementById("importFile").click();
+});
+
+document.getElementById("importFile").addEventListener("change", function (e) {
+  var file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function (ev) {
+    try {
+      var parsed = JSON.parse(ev.target.result);
+      if (!parsed || typeof parsed !== "object") throw new Error("bad");
+      cfg = clean(parsed);
+      persist();
+      fillInputs();
+      render();
+      flash("IMPORTED", false);
+    } catch (err) {
+      flash("BAD FILE", true);
+    }
+  };
+  reader.readAsText(file);
+});
+
+fillInputs();
+render();
+</script>
+</body>
+</html>

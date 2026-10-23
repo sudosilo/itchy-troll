@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f6f1e7">
+<title>KVS Roulette</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f6f1e7;
+    --card: #ffffff;
+    --ink: #111111;
+    --mid: #5c5c5c;
+    --soft: #e7dfd0;
+    --red: #d62828;
+    --red-dark: #a51d1d;
+    --edge: 3px solid var(--ink);
+    --pop: 4px 4px 0 var(--ink);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { background: var(--paper); color: var(--ink); }
+  body {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    min-height: 100vh;
+    padding: 14px 16px 40px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .wrap { width: 100%; max-width: 640px; }
+
+  header { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; border-bottom: var(--edge); padding-bottom: 8px; }
+  h1 { font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 2.6rem; line-height: .9; letter-spacing: 1px; color: var(--red); }
+  h1 span { color: var(--ink); }
+  .libstat { font-size: .62rem; color: var(--mid); text-align: right; line-height: 1.5; text-transform: uppercase; letter-spacing: 1px; }
+  .libstat b { color: var(--ink); }
+
+  .tabs { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 12px; border: var(--edge); box-shadow: var(--pop); background: var(--card); }
+  .tab { font: inherit; font-size: .7rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; background: none; border: 0; border-right: var(--edge); padding: 11px 4px; color: var(--ink); cursor: pointer; }
+  .tab:last-child { border-right: 0; }
+  .tab.on { background: var(--ink); color: var(--paper); }
+
+  .screen { position: relative; margin-top: 14px; background: #000; aspect-ratio: 4 / 3; border: var(--edge); box-shadow: var(--pop); overflow: hidden; }
+  .screen video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+  .screen video.off { visibility: hidden; pointer-events: none; }
+  .veil { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: #000; color: #fff; text-align: center; padding: 20px; cursor: pointer; }
+  .veil.clear { background: rgba(0,0,0,.55); }
+  .veil.hide { display: none; }
+  .veil .big { font-family: 'Bebas Neue', sans-serif; font-size: 2.2rem; letter-spacing: 2px; color: var(--red); line-height: 1; }
+  .veil .msg { font-size: .72rem; color: #d8d8d8; line-height: 1.6; max-width: 300px; }
+  .playbtn { width: 74px; height: 74px; border-radius: 50%; background: var(--red); border: 3px solid #fff; display: grid; place-items: center; }
+  .playbtn::after { content: ''; margin-left: 6px; border-left: 24px solid #fff; border-top: 15px solid transparent; border-bottom: 15px solid transparent; }
+  .spin { width: 34px; height: 34px; border: 4px solid #444; border-top-color: var(--red); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .stage { width: 100%; }
+  .stage:fullscreen, .stage:-webkit-full-screen { background: var(--paper); padding: 12px; display: flex; flex-direction: column; justify-content: center; }
+  .stage:fullscreen .screen, .stage:-webkit-full-screen .screen { aspect-ratio: auto; flex: 1; margin-top: 0; }
+  .scrub { position: relative; margin-top: 12px; height: 26px; touch-action: none; cursor: pointer; }
+  .scrub .track { position: absolute; left: 0; right: 0; top: 7px; height: 12px; border: var(--edge); background: var(--card); overflow: hidden; }
+  .scrub .track i { display: block; height: 100%; width: 0; background: var(--red); }
+  .scrub .knob { position: absolute; top: 1px; left: 0; width: 24px; height: 24px; margin-left: -12px; border-radius: 50%; background: var(--card); border: var(--edge); box-shadow: 2px 2px 0 var(--ink); }
+  .scrub.locked { opacity: .45; }
+  .scrub .tip { position: absolute; bottom: 30px; left: 0; transform: translateX(-50%); background: var(--ink); color: var(--paper); font-size: .65rem; font-weight: 700; padding: 3px 6px; display: none; white-space: nowrap; }
+  .scrub.drag .tip { display: block; }
+  .jumps { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .jumps .btn { padding: 10px 4px; font-size: .66rem; }
+
+  .now { margin-top: 12px; background: var(--card); border: var(--edge); box-shadow: var(--pop); padding: 12px 14px; }
+  .nowtop { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .tag { font-size: .6rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; background: var(--ink); color: var(--paper); padding: 3px 7px; }
+  .tag.red { background: var(--red); color: #fff; }
+  .clock { font-size: .65rem; color: var(--mid); }
+  .title { margin-top: 8px; font-size: .95rem; font-weight: 700; line-height: 1.3; min-height: 1.3em; }
+  .sub { margin-top: 4px; font-size: .62rem; color: var(--mid); word-break: break-all; }
+  .note { margin-top: 6px; font-size: .65rem; color: var(--red); min-height: 1em; }
+
+  .controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .btn { font: inherit; font-size: .72rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 13px 6px; border: var(--edge); background: var(--card); color: var(--ink); box-shadow: var(--pop); cursor: pointer; }
+  .btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
+  .btn.red { background: var(--red); color: #fff; }
+  .btn:disabled { opacity: .4; box-shadow: none; }
+
+  .upnext { margin-top: 10px; font-size: .62rem; color: var(--mid); text-transform: uppercase; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .upnext b { color: var(--ink); }
+
+  .panel { margin-top: 16px; background: var(--card); border: var(--edge); box-shadow: var(--pop); padding: 12px 14px; }
+  .panel h2 { font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 1.4rem; letter-spacing: 1px; }
+  .panel p { font-size: .68rem; color: var(--mid); line-height: 1.6; margin-top: 4px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .chip { font: inherit; font-size: .7rem; font-weight: 700; padding: 8px 12px; border: var(--edge); background: var(--paper); color: var(--ink); cursor: pointer; }
+  .chip.on { background: var(--ink); color: var(--paper); }
+
+  .eplist { margin-top: 12px; border-top: var(--edge); max-height: 52vh; overflow-y: auto; }
+  .ep { display: grid; grid-template-columns: 52px 1fr; gap: 8px; width: 100%; text-align: left; font: inherit; background: none; border: 0; border-bottom: 2px solid var(--soft); padding: 11px 2px; color: var(--ink); cursor: pointer; }
+  .ep .n { font-size: .68rem; font-weight: 700; color: var(--red); }
+  .ep .t { font-size: .74rem; line-height: 1.35; }
+  .ep.playing { background: #fff3c4; }
+  .ep.dead { opacity: .35; text-decoration: line-through; }
+  .rowbtns { display: flex; gap: 10px; margin-top: 12px; }
+  .rowbtns .btn { flex: 1; }
+
+  footer { margin-top: 18px; display: flex; justify-content: space-between; align-items: center; font-size: .6rem; color: var(--mid); text-transform: uppercase; letter-spacing: 1px; }
+  .link { font: inherit; background: none; border: 0; border-bottom: 2px solid var(--ink); color: var(--ink); padding: 2px 0; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>KVS<br><span>ROULETTE</span></h1>
+    <div class="libstat" id="libstat">Finding episodes</div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab on" data-tab="clips">Shuffle Clips</button>
+    <button class="tab" data-tab="random">Random Eps</button>
+    <button class="tab" data-tab="season">Seasons</button>
+  </nav>
+
+  <div class="stage" id="stage">
+  <div class="screen" id="screen">
+    <video id="vA" playsinline preload="auto"></video>
+    <video id="vB" playsinline preload="auto" class="off"></video>
+    <div class="veil" id="veil">
+      <div class="big">KVS ROULETTE</div>
+      <div class="playbtn" id="bigplay"></div>
+      <div class="msg" id="veilmsg">Tap to start</div>
+    </div>
+  </div>
+
+  <div class="scrub locked" id="scrub">
+    <div class="track"><i id="bar"></i></div>
+    <div class="knob" id="knob"></div>
+    <div class="tip" id="tip">0:00</div>
+  </div>
+  <div class="jumps">
+    <button class="btn" id="bStart" disabled>Start Over</button>
+    <button class="btn" id="bBack" disabled>Back 10s</button>
+    <button class="btn" id="bFwd" disabled>Fwd 30s</button>
+  </div>
+  </div>
+
+  <section class="now">
+    <div class="nowtop">
+      <span class="tag" id="tag">Ready</span>
+      <span class="clock" id="clock"></span>
+    </div>
+    <div class="title" id="title">Pick a mode and hit play</div>
+    <div class="sub" id="sub"></div>
+    <div class="note" id="note"></div>
+  </section>
+
+  <div class="controls">
+    <button class="btn" id="bPause" disabled>Pause</button>
+    <button class="btn red" id="bNext" disabled>Next</button>
+    <button class="btn" id="bMore" disabled>Full Ep</button>
+  </div>
+  <div class="upnext" id="upnext"></div>
+
+  <section class="panel" id="pClips">
+    <h2>Shuffle Clips</h2>
+    <p>Random episode, random spot, then on to the next one. Tap Full Ep to watch that episode from the start, or drag the bar to jump anywhere in it.</p>
+    <div class="chips" id="lenChips">
+      <button class="chip" data-len="15">15 sec</button>
+      <button class="chip on" data-len="30">30 sec</button>
+      <button class="chip" data-len="60">60 sec</button>
+      <button class="chip" data-len="120">2 min</button>
+    </div>
+  </section>
+
+  <section class="panel" id="pRandom" hidden>
+    <h2>Random Episodes</h2>
+    <p>Whole episodes from start to finish, picked at random from every season. No repeats until most of the library has played.</p>
+  </section>
+
+  <section class="panel" id="pSeason" hidden>
+    <h2>Seasons</h2>
+    <p>Tap any episode to watch it. It keeps going in order when it ends.</p>
+    <div class="chips" id="seasonChips"></div>
+    <div class="rowbtns">
+      <button class="btn red" id="bPlaySeason">Play From Start</button>
+      <button class="btn" id="bShuffleSeason">Shuffle Season</button>
+    </div>
+    <div class="eplist" id="eplist"></div>
+  </section>
+
+  <footer>
+    <span id="count">Clips played 0</span>
+    <button class="link" id="bRescan">Rescan library</button>
+  </footer>
+</div>
+
+<script>
+(function () {
+'use strict';
+
+/* storage that never throws */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+
+/* crypto randomness */
+function rnd(n) { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % n; }
+function rndf() { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] / 4294967296; }
+
+const $ = s => document.querySelector(s);
+const fmt = s => { if (!isFinite(s) || s < 0) s = 0; s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = String(s % 60).padStart(2, '0'); return h ? h + ':' + String(m).padStart(2, '0') + ':' + x : m + ':' + x; };
+
+/* ============ LIBRARY ============ */
+
+const KNOWN_IDS = ['kenny-vs-spenny-season-one', 'KvSallHere', 'kenny-vs-spenny-s2', 'kenny-vs-spenny-outtakes'];
+
+const SEED = [
+  ['kenny-vs-spenny-season-one', 'S01E01 Who Is The Best Fashion Designer.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E02 Who Can Stay Awake The Longest.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E03 Who Is The Better Chef.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E04 Who Can Stand Up The Longest.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E05 Who Can Sit On A Cow The Longest.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E06 Who Is The Sanest.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E07 Who Can Earn The Most Money In Three Days.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E08 Who Does She Like Better.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E09 Who Can Stay Blindfolded The Longest.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E10 Who Can Win A Beauty Pageant.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E11 Who Can Win A Series Of Mini-Competitions.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E12 Who Can Lose The Most Weight.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E13 Who Can Stay Handcuffed The Longest.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E14 Who Can Put On The Best Concert.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E15 Who Is The Best Parent.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E16 Who Do Kids Like Most.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E17 Who Is The Strongest.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E18 Who Makes The Most Convincing Woman.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E19 Who Is The Best Actor.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E20 Who Is The Best Male Stripper.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E21 Who Is The Best Figure Skater.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E22 Who Can Survive In The Woods The Longest.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E23 Who Will Use Their Arms First.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E24 Kenny Takes Spenny To Court For Money Owed.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E25 Who Can Live In A Van The Longest.ia.mp4'],
+  ['kenny-vs-spenny-season-one', 'S01E26 Boxing.ia.mp4'],
+  ['KvSallHere', 'First to get Boner Loses.ia.mp4'],
+  ['KvSallHere', 'Who Can Go Further With Others Mom.ia.mp4'],
+  ['KvSallHere', 'Who Can Make More Semen.ia.mp4'],
+  ['KvSallHere', 'Who Can Squeeze More Breast.ia.mp4'],
+  ['KvSallHere', 'Who Do Black People Like More 1+2.ia.mp4'],
+  ['KvSallHere', 'Who can Piss off more People (Extended Cut).ia.mp4'],
+  ['KvSallHere', 'Who can Wear A Gorilla Suit Longer (Extended Cut).ia.mp4'],
+  ['KvSallHere', 'Who can stay naked.ia.mp4'],
+  ['KvSallHere', 'Who has the biggest balls.ia.mp4'],
+  ["KvSallHere", "Who's the better rapper.ia.mp4"]
+];
+
+const WORDNUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+const lib = new Map();
+
+function baseName(name) { return name.split('/').pop(); }
+function stripExt(n) { return n.replace(/(\.ia)?\.(mp4|m4v|webm|ogv)$/i, ''); }
+
+function parseSE(name, id) {
+  const n = baseName(name);
+  let m = n.match(/S(\d{1,2})\s*E(\d{1,3})/i);
+  if (m) return { season: +m[1], ep: +m[2] };
+  m = n.match(/(\d{1,2})x(\d{2})/i);
+  if (m) return { season: +m[1], ep: +m[2] };
+  m = n.match(/KVSS(\d)D(\d)(\d{1,2})?/i);
+  if (m) return { season: +m[1], ep: m[3] ? (+m[2]) * 100 + (+m[3]) : (+m[2]) * 100, disc: true };
+  const lid = id.toLowerCase();
+  m = lid.match(/season[-_ ]?(one|two|three|four|five|six|\d)/);
+  if (m) return { season: WORDNUM[m[1]] || +m[1], ep: 0 };
+  m = lid.match(/[-_]s(\d)(?![0-9])/);
+  if (m) return { season: +m[1], ep: 0 };
+  return { season: 0, ep: 0 };
+}
+
+function cleanTitle(name, se) {
+  let t = stripExt(baseName(decodeURIComponent(name)));
+  const d = t.match(/^KVSS(\d)D(\d)(\d{1,2})?$/i);
+  if (d) return 'Disc ' + d[2] + (d[3] ? ', Title ' + d[3] : '');
+  t = t.replace(/_512kb/i, '').replace(/[_]+/g, ' ');
+  t = t.replace(/^\s*(kenny\s*(vs\.?|versus)\s*spenny)\s*[-:.]?\s*/i, '');
+  t = t.replace(/S\d{1,2}\s*E\d{1,3}\s*[-:.]?\s*/i, '').replace(/^\d{1,2}x\d{2}\s*[-:.]?\s*/i, '');
+  return t.trim() || 'Untitled';
+}
+
+function normKey(t) { return t.toLowerCase().replace(/\(.*?\)/g, '').replace(/[^a-z0-9]/g, ''); }
+
+function priority(name) {
+  const l = name.toLowerCase();
+  if (l.includes('512kb')) return 3;
+  if (l.endsWith('.ia.mp4')) return 0;
+  if (l.endsWith('.mp4') || l.endsWith('.m4v')) return 1;
+  if (l.endsWith('.webm')) return 2;
+  return 4;
+}
+
+function fileUrl(id, name) {
+  return 'https://archive.org/download/' + encodeURIComponent(id) + '/' + name.split('/').map(encodeURIComponent).join('/');
+}
+
+function addFile(id, name, size, len) {
+  const l = name.toLowerCase();
+  if (!/\.(mp4|m4v|webm|ogv)$/.test(l)) return false;
+  if (/thumb|sample|preview|trailer|\.gif/.test(l)) return false;
+  if (len && len < 420) return false;
+  if (!len && size && size < 40e6) return false;
+  const se = parseSE(name, id);
+  const title = cleanTitle(name, se);
+  const key = se.ep && !se.disc ? 's' + se.season + 'e' + se.ep : normKey(title) + (se.disc ? '-' + se.season + '-' + se.ep : '');
+  const url = fileUrl(id, name);
+  let ep = lib.get(key);
+  if (!ep) {
+    ep = { key, title, season: se.season, ep: se.ep, sources: [], dead: false, from: id };
+    lib.set(key, ep);
+  } else if (!ep.season && se.season) { ep.season = se.season; ep.ep = se.ep; }
+  if (!ep.sources.some(s => s.url === url)) {
+    ep.sources.push({ url, pri: priority(name) });
+    ep.sources.sort((a, b) => a.pri - b.pri);
+    if (ep.dead) ep.dead = false;
+  }
+  return true;
+}
+
+function parseLen(v) {
+  if (v == null) return 0;
+  const s = String(v);
+  if (s.includes(':')) return s.split(':').reduce((a, p) => a * 60 + (parseFloat(p) || 0), 0);
+  return parseFloat(s) || 0;
+}
+
+function allEps() { return [...lib.values()]; }
+function aliveEps() { return allEps().filter(e => !e.dead); }
+function ordered() {
+  return allEps().sort((a, b) => {
+    const sa = a.season || 99, sb = b.season || 99;
+    if (sa !== sb) return sa - sb;
+    if (a.ep !== b.ep) return a.ep - b.ep;
+    return a.title.localeCompare(b.title);
+  });
+}
+function seasonsPresent() { const s = new Set(allEps().map(e => e.season || 0)); return [...s].sort((a, b) => (a || 99) - (b || 99)); }
+function seasonLabel(s) { return s ? 'Season ' + s : 'More'; }
+function epLabel(e) {
+  if (!e.season) return 'More';
+  if (e.ep >= 100) return 'S' + e.season + ' Disc';
+  return 'S' + e.season + (e.ep ? ' E' + String(e.ep).padStart(2, '0') : '');
+}
+
+let scanning = false;
+async function discover(force) {
+  if (scanning) return;
+  scanning = true;
+  const cache = store.get('kvs_lib_v2', null);
+  if (!force && cache && Date.now() - cache.t < 12 * 3600e3 && cache.files && cache.files.length) {
+    cache.files.forEach(f => addFile(f[0], f[1], f[2], f[3]));
+    scanning = false; refreshLib(); return;
+  }
+  setStat('Scanning archive');
+  const ids = new Set(KNOWN_IDS);
+  try {
+    const q = '(title:(kenny AND spenny) OR subject:(kenny AND spenny) OR title:(kennyvsspenny)) AND mediatype:(movies)';
+    const r = await fetch('https://archive.org/advancedsearch.php?q=' + encodeURIComponent(q) + '&fl[]=identifier&rows=400&output=json');
+    const j = await r.json();
+    (j.response && j.response.docs || []).forEach(d => d.identifier && ids.add(d.identifier));
+  } catch (e) {}
+  const list = [...ids];
+  const found = [];
+  let i = 0;
+  async function worker() {
+    while (i < list.length) {
+      const id = list[i++];
+      try {
+        const r = await fetch('https://archive.org/metadata/' + encodeURIComponent(id));
+        const m = await r.json();
+        (m.files || []).forEach(f => {
+          const rec = [id, f.name, Number(f.size) || 0, parseLen(f.length)];
+          if (addFile(rec[0], rec[1], rec[2], rec[3])) found.push(rec);
+        });
+        refreshLib();
+      } catch (e) {}
+    }
+  }
+  await Promise.all(Array.from({ length: 5 }, worker));
+  if (found.length) store.set('kvs_lib_v2', { t: Date.now(), files: found });
+  scanning = false;
+  refreshLib();
+}
+
+/* ============ PLAYER ============ */
+
+const slots = [
+  { v: $('#vA'), ep: null, gen: 0, ready: false, start: 0, src: 0 },
+  { v: $('#vB'), ep: null, gen: 0, ready: false, start: 0, src: 0 }
+];
+let A = 0;
+const act = () => slots[A];
+const stb = () => slots[1 - A];
+
+let tab = 'clips';
+let mode = 'clips';
+let clipLen = store.get('kvs_len', 30);
+let current = null;
+let started = false;
+let clipsPlayed = 0;
+let seasonOrderShuffle = false;
+let viewSeason = 1;
+let history = store.get('kvs_hist', []);
+let advancing = false;
+
+function markPlayed(ep) {
+  history.push(ep.key);
+  if (history.length > 300) history = history.slice(-300);
+  store.set('kvs_hist', history);
+}
+
+function pickRandom(restrictSeason) {
+  let alive = aliveEps();
+  if (restrictSeason != null) alive = alive.filter(e => (e.season || 0) === restrictSeason);
+  if (!alive.length) return null;
+  const ring = Math.min(60, Math.floor(alive.length * 0.7));
+  const recent = new Set(history.slice(-ring));
+  const skip = new Set([current, stb().ep].filter(Boolean));
+  let pool = alive.filter(e => !recent.has(e.key) && !skip.has(e));
+  if (!pool.length) pool = alive.filter(e => !skip.has(e));
+  if (!pool.length) pool = alive;
+  return pool[rnd(pool.length)];
+}
+
+function nextEp() {
+  if (mode === 'season') {
+    if (seasonOrderShuffle) return pickRandom(current ? (current.season || 0) : viewSeason);
+    const list = ordered();
+    const i = current ? list.indexOf(current) : -1;
+    for (let k = 1; k <= list.length; k++) {
+      const e = list[(i + k + list.length) % list.length];
+      if (!e.dead && e !== current) return e;
+    }
+    return null;
+  }
+  return pickRandom(null);
+}
+
+function pickStart(d) {
+  if (!isFinite(d) || d < clipLen + 30) return 0;
+  const lo = Math.max(8, d * 0.02);
+  const hi = d - clipLen - 8;
+  return hi > lo ? lo + rndf() * (hi - lo) : 0;
+}
+
+function tryUrl(slot, url, gen) {
+  return new Promise(res => {
+    const v = slot.v;
+    let done = false;
+    const fin = ok => {
+      if (done) return; done = true;
+      clearTimeout(t);
+      v.removeEventListener('canplay', okH);
+      v.removeEventListener('error', errH);
+      res(ok && gen === slot.gen);
+    };
+    const okH = () => fin(true);
+    const errH = () => fin(false);
+    v.addEventListener('canplay', okH);
+    v.addEventListener('error', errH);
+    const t = setTimeout(() => fin(false), 20000);
+    v.src = url;
+    v.load();
+  });
+}
+
+function seekTo(v, t) {
+  return new Promise(res => {
+    let done = false;
+    const f = () => { if (done) return; done = true; clearTimeout(to); v.removeEventListener('seeked', f); res(); };
+    v.addEventListener('seeked', f);
+    const to = setTimeout(f, 12000);
+    v.currentTime = t;
+  });
+}
+
+async function load(slot, ep, clip, fromSrc, at) {
+  const gen = ++slot.gen;
+  slot.ep = ep; slot.ready = false; slot.start = 0;
+  for (let i = fromSrc || 0; i < ep.sources.length; i++) {
+    if (gen !== slot.gen) return false;
+    const ok = await tryUrl(slot, ep.sources[i].url, gen);
+    if (gen !== slot.gen) return false;
+    if (!ok) continue;
+    slot.src = i;
+    if (at) { slot.start = at; await seekTo(slot.v, at); }
+    else if (clip) { slot.start = pickStart(slot.v.duration); if (slot.start > 0) await seekTo(slot.v, slot.start); }
+    if (gen !== slot.gen) return false;
+    slot.ready = true;
+    return true;
+  }
+  if (gen === slot.gen) { ep.dead = true; refreshLib(); }
+  return false;
+}
+
+function cancel(slot) {
+  slot.gen++; slot.ready = false; slot.ep = null;
+  slot.v.pause();
+}
+
+function showVeil(kind, msg) {
+  const veil = $('#veil');
+  veil.classList.remove('hide', 'clear');
+  veil.innerHTML = '';
+  if (kind === 'load') {
+    veil.classList.add('clear');
+    veil.innerHTML = '<div class="spin"></div><div class="msg"></div>';
+  } else if (kind === 'tap') {
+    veil.classList.add('clear');
+    veil.innerHTML = '<div class="playbtn"></div><div class="msg"></div>';
+  } else {
+    veil.innerHTML = '<div class="big">KVS ROULETTE</div><div class="playbtn"></div><div class="msg"></div>';
+  }
+  veil.dataset.kind = kind;
+  veil.querySelector('.msg').textContent = msg || '';
+}
+function hideVeil() { $('#veil').classList.add('hide'); }
+
+function note(t) { $('#note').textContent = t || ''; }
+
+async function startEp(ep, opts) {
+  opts = opts || {};
+  if (!ep) { note('Nothing playable right now. Tap Rescan library.'); return; }
+  started = true;
+  const s = act();
+  stopClip();
+  cancel(stb());
+  slots.forEach(x => x.v.pause());
+  setNow(ep);
+  showVeil('load', 'Loading ' + ep.title);
+  note('');
+  const ok = await load(s, ep, mode === 'clips', opts.src, opts.at);
+  if (s.ep !== ep) return;
+  if (!ok) {
+    note('That one would not load, moving on');
+    return startEp(nextEp());
+  }
+  begin();
+}
+
+function begin() {
+  const s = act();
+  current = s.ep;
+  markPlayed(current);
+  slots.forEach((x, i) => { x.v.classList.toggle('off', i !== A); x.v.controls = false; if (i !== A) x.v.pause(); });
+  setNow(current);
+  renderList();
+  s.v.play().then(onStarted).catch(() => showVeil('tap', 'Tap to keep playing'));
+}
+
+function onStarted() {
+  hideVeil();
+  advancing = false;
+  setButtons(true);
+  if (mode === 'clips') startClip();
+  preload();
+}
+
+function preload() {
+  const n = nextEp();
+  const s = stb();
+  if (!n) { $('#upnext').innerHTML = ''; return; }
+  $('#upnext').innerHTML = 'Up next <b></b>';
+  $('#upnext b').textContent = epLabel(n) + '  ' + n.title;
+  load(s, n, mode === 'clips').then(ok => { if (!ok && s.ep === n && started) preload(); });
+}
+
+function advance() {
+  if (!started) return;
+  stopClip();
+  const s = stb();
+  if (s.ep && s.ready) { act().v.pause(); A = 1 - A; begin(); return; }
+  if (s.ep && !s.ep.dead) {
+    act().v.pause();
+    showVeil('load', 'Buffering ' + s.ep.title);
+    const gen = s.gen;
+    const iv = setInterval(() => {
+      if (s.gen !== gen) { clearInterval(iv); advance(); return; }
+      if (s.ready) { clearInterval(iv); A = 1 - A; begin(); }
+    }, 150);
+    return;
+  }
+  startEp(nextEp());
+}
+
+/* clip timing follows real playback so buffering never eats the clip */
+let clipTick = null;
+function startClip() {
+  stopClip();
+  clipTick = setInterval(() => {
+    const s = act();
+    const played = s.v.currentTime - s.start;
+    if (!dragging) paintScrub(s.v.currentTime, s.v.duration);
+    $('#clock').textContent = fmt(Math.max(0, clipLen - played)) + ' left';
+    if (played >= clipLen) {
+      clipsPlayed++;
+      $('#count').textContent = 'Clips played ' + clipsPlayed;
+      advance();
+    }
+  }, 200);
+}
+function stopClip() { if (clipTick) { clearInterval(clipTick); clipTick = null; } }
+
+/* full episode progress, end, errors, stalls */
+slots.forEach((slot, i) => {
+  const v = slot.v;
+  v.addEventListener('timeupdate', () => {
+    if (i !== A || mode === 'clips') return;
+    const d = v.duration;
+    if (isFinite(d) && d > 0) {
+      if (!dragging) paintScrub(v.currentTime, d);
+      $('#clock').textContent = fmt(v.currentTime) + ' / ' + fmt(d);
+    }
+  });
+  v.addEventListener('ended', () => { if (i === A && mode !== 'clips') advance(); });
+  v.addEventListener('play', () => { if (i === A) $('#bPause').textContent = 'Pause'; });
+  v.addEventListener('pause', () => { if (i === A) $('#bPause').textContent = 'Play'; });
+  let stallTimer = null;
+  v.addEventListener('waiting', () => {
+    if (i !== A || !slot.ready) return;
+    clearTimeout(stallTimer);
+    stallTimer = setTimeout(() => { if (i === A && slot.ready && !v.paused) recover(slot); }, 25000);
+  });
+  v.addEventListener('playing', () => clearTimeout(stallTimer));
+  v.addEventListener('error', () => { if (i === A && slot.ready) recover(slot); });
+});
+
+/* a source died mid play: try the next copy at the same spot, otherwise move on */
+async function recover(slot) {
+  if (advancing) return;
+  advancing = true;
+  const ep = slot.ep;
+  const at = slot.v.currentTime || slot.start || 0;
+  if (ep && slot.src + 1 < ep.sources.length) {
+    note('Switching to a backup copy');
+    await startEp(ep, { src: slot.src + 1, at });
+  } else {
+    note('Source dropped, moving on');
+    advance();
+  }
+  advancing = false;
+}
+
+/* ============ UI ============ */
+
+function setStat(t) { $('#libstat').innerHTML = t; }
+
+function refreshLib() {
+  const alive = aliveEps().length;
+  const seasons = seasonsPresent().filter(s => s).length;
+  setStat('<b>' + alive + '</b> episodes<br>' + seasons + ' seasons' + (scanning ? '<br>scanning' : ''));
+  renderSeasonChips();
+  renderList();
+}
+
+function setNow(ep) {
+  $('#tag').textContent = epLabel(ep);
+  $('#tag').className = 'tag' + (mode === 'clips' ? ' red' : '');
+  $('#title').textContent = ep.title;
+  $('#sub').textContent = (mode === 'clips' ? 'Clip mode' : mode === 'random' ? 'Random episodes' : seasonOrderShuffle ? 'Season shuffle' : 'Season in order') + '  ·  ' + ep.from;
+  $('#clock').textContent = '';
+  paintScrub(0, 0);
+  $('#bMore').textContent = mode === 'clips' ? 'Full Ep' : 'Screen';
+}
+
+function setButtons(on) {
+  ['#bPause', '#bNext', '#bMore', '#bStart', '#bBack', '#bFwd'].forEach(s => { $(s).disabled = !on; });
+  $('#scrub').classList.toggle('locked', !on);
+}
+
+/* ============ SCRUBBER ============ */
+let dragging = false;
+function paintScrub(t, d) {
+  const f = isFinite(d) && d > 0 ? Math.min(1, Math.max(0, t / d)) : 0;
+  $('#bar').style.width = (f * 100) + '%';
+  $('#knob').style.left = (f * 100) + '%';
+}
+function scrubFrac(e) {
+  const r = $('#scrub').getBoundingClientRect();
+  return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+}
+function goFull(keepSpot) {
+  if (mode === 'clips') {
+    mode = 'random';
+    stopClip();
+    cancel(stb());
+    setNow(current);
+    setTab('random');
+    preload();
+  }
+  if (!keepSpot) seekActive(0);
+}
+function seekActive(t) {
+  const v = act().v;
+  const d = v.duration;
+  if (!isFinite(d) || d <= 0) return;
+  t = Math.min(Math.max(0, t), d - 1);
+  v.currentTime = t;
+  paintScrub(t, d);
+  if (v.paused) v.play().catch(() => {});
+}
+(function () {
+  const sc = $('#scrub');
+  const tip = $('#tip');
+  const show = e => {
+    const f = scrubFrac(e);
+    const d = act().v.duration;
+    paintScrub(f * d, d);
+    tip.style.left = (f * 100) + '%';
+    tip.textContent = fmt(f * d) + ' / ' + fmt(d);
+    return f;
+  };
+  sc.addEventListener('pointerdown', e => {
+    if (sc.classList.contains('locked') || !started) return;
+    dragging = true;
+    sc.classList.add('drag');
+    try { sc.setPointerCapture(e.pointerId); } catch (x) {}
+    show(e);
+  });
+  sc.addEventListener('pointermove', e => { if (dragging) show(e); });
+  const end = e => {
+    if (!dragging) return;
+    dragging = false;
+    sc.classList.remove('drag');
+    const f = scrubFrac(e);
+    if (mode === 'clips') goFull(true);
+    seekActive(f * act().v.duration);
+  };
+  sc.addEventListener('pointerup', end);
+  sc.addEventListener('pointercancel', () => { dragging = false; sc.classList.remove('drag'); });
+})();
+
+$('#bStart').onclick = () => goFull(false);
+$('#bBack').onclick = () => { if (mode === 'clips') goFull(true); seekActive(act().v.currentTime - 10); };
+$('#bFwd').onclick = () => { if (mode === 'clips') goFull(true); seekActive(act().v.currentTime + 30); };
+
+function renderSeasonChips() {
+  const box = $('#seasonChips');
+  const list = seasonsPresent();
+  if (!list.includes(viewSeason) && list.length) viewSeason = list[0];
+  box.innerHTML = '';
+  list.forEach(s => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (s === viewSeason ? ' on' : '');
+    b.textContent = s ? 'S' + s : 'More';
+    b.onclick = () => { viewSeason = s; renderSeasonChips(); renderList(); };
+    box.appendChild(b);
+  });
+}
+
+function renderList() {
+  const box = $('#eplist');
+  if (tab !== 'season') return;
+  const eps = ordered().filter(e => (e.season || 0) === viewSeason);
+  box.innerHTML = '';
+  eps.forEach(e => {
+    const b = document.createElement('button');
+    b.className = 'ep' + (e === current ? ' playing' : '') + (e.dead ? ' dead' : '');
+    const n = document.createElement('span'); n.className = 'n';
+    n.textContent = e.ep && e.ep < 100 ? 'E' + String(e.ep).padStart(2, '0') : e.ep >= 100 ? 'DISC' : '';
+    const t = document.createElement('span'); t.className = 't'; t.textContent = e.title;
+    b.append(n, t);
+    b.onclick = () => { e.dead = false; mode = 'season'; seasonOrderShuffle = false; startEp(e); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+    box.appendChild(b);
+  });
+}
+
+function setTab(t) {
+  tab = t;
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  $('#pClips').hidden = t !== 'clips';
+  $('#pRandom').hidden = t !== 'random';
+  $('#pSeason').hidden = t !== 'season';
+  renderList();
+}
+
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
+  const t = b.dataset.tab;
+  setTab(t);
+  if (t === 'clips') { mode = 'clips'; if (started) startEp(pickRandom(null)); }
+  else if (t === 'random') { mode = 'random'; if (started) startEp(pickRandom(null)); }
+});
+
+document.querySelectorAll('#lenChips .chip').forEach(b => {
+  b.classList.toggle('on', +b.dataset.len === clipLen);
+  b.onclick = () => {
+    clipLen = +b.dataset.len; store.set('kvs_len', clipLen);
+    document.querySelectorAll('#lenChips .chip').forEach(x => x.classList.toggle('on', x === b));
+  };
+});
+
+$('#veil').onclick = () => {
+  const kind = $('#veil').dataset.kind || 'start';
+  if (kind === 'load') return;
+  if (kind === 'tap') { act().v.play().then(onStarted).catch(() => {}); return; }
+  if (tab === 'season') { mode = 'season'; seasonOrderShuffle = false; startEp(ordered().find(e => (e.season || 0) === viewSeason && !e.dead)); }
+  else { mode = tab; startEp(pickRandom(null)); }
+};
+
+$('#bPause').onclick = () => { const v = act().v; if (v.paused) v.play().catch(() => {}); else v.pause(); };
+$('#bNext').onclick = () => { if (mode === 'clips') { clipsPlayed++; $('#count').textContent = 'Clips played ' + clipsPlayed; } advance(); };
+$('#bMore').onclick = () => {
+  if (mode === 'clips') {
+    goFull(false);
+  } else {
+    const el = $('#stage');
+    const fs = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (fs) fs.call(el);
+  }
+};
+
+$('#bPlaySeason').onclick = () => { mode = 'season'; seasonOrderShuffle = false; startEp(ordered().find(e => (e.season || 0) === viewSeason && !e.dead)); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+$('#bShuffleSeason').onclick = () => { mode = 'season'; seasonOrderShuffle = true; startEp(pickRandom(viewSeason)); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+$('#bRescan').onclick = () => { allEps().forEach(e => { e.dead = false; }); discover(true); };
+
+/* boot */
+SEED.forEach(s => addFile(s[0], s[1], 0, 0));
+showVeil('start', 'Tap to start');
+refreshLib();
+discover(false);
+})();
+</script>
+</body>
+</html>

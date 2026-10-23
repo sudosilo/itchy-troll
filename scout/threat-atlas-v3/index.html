@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>THREAT ATLAS</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#060e1f; --surface:#0d1730; --border:#2a3a5c;
+  --espionage:#22e5ff; --ransomware:#ffaa00; --infrastructure:#ff3d6b;
+  --supply:#d966ff; --hacktivism:#44ff77; --unknown:#6a7a8e;
+  --text:#d8eaff; --dim:#6a80a0; --accent:#22e5ff;
+  --conf:#ffe844; --defense:#ff8855; --gov:#55ff99;
+  --sat:#cc88ff; --statecol:#33bbff; --base:#ff4444;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;display:flex;flex-direction:column;}
+
+header{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;gap:6px;}
+.logo{font-family:'Orbitron',monospace;font-weight:900;font-size:13px;letter-spacing:4px;color:var(--accent);text-shadow:0 0 16px var(--accent),0 0 30px rgba(34,229,255,0.3);white-space:nowrap;}
+.logo span{color:#fff;}
+.stat-pills{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;}
+.pill{font-size:8px;padding:2px 6px;border-radius:3px;border:1px solid;letter-spacing:1px;white-space:nowrap;}
+
+.tabs{display:flex;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;}
+.tab{flex:1;padding:8px 0;text-align:center;font-size:9px;letter-spacing:1px;color:var(--dim);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;text-transform:uppercase;}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);text-shadow:0 0 8px var(--accent);}
+
+.view{display:none;flex:1;overflow:hidden;flex-direction:column;}
+.view.active{display:flex;}
+
+/* GLOBE */
+#globe-view{position:relative;}
+#globe-container{flex:1;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
+#globe-container svg{cursor:grab;touch-action:none;}
+#globe-container svg:active{cursor:grabbing;}
+
+/* LAYER TOGGLES */
+.layer-bar{position:absolute;top:8px;left:8px;display:flex;flex-direction:column;gap:4px;z-index:50;}
+.layer-lbl{font-size:7px;color:var(--dim);letter-spacing:2px;margin-bottom:1px;}
+.layer-btn{font-size:8px;padding:4px 8px;border-radius:3px;border:1px solid;cursor:pointer;letter-spacing:1px;background:rgba(6,14,31,0.88);font-family:'Share Tech Mono',monospace;transition:all .15s;white-space:nowrap;opacity:0.42;}
+.layer-btn.on{opacity:1;box-shadow:0 0 8px currentColor;}
+
+/* LEGEND */
+.legend{position:absolute;bottom:10px;left:8px;background:rgba(6,14,31,0.93);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:8px;letter-spacing:1px;backdrop-filter:blur(4px);}
+.legend-title{color:var(--dim);margin-bottom:6px;font-size:7px;letter-spacing:2px;}
+.legend-item{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
+.legend-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.legend-label{color:var(--text);font-size:7px;}
+
+/* YEAR BAR */
+.year-bar{position:absolute;bottom:10px;right:8px;background:rgba(6,14,31,0.93);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:8px;letter-spacing:1px;backdrop-filter:blur(4px);min-width:130px;}
+.year-label{color:var(--dim);font-size:7px;letter-spacing:2px;margin-bottom:4px;}
+.year-value{font-family:'Orbitron',monospace;font-size:16px;font-weight:700;color:var(--accent);text-shadow:0 0 12px var(--accent);margin-bottom:4px;}
+input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer;}
+.year-note{color:var(--dim);font-size:7px;margin-top:3px;}
+
+/* TOOLTIP */
+#tooltip{position:absolute;background:rgba(6,14,31,0.97);border:1px solid var(--border);border-radius:6px;padding:9px 12px;font-size:9px;pointer-events:none;opacity:0;transition:opacity .15s;z-index:100;max-width:200px;backdrop-filter:blur(8px);}
+#tooltip.show{opacity:1;}
+.tt-country{font-family:'Orbitron',monospace;font-size:11px;color:#fff;margin-bottom:5px;font-weight:700;}
+.tt-row{display:flex;justify-content:space-between;gap:8px;margin-bottom:2px;}
+.tt-key{color:var(--dim);font-size:8px;}
+.tt-val{color:var(--text);text-align:right;font-size:8px;}
+.tt-cats{display:flex;flex-wrap:wrap;gap:3px;margin-top:5px;}
+.tt-cat{font-size:7px;padding:2px 4px;border-radius:2px;border:1px solid;letter-spacing:1px;}
+
+/* DETAIL PANEL */
+#detail-panel{position:absolute;top:0;right:-100%;width:min(290px,92vw);height:100%;background:var(--surface);border-left:1px solid var(--border);transition:right .3s ease;z-index:200;overflow-y:auto;padding:14px 12px;}
+#detail-panel.open{right:0;}
+#panel-backdrop{position:absolute;top:0;left:0;right:0;bottom:0;z-index:199;display:none;}
+#panel-backdrop.show{display:block;}
+.panel-close{position:absolute;top:10px;right:10px;background:none;border:1px solid var(--border);color:var(--dim);cursor:pointer;font-family:'Share Tech Mono',monospace;font-size:11px;padding:3px 8px;border-radius:3px;}
+.panel-close:hover{color:var(--text);border-color:var(--text);}
+.panel-country{font-family:'Orbitron',monospace;font-weight:900;font-size:13px;color:#fff;margin-bottom:3px;padding-right:36px;line-height:1.3;}
+.panel-count{color:var(--dim);font-size:9px;letter-spacing:2px;margin-bottom:12px;}
+.incident-card{background:rgba(0,0,0,0.35);border:1px solid var(--border);border-left:3px solid;border-radius:4px;padding:8px 10px;margin-bottom:8px;}
+.inc-name{font-family:'Orbitron',monospace;font-size:9px;font-weight:700;color:#fff;margin-bottom:3px;}
+.inc-actor{color:var(--accent);font-size:8px;letter-spacing:1px;margin-bottom:5px;}
+.inc-meta{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:5px;}
+.inc-tag{font-size:7px;padding:2px 4px;border-radius:2px;border:1px solid var(--border);color:var(--dim);letter-spacing:1px;}
+.inc-desc{font-size:8px;color:#99b0cc;line-height:1.5;}
+.inc-date{font-size:7px;color:var(--dim);margin-top:4px;}
+.panel-section{font-size:8px;letter-spacing:2px;color:var(--dim);margin:12px 0 6px;border-bottom:1px solid var(--border);padding-bottom:4px;}
+.marker-card{background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:4px;padding:8px 10px;margin-bottom:6px;}
+.mc-name{font-size:9px;color:#fff;font-weight:bold;margin-bottom:2px;}
+.mc-sub{font-size:8px;color:#99b0cc;line-height:1.4;}
+
+/* LIST VIEW */
+#list-view{flex-direction:column;}
+.search-bar{padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;}
+.search-bar input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;padding:7px 11px;outline:none;letter-spacing:1px;}
+.search-bar input:focus{border-color:var(--accent);box-shadow:0 0 8px rgba(34,229,255,0.25);}
+.search-bar input::placeholder{color:var(--dim);}
+.filter-row{display:flex;gap:5px;padding:7px 12px;background:var(--surface);border-bottom:1px solid var(--border);overflow-x:auto;flex-shrink:0;}
+.filter-btn{font-size:7px;padding:3px 7px;border-radius:3px;border:1px solid;cursor:pointer;white-space:nowrap;letter-spacing:1px;background:none;font-family:'Share Tech Mono',monospace;transition:all .15s;opacity:0.45;}
+.filter-btn.active{opacity:1;}
+#list-container{flex:1;overflow-y:auto;padding:8px 12px;}
+.list-item{background:rgba(0,0,0,0.3);border:1px solid var(--border);border-left:3px solid;border-radius:4px;padding:8px 10px;margin-bottom:7px;cursor:pointer;transition:background .15s;}
+.list-item:hover{background:rgba(34,229,255,0.06);}
+.li-header{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:3px;}
+.li-name{font-family:'Orbitron',monospace;font-size:9px;font-weight:700;color:#fff;}
+.li-year{font-size:8px;color:var(--dim);white-space:nowrap;}
+.li-actor{font-size:8px;color:var(--accent);margin-bottom:3px;}
+.li-country{font-size:7px;color:var(--dim);}
+.li-tags{display:flex;gap:3px;flex-wrap:wrap;margin-top:4px;}
+
+/* US STATES VIEW */
+#states-view{flex-direction:column;}
+#states-map-container{flex:1;overflow:hidden;position:relative;background:var(--bg);}
+#states-svg{width:100%;height:100%;}
+.state-tooltip{position:absolute;background:rgba(6,14,31,0.97);border:1px solid var(--border);border-radius:5px;padding:8px 11px;font-size:9px;pointer-events:none;opacity:0;transition:opacity .15s;z-index:100;max-width:220px;}
+.state-tooltip.show{opacity:1;}
+
+/* SATELLITES */
+@keyframes orbitSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+.sat-orbit{fill:none;stroke-dasharray:3,4;}
+.sat-dot{cursor:pointer;}
+
+/* PULSE */
+@keyframes pulse{0%{r:4;opacity:.9;}70%{r:11;opacity:0;}100%{r:4;opacity:0;}}
+.pulse-ring{animation:pulse 2.2s infinite;}
+
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+body::after{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.02) 2px,rgba(0,0,0,0.02) 4px);pointer-events:none;z-index:9999;}
+.globe-hint{position:absolute;top:8px;left:50%;transform:translateX(-50%);font-size:7px;color:var(--dim);letter-spacing:2px;pointer-events:none;white-space:nowrap;}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">THREAT<span>ATLAS</span></div>
+  <div class="stat-pills" id="stat-pills"></div>
+</header>
+<div class="tabs">
+  <div class="tab active" data-view="globe-view">◉ GLOBE</div>
+  <div class="tab" data-view="list-view">≡ INTEL</div>
+  <div class="tab" data-view="states-view">⊞ US STATES</div>
+</div>
+
+<!-- ═══ GLOBE VIEW ═══ -->
+<div id="globe-view" class="view active">
+  <div id="globe-container">
+    <div class="globe-hint">DRAG TO ROTATE · TAP FOR INTEL</div>
+    <svg id="globe"></svg>
+
+    <div class="layer-bar">
+      <div class="layer-lbl">LAYERS</div>
+      <button class="layer-btn on" id="layer-threats" style="color:var(--espionage);border-color:var(--espionage)">⬤ THREATS</button>
+      <button class="layer-btn" id="layer-conferences" style="color:var(--conf);border-color:var(--conf)">★ CONFERENCES</button>
+      <button class="layer-btn" id="layer-defense" style="color:var(--defense);border-color:var(--defense)">⬡ DEFENSE/CYBER</button>
+      <button class="layer-btn" id="layer-usgov" style="color:var(--gov);border-color:var(--gov)">⊕ US GOV CYBER</button>
+      <button class="layer-btn" id="layer-satellites" style="color:var(--sat);border-color:var(--sat)">◎ SATELLITES</button>
+      <button class="layer-btn" id="layer-bases" style="color:var(--base);border-color:var(--base)">✦ US MIL BASES</button>
+    </div>
+
+    <div class="legend" id="legend-box">
+      <div class="legend-title">THREAT CLASS</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--espionage)"></div><div class="legend-label">ESPIONAGE</div></div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--ransomware)"></div><div class="legend-label">RANSOMWARE/FIN</div></div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--infrastructure)"></div><div class="legend-label">INFRASTRUCTURE</div></div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--supply)"></div><div class="legend-label">SUPPLY CHAIN</div></div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--hacktivism)"></div><div class="legend-label">HACKTIVISM</div></div>
+      <div id="legend-extras"></div>
+    </div>
+
+    <div class="year-bar">
+      <div class="year-label">FILTER YEAR</div>
+      <div class="year-value" id="year-display">ALL</div>
+      <input type="range" id="year-slider" min="2000" max="2025" value="2025" step="1">
+      <div class="year-note" id="year-note">showing all incidents</div>
+    </div>
+
+    <div id="tooltip">
+      <div class="tt-country" id="tt-country"></div>
+      <div class="tt-row"><span class="tt-key">INCIDENTS</span><span class="tt-val" id="tt-count"></span></div>
+      <div class="tt-row"><span class="tt-key">THREAT LEVEL</span><span class="tt-val" id="tt-level"></span></div>
+      <div class="tt-cats" id="tt-cats"></div>
+    </div>
+  </div>
+
+  <div id="panel-backdrop"></div>
+  <div id="detail-panel">
+    <button class="panel-close" id="panel-close">✕</button>
+    <div class="panel-country" id="panel-country"></div>
+    <div class="panel-count" id="panel-count"></div>
+    <div id="panel-incidents"></div>
+  </div>
+</div>
+
+<!-- ═══ LIST VIEW ═══ -->
+<div id="list-view" class="view">
+  <div class="search-bar">
+    <input type="text" id="search-input" placeholder="SEARCH ACTOR, MALWARE, COUNTRY...">
+  </div>
+  <div class="filter-row" id="filter-row"></div>
+  <div id="list-container"></div>
+</div>
+
+<!-- ═══ US STATES VIEW ═══ -->
+<div id="states-view" class="view">
+  <div id="states-map-container">
+    <svg id="states-svg"></svg>
+    <div class="state-tooltip" id="state-tooltip">
+      <div class="tt-country" id="st-name"></div>
+      <div id="st-content"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// ██████  DATA
+// ═══════════════════════════════════════════════════════════════════
+
+const THREATS = [
+  {id:"apt28-dnc",country:"Russia",code:"RU",actor:"APT28 / Fancy Bear",name:"DNC Breach",date:"2016-03",category:"espionage",malware:["X-Agent","X-Tunnel"],sophistication:5,confidence:"HIGH",desc:"Spearphishing targeting Democratic National Committee. Exfiltrated opposition research and internal comms."},
+  {id:"sandworm-grid",country:"Russia",code:"RU",actor:"Sandworm / GRU",name:"Ukraine Power Grid",date:"2015-12",category:"infrastructure",malware:["BlackEnergy","KillDisk"],sophistication:5,confidence:"HIGH",desc:"First confirmed cyberattack to cause a power outage — 230,000 Ukrainians without electricity."},
+  {id:"notpetya",country:"Russia",code:"RU",actor:"Sandworm / GRU",name:"NotPetya",date:"2017-06",category:"infrastructure",malware:["NotPetya"],sophistication:5,confidence:"HIGH",desc:"Destructive wiper as ransomware. $10B+ global damage. Deployed via Ukrainian accounting software MEDoc."},
+  {id:"apt29-solar",country:"Russia",code:"RU",actor:"APT29 / Cozy Bear",name:"SolarWinds SUNBURST",date:"2020-10",category:"supply-chain",malware:["SUNBURST","TEARDROP"],sophistication:5,confidence:"HIGH",desc:"Supply chain compromise of SolarWinds Orion. 18,000+ orgs, US federal agencies hit."},
+  {id:"darkside-colonial",country:"Russia",code:"RU",actor:"DarkSide",name:"Colonial Pipeline",date:"2021-05",category:"ransomware",malware:["DarkSide"],sophistication:3,confidence:"HIGH",desc:"$4.4M paid. Shut down 45% of US East Coast fuel supply for 6 days."},
+  {id:"revil-kaseya",country:"Russia",code:"RU",actor:"REvil",name:"Kaseya VSA",date:"2021-07",category:"supply-chain",malware:["REvil"],sophistication:4,confidence:"HIGH",desc:"Zero-day in Kaseya VSA pushed ransomware to 1,500+ businesses via MSP supply chain."},
+  {id:"cl0p-moveit",country:"Russia",code:"RU",actor:"Cl0p",name:"MOVEit Mass Exploit",date:"2023-05",category:"ransomware",malware:["LEMURLOOT"],sophistication:4,confidence:"HIGH",desc:"Zero-day in MOVEit. 2,600+ orgs affected. Pure data theft, no encryption."},
+  {id:"killnet",country:"Russia",code:"RU",actor:"Killnet",name:"NATO/Hospital DDoS",date:"2023-01",category:"hacktivism",malware:["DDoS"],sophistication:2,confidence:"HIGH",desc:"Pro-Kremlin hacktivist DDoS against NATO members, hospitals, and airports."},
+  {id:"lazarus-swift",country:"North Korea",code:"KP",actor:"Lazarus Group",name:"Bangladesh Bank SWIFT",date:"2016-02",category:"ransomware",malware:["EVTDIAG"],sophistication:5,confidence:"HIGH",desc:"$81M stolen via fraudulent SWIFT transfers."},
+  {id:"lazarus-wannacry",country:"North Korea",code:"KP",actor:"Lazarus Group",name:"WannaCry",date:"2017-05",category:"ransomware",malware:["WannaCry","EternalBlue"],sophistication:4,confidence:"HIGH",desc:"Ransomworm using NSA-leaked EternalBlue. 200,000+ systems in 150 countries. Crippled NHS."},
+  {id:"lazarus-ronin",country:"North Korea",code:"KP",actor:"Lazarus Group",name:"Ronin Bridge Hack",date:"2022-03",category:"ransomware",malware:["Trojanized SDK"],sophistication:5,confidence:"HIGH",desc:"$625M stolen from Axie Infinity. Largest crypto hack in history."},
+  {id:"apt1-china",country:"China",code:"CN",actor:"APT1 / Comment Crew",name:"Operation Comment Crew",date:"2006-01",category:"espionage",malware:["TROJAN.ECLTYS"],sophistication:4,confidence:"HIGH",desc:"Multi-year campaign vs 141 orgs across 20 industries. Terabytes of IP stolen."},
+  {id:"apt10-cloud",country:"China",code:"CN",actor:"APT10 / Stone Panda",name:"Cloud Hopper",date:"2016-01",category:"espionage",malware:["PlugX","RedLeaves"],sophistication:5,confidence:"HIGH",desc:"Targeted managed service providers to pivot into global client networks."},
+  {id:"volt-typhoon",country:"China",code:"CN",actor:"Volt Typhoon",name:"US Infrastructure Pre-positioning",date:"2023-05",category:"infrastructure",malware:["Living-off-the-land"],sophistication:5,confidence:"HIGH",desc:"CISA/FBI: stealthy pre-positioning in US comms, energy, water for potential disruption."},
+  {id:"hafnium",country:"China",code:"CN",actor:"HAFNIUM",name:"Exchange 0-Days",date:"2021-03",category:"espionage",malware:["China Chopper"],sophistication:5,confidence:"HIGH",desc:"Four Exchange zero-days exploited before patch. 250,000+ servers hit."},
+  {id:"opm",country:"China",code:"CN",actor:"Deep Panda",name:"OPM Data Breach",date:"2014-03",category:"espionage",malware:["HiKit","PlugX"],sophistication:5,confidence:"HIGH",desc:"21.5M US security clearance files stolen. SF-86 forms and fingerprints exfiltrated."},
+  {id:"iran-shamoon",country:"Iran",code:"IR",actor:"APT33",name:"Shamoon – Saudi Aramco",date:"2012-08",category:"infrastructure",malware:["Shamoon"],sophistication:4,confidence:"HIGH",desc:"Wiped 30,000+ workstations at Saudi Aramco."},
+  {id:"iran-triton",country:"Iran",code:"IR",actor:"TEMP.Veles",name:"TRITON ICS Attack",date:"2017-08",category:"infrastructure",malware:["TRITON"],sophistication:5,confidence:"MED",desc:"Targeted safety instrumented systems at petrochemical plant to disable safety controls."},
+  {id:"iran-ababil",country:"Iran",code:"IR",actor:"OilRig/APT34",name:"Operation Ababil",date:"2012-09",category:"infrastructure",malware:["Brobot"],sophistication:3,confidence:"MED",desc:"DDoS against US banks. Retaliation for Stuxnet."},
+  {id:"us-stuxnet",country:"United States",code:"US",actor:"NSA / Unit 8200",name:"Stuxnet",date:"2010-06",category:"infrastructure",malware:["Stuxnet"],sophistication:5,confidence:"HIGH",desc:"First cyber weapon targeting physical infrastructure. Destroyed ~1,000 Iranian centrifuges."},
+  {id:"us-equation",country:"United States",code:"US",actor:"NSA Equation Group",name:"Equation Group Implants",date:"2001-01",category:"espionage",malware:["EquationDrug","GrayFish"],sophistication:5,confidence:"HIGH",desc:"Most sophisticated actor ever documented. Capable of reprogramming HDD firmware."},
+  {id:"scattered-spider",country:"United States",code:"US",actor:"Scattered Spider",name:"MGM & Caesars",date:"2023-09",category:"ransomware",malware:["ALPHV/BlackCat"],sophistication:4,confidence:"HIGH",desc:"Social engineering helpdesks to bypass MFA. MGM $100M+ disruption."},
+  {id:"israel-unit8200",country:"Israel",code:"IL",actor:"Unit 8200",name:"Stuxnet Co-developer",date:"2010-06",category:"infrastructure",malware:["Stuxnet"],sophistication:5,confidence:"HIGH",desc:"Joint US-Israeli operation co-developing Stuxnet."},
+  {id:"ukraine-itarmy",country:"Ukraine",code:"UA",actor:"IT Army of Ukraine",name:"Coordinated DDoS Campaign",date:"2022-02",category:"hacktivism",malware:["DDoS tools"],sophistication:2,confidence:"HIGH",desc:"300,000-member volunteer group DDoS against Russian banks and infrastructure."},
+  {id:"india-sidewinder",country:"India",code:"IN",actor:"SideWinder",name:"SideWinder Campaigns",date:"2019-01",category:"espionage",malware:["Backdoor.Sidewind"],sophistication:3,confidence:"MED",desc:"Targeting Pakistan, Nepal, Afghanistan military and government."},
+  {id:"pakistan-apt36",country:"Pakistan",code:"PK",actor:"APT36 / Transparent Tribe",name:"Crimson RAT",date:"2020-01",category:"espionage",malware:["CrimsonRAT"],sophistication:3,confidence:"MED",desc:"Targeting Indian defense and government. Active since 2013."},
+  {id:"lapsus-uk",country:"United Kingdom",code:"GB",actor:"LAPSUS$",name:"Microsoft/Nvidia/Samsung",date:"2022-03",category:"supply-chain",malware:["Social engineering"],sophistication:3,confidence:"HIGH",desc:"UK teen gang breached Microsoft, Nvidia, Samsung via SIM-swapping."},
+  // 2023-2025
+  {id:"xz-utils",country:"Unknown",code:"XX",actor:"JiaT75 (state-suspected)",name:"XZ Utils Backdoor",date:"2023-10",category:"supply-chain",malware:["XZ/liblzma backdoor"],platforms:["Linux","systemd"],sophistication:5,confidence:"MED",desc:"Multi-year social engineering of XZ Utils open source project. Backdoor in liblzma gave SSH root access. Caught by a Microsoft engineer one release before mass deployment."},
+  {id:"midnight-blizzard-msft",country:"Russia",code:"RU",actor:"Midnight Blizzard / APT29",name:"Microsoft Corporate Email Breach",date:"2024-01",category:"espionage",malware:["Password spray","OAuth abuse"],platforms:["Microsoft 365","Azure AD"],sophistication:5,confidence:"HIGH",desc:"SVR accessed senior Microsoft executive email for months. Exfiltrated emails about the threat actor itself. Also hit HPE simultaneously."},
+  {id:"salt-typhoon-telecom",country:"China",code:"CN",actor:"Salt Typhoon",name:"US Telecom Wiretap Infrastructure",date:"2024-09",category:"espionage",malware:["Living-off-the-land"],platforms:["Cisco IOS","AT&T","Verizon","T-Mobile"],sophistication:5,confidence:"HIGH",desc:"Breached US carrier wiretap infrastructure used for lawful intercepts. Potentially accessed CALEA surveillance systems. Called worst telecom hack in US history by senators."},
+  {id:"change-healthcare",country:"Russia",code:"RU",actor:"ALPHV/BlackCat",name:"Change Healthcare Ransomware",date:"2024-02",category:"ransomware",malware:["ALPHV/BlackCat"],platforms:["Windows","Healthcare IT"],sophistication:3,confidence:"HIGH",desc:"Largest healthcare data breach in US history. 190M+ records. Disrupted pharmacy and insurance claims processing nationwide for weeks. $22M ransom paid, then exit-scammed."},
+  {id:"volt-typhoon-critical",country:"China",code:"CN",actor:"Volt Typhoon",name:"Critical Infrastructure Persistence Confirmed",date:"2024-02",category:"infrastructure",malware:["Living-off-the-land","web shells"],platforms:["Cisco","Fortinet","SOHO routers"],sophistication:5,confidence:"HIGH",desc:"CISA/FBI confirmed Volt Typhoon maintained access to some US critical infrastructure for 5+ years. Pre-positioned for potential disruption during Taiwan conflict scenario."},
+  {id:"ivanti-mass-exploit",country:"China",code:"CN",actor:"UNC5325 / UTA0178",name:"Ivanti VPN Zero-Days",date:"2024-01",category:"espionage",malware:["ZIPLINE","THINSPOOL","FRAMESTING"],platforms:["Ivanti Connect Secure"],sophistication:4,confidence:"HIGH",desc:"Two chained zero-days in Ivanti VPN hit 2,000+ orgs including CISA itself before patches existed. Espionage focus on defense and government networks."},
+  {id:"snowflake-campaign",country:"Unknown",code:"XX",actor:"UNC5537 / ShinyHunters",name:"Snowflake Customer Breach Campaign",date:"2024-04",category:"ransomware",malware:["Infostealer credentials"],platforms:["Snowflake","Cloud"],sophistication:3,confidence:"HIGH",desc:"Credential-stuffing using infostealer logs hit 165 Snowflake customer tenants. Victims included Ticketmaster (560M records), Santander, AT&T, Advance Auto Parts."},
+  {id:"crowdstrike-falcon-outage",country:"United States",code:"US",actor:"CrowdStrike (accidental)",name:"Falcon Sensor Global Outage",date:"2024-07",category:"infrastructure",malware:["Faulty channel file 291"],platforms:["Windows","Azure"],sophistication:1,confidence:"HIGH",desc:"Faulty content update to CrowdStrike Falcon caused 8.5M Windows machines to BSOD globally. Grounded airlines, halted hospitals, disrupted banks. $5.4B in insured losses. Not malicious — but revealed supply chain fragility of endpoint security."},
+  {id:"treasury-hack-silk-typhoon",country:"China",code:"CN",actor:"Silk Typhoon",name:"US Treasury BeyondTrust Breach",date:"2024-12",category:"espionage",malware:["BeyondTrust API key abuse"],platforms:["BeyondTrust","Windows"],sophistication:4,confidence:"HIGH",desc:"Chinese APT accessed US Treasury workstations via compromised BeyondTrust remote support tool. Reached Office of Foreign Assets Control — the office that administers China sanctions."},
+  {id:"telecom-salt-typhoon-expanded",country:"China",code:"CN",actor:"Salt Typhoon",name:"Global Telecom Campaign (20+ countries)",date:"2025-01",category:"espionage",malware:["GhostSpider","SnappyBee"],platforms:["Cisco IOS XE","Juniper"],sophistication:5,confidence:"HIGH",desc:"Salt Typhoon expanded beyond US to hit telecoms in 20+ countries. New malware strains GhostSpider and SnappyBee discovered. Targets include Southeast Asian government networks."},
+];
+
+// Massively expanded conferences
+const CONFERENCES = [
+  // USA
+  {name:"DEF CON",location:"Las Vegas, NV",lat:36.1699,lon:-115.1398,freq:"Aug, Annual",region:"USA",desc:"World's largest hacker convention. Est. 1993. 30,000+ attendees."},
+  {name:"Black Hat USA",location:"Las Vegas, NV",lat:36.1750,lon:-115.1350,freq:"Aug, Annual",region:"USA",desc:"Premier technical security briefings and trainings."},
+  {name:"RSA Conference",location:"San Francisco, CA",lat:37.7749,lon:-122.4194,freq:"May, Annual",region:"USA",desc:"Largest cybersecurity industry conference. 40,000+ attendees."},
+  {name:"BSides Las Vegas",location:"Las Vegas, NV",lat:36.1680,lon:-115.1420,freq:"Aug, Annual",region:"USA",desc:"Community-driven security event running alongside DEF CON."},
+  {name:"BSides San Francisco",location:"San Francisco, CA",lat:37.7800,lon:-122.4100,freq:"Annual",region:"USA",desc:"Community security event in the Bay Area tech corridor."},
+  {name:"BSides Seattle",location:"Seattle, WA",lat:47.6062,lon:-122.3321,freq:"Annual",region:"USA",desc:"Pacific Northwest security community event."},
+  {name:"BSides Austin",location:"Austin, TX",lat:30.2672,lon:-97.7431,freq:"Annual",region:"USA",desc:"Texas security community conference."},
+  {name:"BSides DC",location:"Washington DC",lat:38.9072,lon:-77.0369,freq:"Annual",region:"USA",desc:"DC-area community security event near federal cyber community."},
+  {name:"ShmooCon",location:"Washington DC",lat:38.8951,lon:-77.0440,freq:"Jan, Annual",region:"USA",desc:"Hacker winter con. Intentionally small, ticket lottery by design."},
+  {name:"DerbyCon",location:"Louisville, KY",lat:38.2527,lon:-85.7585,freq:"Retired 2019",region:"USA",desc:"Beloved midwest security con. Ran 2011-2019, retired by founders."},
+  {name:"SANS summits",location:"Washington DC",lat:38.8960,lon:-77.0280,freq:"Multiple/year",region:"USA",desc:"SANS Institute technical summits across US and globally."},
+  {name:"Blue Team Con",location:"Chicago, IL",lat:41.8781,lon:-87.6298,freq:"Annual",region:"USA",desc:"Defensive security focused conference. Blue team practitioners."},
+  {name:"Wild West Hackin' Fest",location:"Deadwood, SD",lat:44.3767,lon:-103.7296,freq:"Oct, Annual",region:"USA",desc:"Offensive and defensive security. BHIS-affiliated."},
+  {name:"GRIMMcon",location:"Remote/Rolling",lat:39.5,lon:-98.35,freq:"Annual",region:"USA",desc:"ICS/embedded security research conference."},
+  {name:"S4 ICS/SCADA",location:"Miami, FL",lat:25.7617,lon:-80.1918,freq:"Annual (Jan)",region:"USA",desc:"Premier ICS/SCADA and critical infrastructure security conference."},
+  {name:"AvengerCon (Army Cyber)",location:"Fort Eisenhower, GA",lat:33.4195,lon:-82.1363,freq:"Annual",region:"USA",desc:"US Army Cyber Command internal security research conference."},
+  // EUROPE
+  {name:"CCC (Chaos Communication Congress)",location:"Hamburg, Germany",lat:53.5753,lon:10.0153,freq:"Dec, Annual",region:"Europe",desc:"Europe's oldest and largest hacker congress. Est. 1984. CCC community."},
+  {name:"Black Hat Europe",location:"London, UK",lat:51.5074,lon:-0.1278,freq:"Dec, Annual",region:"Europe",desc:"European edition of Black Hat technical briefings."},
+  {name:"BSides London",location:"London, UK",lat:51.5100,lon:-0.1200,freq:"Annual",region:"Europe",desc:"UK community-run security event."},
+  {name:"44CON",location:"London, UK",lat:51.5080,lon:-0.1240,freq:"Sep, Annual",region:"Europe",desc:"Professional UK security conference with hands-on focus."},
+  {name:"TROOPERS",location:"Heidelberg, Germany",lat:49.3988,lon:8.6724,freq:"Mar, Annual",region:"Europe",desc:"Expert-level IT security. Enterprise and ICS/network focus."},
+  {name:"OffensiveCon",location:"Berlin, Germany",lat:52.5200,lon:13.4050,freq:"Feb, Annual",region:"Europe",desc:"Offensive security research only. Exploitation and vulnerability research."},
+  {name:"hack.lu",location:"Luxembourg City, Luxembourg",lat:49.6117,lon:6.1319,freq:"Oct, Annual",region:"Europe",desc:"European open security conference. Strong crypto and privacy focus."},
+  {name:"Hack In The Box Amsterdam",location:"Amsterdam, Netherlands",lat:52.3676,lon:4.9041,freq:"Annual",region:"Europe",desc:"Elite technical security conference. HITB global series."},
+  {name:"BruCON",location:"Ghent, Belgium",lat:51.0543,lon:3.7174,freq:"Annual",region:"Europe",desc:"Belgian security community conference. CTF and research."},
+  {name:"Nuit du Hack",location:"Paris, France",lat:48.8566,lon:2.3522,freq:"Annual",region:"Europe",desc:"French hacker conference. CTF and vulnerability research."},
+  {name:"RootedCON",location:"Madrid, Spain",lat:40.4168,lon:-3.7038,freq:"Mar, Annual",region:"Europe",desc:"Spain's largest technical security conference."},
+  {name:"x33fcon",location:"Gdynia, Poland",lat:54.5189,lon:18.5305,freq:"Annual",region:"Europe",desc:"Offensive security conference for practitioners."},
+  {name:"CONFidence",location:"Kraków, Poland",lat:50.0647,lon:19.9450,freq:"Annual",region:"Europe",desc:"Central European security conference with strong technical program."},
+  {name:"HackInParis",location:"Paris, France",lat:48.8600,lon:2.3450,freq:"Annual",region:"Europe",desc:"French edition technical security conference."},
+  {name:"Virus Bulletin (VB)",location:"Dublin, Ireland",lat:53.3498,lon:-6.2603,freq:"Annual (Oct)",region:"Europe",desc:"Anti-malware and threat intelligence research conference."},
+  {name:"Deepsec",location:"Vienna, Austria",lat:48.2082,lon:16.3738,freq:"Nov, Annual",region:"Europe",desc:"European in-depth security conference. Independent, research-driven."},
+  {name:"Area41",location:"Zurich, Switzerland",lat:47.3769,lon:8.5417,freq:"Annual",region:"Europe",desc:"Swiss/European security conference by HACKING-LAB."},
+  // ASIA/PACIFIC
+  {name:"POC (Power of Community)",location:"Seoul, South Korea",lat:37.5665,lon:126.9780,freq:"Annual (Nov)",region:"APAC",desc:"Korean security conference. Strong exploit research track."},
+  {name:"HITCON",location:"Taipei, Taiwan",lat:25.0330,lon:121.5654,freq:"Annual",region:"APAC",desc:"HITCON — Taiwan's largest security conference and CTF team."},
+  {name:"Hack In The Box KL",location:"Kuala Lumpur, Malaysia",lat:3.1390,lon:101.6869,freq:"Annual",region:"APAC",desc:"HITB GSEC. One of Asia's premier technical security events."},
+  {name:"Nullcon",location:"Goa, India",lat:15.2993,lon:74.1240,freq:"Feb, Annual",region:"APAC",desc:"India's leading information security conference."},
+  {name:"c0c0n",location:"Kochi, India",lat:9.9312,lon:76.2673,freq:"Annual",region:"APAC",desc:"Kerala-based security conference. Government and private sector focus."},
+  {name:"XCon / China Security",location:"Beijing, China",lat:39.9042,lon:116.4074,freq:"Annual",region:"APAC",desc:"China's major domestic security conference. Government-adjacent."},
+  {name:"XCTF (formerly WCTF)",location:"Multiple, China",lat:31.2304,lon:121.4737,freq:"Annual",region:"APAC",desc:"China's elite CTF circuit. International teams compete."},
+  {name:"Ruxcon",location:"Melbourne, Australia",lat:-37.8136,lon:144.9631,freq:"Annual (Oct)",region:"APAC",desc:"Australia's top underground security conference. Est. 2003."},
+  {name:"PancakeCon / BSides AU",location:"Sydney, Australia",lat:-33.8688,lon:151.2093,freq:"Annual",region:"APAC",desc:"Australian BSides community security event."},
+  {name:"Kiwicon",location:"Wellington, New Zealand",lat:-41.2865,lon:174.7762,freq:"Biennial",region:"APAC",desc:"New Zealand hacker conference. Merged with Kawaiicon."},
+  {name:"PHDays",location:"Moscow, Russia",lat:55.7558,lon:37.6173,freq:"Annual (May)",region:"APAC",desc:"Positive Hack Days. Russia's largest international security forum."},
+  // MIDDLE EAST / AFRICA
+  {name:"HITB GSEC",location:"Singapore",lat:1.3521,lon:103.8198,freq:"Annual",region:"APAC",desc:"HITB Global Security Conference. Major APAC track."},
+  {name:"GISEC Global",location:"Dubai, UAE",lat:25.2048,lon:55.2708,freq:"Annual (Mar)",region:"MENA",desc:"Gulf's largest cybersecurity exhibition and conference."},
+  {name:"Botconf",location:"Various, France/EU",lat:47.2184,lon:-1.5536,freq:"Annual (Dec)",region:"Europe",desc:"Botnet fighting conference. Malware analysis and threat intel."},
+  // MILITARY / GOV
+  {name:"CYBERCOM Cyber Flag",location:"Fort Meade, MD, USA",lat:39.1087,lon:-76.7728,freq:"Annual",region:"Military",desc:"US Cyber Command live-fire exercise and competition. Classified program."},
+  {name:"AUSA Annual Meeting",location:"Washington DC, USA",lat:38.8900,lon:-77.0280,freq:"Oct, Annual",region:"Military",desc:"Association of the US Army. Cyber warfare and EW program tracks."},
+  {name:"Air Force Cyberworx",location:"Colorado Springs, CO, USA",lat:38.8339,lon:-104.8214,freq:"Annual",region:"Military",desc:"USAF cyber innovation and acquisition process. USAFA-adjacent."},
+  {name:"I/ITSEC",location:"Orlando, FL, USA",lat:28.4949,lon:-81.4241,freq:"Nov, Annual",region:"Military",desc:"Interservice / Industry Training, Simulation and Education Conference."},
+  // LATAM
+  {name:"Ekoparty",location:"Buenos Aires, Argentina",lat:-34.6037,lon:-58.3816,freq:"Oct, Annual",region:"LATAM",desc:"Latin America's largest and most prestigious security conference."},
+  {name:"DragonJAR",location:"Bogotá, Colombia",lat:4.7110,lon:-74.0721,freq:"Annual",region:"LATAM",desc:"Colombia's major security conference. Est. 2010."},
+  {name:"H2HC",location:"São Paulo, Brazil",lat:-23.5505,lon:-46.6333,freq:"Annual",region:"LATAM",desc:"Hackers to Hackers Conference. Brazil's premier technical security event."},
+];
+
+// Defense & Cyber Firms
+const DEFENSE_FIRMS = [
+  {name:"CrowdStrike",hq:"Austin, TX",lat:30.2672,lon:-97.7431,type:"Cyber",desc:"Endpoint security, threat intel, incident response. APT naming authority. Falcon platform."},
+  {name:"Mandiant / Google Cloud",hq:"Reston, VA",lat:38.9687,lon:-77.3411,type:"Cyber",desc:"Incident response, threat intel. Published APT1/China 2013 report. Acquired by Google 2022."},
+  {name:"Palo Alto Networks",hq:"Santa Clara, CA",lat:37.3541,lon:-121.9552,type:"Cyber",desc:"Network/cloud security, XSOAR, Unit 42 threat intel."},
+  {name:"Recorded Future",hq:"Somerville, MA",lat:42.3876,lon:-71.0995,type:"Cyber",desc:"Real-time threat intelligence. Dark web and open source monitoring."},
+  {name:"Dragos",hq:"Hanover, MD",lat:39.1157,lon:-76.7249,type:"Cyber",desc:"ICS/OT cybersecurity. WorldView threat intelligence for industrial sectors."},
+  {name:"SentinelOne",hq:"Mountain View, CA",lat:37.3861,lon:-122.0839,type:"Cyber",desc:"Autonomous endpoint protection. AI-driven threat detection and response."},
+  {name:"Lockheed Martin",hq:"Bethesda, MD",lat:38.9807,lon:-77.0955,type:"Defense",desc:"Largest US defense contractor. Cyber Kill Chain framework originator."},
+  {name:"Raytheon / RTX",hq:"Arlington, VA",lat:38.8799,lon:-77.1068,type:"Defense",desc:"Defense and intelligence. Forcepoint subsidiary. SIGINT systems."},
+  {name:"Northrop Grumman",hq:"Falls Church, VA",lat:38.8823,lon:-77.1713,type:"Defense",desc:"Defense cyber. Mission-critical network security for DoD."},
+  {name:"Booz Allen Hamilton",hq:"McLean, VA",lat:38.9400,lon:-77.1800,type:"Defense",desc:"Largest NSA contractor. Extensive DoD cyber programs. Edward Snowden's employer."},
+  {name:"MITRE Corporation",hq:"McLean, VA",lat:38.9339,lon:-77.1773,type:"Gov/Research",desc:"ATT&CK framework, CVE system. Federally-funded R&D center."},
+  {name:"BAE Systems Applied Intel",hq:"London, UK",lat:51.4975,lon:-0.1357,type:"Defense",desc:"UK defense giant. Major threat actor attribution. SIGINT systems."},
+  {name:"Kaspersky Lab",hq:"Moscow, Russia",lat:55.7558,lon:37.6173,type:"Cyber",desc:"AV and threat research. Equation Group, Lazarus attribution. Banned from US gov 2017."},
+  {name:"Check Point Research",hq:"Tel Aviv, Israel",lat:32.0853,lon:34.7818,type:"Cyber",desc:"Network and cloud security. Research division tracks global campaigns."},
+  {name:"NSO Group",hq:"Herzliya, Israel",lat:32.1664,lon:34.8438,type:"Defense",desc:"Pegasus spyware. Sold to nation-state actors. Blacklisted by US Commerce Dept 2021."},
+  {name:"Cellebrite",hq:"Petah Tikva, Israel",lat:32.0867,lon:34.8878,type:"Defense",desc:"Mobile device forensics. UFED platform used by law enforcement globally."},
+  {name:"Thales Group",hq:"Paris, France",lat:48.8566,lon:2.3522,type:"Defense",desc:"French defense/aerospace/cyber. Critical infrastructure cybersecurity."},
+  {name:"Positive Technologies",hq:"Moscow, Russia",lat:55.7600,lon:37.6200,type:"Cyber",desc:"Russian security firm. Sanctioned by US Treasury 2021 for FSB support."},
+  {name:"Trend Micro / ZDI",hq:"Tokyo, Japan",lat:35.6762,lon:139.6503,type:"Cyber",desc:"Cloud security, endpoint. Zero Day Initiative — world's largest bug bounty platform."},
+  {name:"SAIC",hq:"Reston, VA",lat:38.9600,lon:-77.3500,type:"Defense",desc:"DoD cyber and intel systems. CISA and NSA program support."},
+];
+
+// US Gov Cyber
+const US_GOV = [
+  {name:"NSA",location:"Fort Meade, MD",state:"Maryland",lat:39.1087,lon:-76.7728,type:"Intel",desc:"National Security Agency. SIGINT, offensive cyber (TAO), and Cybersecurity Directorate."},
+  {name:"US Cyber Command",location:"Fort Meade, MD",state:"Maryland",lat:39.1100,lon:-76.7700,type:"Military",desc:"Unified Combatant Command. Hunt Forward missions globally."},
+  {name:"CISA",location:"Arlington, VA",state:"Virginia",lat:38.8830,lon:-77.1040,type:"Gov",desc:"Cybersecurity and Infrastructure Security Agency. Critical infrastructure defense."},
+  {name:"FBI Cyber Division",location:"Washington, DC",state:"DC",lat:38.8951,lon:-77.0369,type:"Law Enforcement",desc:"Investigates cybercrime, ransomware, nation-state intrusions. InfraGard."},
+  {name:"DARPA I2O / Cyber",location:"Arlington, VA",state:"Virginia",lat:38.8800,lon:-77.1060,type:"R&D",desc:"Cyber Grand Challenge, Plan X, AI cybersecurity programs."},
+  {name:"Air Force Cyber (16th AF)",location:"JBSA, TX",state:"Texas",lat:29.3835,lon:-98.6104,type:"Military",desc:"Operates Air Force networks and offensive cyber capabilities."},
+  {name:"Army Cyber Command",location:"Fort Eisenhower, GA",state:"Georgia",lat:33.4195,lon:-82.1363,type:"Military",desc:"ARCYBER. Army cyber operations and electromagnetic warfare."},
+  {name:"Naval Information Forces",location:"Suffolk, VA",state:"Virginia",lat:36.7282,lon:-76.5836,type:"Military",desc:"Navy cyber, information warfare, signals intelligence."},
+  {name:"RAND Corporation",location:"Santa Monica, CA",state:"California",lat:34.0195,lon:-118.4912,type:"Research",desc:"Federally-funded cyber policy and vulnerability research."},
+  {name:"Sandia National Labs",location:"Albuquerque, NM",state:"New Mexico",lat:35.0522,lon:-106.5443,type:"Research",desc:"DOE national lab. ICS/SCADA, nuclear systems cyber, red team."},
+  {name:"Idaho National Lab",location:"Idaho Falls, ID",state:"Idaho",lat:43.4666,lon:-112.0340,type:"Research",desc:"Critical infrastructure and ICS/SCADA cybersecurity research."},
+  {name:"Carnegie Mellon CERT/CC",location:"Pittsburgh, PA",state:"Pennsylvania",lat:40.4433,lon:-79.9436,type:"Research",desc:"Vulnerability disclosure and incident response coordination since 1988."},
+  {name:"MIT Lincoln Laboratory",location:"Lexington, MA",state:"Massachusetts",lat:42.4573,lon:-71.2705,type:"Research",desc:"DoD-funded. Cyber systems, AI security, resilient communications."},
+  {name:"Lawrence Livermore NL",location:"Livermore, CA",state:"California",lat:37.6879,lon:-121.7061,type:"Research",desc:"Cyber security for nuclear and classified systems. DOE."},
+];
+
+// US Overseas Military Bases
+const US_BASES = [
+  // PACIFIC / INDO-PACOM
+  {name:"Andersen AFB / Naval Base Guam",country:"Guam (US Territory)",lat:13.5830,lon:144.9290,command:"INDOPACOM",branch:"AF/Navy",desc:"Primary US power projection hub in Western Pacific. B-52 bomber deployments, submarine support. Proximity to South China Sea and Taiwan Strait."},
+  {name:"Camp Humphreys / Osan AFB",country:"South Korea",lat:36.9719,lon:127.0300,command:"USFK/INDOPACOM",branch:"Army/AF",desc:"Largest US overseas base. 28,500 troops. Primary deterrent against North Korean cyber and kinetic threats. HQ US Forces Korea."},
+  {name:"Kadena Air Base",country:"Japan (Okinawa)",lat:26.3557,lon:127.7686,command:"INDOPACOM",branch:"Air Force",desc:"Largest US air base in Asia. F-15/F-22 hub. Primary air superiority platform for Pacific contingencies. Chinese cyber targeting confirmed."},
+  {name:"Yokota / Yokosuka / Sasebo",country:"Japan (Honshu)",lat:35.7483,lon:139.3483,command:"INDOPACOM",branch:"AF/Navy",desc:"Yokosuka: home port of 7th Fleet. Yokota: USFJ HQ. Persistent Chinese APT targeting of base networks documented."},
+  {name:"Camp Foster / MCAS Futenma",country:"Japan (Okinawa)",lat:26.2719,lon:127.7544,command:"INDOPACOM",branch:"Marines",desc:"III Marine Expeditionary Force. Rapid reaction force for Pacific contingencies."},
+  {name:"Joint Base Pearl Harbor-Hickam",country:"Hawaii (US)",lat:21.3350,lon:-157.9699,command:"INDOPACOM HQ",branch:"Navy/AF",desc:"INDOPACOM headquarters. NSA Hawaii collection facility (Snowden's posting). Pacific cyber operations hub."},
+  {name:"Diego Garcia (BIOT)",country:"British Indian Ocean Territory",lat:-7.3190,lon:72.4230,command:"CENTCOM/INDOPACOM",branch:"Navy/AF",desc:"Critical Indian Ocean logistics hub. B-2/B-52 staging. Strategic position between Middle East and Pacific theaters."},
+  // MIDDLE EAST / CENTCOM
+  {name:"Al Udeid Air Base",country:"Qatar",lat:25.1173,lon:51.3147,command:"CENTCOM",branch:"Air Force",desc:"CENTCOM forward HQ. Largest US base in Middle East. 10,000+ personnel. Air Operations Center for entire CENTCOM AOR."},
+  {name:"Ali Al Salem / Ahmed Al Jaber",country:"Kuwait",lat:29.3470,lon:47.5480,command:"CENTCOM",branch:"Army/AF",desc:"Staging hub for Iraq/Kuwait operations. Persistent Iranian cyber probing of Kuwait base networks documented."},
+  {name:"NSA Bahrain (NAVCENT)",country:"Bahrain",lat:26.2235,lon:50.5876,command:"NAVCENT/5th Fleet",branch:"Navy",desc:"5th Fleet HQ. Naval forces in Persian Gulf, Red Sea, Arabian Sea. Iranian targeting of Gulf base networks ongoing."},
+  {name:"Al Dhafra Air Base",country:"UAE",lat:24.2483,lon:54.5476,command:"CENTCOM",branch:"Air Force",desc:"F-35, RQ-4 Global Hawk, tanker operations. ISR hub for Gulf region. UAE-US cyber cooperation post-Abraham Accords."},
+  {name:"Prince Sultan Air Base",country:"Saudi Arabia",lat:24.0625,lon:47.5808,command:"CENTCOM",branch:"Air Force",desc:"Reactivated 2019. Patriot missile defense, F-15 deployments. Iranian Aramco attack correlation."},
+  {name:"Camp Lemonnier",country:"Djibouti",lat:11.5466,lon:43.0450,command:"AFRICOM",branch:"Navy/Marines",desc:"Only permanent US base in Africa. JSOC operations hub. Drone operations across Horn of Africa and Yemen. Chinese military base nearby."},
+  {name:"Incirlik Air Base",country:"Turkey",lat:37.0021,lon:35.4259,command:"EUCOM",branch:"Air Force",desc:"NATO dual-key nuclear storage site (B61 bombs). Complex relationship post-2016 coup attempt. Turkish cyber services well-developed."},
+  // EUROPE / EUCOM
+  {name:"Ramstein Air Base",country:"Germany",lat:49.4369,lon:7.6003,command:"EUCOM / USAFE HQ",branch:"Air Force",desc:"HQ US Air Forces Europe. Largest US overseas air base. Drone operations relay for Africa/Middle East. Cyber relay hub."},
+  {name:"US Army Garrison Wiesbaden",country:"Germany",lat:50.0798,lon:8.2396,command:"EUCOM / USAREUR",branch:"Army",desc:"USAREUR-AF HQ. Army Cyber Command Europe elements. Intelligence fusion for Eastern Europe."},
+  {name:"Naval Station Rota",country:"Spain",lat:36.6420,lon:-6.3497,command:"EUCOM/NAVCENT",branch:"Navy",desc:"4 Arleigh Burke destroyers. BMD mission. Atlantic/Med transit hub. NSA collection presence."},
+  {name:"RAF Lakenheath / Mildenhall",country:"United Kingdom",lat:52.4093,lon:0.5604,command:"EUCOM",branch:"Air Force",desc:"F-35A wing. USAFE's main UK presence. GCHQ-NSA Five Eyes integration. Close coordination on Russian cyber ops."},
+  {name:"Aviano Air Base",country:"Italy",lat:46.0319,lon:12.5965,command:"EUCOM",branch:"Air Force",desc:"F-16 wing. Southern Europe air operations. NATO Article 5 rapid response."},
+  {name:"Camp Bondsteel",country:"Kosovo",lat:42.3575,lon:21.4525,command:"EUCOM/KFOR",branch:"Army",desc:"Largest US base in Balkans. Built 1999. Persistent Russian/Serbian cyber targeting of base infrastructure."},
+  {name:"Mihail Kogălniceanu AB",country:"Romania",lat:44.3614,lon:28.4883,command:"EUCOM",branch:"AF/Army",desc:"Expanded post-2022. Patriot batteries, troop rotations near Black Sea. Russian hybrid ops targeting Romanian infrastructure."},
+  {name:"Graf Ignatievo / Novo Selo",country:"Bulgaria",lat:42.3297,lon:24.7165,command:"EUCOM",branch:"AF/Army",desc:"Joint US-Bulgaria training sites. Black Sea region forward presence. Russian cyber ops against Bulgarian government ongoing."},
+  // CENTRAL ASIA / AFRICA
+  {name:"Manas / Transit Center (closed)",country:"Kyrgyzstan",lat:42.8882,lon:74.4938,command:"CENTCOM (former)",branch:"AF (closed 2014)",desc:"Former air bridge for Afghanistan. Closed under Russian pressure. Demonstrates forward base vulnerability to host nation politics."},
+  {name:"Cooperative Security Locations - Africa",country:"Niger / Chad / Kenya",lat:13.5137,lon:2.1098,command:"AFRICOM",branch:"AF/SOF",desc:"Light footprint ISR and CT bases across Sahel and East Africa. Drone operations. French coordination. Recent coup in Niger threatened access."},
+];
+
+// Satellites
+const SATELLITES = [
+  // USA
+  {name:"KH-13 / KEYHOLE",owner:"USA",type:"Spy",orbit:"LEO",lat:0,lon:-100,orbitR:1.12,desc:"NRO optical reconnaissance satellites. Successor to KH-11 series. Resolution ~10cm."},
+  {name:"NROL Radar (Lacrosse)",owner:"USA",type:"Spy",orbit:"LEO",lat:0,lon:-80,orbitR:1.08,desc:"NRO synthetic aperture radar satellites. All-weather, day/night imaging."},
+  {name:"MENTOR / ORION SIGINT",owner:"USA",type:"SIGINT",orbit:"GEO",lat:0,lon:-105,orbitR:1.25,desc:"NRO geosynchronous SIGINT satellites. Massive antenna arrays for signals collection."},
+  {name:"WGS (Wideband Global)",owner:"USA",type:"Comms",orbit:"GEO",lat:0,lon:-120,orbitR:1.28,desc:"DoD wideband satellite communications. 10 satellites. Cyber C2 backbone."},
+  {name:"GPS Block III",owner:"USA",type:"Navigation",orbit:"MEO",lat:0,lon:-90,orbitR:1.18,desc:"GPS III constellation. M-code anti-jam military signal. Anti-spoofing capabilities."},
+  // Russia
+  {name:"Persona / Bars-M",owner:"Russia",type:"Spy",orbit:"LEO",lat:0,lon:60,orbitR:1.10,desc:"Russian optical reconnaissance satellites. Successor to Soviet Yantar program."},
+  {name:"Luch / Olymp-K",owner:"Russia",type:"SIGINT",orbit:"GEO",lat:0,lon:80,orbitR:1.26,desc:"Russian GEO SIGINT. Suspicious maneuvering near Western commsats."},
+  {name:"GLONASS-K2",owner:"Russia",type:"Navigation",orbit:"MEO",lat:0,lon:70,orbitR:1.19,desc:"Russian military navigation constellation. CDMA signals since 2020."},
+  {name:"Meridian Comms",owner:"Russia",type:"Comms",orbit:"HEO",lat:0,lon:90,orbitR:1.22,desc:"Russian Molniya-orbit military communications for high-latitude coverage."},
+  // China
+  {name:"Yaogan Recon Series",owner:"China",type:"Spy",orbit:"LEO",lat:0,lon:100,orbitR:1.11,desc:"40+ Chinese reconnaissance satellites. Optical and SAR imaging. PLA control."},
+  {name:"Shijian-17 / -21",owner:"China",type:"Spy",orbit:"GEO",lat:0,lon:120,orbitR:1.27,desc:"Experimental satellites with robotic arms. GEO surveillance and potential sat-killer capability."},
+  {name:"BeiDou-3",owner:"China",type:"Navigation",orbit:"MEO",lat:0,lon:110,orbitR:1.20,desc:"China's GPS equivalent. Global coverage since 2020. Encrypted military codes."},
+  {name:"Tiangong Space Station",owner:"China",type:"Station",orbit:"LEO",lat:0,lon:130,orbitR:1.06,desc:"Chinese space station. Crew capacity 3-6. Military dual-use. Completed 2022."},
+  // ISS
+  {name:"ISS",owner:"Multi (US/Russia/EU/JP/CA)",type:"Station",orbit:"LEO",lat:0,lon:-60,orbitR:1.05,desc:"International Space Station. Partnership: NASA, Roscosmos, ESA, JAXA, CSA. 400km altitude."},
+  // EU/ESA
+  {name:"CSO (Composante Spatiale)",owner:"France",type:"Spy",orbit:"LEO",lat:0,lon:10,orbitR:1.09,desc:"French optical military reconnaissance. Resolution ~35cm. Replaced Helios series."},
+  {name:"Galileo",owner:"EU/ESA",type:"Navigation",orbit:"MEO",lat:0,lon:20,orbitR:1.17,desc:"European navigation system. Full operational capability 2016. Encrypted PRS for military."},
+  // Israel
+  {name:"Ofek Series",owner:"Israel",type:"Spy",orbit:"LEO",lat:0,lon:35,orbitR:1.13,desc:"Israeli optical spy satellites. Retrograde orbit (east-to-west). High resolution. Amos family."},
+  // India
+  {name:"RISAT / Cartosat Mil",owner:"India",type:"Spy",orbit:"LEO",lat:0,lon:78,orbitR:1.14,desc:"Indian SAR and optical reconnaissance. Post-Balakot, India accelerated deployment."},
+  // North Korea
+  {name:"Malligyong-1",owner:"North Korea",type:"Spy",orbit:"LEO",lat:0,lon:128,orbitR:1.07,desc:"North Korea's first claimed spy satellite. Launched Nov 2023. Disputed resolution quality."},
+  // Iran
+  {name:"Noor / Khayyam",owner:"Iran",type:"Spy",orbit:"LEO",lat:0,lon:52,orbitR:1.15,desc:"Iranian military satellites. Khayyam launched from Russia 2022. Resolution disputed."},
+];
+
+// US State cyber data
+const US_STATES_DATA = {
+  "California":  {score:5,entities:["NSA West (San Jose)","Silicon Valley tech targets","Lawrence Livermore NL","RAND Corp","SentinelOne","Palo Alto Networks"],note:"Home to most major cyber firms. High-value corporate espionage target."},
+  "Maryland":    {score:5,entities:["NSA / Ft Meade","US Cyber Command","Booz Allen Hamilton","Leidos","DLT Solutions"],note:"Densest concentration of federal cyber power on Earth."},
+  "Virginia":    {score:5,entities:["CISA","DARPA","Raytheon","MITRE","Northrop Grumman","Mandiant","Booz Allen","FBI Cyber"],note:"Northern Virginia: highest concentration of cleared cyber contractors globally."},
+  "Texas":       {score:4,entities:["CrowdStrike HQ","16th Air Force Cyber","Dell SecureWorks","USAA Cyber"],note:"Austin tech hub. Air Force cyber ops at JBSA. Financial sector targets."},
+  "Georgia":     {score:4,entities:["Army Cyber Command (Ft Eisenhower)","NCR/Equifax HQ","CDC networks"],note:"Fort Eisenhower: Army's primary cyber operations base. Atlanta fintech hub."},
+  "Washington":  {score:4,entities:["Microsoft HQ","Amazon AWS","Boeing Cyber","JBLM signals"],note:"Microsoft and Amazon — primary targets of nation-state cloud exploitation campaigns."},
+  "Colorado":    {score:4,entities:["NORAD/NORTHCOM cyber","Space Force Cyber","Lockheed Space","USAFA CyberWorx"],note:"Colorado Springs: Space Force and NORAD cyber. Air Force Academy cyber research."},
+  "Massachusetts":{score:4,entities:["MIT Lincoln Lab","Harvard Berkman Center","Raytheon BBN","MITRE Bedford"],note:"Academic and defense R&D cluster. MIT CSAIL. Raytheon BBN origins."},
+  "Pennsylvania": {score:3,entities:["Carnegie Mellon CERT/CC","SEI","Drexel InfoSec"],note:"CMU CERT/CC: vulnerability disclosure coordinator since 1988. SEI cybersecurity research."},
+  "New Mexico":  {score:4,entities:["Sandia National Labs","Los Alamos NL","Kirtland AFB cyber"],note:"Nuclear and ICS cybersecurity research. DOE national labs complex."},
+  "Idaho":       {score:3,entities:["Idaho National Lab","Critical infrastructure ICS research"],note:"INL: primary US government ICS/SCADA security research facility."},
+  "New York":    {score:3,entities:["Claroty HQ","Financial sector (NYSE, banking)","IBM Security"],note:"Wall Street financial networks. High-value banking and financial targeting."},
+  "Florida":     {score:3,entities:["I/ITSEC Orlando","MacDill AFB SOCOM cyber","Lockheed Orlando"],note:"Special Operations cyber. CENTCOM networks at MacDill AFB."},
+  "Hawaii":      {score:3,entities:["INDOPACOM cyber","NSA Hawaii (Snowden facility)"],note:"INDOPACOM cyber operations hub. NSA Hawaii collection facility."},
+  "DC":          {score:5,entities:["FBI Cyber Division","DHS/CISA HQ","DoD CIO","State Dept Cyber","Treasury cyber"],note:"Federal policy and law enforcement cyber center of gravity."},
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════════
+const CAT_COLOR={espionage:'#22e5ff',ransomware:'#ffaa00',infrastructure:'#ff3d6b','supply-chain':'#d966ff',hacktivism:'#44ff77',unknown:'#6a7a8e'};
+const CAT_LABEL={espionage:'ESPIONAGE',ransomware:'RANSOMWARE/FIN',infrastructure:'INFRASTRUCTURE','supply-chain':'SUPPLY CHAIN',hacktivism:'HACKTIVISM',unknown:'UNKNOWN'};
+const LEVEL=['','LOW','LOW','MODERATE','HIGH','CRITICAL'];
+const NUM_TO_CODE={643:'RU',156:'CN',408:'KP',364:'IR',840:'US',376:'IL',804:'UA',356:'IN',586:'PK',826:'GB'};
+const CODE_TO_COUNTRY={RU:'Russia',CN:'China',KP:'North Korea',IR:'Iran',US:'United States',IL:'Israel',UA:'Ukraine',IN:'India',PK:'Pakistan',GB:'United Kingdom'};
+const SAT_OWNER_COLOR={USA:'#22e5ff',Russia:'#ff3d6b',China:'#ffaa00',France:'#44ff77','EU/ESA':'#44ff77',Israel:'#cc88ff',India:'#ff8855','North Korea':'#ff8855',Iran:'#ff6b35','Multi (US/Russia/EU/JP/CA)':'#ffffff'};
+
+// ═══════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════
+let activeYear=null,activeCategory=null,searchQuery='';
+let layers={threats:true,conferences:false,defense:false,usgov:false,satellites:false,bases:false};
+let isDragging=false,lastPos=null,rotation=[0,-20];
+let world=null,countriesFeatures=[],statesFeatures=[];
+let projection,pathGen,svg,g;
+
+// ═══════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════
+function getFiltered(){return THREATS.filter(t=>{
+  if(activeYear&&parseInt(t.date.slice(0,4))>activeYear)return false;
+  if(activeCategory&&t.category!==activeCategory)return false;
+  if(searchQuery){const q=searchQuery.toLowerCase();return t.name.toLowerCase().includes(q)||t.actor.toLowerCase().includes(q)||t.country.toLowerCase().includes(q)||(t.malware||[]).some(m=>m.toLowerCase().includes(q))||t.desc.toLowerCase().includes(q);}
+  return true;
+});}
+function getCountryData(n){return getFiltered().filter(t=>t.country===n);}
+function getDominant(inc){if(!inc.length)return null;const c={};inc.forEach(i=>c[i.category]=(c[i.category]||0)+1);return Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0];}
+function getColor(numId){const code=NUM_TO_CODE[numId];if(!code)return '#0e1f3a';const n=getCountryData(CODE_TO_COUNTRY[code]);if(!n.length)return '#0e1f3a';return CAT_COLOR[getDominant(n)]||CAT_COLOR.unknown;}
+function getOpacity(numId){const code=NUM_TO_CODE[numId];if(!code)return 0;const n=getCountryData(CODE_TO_COUNTRY[code]);if(!n.length)return 0;return 0.3+(Math.max(...n.map(i=>i.sophistication))/5)*0.5;}
+
+function renderStats(){
+  const f=getFiltered();
+  const actors=new Set(f.map(t=>t.actor)).size;
+  document.getElementById('stat-pills').innerHTML=`
+    <div class="pill" style="color:#22e5ff;border-color:#22e5ff33">${f.length} INCIDENTS</div>
+    <div class="pill" style="color:#ffaa00;border-color:#ffaa0033">${actors} ACTORS</div>
+    <div class="pill" style="color:#d966ff;border-color:#d966ff33">${new Set(f.map(t=>t.country)).size} NATIONS</div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════════════
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.view).classList.add('active');
+    if(tab.dataset.view==='list-view')renderList();
+    if(tab.dataset.view==='states-view')renderStatesMap();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// PANEL
+// ═══════════════════════════════════════════════════════════════════
+function openPanel(title,subtitle,bodyHTML){
+  document.getElementById('panel-country').textContent=title;
+  document.getElementById('panel-count').textContent=subtitle;
+  document.getElementById('panel-incidents').innerHTML=bodyHTML;
+  document.getElementById('detail-panel').classList.add('open');
+  document.getElementById('panel-backdrop').classList.add('show');
+}
+function closePanel(){document.getElementById('detail-panel').classList.remove('open');document.getElementById('panel-backdrop').classList.remove('show');}
+document.getElementById('panel-close').addEventListener('click',closePanel);
+document.getElementById('panel-backdrop').addEventListener('click',closePanel);
+
+function buildCountryPanel(country){
+  const incidents=getCountryData(country);
+  let html='';
+  if(incidents.length){
+    html+=incidents.sort((a,b)=>b.date.localeCompare(a.date)).map(t=>`
+      <div class="incident-card" style="border-left-color:${CAT_COLOR[t.category]}">
+        <div class="inc-name">${t.name}</div>
+        <div class="inc-actor">${t.actor}</div>
+        <div class="inc-meta"><span class="inc-tag">${CAT_LABEL[t.category]}</span><span class="inc-tag">SOPH ${t.sophistication}/5</span><span class="inc-tag">${t.confidence} CONF</span></div>
+        <div class="inc-desc">${t.desc}</div>
+        ${t.platforms?.length?`<div class="inc-date">PLATFORMS: ${t.platforms.join(', ')}</div>`:''}
+        ${t.malware?.length?`<div class="inc-date">MALWARE: ${t.malware.join(', ')}</div>`:''}
+        <div class="inc-date">${t.date}</div>
+      </div>`).join('');
+  }
+  // Defense firms in this country
+  if(layers.defense){
+    const firms=DEFENSE_FIRMS.filter(f=>matchCountry(f.hq,country));
+    if(firms.length){html+=`<div class="panel-section">DEFENSE / CYBER FIRMS</div>`;html+=firms.map(f=>`<div class="marker-card"><div class="mc-name" style="color:var(--defense)">${f.name}</div><div class="mc-sub">${f.type} · ${f.hq}</div><div class="mc-sub">${f.desc}</div></div>`).join('');}
+  }
+  if(layers.usgov&&country==='United States'){html+=`<div class="panel-section">US GOV CYBER ENTITIES</div>`;html+=US_GOV.map(u=>`<div class="marker-card"><div class="mc-name" style="color:var(--gov)">${u.name}</div><div class="mc-sub">${u.type} · ${u.location}</div><div class="mc-sub">${u.desc}</div></div>`).join('');}
+  if(layers.bases){
+    const bases=US_BASES.filter(b=>b.country.toLowerCase().includes(country.toLowerCase())||(country==='United States'&&(b.country.includes('Hawaii')||b.country.includes('Guam'))));
+    if(bases.length){html+=`<div class="panel-section">US MILITARY BASES IN/NEAR ${country.toUpperCase()}</div>`;html+=bases.map(b=>`<div class="marker-card"><div class="mc-name" style="color:var(--base)">✦ ${b.name}</div><div class="mc-sub">${b.command} · ${b.branch}</div><div class="mc-sub">${b.desc}</div></div>`).join('');}
+  }
+  if(layers.satellites){
+    const sats=SATELLITES.filter(s=>s.owner===country||(country==='United States'&&s.owner==='USA'));
+    if(sats.length){html+=`<div class="panel-section">SATELLITE ASSETS</div>`;html+=sats.map(s=>`<div class="marker-card"><div class="mc-name" style="color:var(--sat)">◎ ${s.name}</div><div class="mc-sub">${s.type} · ${s.orbit} orbit</div><div class="mc-sub">${s.desc}</div></div>`).join('');}
+  }
+  const subtitle=incidents.length?`${incidents.length} KNOWN INCIDENT${incidents.length>1?'S':''}`:layers.satellites||layers.defense||layers.bases?'ASSOCIATED ASSETS':'NO INCIDENTS';
+  openPanel(country.toUpperCase(),subtitle,html);
+}
+
+function matchCountry(hq,country){
+  const m={Russia:'Russia',China:'China','North Korea':'Korea','United States':['TX','VA','MD','CA','MA','GA','NM','ID','PA','NY','FL','HI','CO','WA'],Israel:'Israel',Japan:'Japan',France:'France',Germany:'Germany','United Kingdom':'UK'};
+  if(country==='United States')return hq.match(/(TX|VA|MD|CA|MA|GA|NM|ID|PA|NY|FL|HI|CO|WA),\s*(USA|US)$/);
+  return hq.toLowerCase().includes((m[country]||country).toLowerCase());
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LAYER TOGGLES
+// ═══════════════════════════════════════════════════════════════════
+['threats','conferences','defense','usgov','satellites','bases'].forEach(id=>{
+  document.getElementById('layer-'+id).addEventListener('click',()=>{
+    layers[id]=!layers[id];
+    document.getElementById('layer-'+id).classList.toggle('on',layers[id]);
+    renderGlobe();updateLegend();
+  });
+});
+function updateLegend(){
+  let h='';
+  if(layers.conferences)h+=`<div class="legend-item"><div class="legend-dot" style="background:var(--conf)"></div><div class="legend-label">CONFERENCE</div></div>`;
+  if(layers.defense)h+=`<div class="legend-item"><div class="legend-dot" style="background:var(--defense)"></div><div class="legend-label">DEFENSE/CYBER FIRM</div></div>`;
+  if(layers.usgov)h+=`<div class="legend-item"><div class="legend-dot" style="background:var(--gov)"></div><div class="legend-label">US GOV CYBER</div></div>`;
+  if(layers.satellites)h+=`<div class="legend-item"><div class="legend-dot" style="background:var(--sat)"></div><div class="legend-label">SATELLITE ASSET</div></div>`;
+  if(layers.bases)h+=`<div class="legend-item"><div class="legend-dot" style="background:var(--base)"></div><div class="legend-label">US MIL BASE</div></div>`;
+  document.getElementById('legend-extras').innerHTML=h;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// GLOBE INIT
+// ═══════════════════════════════════════════════════════════════════
+async function initGlobe(){
+  const container=document.getElementById('globe-container');
+  const W=container.clientWidth,H=container.clientHeight;
+  const R=Math.min(W,H)*0.42;
+  svg=d3.select('#globe').attr('width',W).attr('height',H);
+  svg.append('g').selectAll('circle')
+    .data(Array.from({length:250},()=>({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.5+0.2,o:Math.random()*0.55+0.15})))
+    .enter().append('circle').attr('cx',d=>d.x).attr('cy',d=>d.y).attr('r',d=>d.r).attr('fill','white').attr('opacity',d=>d.o);
+
+  const defs=svg.append('defs');
+  const glow=defs.append('filter').attr('id','glow');
+  glow.append('feGaussianBlur').attr('stdDeviation','4').attr('result','coloredBlur');
+  const fm=glow.append('feMerge');fm.append('feMergeNode').attr('in','coloredBlur');fm.append('feMergeNode').attr('in','SourceGraphic');
+  const og=defs.append('radialGradient').attr('id','og').attr('cx','38%').attr('cy','38%').attr('r','60%');
+  og.append('stop').attr('offset','0%').attr('stop-color','#071428');
+  og.append('stop').attr('offset','100%').attr('stop-color','#030a14');
+
+  projection=d3.geoOrthographic().scale(R).translate([W/2,H/2]).clipAngle(90).rotate(rotation);
+  pathGen=d3.geoPath().projection(projection);
+  g=svg.append('g');
+  g.append('circle').attr('cx',W/2).attr('cy',H/2).attr('r',R).attr('fill','url(#og)').attr('filter','url(#glow)');
+  g.append('circle').attr('cx',W/2).attr('cy',H/2).attr('r',R+2).attr('fill','none').attr('stroke','#22e5ff').attr('stroke-width','1.5').attr('opacity','0.18');
+  g.append('circle').attr('cx',W/2).attr('cy',H/2).attr('r',R+7).attr('fill','none').attr('stroke','#22e5ff').attr('stroke-width','0.8').attr('opacity','0.07');
+
+  try{
+    const resp=await fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+    world=await resp.json();
+    countriesFeatures=topojson.feature(world,world.objects.countries).features;
+    renderGlobe();setupGlobeInteractions();
+  }catch(e){console.warn('World data failed',e);}
+  setupYearSlider();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RENDER GLOBE
+// ═══════════════════════════════════════════════════════════════════
+function renderGlobe(){
+  if(!world)return;
+  g.selectAll('.country,.graticule,.marker-layer,.sat-layer').remove();
+  g.append('path').datum(d3.geoGraticule()()).attr('class','graticule')
+    .attr('d',pathGen).attr('fill','none').attr('stroke','#1e3060').attr('stroke-width','0.4');
+
+  const tt=document.getElementById('tooltip');
+
+  g.selectAll('.country').data(countriesFeatures).enter().append('path').attr('class','country')
+    .attr('d',pathGen)
+    .attr('fill',d=>{
+      if(!layers.threats) return '#1a3055';
+      const col=getColor(+d.id);
+      return col==='#0e1f3a' ? '#1a3055' : col;
+    })
+    .attr('fill-opacity',d=>{
+      if(!layers.threats) return 0.85;
+      return getOpacity(+d.id)||0.75;
+    })
+    .attr('stroke',d=>{
+      const code=NUM_TO_CODE[+d.id];
+      if(layers.threats&&code&&getCountryData(CODE_TO_COUNTRY[code]).length)return getColor(+d.id);
+      return '#3a5580';
+    })
+    .attr('stroke-width',d=>{
+      const code=NUM_TO_CODE[+d.id];
+      return(layers.threats&&code&&getCountryData(CODE_TO_COUNTRY[code]).length)?'0.9':'0.4';
+    })
+    .on('mousemove touchmove',function(event,d){
+      if(isDragging)return;
+      const code=NUM_TO_CODE[+d.id];if(!code)return;
+      const country=CODE_TO_COUNTRY[code];
+      const incidents=getCountryData(country);
+      if(!incidents.length&&!layers.defense&&!layers.usgov&&!layers.satellites)return;
+      const cats=[...new Set(incidents.map(i=>i.category))];
+      const maxS=incidents.length?Math.max(...incidents.map(i=>i.sophistication)):0;
+      document.getElementById('tt-country').textContent=country.toUpperCase();
+      document.getElementById('tt-count').textContent=incidents.length||'—';
+      document.getElementById('tt-level').textContent=maxS?LEVEL[maxS]:'—';
+      document.getElementById('tt-cats').innerHTML=cats.map(c=>`<span class="tt-cat" style="color:${CAT_COLOR[c]};border-color:${CAT_COLOR[c]}55">${CAT_LABEL[c]}</span>`).join('');
+      posTooltip(event,tt);tt.classList.add('show');
+    })
+    .on('mouseleave touchend',()=>tt.classList.remove('show'))
+    .on('click touchstart',function(event,d){
+      if(isDragging)return;
+      const code=NUM_TO_CODE[+d.id];if(!code)return;
+      buildCountryPanel(CODE_TO_COUNTRY[code]);
+    });
+
+  if(layers.conferences)renderDots(CONFERENCES,'#ffe844','conf-layer',d=>`★ ${d.name}`,d=>`${d.region} · ${d.location}`,d=>d.desc);
+  if(layers.defense)renderDots(DEFENSE_FIRMS,'#ff8855','def-layer',d=>`⬡ ${d.name}`,d=>`${d.type} · ${d.hq}`,d=>d.desc);
+  if(layers.usgov)renderDots(US_GOV,'#55ff99','gov-layer',d=>`⊕ ${d.name}`,d=>`${d.type} · ${d.location}`,d=>d.desc);
+  if(layers.bases)renderDots(US_BASES,'#ff4444','base-layer',d=>`✦ ${d.name}`,d=>`${d.command} · ${d.country}`,d=>d.desc);
+  if(layers.satellites)renderSatellites();
+}
+
+function posTooltip(event,tt){
+  const rect=document.getElementById('globe-container').getBoundingClientRect();
+  const cx=event.touches?event.touches[0].clientX:event.clientX;
+  const cy=event.touches?event.touches[0].clientY:event.clientY;
+  let x=cx-rect.left+14,y=cy-rect.top-10;
+  if(x+210>rect.width)x=cx-rect.left-220;
+  if(y+140>rect.height)y=cy-rect.top-140;
+  tt.style.left=x+'px';tt.style.top=y+'px';
+}
+
+function renderDots(data,color,cls,labelFn,subFn,descFn){
+  const tt=document.getElementById('tooltip');
+  const mg=g.append('g').attr('class','marker-layer '+cls);
+  data.forEach((d,i)=>{
+    const proj=projection([d.lon,d.lat]);if(!proj)return;
+    const angle=d3.geoDistance([d.lon,d.lat],[-rotation[0],-rotation[1]]);
+    if(angle>Math.PI/2)return;
+    const dg=mg.append('g').attr('transform',`translate(${proj[0]},${proj[1]})`).style('cursor','pointer');
+    dg.append('circle').attr('r',4.5).attr('fill',color).attr('opacity',0.2).attr('class','pulse-ring').style('animation-delay',`${i*0.12}s`);
+    dg.append('circle').attr('r',3).attr('fill',color).attr('opacity',0.9);
+    dg.on('mousemove',function(event){
+      if(isDragging)return;
+      document.getElementById('tt-country').textContent=labelFn(d);
+      document.getElementById('tt-count').textContent='';document.getElementById('tt-level').textContent='';
+      document.getElementById('tt-cats').innerHTML=`<span style="font-size:8px;color:${color};letter-spacing:1px">${subFn(d)}</span><br><span style="font-size:7px;color:var(--dim);line-height:1.5">${descFn(d)}</span>`;
+      posTooltip(event,tt);tt.classList.add('show');
+    })
+    .on('mouseleave',()=>tt.classList.remove('show'))
+    .on('click',function(event){
+      if(isDragging)return;
+      event.stopPropagation();
+      tt.classList.remove('show');
+      const html=`<div class="marker-card"><div class="mc-name">${d.name}</div><div class="mc-sub">${d.hq||d.location||''}</div>${d.freq?`<div class="mc-sub">FREQ: ${d.freq}</div>`:''}<div class="mc-sub" style="margin-top:5px">${d.desc||''}</div></div>`;
+      openPanel(labelFn(d),subFn(d),html);
+    })
+    .on('touchend',function(event){
+      if(isDragging)return;
+      event.stopPropagation();
+      event.preventDefault();
+      tt.classList.remove('show');
+      const html=`<div class="marker-card"><div class="mc-name">${d.name}</div><div class="mc-sub">${d.hq||d.location||''}</div>${d.freq?`<div class="mc-sub">FREQ: ${d.freq}</div>`:''}<div class="mc-sub" style="margin-top:5px">${d.desc||''}</div></div>`;
+      openPanel(labelFn(d),subFn(d),html);
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SATELLITES — rendered above globe surface via radial offset
+// Strategy: project the satellite's ground-track lon/lat onto the
+// globe surface, then push the rendered point outward from the globe
+// center by the orbital altitude multiplier. A tether line connects
+// the surface point to the floating satellite icon.
+// ═══════════════════════════════════════════════════════════════════
+function renderSatellites(){
+  const W=+svg.attr('width'), H=+svg.attr('height');
+  const R=projection.scale();
+  const cx=W/2, cy=H/2;
+  const tt=document.getElementById('tooltip');
+  const sg=g.append('g').attr('class','sat-layer');
+
+  // Orbit altitude above globe surface as fraction of R
+  const ORBIT_HEIGHT = { LEO:0.14, MEO:0.26, GEO:0.42, HEO:0.32 };
+
+  SATELLITES.forEach((sat, i)=>{
+    const color = SAT_OWNER_COLOR[sat.owner] || '#cc88ff';
+    const alt   = ORBIT_HEIGHT[sat.orbit] || 0.18;
+
+    // Use the satellite's lon/lat as its ground track position.
+    // Spread satellites around the globe a bit so they don't stack.
+    const spreadLon = sat.lon + (i % 5 - 2) * 12;
+    const spreadLat = sat.lat + (i % 3 - 1) * 8;
+
+    // Check visibility: is this point on the front hemisphere?
+    const geoAngle = d3.geoDistance([spreadLon, spreadLat], [-rotation[0], -rotation[1]]);
+    const onFront  = geoAngle < Math.PI / 2;
+
+    // Project the surface ground-track point
+    const surfPt = projection([spreadLon, spreadLat]);
+    if(!surfPt) return;
+
+    // Compute unit vector from globe center to surface point.
+    // Then push outward by altitude to get the satellite screen position.
+    const dx = surfPt[0] - cx;
+    const dy = surfPt[1] - cy;
+    const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+    const ux = dx / dist;
+    const uy = dy / dist;
+
+    // Surface point is at radius R (roughly). Satellite is at R*(1+alt).
+    const orbitDist = R * (1 + alt);
+    const sx = cx + ux * orbitDist;
+    const sy = cy + uy * orbitDist;
+
+    // --- Orbit ring (dashed circle at this altitude, centered on globe) ---
+    // Draw a partial arc suggestion rather than a full circle to avoid clutter.
+    // Use a dashed circle scaled to the orbital radius at this altitude.
+    const orbitR = R * (1 + alt);
+    // Only draw if satellite is visible
+    if(onFront){
+      sg.append('circle')
+        .attr('cx', cx).attr('cy', cy)
+        .attr('r', orbitR)
+        .attr('fill', 'none')
+        .attr('stroke', color)
+        .attr('stroke-width', '0.5')
+        .attr('stroke-dasharray', '2,6')
+        .attr('opacity', 0.18);
+    }
+
+    // --- Tether line: surface → satellite ---
+    if(onFront){
+      sg.append('line')
+        .attr('x1', surfPt[0]).attr('y1', surfPt[1])
+        .attr('x2', sx).attr('y2', sy)
+        .attr('stroke', color)
+        .attr('stroke-width', '0.6')
+        .attr('stroke-dasharray', '2,3')
+        .attr('opacity', 0.35);
+
+      // Surface ground-track dot
+      sg.append('circle')
+        .attr('cx', surfPt[0]).attr('cy', surfPt[1])
+        .attr('r', 1.5)
+        .attr('fill', color)
+        .attr('opacity', 0.4);
+    }
+
+    // --- Satellite icon (always drawn at orbital position, fade if behind) ---
+    const iconOpacity = onFront ? 1 : 0.15;
+    const dg = sg.append('g')
+      .attr('transform', `translate(${sx},${sy})`)
+      .style('cursor', 'pointer')
+      .attr('opacity', iconOpacity);
+
+    // Body diamond
+    dg.append('rect')
+      .attr('x', -3).attr('y', -3)
+      .attr('width', 6).attr('height', 6)
+      .attr('transform', 'rotate(45)')
+      .attr('fill', color)
+      .attr('opacity', 0.95);
+
+    // Solar panels (horizontal bars either side)
+    dg.append('rect').attr('x',-9).attr('y',-1.5).attr('width',5).attr('height',3)
+      .attr('fill',color).attr('opacity',0.55).attr('rx',0.5);
+    dg.append('rect').attr('x', 4).attr('y',-1.5).attr('width',5).attr('height',3)
+      .attr('fill',color).attr('opacity',0.55).attr('rx',0.5);
+    // Panel connector lines
+    dg.append('line').attr('x1',-4).attr('y1',0).attr('x2',-4).attr('y2',0)
+      .attr('stroke',color).attr('stroke-width','1');
+
+    // Subtle glow ring
+    dg.append('circle').attr('r',6).attr('fill','none')
+      .attr('stroke',color).attr('stroke-width','0.5').attr('opacity',0.25);
+
+    dg.on('mousemove',function(event){
+      if(isDragging)return;
+      document.getElementById('tt-country').textContent=`◎ ${sat.name}`;
+      document.getElementById('tt-count').textContent='';
+      document.getElementById('tt-level').textContent='';
+      document.getElementById('tt-cats').innerHTML=`
+        <span style="font-size:8px;color:${color}">${sat.owner} · ${sat.type} · ${sat.orbit}</span>
+        <br><span style="font-size:7px;color:var(--dim);line-height:1.5">${sat.desc}</span>`;
+      posTooltip(event,tt);tt.classList.add('show');
+    })
+    .on('mouseleave',()=>tt.classList.remove('show'))
+    .on('click',function(event){
+      if(isDragging)return;
+      event.stopPropagation();
+      tt.classList.remove('show');
+      openPanel(`◎ ${sat.name}`,`${sat.owner} · ${sat.type} · ${sat.orbit}`,
+        `<div class="marker-card">
+          <div class="mc-name" style="color:${color}">${sat.name}</div>
+          <div class="mc-sub">Owner: ${sat.owner}</div>
+          <div class="mc-sub">Type: ${sat.type}</div>
+          <div class="mc-sub">Orbit class: ${sat.orbit} (+${Math.round(alt*100)}% above surface)</div>
+          <div class="mc-sub" style="margin-top:5px">${sat.desc}</div>
+        </div>`);
+    })
+    .on('touchend',function(event){
+      if(isDragging)return;
+      event.stopPropagation();
+      event.preventDefault();
+      tt.classList.remove('show');
+      openPanel(`◎ ${sat.name}`,`${sat.owner} · ${sat.type} · ${sat.orbit}`,
+        `<div class="marker-card">
+          <div class="mc-name" style="color:${color}">${sat.name}</div>
+          <div class="mc-sub">Owner: ${sat.owner}</div>
+          <div class="mc-sub">Type: ${sat.type}</div>
+          <div class="mc-sub">Orbit class: ${sat.orbit} (+${Math.round(alt*100)}% above surface)</div>
+          <div class="mc-sub" style="margin-top:5px">${sat.desc}</div>
+        </div>`);
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DRAG TO ROTATE
+// ═══════════════════════════════════════════════════════════════════
+function setupGlobeInteractions(){
+  const svgEl=document.getElementById('globe');
+  function onStart(x,y){isDragging=false;lastPos=[x,y];}
+  function onMove(x,y){
+    if(!lastPos)return;
+    const dx=x-lastPos[0],dy=y-lastPos[1];
+    if(Math.abs(dx)>3||Math.abs(dy)>3)isDragging=true;
+    if(!isDragging)return;
+    rotation[0]+=dx*0.4;rotation[1]-=dy*0.4;
+    rotation[1]=Math.max(-90,Math.min(90,rotation[1]));
+    projection.rotate(rotation);
+    // Only update path geometry — never re-render during drag.
+    // Re-rendering adds new event listeners on every frame causing cascading input events.
+    g.selectAll('path').attr('d',pathGen);
+    lastPos=[x,y];
+  }
+  function onEnd(){
+    lastPos=null;
+    setTimeout(()=>{
+      isDragging=false;
+      // Full re-render after drag ends so overlay markers reposition correctly
+      renderGlobe();
+    },60);
+  }
+  svgEl.addEventListener('mousedown',e=>onStart(e.clientX,e.clientY));
+  window.addEventListener('mousemove',e=>{if(lastPos)onMove(e.clientX,e.clientY);});
+  window.addEventListener('mouseup',onEnd);
+  svgEl.addEventListener('touchstart',e=>{e.preventDefault();onStart(e.touches[0].clientX,e.touches[0].clientY);},{passive:false});
+  svgEl.addEventListener('touchmove',e=>{e.preventDefault();if(e.touches.length===1)onMove(e.touches[0].clientX,e.touches[0].clientY);},{passive:false});
+  svgEl.addEventListener('touchend',onEnd);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// YEAR SLIDER
+// ═══════════════════════════════════════════════════════════════════
+function setupYearSlider(){
+  const slider=document.getElementById('year-slider');
+  slider.min=2000;
+  slider.addEventListener('input',()=>{
+    const val=parseInt(slider.value);
+    if(val===2025){
+      activeYear=null;
+      document.getElementById('year-display').textContent='ALL';
+      document.getElementById('year-note').textContent=`all ${THREATS.length} incidents`;
+    } else {
+      activeYear=val;
+      const ic=THREATS.filter(t=>parseInt(t.date.slice(0,4))<=val).length;
+      document.getElementById('year-display').textContent=val;
+      document.getElementById('year-note').textContent=`${ic} incident${ic!==1?'s':''} thru ${val}`;
+    }
+    renderGlobe();renderStats();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// US STATES MAP
+// ═══════════════════════════════════════════════════════════════════
+async function renderStatesMap(){
+  const container=document.getElementById('states-map-container');
+  const W=container.clientWidth,H=container.clientHeight;
+  const svgS=d3.select('#states-svg').attr('width',W).attr('height',H);
+  svgS.selectAll('*').remove();
+
+  const tt=document.getElementById('state-tooltip');
+
+  try{
+    const resp=await fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json');
+    const us=await resp.json();
+    const states=topojson.feature(us,us.objects.states).features;
+    const stateMesh=topojson.mesh(us,us.objects.states,(a,b)=>a!==b);
+    const names=await fetch('https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json').then(()=>null).catch(()=>null);
+
+    const proj=d3.geoAlbersUsa().fitSize([W,H],topojson.feature(us,us.objects.states));
+    const path=d3.geoPath().projection(proj);
+
+    // State name map (FIPS to name)
+    const FIPS={1:'Alabama',2:'Alaska',4:'Arizona',5:'Arkansas',6:'California',8:'Colorado',9:'Connecticut',10:'Delaware',11:'DC',12:'Florida',13:'Georgia',15:'Hawaii',16:'Idaho',17:'Illinois',18:'Indiana',19:'Iowa',20:'Kansas',21:'Kentucky',22:'Louisiana',23:'Maine',24:'Maryland',25:'Massachusetts',26:'Michigan',27:'Minnesota',28:'Mississippi',29:'Missouri',30:'Montana',31:'Nebraska',32:'Nevada',33:'New Hampshire',34:'New Jersey',35:'New Mexico',36:'New York',37:'North Carolina',38:'North Dakota',39:'Ohio',40:'Oklahoma',41:'Oregon',42:'Pennsylvania',44:'Rhode Island',45:'South Carolina',46:'South Dakota',47:'Tennessee',48:'Texas',49:'Utah',50:'Vermont',51:'Virginia',53:'Washington',54:'West Virginia',55:'Wisconsin',56:'Wyoming'};
+
+    const scoreColor=score=>{
+      if(!score)return '#0e1f3a';
+      const c=['#0e1f3a','#0d2d4a','#1a4060','#1e5c8a','#1a7ab5','#22e5ff'];
+      return c[Math.min(score,5)];
+    };
+
+    svgS.append('g').selectAll('path').data(states).enter().append('path')
+      .attr('d',path)
+      .attr('fill',d=>{const name=FIPS[+d.id];const data=US_STATES_DATA[name];return scoreColor(data?.score);})
+      .attr('stroke','#2a3a5c').attr('stroke-width','0.5')
+      .style('cursor','pointer')
+      .on('mousemove',function(event,d){
+        const name=FIPS[+d.id];const data=US_STATES_DATA[name];
+        if(!name)return;
+        document.getElementById('st-name').textContent=name.toUpperCase();
+        document.getElementById('st-content').innerHTML=data
+          ?`<div style="font-size:8px;color:var(--statecol);margin-bottom:4px">CYBER SIGNIFICANCE: ${['','LOW','LOW','MODERATE','HIGH','CRITICAL'][data.score]}</div><div style="font-size:8px;color:#99b0cc;line-height:1.5">${data.note||''}</div>`
+          :`<div style="font-size:8px;color:var(--dim)">NO SIGNIFICANT CYBER ENTITIES</div>`;
+        const rect=container.getBoundingClientRect();
+        tt.style.left=(event.clientX-rect.left+12)+'px';tt.style.top=(event.clientY-rect.top-8)+'px';
+        tt.classList.add('show');
+      })
+      .on('mouseleave',()=>tt.classList.remove('show'))
+      .on('click',function(event,d){
+        const name=FIPS[+d.id];const data=US_STATES_DATA[name];if(!name||!data)return;
+        tt.classList.remove('show');
+        const html=`
+          <div class="marker-card">
+            <div class="mc-name" style="color:var(--statecol)">CYBER SIGNIFICANCE: ${['','LOW','LOW','MODERATE','HIGH','CRITICAL'][data.score]}</div>
+            <div class="mc-sub" style="margin:5px 0">${data.note||''}</div>
+          </div>
+          ${data.entities.map(e=>`<div class="incident-card" style="border-left-color:var(--statecol)"><div class="inc-name" style="color:var(--statecol)">${e}</div></div>`).join('')}`;
+        openPanel(name.toUpperCase(),`${data.entities.length} CYBER ENTITIES`,html);
+      })
+      .on('touchend',function(event,d){
+        event.preventDefault();
+        const name=FIPS[+d.id];const data=US_STATES_DATA[name];if(!name||!data)return;
+        tt.classList.remove('show');
+        const html=`
+          <div class="marker-card">
+            <div class="mc-name" style="color:var(--statecol)">CYBER SIGNIFICANCE: ${['','LOW','LOW','MODERATE','HIGH','CRITICAL'][data.score]}</div>
+            <div class="mc-sub" style="margin:5px 0">${data.note||''}</div>
+          </div>
+          ${data.entities.map(e=>`<div class="incident-card" style="border-left-color:var(--statecol)"><div class="inc-name" style="color:var(--statecol)">${e}</div></div>`).join('')}`;
+        openPanel(name.toUpperCase(),`${data.entities.length} CYBER ENTITIES`,html);
+      });
+
+    // State borders mesh
+    svgS.append('path').datum(stateMesh).attr('d',path).attr('fill','none').attr('stroke','#3a5080').attr('stroke-width','0.8');
+
+    // Labels for significant states
+    svgS.append('g').selectAll('text').data(states.filter(d=>US_STATES_DATA[FIPS[+d.id]]?.score>=4)).enter()
+      .append('text')
+      .attr('transform',d=>{const c=path.centroid(d);return`translate(${c[0]},${c[1]})`;})
+      .attr('text-anchor','middle').attr('font-size','7').attr('fill','#22e5ff').attr('font-family','Share Tech Mono').attr('opacity','0.8')
+      .text(d=>{const n=FIPS[+d.id];if(!n)return'';const abbr={California:'CA',Maryland:'MD',Virginia:'VA',Texas:'TX',Georgia:'GA',Washington:'WA',Colorado:'CO',Massachusetts:'MA',DC:'DC'};return abbr[n]||n.slice(0,2).toUpperCase();});
+
+  }catch(e){
+    svgS.append('text').attr('x',W/2).attr('y',H/2).attr('text-anchor','middle').attr('fill','var(--dim)').attr('font-size','12').attr('font-family','Share Tech Mono').text('COULD NOT LOAD STATE MAP DATA');
+    console.warn('States map failed',e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LIST VIEW
+// ═══════════════════════════════════════════════════════════════════
+function renderList(){
+  const cats=['espionage','ransomware','infrastructure','supply-chain','hacktivism'];
+  document.getElementById('filter-row').innerHTML=`
+    <button class="filter-btn ${!activeCategory?'active':''}" data-cat="" style="color:#fff;border-color:#ffffff44">ALL</button>
+    ${cats.map(c=>`<button class="filter-btn ${activeCategory===c?'active':''}" data-cat="${c}" style="color:${CAT_COLOR[c]};border-color:${CAT_COLOR[c]}">${CAT_LABEL[c]}</button>`).join('')}`;
+  document.querySelectorAll('.filter-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{activeCategory=btn.dataset.cat||null;renderList();renderGlobe();renderStats();});
+  });
+  const items=getFiltered().sort((a,b)=>b.date.localeCompare(a.date));
+  document.getElementById('list-container').innerHTML=items.length===0
+    ?`<div style="color:var(--dim);font-size:10px;padding:20px;text-align:center">NO INCIDENTS MATCH FILTER</div>`
+    :items.map(t=>`
+      <div class="list-item" style="border-left-color:${CAT_COLOR[t.category]}" data-id="${t.id}">
+        <div class="li-header"><div class="li-name">${t.name}</div><div class="li-year">${t.date.slice(0,4)}</div></div>
+        <div class="li-actor">${t.actor}</div>
+        <div class="li-country">${t.country.toUpperCase()} · SOPH ${t.sophistication}/5 · ${t.confidence}</div>
+        <div class="li-tags"><span class="inc-tag" style="border-color:${CAT_COLOR[t.category]}55;color:${CAT_COLOR[t.category]}">${CAT_LABEL[t.category]}</span>${(t.malware||[]).slice(0,2).map(m=>`<span class="inc-tag">${m}</span>`).join('')}</div>
+      </div>`).join('');
+  document.querySelectorAll('.list-item').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const t=THREATS.find(x=>x.id===el.dataset.id);if(!t)return;
+      document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+      document.querySelector('[data-view="globe-view"]').classList.add('active');
+      document.getElementById('globe-view').classList.add('active');
+      buildCountryPanel(t.country);
+    });
+  });
+}
+
+document.getElementById('search-input').addEventListener('input',e=>{searchQuery=e.target.value.trim();renderList();renderStats();});
+
+// ═══════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════
+renderStats();
+initGlobe();
+renderList();
+</script>
+</body>
+</html>

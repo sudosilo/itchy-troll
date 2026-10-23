@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ether Wand</title>
+<style>
+/* Layout: one-screen tube-amp console. Readout on top, scope in the middle, controls at the thumb. Light theme. */
+:root{
+  --bg:#faf6f0; --panel:#ffffff; --line:#e6d8c6; --ink:#2a1d14; --dim:#7a6552;
+  --amber:#c96a00; --ember:#e5502a;
+  --display:"Arial Narrow",Impact,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--mono);margin:0;overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+.app{height:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;
+  padding-inline:16px;padding-block:14px;max-width:560px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+h1{font-family:var(--display);font-weight:800;font-size:1.9rem;letter-spacing:.04em;margin:0;text-transform:uppercase;color:var(--amber)}
+.mode{font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.mode b{color:var(--ink);font-weight:600}
+.readout{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.note{font-family:var(--display);font-weight:800;font-size:clamp(4rem,22vw,6.5rem);line-height:.85;color:var(--ink);
+  text-shadow:0 0 calc(var(--v,0)*28px) var(--ember)}
+.note small{font-size:.42em;color:var(--dim);margin-left:2px}
+.meters{display:flex;flex-direction:column;gap:6px;flex:1;max-width:200px;font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.hz{font-size:1rem;color:var(--amber);text-align:right;font-variant-numeric:tabular-nums;letter-spacing:0}
+.meter{display:grid;grid-template-columns:4.2em 1fr;align-items:center;gap:8px}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--amber),var(--ember))}
+.scope{position:relative;flex:1;min-height:160px;border:1px solid var(--line);border-radius:14px;background:
+  radial-gradient(120% 80% at 50% 100%,#fde9cf 0%,var(--panel) 60%);overflow:hidden;touch-action:none}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+.hint{position:absolute;left:12px;right:12px;bottom:10px;font-size:.72rem;color:var(--dim);line-height:1.45;pointer-events:none}
+.axes{position:absolute;top:10px;left:12px;right:76px;font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);pointer-events:none}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.seg{display:flex;flex:1;min-width:0;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{flex:1;min-width:0;background:transparent;color:var(--dim);border:0;font:600 .72rem var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:11px 4px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--line);color:var(--amber)}
+.btn{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;font:600 .72rem var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:11px 12px;cursor:pointer}
+.power{width:100%;font-family:var(--display);font-weight:800;font-size:1.5rem;letter-spacing:.12em;text-transform:uppercase;
+  padding:14px;border-radius:14px;border:0;cursor:pointer;color:#ffffff;background:linear-gradient(180deg,#e88a1a,var(--amber))}
+.power.on{background:var(--panel);color:var(--amber);box-shadow:inset 0 0 0 1px var(--amber)}
+button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.field{flex:2;min-width:0;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;
+  font:600 .8rem var(--mono);letter-spacing:.06em;padding:11px 12px;-webkit-user-select:text;user-select:text}
+.field:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.roomline{font-size:.7rem;line-height:1.45;color:var(--dim);letter-spacing:.04em}
+.roomline b{color:var(--amber);font-weight:600}
+@media (prefers-reduced-motion:reduce){.note{text-shadow:none}}
+</style>
+</head><body>
+
+<div class="app">
+  <header>
+    <h1>Ether Wand</h1>
+    <div class="mode">Input: <b id="modeLabel">Tilt</b></div>
+  </header>
+
+  <div class="readout">
+    <div class="note" id="note">A<small>4</small></div>
+    <div class="meters">
+      <div class="hz" id="hz">440.0 Hz</div>
+      <div class="meter"><span>Pitch</span><div class="bar"><i id="mP"></i></div></div>
+      <div class="meter"><span>Volume</span><div class="bar"><i id="mV"></i></div></div>
+      <div class="meter"><span>Vibrato</span><div class="bar"><i id="mS"></i></div></div>
+    </div>
+  </div>
+
+  <div class="scope" id="pad">
+    <canvas id="cv"></canvas>
+    <div class="axes" id="axes">Y tilt: pitch · X roll: volume · shake: vibrato</div>
+    <div class="hint" id="hint">Tap Play, then tilt the top of the phone toward you to drop the pitch and away to raise it. Roll right for louder, left to fade out. Shake for vibrato.</div>
+  </div>
+
+  <div class="row">
+    <div class="seg" id="rangeSeg" role="group" aria-label="Range">
+      <button id="rLow" data-r="low" aria-pressed="false">Low</button>
+      <button id="rMid" data-r="mid" aria-pressed="true">Mid</button>
+      <button id="rHigh" data-r="high" aria-pressed="false">High</button>
+    </div>
+    <div class="seg" id="snapSeg" role="group" aria-label="Pitch mode">
+      <button id="sGlide" data-s="glide" aria-pressed="true">Glide</button>
+      <button id="sChrom" data-s="chrom" aria-pressed="false">Notes</button>
+      <button id="sPent" data-s="pent" aria-pressed="false">Penta</button>
+    </div>
+  </div>
+  <div class="row">
+    <button class="btn" id="center" style="flex:1">Re-center</button>
+    <button class="btn" id="invert" style="flex:1" aria-pressed="false">Flip pitch</button>
+    <button class="btn" id="modeBtn" style="flex:1">Use touch</button>
+  </div>
+  <div class="row">
+    <input class="field" id="roomIn" maxlength="24" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="room code" aria-label="Room code">
+    <button class="btn" id="joinBtn" style="flex:1">Join</button>
+  </div>
+  <div class="roomline" id="roomLine"></div>
+  <button class="power" id="power">Play</button>
+</div>
+
+<script>
+(() => {
+  const NAMES = ["C","C♯","D","D♯","E","F","F♯","G","G♯","A","A♯","B"];
+  const RANGES = { low:[65.41,523.25], mid:[130.81,1046.5], high:[261.63,2093] }; // C2-C5, C3-C6, C4-C7
+  const PENTA = [0,2,4,7,9];
+  const $ = id => document.getElementById(id);
+
+  let ctx=null, osc, vca, lfo, lfoAmt, filt, master, running=false;
+  let range="mid", snap="glide", invert=false, mode="tilt";
+  let pitchN=0.5, volN=0, shake=0;         // normalized controls 0..1
+  let center=null, gotMotion=false, motionTimer=null, wake=null;
+  let lastMag=1, dly=null, voiceIdx=0;
+  const hist=[];
+
+  // ---------- audio ----------
+  function buildAudio(){
+    ctx = new (window.AudioContext||window.webkitAudioContext)();
+    // theremin-ish timbre: mostly sine with a touch of 2nd and 3rd harmonic
+    osc=ctx.createOscillator(); setVoice(voiceIdx);
+    osc.frequency.value=440;
+    lfo=ctx.createOscillator(); lfo.frequency.value=5.6;
+    lfoAmt=ctx.createGain(); lfoAmt.gain.value=4; lfo.connect(lfoAmt); lfoAmt.connect(osc.detune);
+    filt=ctx.createBiquadFilter(); filt.type="lowpass"; filt.frequency.value=3200; filt.Q.value=0.4;
+    vca=ctx.createGain(); vca.gain.value=0;
+    master=ctx.createGain(); master.gain.value=0.6;
+    // small tape-style echo for air
+    dly=ctx.createDelay(1); const fb=ctx.createGain(), wet=ctx.createGain();
+    dly.delayTime.value=0.23; fb.gain.value=0.28; wet.gain.value=0.22;
+    osc.connect(filt); filt.connect(vca); vca.connect(master);
+    vca.connect(dly); dly.connect(fb); fb.connect(dly); dly.connect(wet); wet.connect(master);
+    master.connect(ctx.destination);
+    osc.start(); lfo.start();
+  }
+
+  // Each seat in a room gets its own harmonic recipe, so two wands in one room sound different.
+  const VOICES=[
+    {name:"Classic", real:[0,1,0.18,0.09,0.03,0.015]},
+    {name:"Hollow",  real:[0,1,0,0.3,0,0.12,0,0.05]},
+    {name:"Bright",  real:[0,1,0.5,0.33,0.25,0.2,0.16]},
+    {name:"Glass",   real:[0,1,0.05,0.02,0.35,0,0,0,0.12]}
+  ];
+  function setVoice(i){
+    voiceIdx=i;
+    if(!osc) return;
+    const real=new Float32Array(VOICES[i].real), imag=new Float32Array(real.length);
+    osc.setPeriodicWave(ctx.createPeriodicWave(real,imag));
+  }
+
+  function freqFor(n){
+    const [lo,hi]=RANGES[range];
+    const midiLo=69+12*Math.log2(lo/440), midiHi=69+12*Math.log2(hi/440);
+    let m=midiLo+(midiHi-midiLo)*n;
+    if(snap==="chrom") m=Math.round(m);
+    if(snap==="pent"){ const r=Math.round(m), pc=((r%12)+12)%12;
+      let best=r, d=99; for(let k=-3;k<=3;k++){const c=r+k,p=((c%12)+12)%12; if(PENTA.includes(p)&&Math.abs(c-m)<d){d=Math.abs(c-m);best=c;}} m=best; }
+    return {f:440*Math.pow(2,(m-69)/12), midi:m};
+  }
+
+  function apply(){
+    const {f,midi}=freqFor(pitchN);
+    const r=Math.round(midi), name=NAMES[((r%12)+12)%12], oct=Math.floor(r/12)-1;
+    $("note").innerHTML=name+"<small>"+oct+"</small>";
+    $("hz").textContent=f.toFixed(1)+" Hz";
+    $("mP").style.width=(pitchN*100)+"%"; $("mV").style.width=(volN*100)+"%"; $("mS").style.width=(Math.min(1,shake)*100)+"%";
+    $("note").style.setProperty("--v",running?volN:0);
+    if(!ctx||!running) return;
+    const t=ctx.currentTime;
+    osc.frequency.setTargetAtTime(f,t,snap==="glide"?0.035:0.012);
+    vca.gain.setTargetAtTime(Math.pow(volN,1.6)*0.9,t,0.04);
+    lfoAmt.gain.setTargetAtTime(3+Math.min(1,shake)*45,t,0.08);
+    lfo.frequency.setTargetAtTime(5.2+Math.min(1,shake)*2,t,0.2);
+  }
+
+  // ---------- motion (all three axes) ----------
+  const clamp=v=>Math.max(0,Math.min(1,v));
+  function onMotion(e){
+    const g=e.accelerationIncludingGravity; if(!g||g.x==null) return;
+    gotMotion=true;
+    if(mode!=="tilt") return;
+    const x=g.x/9.81, y=g.y/9.81, z=g.z/9.81;
+    const pitchDeg=Math.atan2(y,z)*180/Math.PI;                    // Y/Z: tip toward/away
+    const rollDeg=Math.atan2(x,Math.hypot(y,z))*180/Math.PI;       // X: roll left/right
+    if(!center) center={p:pitchDeg,r:rollDeg};
+    let dp=(pitchDeg-center.p); if(invert) dp=-dp;
+    pitchN=clamp(0.5 - dp/80);                                     // ±40° spans the range
+    volN=clamp(0.55 + (rollDeg-center.r)/60);
+    const mag=Math.hypot(x,y,z), jolt=Math.abs(mag-lastMag); lastMag=mag;
+    shake=shake*0.9 + Math.min(1.5,jolt*3)*0.1;                     // smoothed shake energy
+    apply();
+  }
+
+  async function startMotion(){
+    try{
+      if(typeof DeviceMotionEvent!=="undefined" && typeof DeviceMotionEvent.requestPermission==="function"){
+        const s=await DeviceMotionEvent.requestPermission(); if(s!=="granted") throw new Error("denied");
+      }
+      window.addEventListener("devicemotion",onMotion);
+    }catch(_){}
+    clearTimeout(motionTimer);
+    motionTimer=setTimeout(()=>{ if(!gotMotion && mode==="tilt"){ setMode("touch",true); } },1600);
+  }
+
+  // ---------- touch fallback ----------
+  const pad=$("pad");
+  function padPoint(e){
+    if(mode!=="touch") return;
+    const r=pad.getBoundingClientRect(), p=e.touches?e.touches[0]:e;
+    pitchN=clamp((p.clientX-r.left)/r.width);
+    volN=clamp(1-(p.clientY-r.top)/r.height);
+    apply();
+  }
+  let down=false, lastX=0, lastY=0;
+  pad.addEventListener("pointerdown",e=>{down=true;lastX=e.clientX;lastY=e.clientY;padPoint(e);});
+  pad.addEventListener("pointermove",e=>{ if(!down) return;
+    const d=Math.hypot(e.clientX-lastX,e.clientY-lastY); lastX=e.clientX; lastY=e.clientY;
+    shake=shake*0.85+Math.min(1,d/40)*0.15; padPoint(e);});
+  const lift=()=>{ if(mode==="touch"&&down){down=false; volN=0; shake=0; apply();} down=false; };
+  pad.addEventListener("pointerup",lift); pad.addEventListener("pointercancel",lift); pad.addEventListener("pointerleave",lift);
+
+  function setMode(m,auto){
+    mode=m; $("modeLabel").textContent=m==="tilt"?"Tilt":"Touch";
+    $("modeBtn").textContent=m==="tilt"?"Use touch":"Use tilt";
+    $("axes").textContent=m==="tilt"?"Y tilt: pitch · X roll: volume · shake: vibrato":"Left–right: pitch · up–down: volume · wiggle: vibrato";
+    $("hint").textContent=m==="tilt"
+      ? "Tilt the top of the phone toward you to drop the pitch, away to raise it. Roll right for louder, left to fade out. Shake for vibrato."
+      : (auto?"Motion sensors aren't reaching this page, so it switched to touch. ":"")+"Drag across the scope: left to right is pitch, bottom to top is volume. Lift your finger to go silent.";
+    if(m==="touch"){ volN=0; } else { center=null; }
+    apply();
+  }
+
+  // ---------- controls ----------
+  $("power").addEventListener("click",async()=>{
+    if(!ctx) buildAudio();
+    if(!running){
+      await ctx.resume(); running=true; $("power").textContent="Stop"; $("power").classList.add("on");
+      if(mode==="tilt") startMotion();
+      if(live && loopState && !loopState.playing) wsSend({type:"transport",action:"start"});
+      heartbeat();
+      try{ wake=await navigator.wakeLock?.request("screen"); }catch(_){}
+    }else{
+      running=false; vca.gain.setTargetAtTime(0,ctx.currentTime,0.05);
+      $("power").textContent="Play"; $("power").classList.remove("on");
+      try{ wake&&wake.release(); }catch(_){}
+    }
+    apply();
+  });
+  $("rangeSeg").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return; range=b.dataset.r;
+    [...$("rangeSeg").children].forEach(x=>x.setAttribute("aria-pressed",x===b)); apply();});
+  $("snapSeg").addEventListener("click",e=>{const b=e.target.closest("button"); if(!b) return; snap=b.dataset.s;
+    [...$("snapSeg").children].forEach(x=>x.setAttribute("aria-pressed",x===b)); apply();});
+  $("center").addEventListener("click",()=>{center=null;});
+  $("invert").addEventListener("click",()=>{invert=!invert; $("invert").setAttribute("aria-pressed",invert);
+    $("invert").style.color=invert?"var(--amber)":"";});
+  $("modeBtn").addEventListener("click",()=>{ setMode(mode==="tilt"?"touch":"tilt"); if(mode==="tilt"&&running){gotMotion=false;startMotion();} });
+
+
+  // ---------- room, Stompbox Lab API ----------
+  // One WebSocket to the stompbox lab API on Railway. This page joins as app "ether-wand".
+  // It shares the room clock, tempo and loop with every other phone that typed the same room code.
+  const SYNC_URL="wss://stompbox-lab-api-production.up.railway.app";
+  const APP="ether-wand";
+  function keep(k,v){ try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k,v); }catch(_){} return null; }
+  let device=keep(APP+"-device-id");
+  if(!device){ device=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now().toString(16)+Math.random().toString(16).slice(2); keep(APP+"-device-id",device); }
+  const cleanRoom=r=>String(r||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,24);
+  let room=cleanRoom(keep(APP+"-room")), sock=null, live=false, retry=0, retryTimer=null, note="";
+  let loopState=null, phones=0, seat=-1, lastTempo=0;
+  let offset=0, bestRtt=Infinity, pingLeft=0, pingTimer=null, burstTimer=null;
+  const local=()=>(performance.timeOrigin||0)+performance.now();
+  const serverNow=()=>local()+offset;
+
+  function wsSend(m){ if(sock&&sock.readyState===1){ sock.send(JSON.stringify(m)); return true; } return false; }
+  // Clock: a burst of pings, the fastest round trip sets the offset to the server clock.
+  function pingBurst(n){
+    clearTimeout(pingTimer); pingLeft=n; bestRtt=Infinity;
+    (function step(){ if(pingLeft--<=0) return; wsSend({type:"ping",t0:local()}); pingTimer=setTimeout(step,150); })();
+  }
+  // Heartbeat: while this wand is playing and on screen, it keeps the room loop alive.
+  function heartbeat(){ if(running&&live&&document.visibilityState==="visible") wsSend({type:"beat"}); }
+  setInterval(heartbeat,10000);
+  document.addEventListener("visibilitychange",heartbeat);
+
+  function connect(){
+    clearTimeout(retryTimer); clearInterval(burstTimer);
+    if(sock){ const old=sock; sock=null; old.close(); }
+    live=false; loopState=null; seat=-1; note="";
+    if(!room){ renderRoom(); syncTempo(); return; }
+    const s=new WebSocket(SYNC_URL+"?app="+APP+"&room="+encodeURIComponent(room)+"&device="+encodeURIComponent(device));
+    sock=s; note="connecting"; renderRoom();
+    s.onopen=()=>{ if(sock!==s) return; retry=0; live=true; note="";
+      pingBurst(8); burstTimer=setInterval(()=>pingBurst(4),30000); heartbeat(); renderRoom(); };
+    s.onmessage=e=>{ if(sock===s) onRoomMsg(e.data); };
+    s.onerror=()=>s.close();
+    s.onclose=e=>{ if(sock!==s) return;
+      sock=null; live=false; loopState=null; seat=-1; clearInterval(burstTimer);
+      note=e.reason==="room full"?"room full":e.reason==="sign in"?"this room needs a login":e.reason==="origin"?"this page is not on the server origin list":"reconnecting";
+      renderRoom(); syncTempo();
+      retryTimer=setTimeout(connect,Math.min(15000,500*Math.pow(2,retry++))); };
+  }
+
+  function onRoomMsg(text){
+    let m; try{ m=JSON.parse(text); }catch(_){ return; }
+    if(!m||m.app!==APP) return;
+    if(m.type==="pong"){
+      const t3=local(), trip=t3-m.t0;
+      if(trip>=0&&typeof m.t1==="number"&&trip<bestRtt){ bestRtt=trip; offset=m.t1+trip/2-t3; }
+      return;
+    }
+    if(m.type==="loop"){ loopState=m.state; phones=m.phones|0; syncTempo(); renderRoom(); return; }
+    if(m.type==="seat"){ seat=m.seat; setVoice(((seat%VOICES.length)+VOICES.length)%VOICES.length); renderRoom(); return; }
+  }
+
+  // Where the room loop is right now, worked out from the server clock. A queued change takes over at its bar line.
+  const barMs=t=>240000/t;
+  function timeline(){
+    const st=loopState; if(!st||!st.playing) return null;
+    const now=serverNow(); let ep=st.epoch, off=st.barOffset, tempo=st.tempo; const p=st.pending;
+    if(p){ const at=st.epoch+(p.atBar-st.barOffset)*barMs(st.tempo); if(now>=at){ ep=at; off=p.atBar; tempo=p.tempo; } }
+    const beats=(now-ep)/(60000/tempo);
+    if(beats<0) return {tempo, bar:off, beat:-1, frac:0};
+    return {tempo, bar:off+Math.floor(beats/4), beat:Math.floor(beats)%4, frac:beats%1};
+  }
+  // The echo locks to a dotted eighth of the room tempo while the loop runs, and goes back to its own time otherwise.
+  function syncTempo(){
+    const tl=timeline(), tempo=tl?tl.tempo:0;
+    if(tempo===lastTempo) return;
+    lastTempo=tempo; renderRoom();
+    if(!ctx||!dly) return;
+    dly.delayTime.setTargetAtTime(tempo?Math.min(0.95,0.75*60/tempo):0.23,ctx.currentTime,0.05);
+  }
+
+  const roomIn=$("roomIn"), joinBtn=$("joinBtn"), roomLine=$("roomLine");
+  roomIn.value=room;
+  function renderRoom(){
+    joinBtn.textContent=room?"Leave":"Join";
+    roomIn.disabled=!!room;
+    if(!room){ roomLine.textContent="Solo. Type the same room code as the Stompbox Lab phones and tap Join."; return; }
+    if(!live){ roomLine.innerHTML="Room <b>"+room+"</b>, "+(note||"connecting"); return; }
+    const st=loopState, tl=timeline();
+    const parts=["Room <b>"+room+"</b>"];
+    if(seat>=0) parts.push("seat "+(seat+1)+", "+VOICES[voiceIdx].name);
+    if(st) parts.push(tl?tl.tempo+" bpm, loop running":st.idle?"loop paused, no player":"loop stopped, Play starts it");
+    if(phones) parts.push(phones+(phones===1?" phone":" phones"));
+    roomLine.innerHTML=parts.join(" · ");
+  }
+  joinBtn.addEventListener("click",()=>{
+    if(room){ room=""; keep(APP+"-room",""); connect(); return; }
+    const r=cleanRoom(roomIn.value); if(!r){ roomIn.focus(); return; }
+    room=r; roomIn.value=r; keep(APP+"-room",r); connect();
+  });
+  roomIn.addEventListener("keydown",e=>{ if(e.key==="Enter") joinBtn.click(); });
+
+  // ---------- scope ----------
+  const cv=$("cv"), g2=cv.getContext("2d");
+  function size(){ const r=cv.getBoundingClientRect(), d=devicePixelRatio||1; cv.width=r.width*d; cv.height=r.height*d; g2.setTransform(d,0,0,d,0,0); }
+  addEventListener("resize",size); size();
+  const css=getComputedStyle(document.documentElement);
+  const AMBER=css.getPropertyValue("--amber").trim(), LINE=css.getPropertyValue("--line").trim(), DIM=css.getPropertyValue("--dim").trim();
+  function draw(){
+    const w=cv.clientWidth, h=cv.clientHeight;
+    hist.push({p:pitchN,v:running?volN:0}); if(hist.length>180) hist.shift();
+    g2.clearRect(0,0,w,h);
+    // octave lines at each C in the current range
+    const [lo,hi]=RANGES[range], oct=Math.round(Math.log2(hi/lo));
+    g2.strokeStyle=LINE; g2.lineWidth=1; g2.fillStyle=DIM; g2.font="10px "+css.getPropertyValue("--mono");
+    for(let i=0;i<=oct;i++){ const y=h-(i/oct)*(h-40)-20; g2.beginPath(); g2.moveTo(0,y); g2.lineTo(w,y); g2.stroke();
+      const o=Math.round(Math.log2(lo/16.35))+i; g2.fillText("C"+o,w-24,y-4); }
+    // pitch trail, brightness = volume
+    const step=w/179;
+    for(let i=1;i<hist.length;i++){ const a=hist[i-1], b=hist[i];
+      g2.strokeStyle=AMBER; g2.globalAlpha=0.12+b.v*0.88; g2.lineWidth=1+b.v*4;
+      g2.beginPath(); g2.moveTo((i-1)*step,h-a.p*(h-40)-20); g2.lineTo(i*step,h-b.p*(h-40)-20); g2.stroke(); }
+    g2.globalAlpha=1;
+    // room beat: four dots, top right, the current beat lit
+    const tl=timeline(); syncTempo();
+    if(tl){ for(let i=0;i<4;i++){ const on=i===tl.beat;
+      g2.fillStyle=on?AMBER:LINE; g2.globalAlpha=on?1-tl.frac*0.6:1;
+      g2.beginPath(); g2.arc(w-16-(3-i)*14,16,i===0?5:4,0,Math.PI*2); g2.fill(); }
+      g2.globalAlpha=1; }
+    const last=hist[hist.length-1], lx=(hist.length-1)*step, ly=h-last.p*(h-40)-20;
+    g2.fillStyle=AMBER; g2.shadowColor=AMBER; g2.shadowBlur=running?12+last.v*20:0;
+    g2.beginPath(); g2.arc(lx,ly,4+last.v*5,0,Math.PI*2); g2.fill(); g2.shadowBlur=0;
+    requestAnimationFrame(draw);
+  }
+  apply(); renderRoom(); draw(); if(room) connect();
+})();
+</script>
+</body></html>

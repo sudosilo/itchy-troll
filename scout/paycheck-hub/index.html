@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Paycheck Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Public+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one column. Controls on top, live hub diagram, then each spoke as a ledger line, then the rules as code. Single light look by choice. */
+:root{
+  --paper:#F4F6F3; --card:#FFFFFF; --ink:#18272B; --muted:#5D6B6E; --line:#D7DDD9;
+  --hub:#0E5F57; --bills:#7A8B8F; --floor:#2F6FB0; --growth:#2E8B57; --earner:#B7791F;
+  --protect:#8A4FA3; --pocket:#C2536B; --travel:#4E7A86; --warn:#B4441F;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"Public Sans",ui-sans-serif,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:760px;margin:0 auto;padding-inline:16px;padding-block:24px 48px;display:grid;gap:22px}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(28px,7vw,40px);line-height:1.05;margin:0;text-wrap:balance}
+h2{font-family:var(--display);font-weight:600;font-size:20px;margin:0 0 10px}
+.lede{color:var(--muted);margin:6px 0 0;max-width:62ch}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.presets{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.presets button{font:600 13px var(--body);border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:999px;padding:7px 14px;cursor:pointer}
+.presets button[aria-pressed="true"]{background:var(--hub);border-color:var(--hub);color:#fff}
+.presets button:focus-visible,input:focus-visible{outline:2px solid var(--hub);outline-offset:2px}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+label{display:grid;gap:4px;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+input{font:600 17px var(--mono);color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:8px 10px;width:100%;box-sizing:border-box;font-variant-numeric:tabular-nums}
+.diagram{overflow-x:auto}
+.diagram svg{display:block;width:100%;max-width:440px;margin:0 auto;height:auto}
+.ledger{display:grid;gap:0}
+.row{display:grid;grid-template-columns:12px 1fr auto;gap:12px;align-items:start;padding:12px 0;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.dot{width:12px;height:12px;border-radius:3px;margin-top:5px}
+.row .name{font-weight:600}
+.row .why{color:var(--muted);font-size:13px;min-width:0}
+.amt{font:600 17px var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.notes{display:grid;gap:8px}
+.note{margin:0;padding:10px 12px;border-radius:6px;background:var(--paper);font-size:14px}
+.note.warn{background:#FBEDE7;color:var(--warn)}
+pre{font:13px/1.55 var(--mono);background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:14px;overflow-x:auto;margin:0;color:var(--ink)}
+.total{display:flex;justify-content:space-between;padding-top:12px;border-top:2px solid var(--ink);font-weight:600}
+.bills{display:grid;gap:10px;margin-bottom:12px}
+.bill{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1.2fr) auto;gap:8px;align-items:center}
+.bill input,.bill select{font:500 15px var(--body);color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:8px;width:100%;box-sizing:border-box;min-width:0}
+.bill input[type=number]{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.bill .per{font:600 14px var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right;min-width:56px}
+.bill .hold{grid-column:1/-1;font-size:12px;color:var(--floor);margin-top:-4px}
+.add{font:600 13px var(--body);border:1px dashed var(--muted);background:transparent;color:var(--ink);border-radius:6px;padding:8px 14px;cursor:pointer;margin-bottom:12px}
+.x{border:0;background:transparent;color:var(--muted);font-size:18px;cursor:pointer;padding:0 4px}
+@media (max-width:460px){.bill{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.bill .per{text-align:left}}
+@media (prefers-reduced-motion:no-preference){.spoke line{transition:stroke-width .25s}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Paycheck Hub</h1>
+    <p class="lede">Every check lands in the hub. Bills get paid first. What is left gets pushed out to the spokes by fixed rules, so no single place holds everything.</p>
+  </header>
+
+  <section class="card" aria-label="This paycheck">
+    <div class="presets" id="presets">
+      <button type="button" data-pay="1500" data-travel="0">Short check 1,500</button>
+      <button type="button" data-pay="2000" data-travel="0" aria-pressed="true">Normal 2,000</button>
+      <button type="button" data-pay="2600" data-travel="0">Overtime 2,600</button>
+      <button type="button" data-pay="3000" data-travel="300">OT plus travel 3,000</button>
+    </div>
+    <div class="fields">
+      <label for="pay">Paycheck total<input id="pay" type="number" inputmode="decimal" value="2000"></label>
+      <label for="travel">Travel reimbursement in it<input id="travel" type="number" inputmode="decimal" value="0"></label>
+      <label for="bills">Bills per check<input id="bills" type="number" value="0" readonly title="Set by the bill list below"></label>
+      <label for="base">Normal check size<input id="base" type="number" inputmode="decimal" value="2000"></label>
+      <label for="floorTarget">Floor target<input id="floorTarget" type="number" inputmode="decimal" value="7800"></label>
+      <label for="floorNow">Floor balance now<input id="floorNow" type="number" inputmode="decimal" value="0"></label>
+    </div>
+  </section>
+
+  <section class="card" aria-label="Bills">
+    <h2>Bills spoke</h2>
+    <p class="lede" style="margin:0 0 12px">Every bill gets turned into a per-check amount. Bills that hit rarely, like insurance, get held back a little each check so the money is there when the bill lands.</p>
+    <div class="bills" id="billList"></div>
+    <button type="button" class="add" id="addBill">Add a bill</button>
+    <div class="total"><span>Bills per check</span><span class="amt" id="billTotal"></span></div>
+  </section>
+
+  <section class="card diagram" aria-label="Hub and spokes">
+    <svg id="svg" viewBox="0 0 440 400" role="img" aria-label="Hub and spoke split of this paycheck"></svg>
+  </section>
+
+  <section class="card">
+    <h2>Where this check goes</h2>
+    <div class="ledger" id="ledger"></div>
+    <div class="total"><span>Accounted for</span><span class="amt" id="total"></span></div>
+  </section>
+
+  <section class="card">
+    <h2>Rules that fired</h2>
+    <div class="notes" id="notes"></div>
+  </section>
+
+  <section class="card">
+    <h2>The algorithm</h2>
+<pre># Rule 0: turn every bill into a per-check amount (26 checks a year)
+PER_CHECK = {"day": 14, "week": 2, "month": 12 / 26,
+             "six_months": 2 / 26, "year": 1 / 26}
+
+def bills_per_check(bill_list):
+    return sum(amount * PER_CHECK[how_often]
+               for name, amount, how_often in bill_list)
+
+# rare bills (insurance) stay in the hub until due
+
+def split(pay, travel, bills, base, floor_target, floor_now):
+    income = pay - travel          # travel money repays what you already spent
+    out = {"travel": travel}
+
+    # Rule 1: bills come first, always
+    if income &lt;= bills:
+        out["bills"] = income
+        out["draw_from_floor"] = bills - income
+        return out                 # every spoke pauses this check
+    out["bills"] = bills
+    left = income - bills
+
+    # Rule 2: the normal part of the check uses fixed shares
+    core = min(left, base - bills)
+    extra = left - core
+    room = max(0, floor_target - floor_now)
+
+    floor_cut = core * 0.375
+    to_floor = min(floor_cut, room)
+    spill = floor_cut - to_floor   # floor full? its share moves on
+    out["floor"]   = to_floor
+    out["growth"]  = core * 0.3125 + spill * 0.5
+    out["earner"]  = core * 0.1875 + spill * 0.5
+    out["protect"] = core * 0.0625
+    out["pocket"]  = core * 0.0625
+
+    # Rule 3: overtime above a normal check
+    if extra &gt; 0:
+        out["pocket"] += extra * 0.10
+        rest = extra * 0.90
+        room -= to_floor
+        fill = min(rest, room)     # finish the floor first
+        out["floor"]  += fill
+        rest -= fill
+        out["growth"] += rest * 5 / 9
+        out["earner"] += rest * 4 / 9
+    return out</pre>
+  </section>
+</div>
+
+<script>
+const SPOKES=[
+  {k:"bills",name:"Bills",color:"--bills",why:"Rent, food, fuel, utilities. Stays in checking."},
+  {k:"floor",name:"Floor",color:"--floor",why:"High-yield savings. Never spent. Fills to target, then stops."},
+  {k:"growth",name:"Growth",color:"--growth",why:"Index fund. Works without your hours."},
+  {k:"earner",name:"Earner",color:"--earner",why:"Saved only for things that earn without you."},
+  {k:"protect",name:"Protection",color:"--protect",why:"Insurance and locks on anything you own."},
+  {k:"pocket",name:"Pocket",color:"--pocket",why:"Yours to spend. No guilt."},
+  {k:"travel",name:"Travel payback",color:"--travel",why:"Reimbursement. Replaces money already spent on the road."}
+];
+const $=id=>document.getElementById(id);
+const num=id=>Math.max(0,parseFloat($(id).value)||0);
+const fmt=n=>"$"+Math.round(n).toLocaleString("en-US");
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+function split(pay,travel,bills,base,floorTarget,floorNow){
+  travel=Math.min(travel,pay);
+  const income=pay-travel;
+  const out={bills:0,floor:0,growth:0,earner:0,protect:0,pocket:0,travel,draw:0};
+  const notes=[];
+  if(travel>0)notes.push(["",fmt(travel)+" is travel reimbursement. It is not income, so it goes back to cover what you spent on the road."]);
+  if(income<=bills){
+    out.bills=income;out.draw=bills-income;
+    notes.push(["warn","Short check. Bills take all of it. Pull "+fmt(out.draw)+" from the floor. Every other spoke pauses."]);
+    if(out.draw>floorNow)notes.push(["warn","Floor only holds "+fmt(floorNow)+". You are "+fmt(out.draw-floorNow)+" short."]);
+    return {out,notes};
+  }
+  out.bills=bills;
+  const left=income-bills;
+  const coreSize=Math.max(0,base-bills);
+  const core=Math.min(left,coreSize);
+  const extra=left-core;
+  let room=Math.max(0,floorTarget-floorNow);
+  const floorCut=core*.375;
+  const toFloor=Math.min(floorCut,room);
+  const spill=floorCut-toFloor;
+  out.floor=toFloor;
+  out.growth=core*.3125+spill*.5;
+  out.earner=core*.1875+spill*.5;
+  out.protect=core*.0625;
+  out.pocket=core*.0625;
+  if(core<coreSize)notes.push(["warn","Check is under normal size. Spokes shrink in the same proportions. Bills still paid in full."]);
+  if(room===0)notes.push(["","Floor is full. Its share splits evenly between growth and earner."]);
+  else if(spill>0)notes.push(["","This check tops off the floor. The leftover floor share moves to growth and earner."]);
+  if(extra>0){
+    out.pocket+=extra*.1;
+    let rest=extra*.9;
+    room-=toFloor;
+    const fill=Math.min(rest,room);
+    out.floor+=fill;rest-=fill;
+    out.growth+=rest*5/9;
+    out.earner+=rest*4/9;
+    notes.push(["",fmt(extra)+" of overtime above a normal check. 10 percent to pocket. The rest finishes the floor first, then goes to growth and earner."]);
+  }
+  const afterFloor=floorNow+out.floor;
+  if(out.floor>0&&afterFloor<floorTarget){
+    const checks=Math.ceil((floorTarget-afterFloor)/Math.max(1,out.floor));
+    notes.push(["","Floor after this check: "+fmt(afterFloor)+" of "+fmt(floorTarget)+". About "+checks+" more checks like this one to fill it."]);
+  }else if(out.floor>0){
+    notes.push(["","Floor hits its target with this check. From the next one on, the floor share goes to growth and earner."]);
+  }
+  return {out,notes};
+}
+
+function draw(out,pay){
+  const svg=$("svg");const cx=220,cy=200,R=148;
+  const shown=SPOKES.filter(s=>s.k!=="travel"||out.travel>0);
+  const max=Math.max(...shown.map(s=>out[s.k]),1);
+  let h="";
+  shown.forEach((s,i)=>{
+    const a=-Math.PI/2+i*2*Math.PI/shown.length;
+    const x=cx+R*Math.cos(a),y=cy+R*Math.sin(a);
+    const w=out[s.k]>0?2+10*out[s.k]/max:1;
+    const c=css(s.color);
+    const dash=out[s.k]>0?"":' stroke-dasharray="4 4"';
+    h+='<g class="spoke"><line x1="'+cx+'" y1="'+cy+'" x2="'+x.toFixed(1)+'" y2="'+y.toFixed(1)+'" stroke="'+c+'" stroke-width="'+w.toFixed(1)+'" stroke-linecap="round"'+dash+'/>';
+    h+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="30" fill="'+css("--card")+'" stroke="'+c+'" stroke-width="2"/>';
+    h+='<text x="'+x.toFixed(1)+'" y="'+(y-4).toFixed(1)+'" text-anchor="middle" font-family="Public Sans,sans-serif" font-size="10" font-weight="600" fill="'+css("--muted")+'">'+s.name.split(" ")[0].toUpperCase()+'</text>';
+    h+='<text x="'+x.toFixed(1)+'" y="'+(y+11).toFixed(1)+'" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="12" font-weight="600" fill="'+css("--ink")+'">'+fmt(out[s.k])+'</text></g>';
+  });
+  h+='<circle cx="'+cx+'" cy="'+cy+'" r="46" fill="'+css("--hub")+'"/>';
+  h+='<text x="'+cx+'" y="'+(cy-6)+'" text-anchor="middle" font-family="Public Sans,sans-serif" font-size="11" font-weight="600" fill="#FFFFFF" letter-spacing="1">HUB</text>';
+  h+='<text x="'+cx+'" y="'+(cy+14)+'" text-anchor="middle" font-family="JetBrains Mono,monospace" font-size="15" font-weight="600" fill="#FFFFFF">'+fmt(pay)+'</text>';
+  svg.innerHTML=h;
+}
+
+const FREQ={day:{label:"Per day",per:14},week:{label:"Per week",per:2},month:{label:"Per month",per:12/26},six:{label:"Every 6 months",per:2/26},year:{label:"Per year",per:1/26}};
+let BILLS=[
+  {name:"Cabins",amt:1100,f:"month"},
+  {name:"Fuel",amt:20,f:"day"},
+  {name:"Food",amt:20,f:"day"},
+  {name:"Phone",amt:80,f:"month"},
+  {name:"Insurance",amt:800,f:"six"}
+];
+const perCheck=b=>(parseFloat(b.amt)||0)*FREQ[b.f].per;
+function renderBills(){
+  $("billList").innerHTML=BILLS.map((b,i)=>{
+    const opts=Object.entries(FREQ).map(([k,v])=>'<option value="'+k+'"'+(k===b.f?" selected":"")+'>'+v.label+'</option>').join("");
+    const rare=b.f==="six"||b.f==="year";
+    return '<div class="bill" data-i="'+i+'">'+
+      '<input id="bn'+i+'" aria-label="Bill name" value="'+b.name.replace(/"/g,"&quot;")+'" data-k="name">'+
+      '<input id="ba'+i+'" aria-label="Amount" type="number" inputmode="decimal" value="'+b.amt+'" data-k="amt">'+
+      '<select id="bf'+i+'" aria-label="How often" data-k="f">'+opts+'</select>'+
+      '<span class="per">'+fmt(perCheck(b))+'<button type="button" class="x" aria-label="Remove bill" data-rm="'+i+'">&#215;</button></span>'+
+      (rare?'<span class="hold">Hold '+fmt(perCheck(b))+' in the hub every check. Pay '+fmt(b.amt)+' when it comes due.</span>':"")+
+    '</div>';
+  }).join("");
+}
+$("billList").addEventListener("input",e=>{
+  const row=e.target.closest(".bill");if(!row)return;
+  BILLS[row.dataset.i][e.target.dataset.k]=e.target.value;
+  if(e.target.tagName==="SELECT"){renderBills();}
+  else{row.querySelector(".per").firstChild.textContent=fmt(perCheck(BILLS[row.dataset.i]));const h=row.querySelector(".hold");if(h)h.textContent="Hold "+fmt(perCheck(BILLS[row.dataset.i]))+" in the hub every check. Pay "+fmt(BILLS[row.dataset.i].amt)+" when it comes due.";}
+  run();
+});
+$("billList").addEventListener("click",e=>{
+  const rm=e.target.dataset.rm;if(rm===undefined)return;
+  BILLS.splice(+rm,1);renderBills();run();
+});
+$("addBill").addEventListener("click",()=>{BILLS.push({name:"New bill",amt:0,f:"month"});renderBills();run();});
+
+function run(){
+  const billSum=BILLS.reduce((t,b)=>t+perCheck(b),0);
+  $("bills").value=Math.round(billSum);
+  $("billTotal").textContent=fmt(billSum);
+  const pay=num("pay");
+  const {out,notes}=split(pay,num("travel"),num("bills"),num("base"),num("floorTarget"),num("floorNow"));
+  draw(out,pay);
+  $("ledger").innerHTML=SPOKES.filter(s=>s.k!=="travel"||out.travel>0).map(s=>
+    '<div class="row"><span class="dot" style="background:var('+s.color+')"></span><div><div class="name">'+s.name+'</div><div class="why">'+(s.k==="bills"?(BILLS.map(b=>b.name).join(", ")||"No bills listed")+". Stays in checking.":s.why)+'</div></div><span class="amt">'+fmt(out[s.k])+'</span></div>'
+  ).join("")+(out.draw>0?'<div class="row"><span class="dot" style="background:var(--warn)"></span><div><div class="name">Pulled from floor</div><div class="why">Covers the bills this check could not.</div></div><span class="amt">'+fmt(out.draw)+'</span></div>':"");
+  const sum=SPOKES.reduce((t,s)=>t+out[s.k],0);
+  $("total").textContent=fmt(sum)+" of "+fmt(pay);
+  $("notes").innerHTML=notes.length?notes.map(n=>'<p class="note '+n[0]+'">'+n[1]+'</p>').join(""):'<p class="note">Normal check. Fixed shares only.</p>';
+}
+
+document.querySelectorAll("input").forEach(i=>i.addEventListener("input",()=>{
+  document.querySelectorAll("#presets button").forEach(b=>b.setAttribute("aria-pressed","false"));run();
+}));
+document.querySelectorAll("#presets button").forEach(b=>b.addEventListener("click",()=>{
+  $("pay").value=b.dataset.pay;$("travel").value=b.dataset.travel;
+  document.querySelectorAll("#presets button").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false"));
+  run();
+}));
+renderBills();
+run();
+</script>
+
+</body>
+</html>

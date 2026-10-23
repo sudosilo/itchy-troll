@@ -1,0 +1,1 @@
+2026-10-10, v2026.10.10. Version 2 plays full episodes and adds a random mode, seasons, and backup sources. Added a seek bar, start over, back and forward jumps, and fullscreen that keeps the controls.
