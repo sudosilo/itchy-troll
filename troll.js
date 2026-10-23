@@ -93,11 +93,17 @@ function prepareBuild() {
   const src = `work/src`;
   const dist = `work/dist`;
   execSync(`rm -rf "${src}" "${dist}"`);
-  execSync(`git clone --depth 1 https://github.com/${OWNER}/${REPO} "${src}"`, { stdio: 'inherit' });
+  const local = (SHIP.build || '').trim();
+  if (local && fs.existsSync(`${local}/index.html`)) {
+    log(`Using the gated build stored in ${local}`);
+    execSync(`cp -r "${local}" "${src}"`);
+  } else {
+    execSync(`git clone --depth 1 https://github.com/${OWNER}/${REPO} "${src}"`, { stdio: 'inherit' });
+  }
   fs.mkdirSync(dist, { recursive: true });
   execSync(`rsync -a --exclude .git --exclude .github --exclude .vercel --exclude node_modules "${src}/" "${dist}/"`);
   if (!fs.existsSync(`${dist}/index.html`)) throw new Error('No index.html at the top of the repo');
-  log(`Build ready: ${fs.readdirSync(dist).length} files from ${OWNER}/${REPO}`);
+  log(`Build ready: ${fs.readdirSync(dist).length} files for ${OWNER}/${REPO}`);
   return dist;
 }
 
