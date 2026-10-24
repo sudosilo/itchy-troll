@@ -111,7 +111,7 @@ function butlerPush(dir) {
   for (const channel of ['html5', 'offline']) {
     log(`Uploading channel ${channel} with butler`);
     // No shell here, so odd characters in the username secret cannot break the command.
-    execFileSync('butler', ['push', dir, `${USER.toLowerCase()}/${SLUG}:${channel}`, '--if-changed'], { stdio: 'inherit' });
+    execFileSync('butler', ['push', dir, `${USER}/${SLUG}:${channel}`, '--if-changed'], { stdio: 'inherit' });
   }
 }
 
@@ -289,7 +289,7 @@ async function finishSetup(editUrl) {
     try {
       butlerPush(dist);
     } catch (e) {
-      throw new Error(`butler could not upload to ${USER}/${SLUG} (${e.message.split('\n')[0]}). If the page does not exist yet, create it at itch.io/game/new with the URL ${SLUG}`);
+      throw new Error(`butler could not upload to ${USER}/${SLUG}. If the page does not exist yet, create it at itch.io/game/new with the URL ${SLUG}`);
     }
     ledger[REPO] = {
       ...(ledger[REPO] || {}),
