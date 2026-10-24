@@ -48,8 +48,10 @@ function saveLedger(ledger) {
   fs.writeFileSync(LEDGER_FILE, JSON.stringify(ledger, null, 2) + '\n');
 }
 
+let privateShots = false;
+
 async function shot(name) {
-  if (!page) return;
+  if (!page || privateShots) return;
   step += 1;
   await page.screenshot({ path: `shots/${String(step).padStart(2, '0')}-${name}.png`, fullPage: true }).catch(() => {});
 }
@@ -271,6 +273,57 @@ async function finishSetup(editUrl) {
   log('Edit page saved');
 }
 
+/* Hands */
+
+async function openSavedLogin() {
+  // Logged in pages are never screenshotted into the public repo.
+  privateShots = true;
+  execSync('openssl enc -d -aes-256-cbc -pbkdf2 -pass env:ITCH_PASSWORD -in itch-session.enc -out work/session.json');
+  browser = await chromium.launch();
+  const context = await browser.newContext({ storageState: 'work/session.json', viewport: { width: 1280, height: 900 } });
+  fs.rmSync('work/session.json');
+  page = await context.newPage();
+  await page.goto(`${SITE}/dashboard`, { waitUntil: 'domcontentloaded' });
+  if (page.url().includes('/login')) throw new Error('The saved itch.io login expired. Run the itch-login workflow again.');
+  log('Saved itch.io login works');
+}
+
+async function handsPublish(dist, title) {
+  const hands = require('./hands');
+  await openSavedLogin();
+  let uploaded = false;
+  try {
+    butlerPush(dist);
+    uploaded = true;
+    log('Page already existed, build uploaded');
+  } catch {
+    log('Page does not exist yet, the hands agent will create it');
+  }
+  if (!uploaded) {
+    await hands.run(
+      page,
+      `Create a new itch.io project. Title: ${title}. Project URL: ${SLUG} (the part after the username, type exactly ${SLUG}). ` +
+        `Kind of project: HTML. Leave pricing and uploads alone for now. Leave visibility as Draft. Click Save. ` +
+        `If itch.io says the URL is already taken by one of your own projects, that counts as done. Done means the edit page reloads with no red error.`,
+      `${SITE}/game/new`
+    );
+    butlerPush(dist);
+  }
+  log('Waiting 40 seconds for itch.io to process the uploads');
+  await page.waitForTimeout(40000);
+  await hands.run(
+    page,
+    `Finish setting up the itch.io project whose URL ends in /${SLUG}. Open its edit page from the dashboard (the Edit link under the project). ` +
+      `In Uploads there is an upload on the html5 channel and one on the offline channel. Tick "This file will be played in the browser" only for the html5 one. ` +
+      `If an embed options section appears, set the viewport to 1280 by 720, and tick Mobile friendly and Fullscreen button if those boxes exist. ` +
+      `In Pricing choose Paid and set the price to ${PRICE}. In Visibility choose Public. Then click Save at the bottom. ` +
+      `Done means the page saved with no red error message and shows Public and the price ${PRICE}. If the uploads are not listed yet, reload the edit page and look again.`,
+    `${SITE}/dashboard`,
+    60
+  );
+  log('Hands agent finished the page setup');
+}
+
 /* Main */
 
 (async () => {
@@ -282,7 +335,21 @@ async function finishSetup(editUrl) {
   const title = TITLE_IN || (ledger[REPO] && ledger[REPO].title) || titleFrom(fs.readFileSync(`${dist}/index.html`, 'utf8'));
   log(`Publishing ${REPO} as "${title}" at $${PRICE}`);
 
-  if (process.env.PUBLISH_MODE !== 'browser') {
+  if (fs.existsSync('itch-session.enc') && !(ledger[REPO] && ledger[REPO].state === 'live')) {
+    // The owner logged in once through the login relay. The hands agent reuses
+    // that login and taps through itch.io by looking at screenshots.
+    await handsPublish(dist, title);
+    ledger[REPO] = {
+      ...(ledger[REPO] || {}),
+      title,
+      state: 'live',
+      price: PRICE,
+      page: plain(PAGE_URL),
+      error: undefined,
+      shipped: new Date().toISOString(),
+      updated: new Date().toISOString(),
+    };
+  } else if (process.env.PUBLISH_MODE !== 'browser') {
     // itch.io puts a human check on its login page, so the robot never logs in.
     // The owner makes the page by hand once. After that butler uploads every build.
     log('Uploading with butler only. The itch.io page must already exist.');
@@ -327,12 +394,12 @@ async function finishSetup(editUrl) {
 })()
   .catch(async (err) => {
     log(`FAILED: ${err.message}`);
-    if (page) {
+    if (page && !privateShots) {
       const where = await page.evaluate(() => ({ url: location.href, title: document.title, text: (document.body ? document.body.innerText : '').replace(/\s+/g, ' ').slice(0, 600) })).catch(() => null);
       if (where) log(`Page at failure: ${where.url} | title: ${where.title} | text: ${where.text}`);
     }
     await shot('failure');
-    await dumpFields();
+    if (!privateShots) await dumpFields();
     const ledger = loadLedger();
     ledger[REPO] = { ...(ledger[REPO] || {}), state: ledger[REPO] && ledger[REPO].state === 'live' ? 'live' : 'failed', error: err.message, updated: new Date().toISOString() };
     if (REPO) saveLedger(ledger);
