@@ -75,7 +75,7 @@ const GATE = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewp
 body{margin:0;background:#fafaf7;color:#222;font:17px system-ui,sans-serif;padding:16px}
 input,button{font:inherit;padding:12px;border-radius:8px;border:1px solid #bbb;width:100%;box-sizing:border-box;margin-top:10px}
 button{background:#ff7a45;color:#fff;border:0}</style></head><body>
-<p>Type your itch.io password to open the live login.</p>
+<p>Type the value you saved as ITCH_PASSWORD to open the live login.</p>BAD
 <form method="post" action="/auth"><input type="password" name="pw" autocomplete="current-password"><button>Open</button></form>
 </body></html>`;
 
@@ -96,7 +96,8 @@ button.soft{background:#e8e4dc;color:#222}
 const img=document.getElementById('shot');const msg=document.getElementById('msg');
 function post(path,data){return fetch(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data||{})});}
 function refresh(){img.src='/shot.png?t='+Date.now();}
-img.onload=()=>setTimeout(refresh,900);img.onerror=()=>setTimeout(refresh,2000);refresh();
+img.onload=()=>{msg.textContent='Tap the picture where you would tap on itch.io. It updates every second.';setTimeout(refresh,900);};
+img.onerror=()=>{msg.textContent='Picture did not load, trying again.';setTimeout(refresh,2000);};refresh();
 img.addEventListener('click',e=>{const r=img.getBoundingClientRect();post('/tap',{x:(e.clientX-r.left)/r.width,y:(e.clientY-r.top)/r.height});});
 document.getElementById('send').onclick=()=>{const t=document.getElementById('txt');post('/type',{text:t.value});t.value='';};
 document.getElementById('enter').onclick=()=>post('/key',{key:'Enter'});
@@ -120,17 +121,20 @@ function startServer() {
           res.writeHead(303, { 'set-cookie': `relay=${t}; HttpOnly; Secure; SameSite=Strict; Path=/`, location: '/' });
           return res.end();
         }
-        res.writeHead(303, { location: '/' });
+        log('Someone typed a password that does not match ITCH_PASSWORD');
+        res.writeHead(303, { location: '/?bad=1' });
         res.end();
       });
       return;
     }
     if (!authed(req)) {
       res.writeHead(200, { 'content-type': 'text/html' });
-      return res.end(GATE);
+      const bad = url.searchParams.has('bad') ? '<p style="color:#b3261e">That does not match ITCH_PASSWORD. Try again.</p>' : '';
+      return res.end(GATE.replace('BAD', bad));
     }
     try {
       if (url.pathname === '/') {
+        log('Owner opened the live login');
         res.writeHead(200, { 'content-type': 'text/html' });
         return res.end(LIVE);
       }
