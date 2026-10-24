@@ -1,0 +1,1711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#e9e6df">
+<title>Lyric Smash</title>
+<style>
+  :root {
+    --chassis: #e9e6df;
+    --chassis-edge: #cfcac0;
+    --panel: #f6f4ef;
+    --ink: #22252a;
+    --ink-soft: #5d6168;
+    --ink-faint: #8b8f96;
+    --lcd: #dfe8cf;
+    --lcd-edge: #b8c4a3;
+    --lcd-ink: #26321a;
+    --lcd-dim: #6f7d5c;
+    --accent: #c4561f;
+    --ok: #2f8a4a;
+    --warn: #b7791f;
+    --key: #fbfaf7;
+    --key-shadow: #bdb7ab;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--chassis); color: var(--ink); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    padding: 14px 14px 40px;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Roboto Mono", monospace; }
+
+  header { display: flex; align-items: center; gap: 10px; }
+  .logo { width: 34px; height: 34px; border-radius: 8px; background: var(--ink); display: grid; place-items: center; flex: none; }
+  .brand { line-height: 1.1; flex: 1; min-width: 0; }
+  .brand b { display: block; font-size: 15px; letter-spacing: 3px; }
+  .brand span { font-size: 11px; color: var(--ink-soft); letter-spacing: 1px; text-transform: uppercase; }
+  .pill { font-size: 10px; letter-spacing: 1px; padding: 5px 8px; border-radius: 20px; background: var(--panel); border: 1px solid var(--chassis-edge); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-faint); }
+  .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px rgba(47,138,74,.18); }
+  .dot.busy { background: var(--warn); animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+
+  .modeRow { display: flex; gap: 6px; margin: 14px 0 8px; }
+  .modeRow .seg { flex: 1; padding: 10px 0; font-size: 11px; }
+
+  .card { background: var(--panel); border: 1px solid var(--chassis-edge); border-radius: 14px; padding: 12px; margin-top: 12px; box-shadow: inset 0 1px 0 #fff; }
+  .cardTitle { font-size: 10px; letter-spacing: 2px; color: var(--ink-faint); text-transform: uppercase; margin-bottom: 8px; display: flex; justify-content: space-between; gap: 8px; }
+
+  .lcd { background: var(--lcd); border: 2px solid var(--lcd-edge); border-radius: 10px; padding: 12px; color: var(--lcd-ink); box-shadow: inset 0 2px 6px rgba(0,0,0,.08); }
+  .lcdTop { display: flex; justify-content: space-between; font-size: 10px; letter-spacing: 1.5px; color: var(--lcd-dim); }
+  .nowRow { display: flex; gap: 12px; margin-top: 10px; align-items: center; }
+  .art { width: 78px; height: 78px; border-radius: 6px; background: var(--lcd-edge); flex: none; overflow: hidden; position: relative; display: grid; place-items: center; }
+  #tuneSlot { position: absolute; inset: 0; overflow: hidden; visibility: hidden; }
+  #tuneSlot.on { visibility: visible; }
+  #tuneSlot iframe { position: absolute; top: 0; left: 50%; width: 139px; height: 78px; transform: translateX(-50%); border: 0; pointer-events: none; }
+  .nowText { min-width: 0; flex: 1; }
+  .title { font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .artist { font-size: 13px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta { font-size: 11px; color: var(--lcd-dim); margin-top: 6px; letter-spacing: .5px; }
+
+  .lyrics { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--lcd-edge); text-align: center; }
+  .lyrLabel { font-size: 9px; letter-spacing: 2px; color: var(--lcd-dim); text-align: left; }
+  .lyr { min-height: 52px; line-height: 1.3; display: flex; align-items: center; justify-content: center; }
+  .lyr.cur { font-size: 21px; font-weight: 700; color: var(--lcd-ink); }
+  .lyr.nxt { font-size: 18px; font-weight: 600; color: var(--lcd-dim); }
+  .lyr.chorus { color: var(--accent); }
+  .lyr.nxt.chorus { opacity: .75; }
+  .lead { height: 4px; background: rgba(38,50,26,.12); border-radius: 2px; margin: 4px 0 8px; overflow: hidden; }
+  .lead > div { height: 100%; width: 0%; background: var(--accent); border-radius: 2px; }
+
+  .bar { height: 6px; background: rgba(38,50,26,.15); border-radius: 3px; margin-top: 10px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0%; background: var(--lcd-ink); border-radius: 3px; transition: width .25s linear; }
+  .times { display: flex; justify-content: space-between; font-size: 12px; margin-top: 5px; }
+
+  .transport { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 14px; }
+  .key { background: var(--key); border: 1px solid var(--chassis-edge); border-radius: 50%; box-shadow: 0 3px 0 var(--key-shadow); display: grid; place-items: center; padding: 0; color: var(--ink); font: 700 15px ui-monospace, Menlo, monospace; }
+  .key:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--key-shadow); }
+  .key.small { width: 56px; height: 56px; }
+  .key.big { width: 72px; height: 72px; }
+  .key svg { width: 30px; height: 30px; fill: currentColor; }
+  .keyLabels { display: flex; justify-content: center; gap: 16px; margin-top: 6px; font-size: 9px; letter-spacing: 1.5px; color: var(--ink-faint); }
+  .keyLabels span { width: 56px; text-align: center; }
+  .keyLabels span:nth-child(2) { width: 72px; }
+
+  #ack { margin-top: 12px; font-size: 12px; color: var(--ink-soft); min-height: 34px; line-height: 1.45; }
+  #ack .cmd { color: var(--accent); }
+
+  .seg { padding: 6px 9px; border-radius: 8px; border: 1px solid var(--chassis-edge); background: var(--key); color: var(--ink); font: 600 10px/1 ui-monospace, Menlo, monospace; letter-spacing: 1px; }
+  .seg.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .sbtn { padding: 10px 14px; border-radius: 10px; border: 1px solid var(--chassis-edge); background: var(--key); color: var(--ink); font: 600 12px/1 ui-monospace, Menlo, monospace; letter-spacing: 1px; text-transform: uppercase; flex: none; }
+  .sbtn.go { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .searchRow { display: flex; gap: 8px; }
+  .searchRow input, .numIn { flex: 1; min-width: 0; padding: 10px; border-radius: 8px; border: 1px solid var(--chassis-edge); background: #fff; color: var(--ink); font: 15px -apple-system, Roboto, sans-serif; }
+  .numIn { flex: none; width: 84px; text-align: center; font-family: ui-monospace, Menlo, monospace; }
+
+  .resultRow { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 0; border: 0; border-top: 1px solid #e6e2d9; background: transparent; color: var(--ink); font: 13px -apple-system, Roboto, sans-serif; cursor: pointer; }
+  .resultRow:first-child { border-top: 0; }
+  .resultRow img { width: 48px; height: 36px; border-radius: 4px; object-fit: cover; flex: none; background: var(--lcd-edge); }
+  .resultRow .rt { flex: 1; min-width: 0; }
+  .resultRow .rt div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .resultRow .rs { font-size: 10px; letter-spacing: 1px; color: var(--ink-faint); }
+
+  .picked { margin-top: 8px; font-size: 13px; padding: 8px 10px; border-radius: 8px; background: #fff; border: 1px solid var(--chassis-edge); display: none; }
+  .picked.on { display: block; }
+  .picked .ps { font-size: 10px; letter-spacing: 1px; color: var(--ink-faint); margin-top: 2px; }
+
+  .toggleRow { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; padding: 6px 0; }
+  .toggleRow + .toggleRow { border-top: 1px solid #e6e2d9; }
+  .ctl { display: flex; gap: 6px; align-items: center; }
+  .readout { min-width: 72px; text-align: center; font-size: 13px; }
+
+  .stat { display: grid; grid-template-columns: 1fr auto; gap: 6px; font-size: 13px; padding: 6px 0; border-top: 1px solid #e6e2d9; }
+  .stat:first-child { border-top: 0; }
+  .stat span:last-child { font-family: ui-monospace, Menlo, monospace; }
+  .chorusText { margin-top: 8px; font-size: 12px; color: var(--ink-soft); line-height: 1.5; }
+
+  .acaRow { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+  .art.small { width: 52px; height: 52px; }
+  #acaSlot { position: absolute; inset: 0; overflow: hidden; }
+  #acaSlot iframe { position: absolute; top: 0; left: 50%; width: 93px; height: 52px; transform: translateX(-50%); border: 0; pointer-events: none; }
+  .artStack { display: flex; flex-direction: column; gap: 4px; align-items: center; flex: none; }
+  .artCap { font-size: 8px; letter-spacing: 1px; color: var(--lcd-dim); }
+  #acaInfo { flex: 1; min-width: 0; font-size: 13px; }
+  #acaInfo .rs { font-size: 10px; letter-spacing: 1px; color: var(--ink-faint); margin-top: 2px; }
+  input[type=range] { accent-color: var(--ink); }
+
+  .bpmTag { flex: none; font: 600 10px/1.3 ui-monospace, Menlo, monospace; letter-spacing: .5px; color: var(--ink-faint); text-align: right; max-width: 92px; }
+  .bpmTag.match { color: var(--ok); }
+  .bpmTag.near { color: var(--warn); }
+  .bpmTag.far { color: var(--accent); }
+  .gapVal.match { color: var(--ok); }
+  .gapVal.near { color: var(--warn); }
+  .gapVal.far { color: var(--accent); }
+  .cueSel { max-width: 190px; padding: 8px; border-radius: 8px; border: 1px solid var(--chassis-edge); background: #fff; color: var(--ink); font: 13px -apple-system, Roboto, sans-serif; }
+  .key.armed { color: var(--accent); border-color: var(--accent); }
+
+  .sampleBtn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; margin-top: 14px; padding: 14px; border-radius: 12px; border: 1px solid var(--chassis-edge); background: var(--key); color: var(--ink); font: 700 13px/1 ui-monospace, Menlo, monospace; letter-spacing: 2px; box-shadow: 0 3px 0 var(--key-shadow); }
+  .sampleBtn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--key-shadow); }
+  .sampleBtn .rec { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
+  .sampleBtn.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .sampleBtn.on .rec { background: #fff; animation: blink 1s infinite; }
+  .sampRow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid #e6e2d9; font-size: 13px; }
+  .sampRow:first-child { border-top: 0; }
+  .sampRow .rt { flex: 1; min-width: 0; }
+  .sampRow .rt div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sampRow .rs { font-size: 10px; letter-spacing: 1px; color: var(--ink-faint); }
+
+  .hide { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><svg width="20" height="20" viewBox="0 0 24 24"><path d="M3 12h2v5H3zm4-4h2v13H7zm4-5h2v18h-2zm4 6h2v9h-2zm4 3h2v5h-2z" fill="#fff"/></svg></div>
+  <div class="brand"><b>LYRIC SMASH</b><span>Smash Director</span></div>
+  <div class="pill mono"><span class="dot" id="linkDot"></span><span id="linkText">STANDBY</span></div>
+</header>
+
+<div class="modeRow">
+  <button class="seg on" data-mode="smash">SMASH</button>
+  <button class="seg" data-mode="karaoke">LIVE KARAOKE</button>
+  <button class="seg" data-mode="live">LIVE SMASH</button>
+</div>
+
+<div class="lcd mono" id="lcd">
+  <div class="lcdTop"><span id="lcdLabel">NOW SMASHING</span><span id="lcdTag">NO TUNE</span></div>
+  <div class="nowRow">
+    <div class="artStack"><div class="art"><svg width="28" height="28" viewBox="0 0 24 24"><path d="M12 3v10.6A4 4 0 1 0 14 17V7h4V3z" fill="#6f7d5c"/></svg><div id="tuneSlot"><div id="tunePlayer"></div></div></div><span class="artCap">BEAT</span></div>
+    <div class="artStack"><div class="art small"><svg width="20" height="20" viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v7a3 3 0 0 0 3 3z" fill="#6f7d5c"/></svg><div id="acaSlot"><div id="acaPlayer"></div></div></div><span class="artCap">VOICE</span></div>
+    <div class="nowText">
+      <div class="title" id="title">Pick a tune</div>
+      <div class="artist" id="artist">Then pick the words</div>
+      <div class="meta" id="meta">--</div>
+    </div>
+  </div>
+  <div class="lyrics">
+    <div class="lyrLabel">NOW</div>
+    <div class="lyr cur" id="lyrCur"></div>
+    <div class="lead"><div id="leadBar"></div></div>
+    <div class="lyrLabel">NEXT</div>
+    <div class="lyr nxt" id="lyrNext"></div>
+  </div>
+  <div class="bar"><div id="progress"></div></div>
+  <div class="times"><span id="elapsed">0:00</span><span id="remaining">-0:00</span></div>
+</div>
+
+<div class="transport" id="smashTransport">
+  <button class="key small" id="backBtn" aria-label="Words earlier">-1/4</button>
+  <button class="key big" id="playBtn" aria-label="Play"><svg viewBox="0 0 24 24"><path d="M7 5v14l12-7z"/></svg></button>
+  <button class="key small" id="fwdBtn" aria-label="Words later">+1/4</button>
+  <button class="key small" id="dropBtn" aria-label="Drop the acapella">DROP</button>
+</div>
+<div class="keyLabels mono" id="smashLabels"><span>EARLIER</span><span id="playLabel">PLAY</span><span>LATER</span><span id="dropLabel">ARM</span></div>
+
+<div class="transport hide" id="karaokeTransport">
+  <button class="key big" id="listenBtn" aria-label="Listen"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v7a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-2.1A7 7 0 0 0 19 12z"/></svg></button>
+</div>
+<div class="transport hide" id="liveTransport">
+  <button class="key small" id="livePlayBtn" aria-label="Play"><svg viewBox="0 0 24 24" style="width:24px;height:24px"><path d="M7 5v14l12-7z"/></svg></button>
+  <button class="key big" id="liveListenBtn" aria-label="Listen"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v7a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-2.1A7 7 0 0 0 19 12z"/></svg></button>
+  <button class="key small" id="liveDropBtn" aria-label="Drop">DROP</button>
+</div>
+<div class="keyLabels mono hide" id="liveLabels"><span id="livePlayLabel">PLAY</span><span id="liveListenLabel">LISTEN</span><span>DROP</span></div>
+<div class="keyLabels mono hide" id="karaokeLabels"><span></span><span id="listenLabel">LISTEN</span><span></span></div>
+
+<button class="sampleBtn" id="sampleBtn"><span class="rec"></span><span id="sampleLabel">TAP TO SAMPLE</span></button>
+<div id="ack" class="mono"></div>
+
+<div id="smashPanel">
+  <div class="card">
+    <div class="cardTitle"><span>Tune</span><span class="mono" id="tuneCount"></span></div>
+    <div class="searchRow"><input id="tuneInput" placeholder="Song or artist"><button class="sbtn" id="tuneFind">Find</button></div>
+    <div class="toggleRow"><span>Instrumentals only</span><input type="checkbox" id="instOnly" checked></div>
+    <div id="tuneResults"></div>
+    <div class="picked" id="tunePicked"></div>
+  </div>
+
+  <div class="card">
+    <div class="cardTitle"><span>Words</span><span class="mono" id="wordsCount"></span></div>
+    <div class="searchRow"><input id="wordsInput" placeholder="Song or artist"><button class="sbtn" id="wordsFind">Find</button></div>
+    <div id="wordsResults" style="margin-top:6px;"></div>
+    <div class="picked" id="wordsPicked"></div>
+  </div>
+
+  <div class="card">
+    <div class="cardTitle"><span>Stretch</span><span class="mono" id="ratioTag">1.000X</span></div>
+    <div class="toggleRow"><span>Tune BPM</span><input class="numIn" id="tuneBpm" type="number" step="0.1" inputmode="decimal"></div>
+    <div class="toggleRow"><span>Words BPM</span><input class="numIn" id="wordsBpm" type="number" step="0.1" inputmode="decimal"></div>
+    <div class="toggleRow"><span>How far off</span><span class="mono gapVal" id="gapVal">--</span></div>
+    <div class="toggleRow"><span>Stretch the voice to the beat</span><input type="checkbox" id="stretchOn" checked></div>
+    <div class="toggleRow"><span>Words tempo</span><span class="ctl"><button class="seg" data-fold="0.5">HALF</button><button class="seg on" data-fold="1">1X</button><button class="seg" data-fold="2">DOUBLE</button></span></div>
+    <div class="toggleRow"><span>Words start</span><span class="ctl"><span class="mono readout" id="offsetVal">+0.00 s</span><button class="seg" id="offsetReset">RST</button></span></div>
+  </div>
+
+  <div class="card">
+    <div class="cardTitle"><span>Snap</span><span class="mono" id="snapTag">OFF GRID</span></div>
+    <div class="toggleRow"><span>Snap to the beat</span><input type="checkbox" id="snapOn" checked></div>
+    <div class="toggleRow"><span>Snap size</span><span class="ctl"><button class="seg" data-snap="0.5">HALF</button><button class="seg on" data-snap="1">BEAT</button><button class="seg" data-snap="4">BAR</button></span></div>
+    <div class="toggleRow"><span>Beat one</span><span class="ctl"><button class="seg" data-ph="-0.02">-</button><span class="mono readout" id="phaseVal">0.00 s</span><button class="seg" data-ph="0.02">+</button><button class="seg" id="beatOneBtn">SET</button></span></div>
+  </div>
+
+  <div class="card">
+    <div class="cardTitle"><span>Acapella</span><span class="mono" id="acaTag">PICK WORDS FIRST</span></div>
+    <div class="toggleRow"><span>Play the acapella</span><input type="checkbox" id="acaOn" checked></div>
+    <div class="toggleRow"><span>Start from</span><select class="cueSel" id="cueSel"><option value="0">0:00 top of the song</option></select></div>
+    <div class="toggleRow"><span>Acapella shift</span><span class="ctl"><button class="seg" data-as="-0.1">-</button><span class="mono readout" id="asVal">+0.0 s</span><button class="seg" data-as="0.1">+</button><button class="seg" data-as="0">RST</button></span></div>
+    <div class="toggleRow"><span>Acapella level</span><input type="range" id="acaVol" min="0" max="100" value="100" style="width:150px;"></div>
+    <div class="toggleRow"><span>Drop at</span><span class="ctl"><input class="numIn" id="dropIn" type="number" step="0.001" inputmode="decimal" placeholder="tap drop"><span class="mono" style="font-size:11px;color:var(--ink-faint)">S</span><button class="seg" id="dropClear">CLEAR</button></span></div>
+    <div class="toggleRow"><span>Fine tune the drop</span><span class="ctl"><button class="seg" data-dt="-0.05">-50</button><button class="seg" data-dt="-0.01">-10</button><button class="seg" data-dt="0.01">+10</button><button class="seg" data-dt="0.05">+50</button><span class="mono" style="font-size:10px;color:var(--ink-faint)">MS</span></span></div>
+    <div class="toggleRow"><span>Start over, everything buffered</span><button class="seg" id="restartBtn">FROM THE TOP</button></div>
+    <div id="dropLog" style="margin-top:4px;"></div>
+    <div class="acaRow"><div id="acaInfo"><span style="color:var(--ink-faint)">Pick words and the vocal only version loads here</span></div></div>
+    <div id="acaResults" style="margin-top:6px;"></div>
+  </div>
+</div>
+
+<div id="livePanel" class="hide">
+  <div class="card">
+    <div class="cardTitle"><span>Live smash</span><span></span></div>
+    <div class="toggleRow"><span>Auto follow songs</span><input type="checkbox" id="liveFollow" checked></div>
+    <div class="toggleRow"><span>Play the instrumental</span><input type="checkbox" id="liveInstOn" checked></div>
+    <div class="toggleRow"><span>Play the donor acapella</span><input type="checkbox" id="liveAcaOn" checked></div>
+    <div class="toggleRow"><span>Stretch the voice to the beat</span><input type="checkbox" id="liveStretch" checked></div>
+    <div class="toggleRow"><span>Beat timing</span><span class="ctl"><button class="seg" data-ln="-50">-</button><span class="mono readout" id="lnVal">+0 ms</span><button class="seg" data-ln="50">+</button><button class="seg" data-ln="0">RST</button></span></div>
+    <div class="toggleRow"><span>Acapella shift</span><span class="ctl"><button class="seg" data-las="-0.1">-</button><span class="mono readout" id="lasVal">+0.0 s</span><button class="seg" data-las="0.1">+</button><button class="seg" data-las="0">RST</button></span></div>
+  </div>
+  <div class="card">
+    <div class="cardTitle"><span>Instrumental</span><span class="mono" id="liveInstTag">WAITING</span></div>
+    <div id="liveInstInfo" style="font-size:13px;color:var(--ink-faint)">Listen to a song and its instrumental loads here</div>
+    <div id="liveInstResults" style="margin-top:6px;"></div>
+  </div>
+  <div class="card">
+    <div class="cardTitle"><span>Donor suggestions</span><span class="mono" id="liveSugTag">SAME BPM</span></div>
+    <div class="searchRow"><input id="liveSearch" placeholder="Song, artist, or a BPM like 120"><button class="sbtn" id="liveFind">Find</button></div>
+    <div class="toggleRow"><span>Songs at the live BPM</span><button class="seg" id="liveBpmFind">SEARCH LIVE BPM</button></div>
+    <input type="hidden" id="liveBpmNow">
+    <div id="liveSug"><div class="resultRow"><span class="rs">Suggestions show up once a song is locked</span></div></div>
+  </div>
+  <div class="card">
+    <div class="cardTitle"><span>Donor acapella</span><span class="mono" id="liveAcaTag">WAITING</span></div>
+    <div id="liveAcaInfo" style="font-size:13px;color:var(--ink-faint)">Pick a suggestion and its vocal only version loads here</div>
+    <div id="liveAcaResults" style="margin-top:6px;"></div>
+  </div>
+</div>
+
+<div id="karaokePanel" class="hide">
+  <div class="card">
+    <div class="cardTitle"><span>Live karaoke</span><span></span></div>
+    <div class="toggleRow"><span>Auto follow songs</span><input type="checkbox" id="followToggle" checked></div>
+    <div class="toggleRow"><span>Lyric timing</span><span class="ctl"><button class="seg" data-kn="-250">-</button><span class="mono readout" id="knVal">+0 ms</span><button class="seg" data-kn="250">+</button><button class="seg" data-kn="0">RST</button></span></div>
+  </div>
+</div>
+
+<div class="card" id="samplesCard">
+  <div class="cardTitle"><span>Samples</span><span class="mono" id="sampCount"></span></div>
+  <div id="sampList"><div class="sampRow"><span class="rs">Tap sample while a smash plays, tap again to stop and export</span></div></div>
+</div>
+
+<div class="card">
+  <div class="cardTitle"><span>Word count</span><span class="mono" id="statSong"></span></div>
+  <div id="stats"><div class="stat"><span style="color:var(--ink-faint)">Load words to count them</span><span></span></div></div>
+  <div class="chorusText" id="chorusText"></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const CLIP_MS = 9000;
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+function fmt(sec) {
+  if (sec === null || sec === undefined || !isFinite(sec)) return '--:--';
+  sec = Math.max(0, Math.floor(sec));
+  return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+}
+function setLink(state, text) { $('linkDot').className = 'dot' + (state ? ' ' + state : ''); $('linkText').textContent = text; }
+let ackTimer = null;
+function log(cmd, text, holdMs) {
+  $('ack').innerHTML = '&gt; <span class="cmd">' + esc(cmd) + '</span> ' + esc(text);
+  if (ackTimer) clearTimeout(ackTimer);
+  if (holdMs !== 0) ackTimer = setTimeout(() => { $('ack').innerHTML = ''; }, holdMs || 6000);
+}
+function store(k, v) { try { localStorage.setItem('smash:' + k, JSON.stringify(v)); } catch (e) {} }
+function recall(k) { try { return JSON.parse(localStorage.getItem('smash:' + k) || 'null'); } catch (e) { return null; } }
+
+/* server clock, copied from the zone director sync */
+let clockOffsetMs = 0, calibrated = false;
+async function calibrateClock() {
+  const samples = [];
+  for (let i = 0; i < 5; i++) {
+    const t0 = Date.now();
+    try {
+      const data = await (await fetch('/api/time', { cache: 'no-store' })).json();
+      const t1 = Date.now();
+      samples.push({ offset: (data.serverTime + (t1 - t0) / 2) - t1, rtt: t1 - t0 });
+    } catch (err) {}
+  }
+  if (!samples.length) return;
+  samples.sort((a, b) => a.rtt - b.rtt);
+  if (!calibrated) { clockOffsetMs = samples[0].offset; calibrated = true; }
+  else clockOffsetMs += (samples[0].offset - clockOffsetMs) * 0.5;
+}
+function now() { return Date.now() + clockOffsetMs; }
+calibrateClock();
+setInterval(calibrateClock, 75000);
+
+/* lyric parsing and counting */
+function parseLrc(text) {
+  const lines = [];
+  (text || '').split(/\r?\n/).forEach(raw => {
+    const stamps = [...raw.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)];
+    if (!stamps.length) return;
+    const words = raw.replace(/\[[^\]]*\]/g, '').replace(/<[^>]*>/g, '').trim();
+    stamps.forEach(m => lines.push({ t: Number(m[1]) * 60 + Number(m[2]), text: words }));
+  });
+  lines.sort((a, b) => a.t - b.t);
+  return lines;
+}
+function normLine(s) { return (s || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim(); }
+function wordCount(s) { return (s || '').split(/\s+/).filter(w => /[a-z0-9]/i.test(w)).length; }
+function consonantCount(s) { return ((s || '').toLowerCase().match(/[bcdfghjklmnpqrstvwxyz]/g) || []).length; }
+
+function markChorus(lines) {
+  const counts = {};
+  lines.forEach(l => { const n = normLine(l.text); if (n) counts[n] = (counts[n] || 0) + 1; });
+  lines.forEach(l => { const n = normLine(l.text); l.chorus = !!n && counts[n] >= 2; });
+  const seen = new Set(), chorus = [];
+  lines.forEach(l => { const n = normLine(l.text); if (l.chorus && !seen.has(n)) { seen.add(n); chorus.push(l.text); } });
+  return chorus;
+}
+
+function renderStats(src) {
+  if (!src || !src.lines.length) {
+    $('statSong').textContent = '';
+    $('stats').innerHTML = '<div class="stat"><span style="color:var(--ink-faint)">Load words to count them</span><span></span></div>';
+    $('chorusText').textContent = '';
+    return;
+  }
+  const lines = src.lines.filter(l => l.text);
+  const chorus = src.chorus;
+  const all = lines.map(l => l.text).join(' ');
+  const ch = chorus.join(' ');
+  const span = lines.length > 1 ? lines[lines.length - 1].t - lines[0].t : 0;
+  const bpm = src.bpm;
+  const beats = bpm && span ? span * bpm / 60 : null;
+  const rows = [
+    ['Lines', lines.length],
+    ['Words, whole song', wordCount(all)],
+    ['Consonants, whole song', consonantCount(all)],
+    ['Chorus lines', chorus.length],
+    ['Words, chorus', chorus.length ? wordCount(ch) : 'none found'],
+    ['Consonants, chorus', chorus.length ? consonantCount(ch) : 'none found'],
+    ['Words per beat', beats ? (wordCount(all) / beats).toFixed(2) : 'needs BPM']
+  ];
+  $('statSong').textContent = (src.title || '').toUpperCase().slice(0, 28);
+  $('stats').innerHTML = rows.map(r => '<div class="stat"><span>' + esc(r[0]) + '</span><span>' + esc(r[1]) + '</span></div>').join('');
+  $('chorusText').textContent = chorus.length ? 'Chorus is the lines that repeat. Orange lines on the screen are chorus lines.' : '';
+}
+
+/* shared lyric display */
+let lastIdx = -2;
+function showLyrics(lines, t) {
+  let idx = -1;
+  if (lines && lines.length) {
+    let lo = 0, hi = lines.length - 1;
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (lines[mid].t <= t) { idx = mid; lo = mid + 1; } else hi = mid - 1; }
+  }
+  const at = (i) => (lines && lines[i] ? lines[i] : null);
+  const cur = at(idx), nxt = at(idx + 1);
+  const startT = cur ? cur.t : 0;
+  const lead = nxt && nxt.t > startT ? Math.min(1, Math.max(0, (t - startT) / (nxt.t - startT))) : 0;
+  $('leadBar').style.width = (lead * 100) + '%';
+  if (idx === lastIdx) return;
+  lastIdx = idx;
+  $('lyrCur').textContent = cur ? (cur.text || '...') : (lines && lines.length ? '...' : '');
+  $('lyrCur').classList.toggle('chorus', !!(cur && cur.chorus));
+  $('lyrNext').textContent = nxt ? (nxt.text || '...') : '';
+  $('lyrNext').classList.toggle('chorus', !!(nxt && nxt.chorus));
+}
+function clearLyrics() { lastIdx = -2; $('lyrCur').textContent = ''; $('lyrNext').textContent = ''; $('leadBar').style.width = '0%'; }
+
+/* mode switch */
+let mode = 'smash';
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.getAttribute('data-mode') === m));
+  const groups = { smash: ['smashPanel', 'smashTransport', 'smashLabels'], karaoke: ['karaokePanel', 'karaokeTransport', 'karaokeLabels'], live: ['livePanel', 'liveTransport', 'liveLabels'] };
+  Object.keys(groups).forEach(k => groups[k].forEach(id => $(id).classList.toggle('hide', k !== m)));
+  ['sampleBtn', 'samplesCard'].forEach(id => $(id).classList.toggle('hide', m === 'karaoke'));
+  if (sampling && m === 'karaoke') stopSample();
+  clearLyrics();
+  pauseTune();
+  if (m !== 'karaoke' && karaokeTimer) { clearTimeout(karaokeTimer); karaokeTimer = null; }
+  if (m !== 'live' && liveTimer) { clearTimeout(liveTimer); liveTimer = null; }
+  if (m === 'smash') {
+    $('lcdLabel').textContent = 'NOW SMASHING';
+    loadedVideo = null;
+    if (tune) loadTune(false);
+    if (aca && acaReady) { acaLoaded = null; try { acaPlayer.cueVideoById(aca.videoId, 0); acaLoaded = aca.videoId; } catch (e) {} }
+    renderSmashHeader();
+    renderStats(words);
+  } else if (m === 'karaoke') {
+    $('lcdLabel').textContent = 'LIVE KARAOKE';
+    renderKaraokeHeader();
+    renderStats(live);
+  } else {
+    $('lcdLabel').textContent = 'LIVE SMASH';
+    renderLiveHeader();
+    renderStats(donor);
+  }
+}
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => setMode(b.getAttribute('data-mode'))));
+
+/* ===== SMASH MODE ===== */
+let tune = recall('tune');
+let words = null;
+let fold = 1;
+let offsetSec = 0;
+
+function ratio() {
+  if (!$('stretchOn').checked) return 1;
+  const tb = parseFloat($('tuneBpm').value), wb = parseFloat($('wordsBpm').value);
+  if (!(tb > 0) || !(wb > 0)) return 1;
+  return tb / (wb * fold);
+}
+/* the speed the voice really plays at: YouTube rounds speeds, so the lyrics and drift checks follow the rounded speed */
+function appliedRate() {
+  const want = ratio();
+  if (aca && acaReady && acaPlayer && $('acaOn').checked) return nearestRate(want);
+  return want;
+}
+function bpmGap(bpm, other) {
+  if (!(bpm > 0) || !(other > 0)) return null;
+  let best = null;
+  [[1, ''], [2, ' AT DOUBLE'], [0.5, ' AT HALF']].forEach(([f, note]) => {
+    const pct = (bpm * f - other) / other * 100;
+    if (!best || Math.abs(pct) < Math.abs(best.pct) - 0.01) best = { pct, note };
+  });
+  const a = Math.abs(best.pct);
+  best.cls = a <= 1.5 ? 'match' : a <= 6 ? 'near' : 'far';
+  best.text = (a <= 1.5 ? 'MATCH' : (best.pct > 0 ? '+' : '') + best.pct.toFixed(1) + '%') + best.note;
+  return best;
+}
+function renderRatio() {
+  $('ratioTag').textContent = $('stretchOn').checked ? ratio().toFixed(3) + 'X' : 'ORIGINAL SPEED';
+  const g = bpmGap(parseFloat($('wordsBpm').value), parseFloat($('tuneBpm').value));
+  $('gapVal').className = 'mono gapVal' + (g ? ' ' + g.cls : '');
+  $('gapVal').textContent = g ? g.text : '--';
+  renderPhase();
+}
+
+/* bpm for every song that shows up in a list, cached on this phone */
+let bpmCache = recall('bpm') || {};
+Object.keys(bpmCache).forEach(k => { if (!bpmCache[k]) delete bpmCache[k]; });
+const bpmJobs = [];
+let bpmRunning = false;
+function splitYt(title, channel) {
+  const t = decodeHtml(title);
+  const parts = t.split(/\s+[-|\u2013]\s+/);
+  if (parts.length >= 2) return { artist: parts[0], title: parts.slice(1).join(' ') };
+  return { artist: decodeHtml(channel || '').replace(/vevo|\s*-\s*topic|official/gi, '').trim(), title: t };
+}
+function bpmFor(title, artist) {
+  const k = (title + '|' + (artist || '')).toLowerCase();
+  if (k in bpmCache) return Promise.resolve(bpmCache[k]);
+  return new Promise((resolve) => { bpmJobs.push({ k, title, artist, resolve }); runBpmJobs(); });
+}
+async function runBpmJobs() {
+  if (bpmRunning) return;
+  bpmRunning = true;
+  while (bpmJobs.length) {
+    const job = bpmJobs.shift();
+    let v = null;
+    if (job.k in bpmCache) v = bpmCache[job.k];
+    else {
+      try {
+        const d = await (await fetch('/api/bpm?title=' + encodeURIComponent(job.title) + '&artist=' + encodeURIComponent(job.artist || ''))).json();
+        v = d && d.bpm ? d.bpm : null;
+        if (v) { bpmCache[job.k] = v; store('bpm', bpmCache); }
+      } catch (e) {}
+    }
+    job.resolve(v);
+  }
+  bpmRunning = false;
+}
+function tagRow(row, title, artist, otherId, list) {
+  const tag = document.createElement('span');
+  tag.className = 'bpmTag';
+  tag.textContent = 'BPM ...';
+  row.appendChild(tag);
+  row.dataset.gap = '999';
+  return bpmFor(title, artist).then(bpm => {
+    if (!bpm) { tag.textContent = 'BPM --'; return; }
+    const g = bpmGap(bpm, parseFloat($(otherId).value));
+    tag.innerHTML = Math.round(bpm) + ' BPM' + (g ? '<br>' + esc(g.text) : '');
+    if (g) { tag.classList.add(g.cls); row.dataset.gap = String(Math.abs(g.pct)); }
+    row.dataset.bpm = String(bpm);
+  });
+}
+function sortByGap(list) {
+  const rows = [...$(list).children].filter(r => r.dataset && r.dataset.gap);
+  rows.sort((a, b) => parseFloat(a.dataset.gap) - parseFloat(b.dataset.gap)).forEach(r => $(list).appendChild(r));
+}
+function renderOffset() { $('offsetVal').textContent = (offsetSec >= 0 ? '+' : '') + offsetSec.toFixed(2) + ' s'; }
+['tuneBpm', 'wordsBpm'].forEach(id => $(id).addEventListener('input', () => { renderRatio(); renderSmashHeader(); }));
+document.querySelectorAll('[data-fold]').forEach(b => b.addEventListener('click', () => {
+  fold = parseFloat(b.getAttribute('data-fold'));
+  document.querySelectorAll('[data-fold]').forEach(x => x.classList.toggle('on', x === b));
+  renderRatio(); renderSmashHeader();
+}));
+function quarterBeat() {
+  const tb = parseFloat($('tuneBpm').value);
+  if (!(tb > 0)) return 0.25;
+  return snapReady() ? 60 / tb * snapMult : 60 / tb / 4;
+}
+function nudgeDrop(d) {
+  if (dropAt !== null) setDropAt(dropAt + d, 'nudge');
+  else { offsetSec += d; renderOffset(); }
+  lastIdx = -2; acaLastSync = 0;
+}
+$('backBtn').addEventListener('click', () => { nudgeDrop(-quarterBeat()); log('NUDGE', 'words land earlier'); });
+$('fwdBtn').addEventListener('click', () => { nudgeDrop(quarterBeat()); log('NUDGE', 'words land later'); });
+$('offsetReset').addEventListener('click', () => { offsetSec = 0; setArmed(true); renderOffset(); lastIdx = -2; });
+$('stretchOn').addEventListener('change', () => { acaRateSet = null; renderRatio(); renderSmashHeader(); });
+
+function renderSmashHeader() {
+  if (mode !== 'smash') return;
+  $('title').textContent = tune ? tune.title : 'Pick a tune';
+  $('artist').textContent = words ? 'Words: ' + words.title + ' / ' + words.artist : 'Then pick the words';
+  $('lcdTag').textContent = tune && words ? 'READY' : tune ? 'NEEDS WORDS' : 'NO TUNE';
+  const tb = parseFloat($('tuneBpm').value), wb = parseFloat($('wordsBpm').value);
+  const bits = [];
+  bits.push(tb > 0 ? 'TUNE ' + Math.round(tb) : 'TUNE --');
+  bits.push(wb > 0 ? 'WORDS ' + Math.round(wb * fold) : 'WORDS --');
+  bits.push(ratio().toFixed(3) + 'X');
+  $('meta').textContent = bits.join(' / ');
+}
+
+async function lookupBpm(title, artist, field) {
+  $(field).value = '';
+  $(field).placeholder = '...';
+  try {
+    const d = await (await fetch('/api/bpm?title=' + encodeURIComponent(title) + '&artist=' + encodeURIComponent(artist || ''))).json();
+    if (d.bpm) { $(field).value = d.bpm; $(field).placeholder = ''; log('BPM', Math.round(d.bpm) + ' for ' + title + (d.source ? ' via ' + d.source : '')); }
+    else { $(field).placeholder = 'none'; log('BPM', 'no BPM on file for ' + title + ', type it in'); }
+  } catch (e) { $(field).placeholder = 'none'; }
+  renderRatio(); renderSmashHeader();
+}
+
+/* tune search */
+async function findTune() {
+  const q = $('tuneInput').value.trim();
+  if (!q) return;
+  $('tuneResults').innerHTML = '<div class="resultRow"><span class="rs">SEARCHING</span></div>';
+  const inst = $('instOnly').checked;
+  const finalQ = inst && !/instrumental/i.test(q) ? q + ' instrumental' : q;
+  let d = null;
+  try { d = await (await fetch('/api/youtube-search?q=' + encodeURIComponent(finalQ))).json(); } catch (e) {}
+  let rows = d && d.results ? d.results : [];
+  if (inst) {
+    const tagged = rows.filter(r => /instrumental|beat|karaoke|no vocals/i.test(decodeHtml(r.title)));
+    if (tagged.length) rows = tagged;
+  }
+  $('tuneCount').textContent = rows.length ? rows.length + ' FOUND' : '';
+  if (!rows.length) { $('tuneResults').innerHTML = '<div class="resultRow"><span class="rs">' + esc(d && d.error ? d.error : 'NOTHING FOUND') + '</span></div>'; return; }
+  $('tuneResults').innerHTML = '';
+  const jobs = [];
+  rows.forEach(r => {
+    const b = document.createElement('button');
+    b.className = 'resultRow';
+    b.innerHTML = (r.thumbnail ? '<img alt="" src="' + esc(r.thumbnail) + '">' : '<img alt="">') +
+      '<div class="rt"><div>' + esc(decodeHtml(r.title)) + '</div><div class="rs">' + esc(decodeHtml(r.channel)) + '</div></div>';
+    b.addEventListener('click', () => pickTune({ videoId: r.videoId, title: decodeHtml(r.title), channel: decodeHtml(r.channel), bpm: b.dataset.bpm ? parseFloat(b.dataset.bpm) : null }));
+    $('tuneResults').appendChild(b);
+    const sp = splitYt(r.title, r.channel);
+    jobs.push(tagRow(b, sp.title, sp.artist, 'wordsBpm'));
+  });
+  Promise.all(jobs).then(() => sortByGap('tuneResults'));
+}
+function decodeHtml(s) { const t = document.createElement('textarea'); t.innerHTML = s || ''; return t.value; }
+$('tuneFind').addEventListener('click', findTune);
+$('tuneInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') findTune(); });
+
+function pickTune(t) {
+  tune = t;
+  store('tune', t);
+  loadPhase();
+  if (words) loadDropLog();
+  $('tuneResults').innerHTML = '';
+  $('tuneCount').textContent = '';
+  $('tunePicked').innerHTML = esc(t.title) + '<div class="ps">' + esc(t.channel || '') + '</div>';
+  $('tunePicked').classList.add('on');
+  loadTune(false);
+  lookupBpm(t.title, '', 'tuneBpm');
+  renderSmashHeader();
+  log('TUNE', 'loaded ' + t.title);
+}
+
+/* words search */
+async function findWords() {
+  const q = $('wordsInput').value.trim();
+  if (!q) return;
+  $('wordsResults').innerHTML = '<div class="resultRow"><span class="rs">SEARCHING</span></div>';
+  let d = null;
+  try { d = await (await fetch('/api/lyrics?q=' + encodeURIComponent(q))).json(); } catch (e) {}
+  const rows = d && d.results ? d.results : [];
+  $('wordsCount').textContent = rows.length ? rows.length + ' FOUND' : '';
+  if (!rows.length) { $('wordsResults').innerHTML = '<div class="resultRow"><span class="rs">NO TIMED LYRICS FOUND</span></div>'; return; }
+  $('wordsResults').innerHTML = '';
+  const jobs = [];
+  rows.forEach(r => {
+    const b = document.createElement('button');
+    b.className = 'resultRow';
+    b.innerHTML = '<div class="rt"><div>' + esc(r.title) + '</div><div class="rs">' + esc(r.artist) + (r.album ? ' / ' + esc(r.album) : '') + ' / ' + fmt(r.durationSeconds) + '</div></div>';
+    b.addEventListener('click', () => { r.bpm = b.dataset.bpm ? parseFloat(b.dataset.bpm) : null; pickWords(r); });
+    $('wordsResults').appendChild(b);
+    jobs.push(tagRow(b, r.title, r.artist, 'tuneBpm'));
+  });
+  Promise.all(jobs).then(() => sortByGap('wordsResults'));
+}
+$('wordsFind').addEventListener('click', findWords);
+$('wordsInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') findWords(); });
+
+function pickWords(r) {
+  const lines = parseLrc(r.synced);
+  words = { title: r.title, artist: r.artist, lines, chorus: markChorus(lines), bpm: null };
+  $('wordsResults').innerHTML = '';
+  $('wordsCount').textContent = '';
+  $('wordsPicked').innerHTML = esc(r.title) + '<div class="ps">' + esc(r.artist) + ' / ' + lines.length + ' TIMED LINES</div>';
+  $('wordsPicked').classList.add('on');
+  offsetSec = 0; renderOffset();
+  lastIdx = -2;
+  renderStats(words);
+  buildCueList(lines);
+  setArmed(true);
+  loadDropLog();
+  findAcapella(r.title, r.artist);
+  lookupBpm(r.title, r.artist, 'wordsBpm').then(() => { words.bpm = parseFloat($('wordsBpm').value) || null; renderStats(words); });
+  renderSmashHeader();
+  log('WORDS', 'loaded ' + lines.length + ' timed lines from ' + r.title);
+}
+$('wordsBpm').addEventListener('change', () => { if (words) { words.bpm = parseFloat($('wordsBpm').value) || null; renderStats(words); } });
+
+/* youtube player, copied from the zone director */
+let ytLoading = false;
+const ytQueue = [];
+function whenYouTubeReady(cb) {
+  if (window.YT && window.YT.Player) { cb(); return; }
+  ytQueue.push(cb);
+  if (ytLoading) return;
+  ytLoading = true;
+  window.onYouTubeIframeAPIReady = function () { ytQueue.splice(0).forEach(f => { try { f(); } catch (err) {} }); };
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  document.body.appendChild(tag);
+}
+let player = null, playerReady = false, loadedVideo = null, playerState = -1, wantPlay = false;
+function ensurePlayer(cb) {
+  if (player && playerReady) { cb && cb(); return; }
+  whenYouTubeReady(() => {
+    if (player) { if (cb) readyQueue.push(cb); return; }
+    player = new YT.Player('tunePlayer', {
+      height: '78', width: '139',
+      playerVars: { controls: 0, playsinline: 1, rel: 0, disablekb: 1, fs: 0, iv_load_policy: 3 },
+      events: {
+        onReady: () => { playerReady = true; readyQueue.splice(0).forEach(f => f()); },
+        onStateChange: (e) => { playerState = e.data; renderPlayKey(); if (e.data === 0) { wantPlay = false; log('END', 'tune finished'); } },
+        onError: (e) => { log('TUNE', 'this upload blocks embedded play, error ' + (e && e.data) + ', pick another'); wantPlay = false; renderPlayKey(); }
+      }
+    });
+    if (cb) readyQueue.push(cb);
+  });
+}
+const readyQueue = [];
+function loadTune(autoplay) {
+  if (!tune) return;
+  ensurePlayer(() => {
+    if (loadedVideo !== tune.videoId) {
+      loadedVideo = tune.videoId;
+      if (autoplay) player.loadVideoById(tune.videoId, 0);
+      else player.cueVideoById(tune.videoId, 0);
+    } else if (autoplay) player.playVideo();
+  });
+}
+function pauseTune() { wantPlay = false; try { if (player && player.pauseVideo) player.pauseVideo(); } catch (e) {} pauseAca(); renderPlayKey(); }
+const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 5v14l12-7z"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg>';
+function renderPlayKey() {
+  const playing = playerState === 1;
+  $('playBtn').innerHTML = playing ? ICON_PAUSE : ICON_PLAY;
+  $('playLabel').textContent = playing ? 'PAUSE' : 'PLAY';
+  $('tuneSlot').classList.toggle('on', playing || playerState === 2 || playerState === 3);
+  if (mode === 'smash') setLink(playing ? 'ok' : (playerState === 3 ? 'busy' : ''), playing ? 'SMASHING' : (playerState === 3 ? 'LOADING' : 'STANDBY'));
+}
+$('playBtn').addEventListener('click', () => {
+  if (!tune) { log('PLAY', 'pick a tune first'); return; }
+  if (playerState === 1) { pauseTune(); return; }
+  if (snapReady() && playerState === 2) {
+    try { const t = player.getCurrentTime() || 0; player.seekTo(Math.max(0, snapFloor(t)), true); } catch (e) {}
+  }
+  wantPlay = true;
+  loadTune(true);
+  if (!words) log('PLAY', 'tune only, pick words to smash on top');
+});
+
+function smashTick() {
+  if (mode !== 'smash' || !player || !playerReady || typeof player.getCurrentTime !== 'function') return;
+  let t = 0, dur = 0;
+  try { t = player.getCurrentTime() || 0; dur = player.getDuration() || 0; } catch (e) { return; }
+  $('elapsed').textContent = fmt(t);
+  $('remaining').textContent = dur ? '-' + fmt(dur - t) : '-0:00';
+  $('progress').style.width = dur ? Math.min(100, t / dur * 100) + '%' : '0%';
+  if (snapReady() && playerState === 1) {
+    const beat = 60 / parseFloat($('tuneBpm').value);
+    const n = Math.floor((t - gridPhase) / beat + 1e-6);
+    $('lcdTag').textContent = n < 0 ? 'COUNT IN' : 'BAR ' + (Math.floor(n / 4) + 1) + ' BEAT ' + ((n % 4) + 1);
+  }
+  if (replayEnd !== null && t >= replayEnd) { replayEnd = null; pauseTune(); log('SAMPLE', 'replay finished'); }
+  const rate = appliedRate();
+  if (dropAt !== null) offsetSec = dropAt - cueT / rate;
+  if (words && waiting(t)) showArmed(t);
+  else if (words) showLyrics(words.lines, (t - offsetSec) * rate);
+  renderDropKey(t);
+  syncAca(t);
+}
+
+/* acapella: the vocal only upload of the words song, held to the same clock as the lyrics */
+let aca = null, acaPlayer = null, acaReady = false, acaLoaded = null, acaState = -1, acaRateSet = null, acaLastSync = 0;
+const acaReadyQueue = [];
+const ACA_WORDS = /acapella|a cappella|a capella|acappella|vocals? only|isolated vocals?|voice only|studio vocals?/i;
+
+function ensureAcaPlayer(cb) {
+  if (acaPlayer && acaReady) { cb && cb(); return; }
+  if (cb) acaReadyQueue.push(cb);
+  whenYouTubeReady(() => {
+    if (acaPlayer) return;
+    acaPlayer = new YT.Player('acaPlayer', {
+      height: '78', width: '139',
+      playerVars: { controls: 0, playsinline: 1, rel: 0, disablekb: 1, fs: 0, iv_load_policy: 3 },
+      events: {
+        onReady: () => { acaReady = true; try { acaPlayer.setVolume(+$('acaVol').value); } catch (e) {} acaReadyQueue.splice(0).forEach(f => f()); },
+        onStateChange: (e) => { acaState = e.data; },
+        onError: (e) => { $('acaTag').textContent = 'BLOCKED'; log('ACAPELLA', 'this upload blocks embedded play, pick another below'); }
+      }
+    });
+  });
+}
+
+async function findAcapella(title, artist) {
+  aca = null; acaLoaded = null; acaRateSet = null;
+  pauseAca();
+  $('acaTag').textContent = 'SEARCHING';
+  $('acaResults').innerHTML = '';
+  $('acaInfo').innerHTML = '<span style="color:var(--ink-faint)">Looking for a vocal only version</span>';
+  let d = null;
+  try { d = await (await fetch('/api/youtube-search?q=' + encodeURIComponent(title + ' ' + artist + ' acapella'))).json(); } catch (e) {}
+  const rows = (d && d.results ? d.results : []).filter(r => ACA_WORDS.test(decodeHtml(r.title)));
+  if (!rows.length) {
+    $('acaTag').textContent = 'NONE FOUND';
+    $('acaInfo').innerHTML = '<span style="color:var(--ink-faint)">No vocal only upload found for this song</span>';
+    return;
+  }
+  pickAca(rows[0]);
+  rows.slice(1, 6).forEach(r => {
+    const b = document.createElement('button');
+    b.className = 'resultRow';
+    b.innerHTML = (r.thumbnail ? '<img alt="" src="' + esc(r.thumbnail) + '">' : '<img alt="">') +
+      '<div class="rt"><div>' + esc(decodeHtml(r.title)) + '</div><div class="rs">' + esc(decodeHtml(r.channel)) + '</div></div>';
+    b.addEventListener('click', () => pickAca(r));
+    $('acaResults').appendChild(b);
+    const sp = splitYt(r.title, r.channel);
+    tagRow(b, sp.title, sp.artist, 'tuneBpm');
+  });
+}
+
+function pickAca(r) {
+  aca = { videoId: r.videoId, title: decodeHtml(r.title), channel: decodeHtml(r.channel) };
+  acaRateSet = null;
+  $('acaInfo').innerHTML = esc(aca.title) + '<div class="rs">' + esc(aca.channel) + '</div>';
+  $('acaTag').textContent = 'LOADED';
+  ensureAcaPlayer(() => {
+    if (acaLoaded !== aca.videoId) { acaLoaded = aca.videoId; acaPlayer.cueVideoById(aca.videoId, 0); }
+  });
+  log('ACAPELLA', 'loaded ' + aca.title);
+}
+
+function pauseAca() { try { if (acaPlayer && acaReady) acaPlayer.pauseVideo(); } catch (e) {} }
+
+function nearestRate(want) {
+  let rates = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+  try { const r = acaPlayer.getAvailablePlaybackRates(); if (r && r.length) rates = r; } catch (e) {}
+  return rates.reduce((best, r) => Math.abs(r - want) < Math.abs(best - want) ? r : best, rates[0]);
+}
+
+/* buffering guard: warm the voice before the drop, and never stack seeks while a stream is still loading */
+let acaWarming = false, acaGraceUntil = 0, instGraceUntil = 0, warmToken = 0;
+function warmAca(at) {
+  if (!acaPlayer || !acaReady) return;
+  acaWarming = true;
+  const tok = ++warmToken;
+  try { acaPlayer.mute(); acaPlayer.seekTo(Math.max(0, at), true); acaPlayer.playVideo(); } catch (e) {}
+  setTimeout(() => {
+    if (tok !== warmToken || !acaWarming) return;
+    try { acaPlayer.pauseVideo(); acaPlayer.seekTo(Math.max(0, at), true); acaPlayer.unMute(); acaPlayer.setVolume(+$('acaVol').value); } catch (e) {}
+    acaWarming = false;
+  }, 5000);
+}
+function acaSeek(t) {
+  try { acaPlayer.seekTo(Math.max(0, t), true); } catch (e) {}
+  acaGraceUntil = Date.now() + 2000;
+}
+
+function syncAca(tuneT) {
+  if (!aca || !acaReady || !acaPlayer) return;
+  const r = appliedRate();
+  if (acaRateSet !== r) {
+    acaRateSet = r;
+    try { acaPlayer.setPlaybackRate(r); } catch (e) {}
+    const want = ratio();
+    $('acaTag').textContent = !$('stretchOn').checked ? 'ORIGINAL SPEED' : 'RATE ' + r.toFixed(2) + 'X' + (Math.abs(r - want) > 0.01 ? ' NEAR' : '');
+  }
+  if (waiting(tuneT)) {
+    if (acaState === 1 && !acaWarming) { pauseAca(); acaParkedAt = null; }
+    if (acaParkedAt !== cueT + acaShift && !acaWarming) { acaParkedAt = cueT + acaShift; warmAca(acaParkedAt); }
+    if (dropAt !== null && dropTimerFor === dropAt && tuneT < dropAt - 1.5) dropTimerFor = null;
+    if (dropAt !== null && playerState === 1 && dropTimerFor !== dropAt && dropAt - tuneT < 1.0) {
+      dropTimerFor = dropAt;
+      const at = dropAt;
+      setTimeout(() => fireDrop(at), Math.max(0, (dropAt - tuneT) * 1000));
+    }
+    return;
+  }
+  if (acaWarming) { acaWarming = false; try { acaPlayer.unMute(); acaPlayer.setVolume(+$('acaVol').value); } catch (e) {} }
+  if (!$('acaOn').checked || playerState !== 1) { if (acaState === 1) pauseAca(); return; }
+  const target = cueT + (tuneT - dropAt) * r + acaShift;
+  const nowMs = Date.now();
+  if (nowMs - acaLastSync < 500) return;
+  acaLastSync = nowMs;
+  let at = 0;
+  try { at = acaPlayer.getCurrentTime() || 0; } catch (e) { return; }
+  try {
+    const acaDur = acaPlayer.getDuration() || 0;
+    if (acaDur && target >= acaDur - 0.3) { if (acaState === 1) pauseAca(); return; }
+    if (acaState === 3 || nowMs < acaGraceUntil) return;
+    if (Math.abs(at - target) > 0.5) acaSeek(target);
+    if (acaState !== 1) acaPlayer.playVideo();
+  } catch (e) {}
+}
+
+$('acaVol').addEventListener('input', () => { try { if (acaPlayer && acaReady) acaPlayer.setVolume(+$('acaVol').value); } catch (e) {} });
+$('acaOn').addEventListener('change', () => {
+  if (!$('acaOn').checked) pauseAca();
+  else if (playerState === 1 && aca && acaReady) { try { acaPlayer.playVideo(); } catch (e) {} }
+});
+
+/* snap: a beat grid from the tune BPM, anchored on beat one */
+let snapMult = 1, gridPhase = 0;
+function snapReady() { return $('snapOn').checked && parseFloat($('tuneBpm').value) > 0; }
+function snapUnit() { return 60 / parseFloat($('tuneBpm').value) * snapMult; }
+function snapNearest(t) { const u = snapUnit(); return gridPhase + Math.round((t - gridPhase) / u) * u; }
+function snapFloor(t) { const u = snapUnit(); return gridPhase + Math.floor((t - gridPhase) / u + 1e-6) * u; }
+function renderPhase() {
+  $('phaseVal').textContent = gridPhase.toFixed(2) + ' s';
+  const step = snapReady() ? (snapMult === 0.5 ? '1/2' : snapMult === 4 ? 'BAR' : '1') : '1/4';
+  $('backBtn').textContent = '-' + step;
+  $('fwdBtn').textContent = '+' + step;
+  $('snapTag').textContent = !$('snapOn').checked ? 'OFF' : (parseFloat($('tuneBpm').value) > 0 ? (snapMult === 0.5 ? 'HALF BEAT' : snapMult === 4 ? 'BAR' : 'BEAT') + ' GRID' : 'NEEDS TUNE BPM');
+}
+function savePhase() { if (tune) { const m = recall('phase') || {}; m[tune.videoId] = gridPhase; store('phase', m); } }
+function loadPhase() { const m = recall('phase') || {}; gridPhase = tune && typeof m[tune.videoId] === 'number' ? m[tune.videoId] : 0; renderPhase(); }
+document.querySelectorAll('[data-snap]').forEach(b => b.addEventListener('click', () => {
+  snapMult = parseFloat(b.getAttribute('data-snap'));
+  document.querySelectorAll('[data-snap]').forEach(x => x.classList.toggle('on', x === b));
+  renderPhase();
+}));
+document.querySelectorAll('[data-ph]').forEach(b => b.addEventListener('click', () => {
+  gridPhase = Math.max(0, Math.round((gridPhase + parseFloat(b.getAttribute('data-ph'))) * 100) / 100);
+  renderPhase(); savePhase();
+}));
+$('beatOneBtn').addEventListener('click', () => {
+  if (playerState !== 1) { log('BEAT ONE', 'play the tune and tap set right on a downbeat'); return; }
+  let t = 0;
+  try { t = player.getCurrentTime() || 0; } catch (e) {}
+  const bar = 60 / (parseFloat($('tuneBpm').value) || 120) * 4;
+  gridPhase = Math.round((t % bar) * 100) / 100;
+  renderPhase(); savePhase();
+  log('BEAT ONE', 'grid anchored, bar counter is on the screen');
+});
+$('snapOn').addEventListener('change', renderPhase);
+$('tuneBpm').addEventListener('input', renderPhase);
+
+/* cue and drop: park the voice on a cue line, then drop it at a tune time you tap or type */
+let dropAt = null, dropTimerFor = null, cueT = 0, acaShift = 0, acaParkedAt = null, dropLog = [];
+function waiting(t) { return dropAt === null || t < dropAt - 0.02; }
+function buildCueList(lines) {
+  const sel = $('cueSel');
+  sel.innerHTML = '<option value="0">0:00 top of the song</option>';
+  lines.forEach((l) => {
+    if (!l.text) return;
+    const o = document.createElement('option');
+    o.value = String(l.t);
+    o.textContent = fmt(l.t) + (l.chorus ? ' CHORUS ' : ' ') + l.text.slice(0, 40);
+    sel.appendChild(o);
+  });
+  const first = lines.find(l => l.text);
+  cueT = first ? first.t : 0;
+  sel.value = String(cueT);
+  acaParkedAt = null;
+}
+$('cueSel').addEventListener('change', () => {
+  cueT = parseFloat($('cueSel').value) || 0;
+  acaParkedAt = null; acaLastSync = 0; lastIdx = -2;
+  log('CUE', 'voice parked at ' + fmt(cueT) + (dropAt !== null ? ', drops at ' + dropAt.toFixed(3) + ' s' : ', tap drop on the beat'));
+});
+function renderAs() { $('asVal').textContent = (acaShift >= 0 ? '+' : '') + acaShift.toFixed(1) + ' s'; }
+document.querySelectorAll('[data-as]').forEach(b => b.addEventListener('click', () => {
+  const d = parseFloat(b.getAttribute('data-as'));
+  acaShift = d === 0 ? 0 : Math.round((acaShift + d) * 10) / 10;
+  renderAs(); acaParkedAt = null; acaLastSync = 0;
+}));
+
+function dropKey() { return (tune ? tune.videoId : '') + '|' + (words ? normLine(words.title) : ''); }
+function loadDropLog() { const m = recall('drops') || {}; dropLog = m[dropKey()] || []; renderDropLog(); }
+function saveDropLog() { const m = recall('drops') || {}; m[dropKey()] = dropLog.slice(0, 12); store('drops', m); }
+function renderDropLog() {
+  if (!dropLog.length) { $('dropLog').innerHTML = ''; return; }
+  $('dropLog').innerHTML = '<div class="rs mono" style="font-size:10px;letter-spacing:1px;color:var(--ink-faint);margin:6px 0 2px;">YOUR DROPS, NEWEST FIRST</div>';
+  dropLog.forEach(d => {
+    const row = document.createElement('div');
+    row.className = 'sampRow';
+    row.innerHTML = '<div class="rt"><div class="mono">' + d.at.toFixed(3) + ' s</div><div class="rs">' + esc(d.how) + ' / ' + esc(d.when) + '</div></div>';
+    const use = document.createElement('button'); use.className = 'seg'; use.textContent = 'USE';
+    use.addEventListener('click', () => { setDropAt(d.at, null); log('DROP', 'drop set to ' + d.at.toFixed(3) + ' s, tap from the top to hear it'); });
+    row.appendChild(use);
+    $('dropLog').appendChild(row);
+  });
+}
+function logDrop(at, how) {
+  const d = new Date();
+  dropLog.unshift({ at: Math.round(at * 1000) / 1000, how, when: String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0') });
+  if (dropLog.length > 12) dropLog.pop();
+  saveDropLog(); renderDropLog();
+}
+function setDropAt(v, how) {
+  dropAt = v === null || !isFinite(v) ? null : Math.max(0, Math.round(v * 1000) / 1000);
+  dropTimerFor = null; acaLastSync = 0; lastIdx = -2;
+  if (document.activeElement !== $('dropIn')) $('dropIn').value = dropAt === null ? '' : dropAt.toFixed(3);
+  if (dropAt !== null && how) logDrop(dropAt, how);
+  renderOffset();
+}
+function setArmed(v) {
+  if (v) { setDropAt(null, null); pauseAca(); acaParkedAt = null; }
+  lastIdx = -2;
+}
+function renderDropKey(t) {
+  const w = waiting(t);
+  $('dropBtn').classList.toggle('armed', w);
+  $('dropBtn').textContent = w ? 'DROP' : 'ARM';
+  $('dropLabel').textContent = w ? (dropAt !== null ? 'AUTO ' + dropAt.toFixed(1) : 'DROP') : 'RE-ARM';
+}
+function showArmed(t) {
+  const line = words.lines.find(l => Math.abs(l.t - cueT) < 0.01);
+  $('lyrCur').textContent = dropAt !== null ? 'Drops at ' + dropAt.toFixed(3) + ' s' : 'Waiting for drop';
+  $('lyrCur').classList.remove('chorus');
+  $('lyrNext').textContent = line ? line.text : 'Top of the song';
+  $('lyrNext').classList.toggle('chorus', !!(line && line.chorus));
+  const bar = parseFloat($('tuneBpm').value) > 0 ? 240 / parseFloat($('tuneBpm').value) : 2;
+  $('leadBar').style.width = dropAt !== null && t > dropAt - bar ? Math.min(100, (1 - (dropAt - t) / bar) * 100) + '%' : '0%';
+  lastIdx = -2;
+}
+function fireDrop(at) {
+  if (mode !== 'smash' || dropAt !== at || playerState !== 1 || !aca || !acaReady || !$('acaOn').checked) return;
+  acaWarming = false; warmToken++;
+  let t = at;
+  try { t = player.getCurrentTime() || at; } catch (e) {}
+  const start = cueT + Math.max(0, t - at) * appliedRate() + acaShift;
+  try { acaPlayer.unMute(); acaPlayer.setVolume(+$('acaVol').value); } catch (e) {}
+  if (Math.abs(start - (cueT + acaShift)) > 0.3) acaSeek(start); else acaGraceUntil = Date.now() + 1500;
+  try { acaPlayer.playVideo(); } catch (e) {}
+  acaLastSync = Date.now();
+}
+$('dropBtn').addEventListener('click', () => {
+  if (!words) { log('DROP', 'pick words first'); return; }
+  let t = 0;
+  try { t = player.getCurrentTime() || 0; } catch (e) {}
+  if (!waiting(t)) { setArmed(true); log('ARM', 'voice parked at ' + fmt(cueT) + ', tap drop on the beat'); return; }
+  if (playerState !== 1) { log('DROP', 'start the tune first, then drop on the beat'); return; }
+  const landAt = snapReady() ? snapNearest(t) : t;
+  setDropAt(landAt, 'tapped' + (landAt !== t ? ', snapped ' + Math.round((landAt - t) * 1000) + ' ms' : ''));
+  if (landAt <= t + 0.02) { dropTimerFor = dropAt; fireDrop(dropAt); }
+  log('DROP', 'dropped at ' + dropAt.toFixed(3) + ' s of the tune, it is saved in your drops');
+});
+$('dropIn').addEventListener('change', () => {
+  const v = parseFloat($('dropIn').value);
+  if (!isFinite(v)) { setArmed(true); return; }
+  setDropAt(v, 'typed');
+  log('DROP', 'voice drops at ' + dropAt.toFixed(3) + ' s, tap from the top to hear it');
+});
+$('dropClear').addEventListener('click', () => { setArmed(true); log('DROP', 'cleared, tap drop on the beat'); });
+document.querySelectorAll('[data-dt]').forEach(b => b.addEventListener('click', () => {
+  if (dropAt === null) { log('DROP', 'set a drop first'); return; }
+  setDropAt(dropAt + parseFloat(b.getAttribute('data-dt')), null);
+  log('DROP', 'drop moved to ' + dropAt.toFixed(3) + ' s');
+}));
+$('restartBtn').addEventListener('click', () => {
+  if (!tune) { log('RESTART', 'pick a tune first'); return; }
+  pauseAca(); acaParkedAt = null; dropTimerFor = null; lastIdx = -2;
+  wantPlay = true;
+  ensurePlayer(() => {
+    try {
+      if (loadedVideo !== tune.videoId) { loadedVideo = tune.videoId; player.loadVideoById(tune.videoId, 0); }
+      else { player.seekTo(0, true); player.playVideo(); }
+    } catch (e) {}
+  });
+  log('RESTART', 'from the top' + (dropAt !== null ? ', voice drops at ' + dropAt.toFixed(3) + ' s' : ', tap drop on the beat'));
+});
+
+/* ===== LIVE KARAOKE MODE ===== */
+let stream = null, busy = false, karaokeTimer = null, live = null, knMs = 0;
+function syncState(t) {}
+function renderKaraokeHeader() {
+  if (mode !== 'karaoke') return;
+  $('title').textContent = live ? live.title : 'Tap listen';
+  $('artist').textContent = live ? live.artist : 'Hold the phone near the speaker';
+  $('lcdTag').textContent = live ? (live.lines.length ? 'LOCKED' : 'NO LYRICS') : '';
+  const bits = [];
+  if (live && live.bpm) bits.push(Math.round(live.bpm) + ' BPM');
+  if (live && live.key) bits.push('KEY ' + live.key);
+  if (live) bits.push(live.lines.length + ' LINES');
+  $('meta').textContent = bits.length ? bits.join(' / ') : '--';
+}
+function renderKn() { $('knVal').textContent = (knMs >= 0 ? '+' : '') + knMs + ' ms'; }
+document.querySelectorAll('[data-kn]').forEach(b => b.addEventListener('click', () => {
+  const d = parseInt(b.getAttribute('data-kn'), 10);
+  knMs = d === 0 ? 0 : knMs + d;
+  renderKn(); lastIdx = -2;
+}));
+
+async function openMic() {
+  if (stream) return true;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    return true;
+  } catch (e) {
+    log('MIC', 'microphone refused, allow it and tap listen again');
+    return false;
+  }
+}
+function recordClip() {
+  return new Promise((resolve) => {
+    const chunks = [];
+    const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+    const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    rec.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    rec.onstop = () => resolve(new Blob(chunks, { type: rec.mimeType || 'audio/webm' }));
+    rec.start();
+    setTimeout(() => rec.stop(), CLIP_MS);
+  });
+}
+function livePos() { return live ? live.offsetSeconds + (now() - live.epochMs) / 1000 + knMs / 1000 : 0; }
+
+async function identify() {
+  if (busy || mode !== 'karaoke') return;
+  if (!(await openMic())) return;
+  busy = true;
+  if (karaokeTimer) { clearTimeout(karaokeTimer); karaokeTimer = null; }
+  syncState('LISTENING');
+  setLink('busy', 'LISTENING');
+  const capturedAt = now();
+  const blob = await recordClip();
+  let data = null;
+  try {
+    const form = new FormData();
+    form.append('audio', blob, 'clip.webm');
+    form.append('capturedAt', String(capturedAt));
+    form.append('clipDurationMs', String(CLIP_MS));
+    data = await (await fetch('/api/recognize', { method: 'POST', body: form })).json();
+  } catch (e) { data = { error: 'network' }; }
+  busy = false;
+  $('listenLabel').textContent = 'LISTEN';
+
+  if (!data || data.error || typeof data.offsetSeconds !== 'number') {
+    syncState(live ? 'HELD' : 'NO MATCH');
+    setLink(live ? 'ok' : '', live ? 'LOCKED' : 'NO MATCH');
+    log('LISTEN', data && data.error ? data.error : 'no match, retrying');
+    scheduleListen(live ? 30000 : 15000);
+    return;
+  }
+
+  const sameSong = live && normLine(live.title) === normLine(data.title);
+  if (sameSong) {
+    live.offsetSeconds = data.offsetSeconds;
+    live.epochMs = data.epochMs;
+  } else {
+    live = { title: data.title, artist: data.artist, offsetSeconds: data.offsetSeconds, epochMs: data.epochMs, bpm: data.bpm, key: data.key, lines: [], chorus: [], durationSeconds: null };
+    lastIdx = -2;
+    clearLyrics();
+    renderKaraokeHeader();
+    log('LOCK', data.title + ', pulling lyrics');
+    try {
+      const d = await (await fetch('/api/lyrics?title=' + encodeURIComponent(data.title) + '&artist=' + encodeURIComponent(data.artist))).json();
+      const hit = d && d.results && d.results[0];
+      if (hit) {
+        live.lines = parseLrc(hit.synced);
+        live.chorus = markChorus(live.lines);
+        live.durationSeconds = hit.durationSeconds || null;
+      }
+    } catch (e) {}
+    if (!live.lines.length) log('LYRICS', 'no timed lyrics on file for ' + data.title);
+  }
+  syncState('ALIGNED');
+  setLink('ok', 'LOCKED');
+  renderKaraokeHeader();
+  renderStats(live);
+  const left = live.durationSeconds ? live.durationSeconds - livePos() : 0;
+  scheduleListen(left > 0 ? left * 1000 + 4000 : 90000);
+}
+function scheduleListen(ms) {
+  if (karaokeTimer) clearTimeout(karaokeTimer);
+  karaokeTimer = null;
+  if (!$('followToggle').checked || mode !== 'karaoke') return;
+  karaokeTimer = setTimeout(identify, Math.max(ms, 8000));
+}
+$('listenBtn').addEventListener('click', identify);
+$('followToggle').addEventListener('change', () => { if (!$('followToggle').checked && karaokeTimer) { clearTimeout(karaokeTimer); karaokeTimer = null; } });
+
+function karaokeTick() {
+  if (mode !== 'karaoke' || !live) return;
+  const t = livePos();
+  const dur = live.durationSeconds;
+  $('elapsed').textContent = fmt(t);
+  $('remaining').textContent = dur ? '-' + fmt(dur - t) : '-0:00';
+  $('progress').style.width = dur ? Math.min(100, t / dur * 100) + '%' : '0%';
+  showLyrics(live.lines, t);
+}
+
+/* ===== LIVE SMASH MODE ===== */
+let liveSong = null, liveTimer = null, liveBusy = false, liveNudgeMs = 0, liveShift = 0;
+let liveWarmedFor = null, liveApplied = 1;
+let liveInst = null, donor = null, donorAca = null, liveDropAt = null, liveRate = 1, liveRateSet = null, liveLastSync = 0, liveWantPlay = false;
+
+function liveLyricsLine() { return donor && donor.lines.length ? donor.lines.find(l => l.text) : null; }
+function livePosNow() { return liveSong ? liveSong.offsetSeconds + (now() - liveSong.epochMs) / 1000 + liveNudgeMs / 1000 : 0; }
+function liveState(t) {}
+
+function renderLiveHeader() {
+  if (mode !== 'live') return;
+  $('title').textContent = liveSong ? liveSong.title : 'Tap listen';
+  $('artist').textContent = donor ? 'Smashing: ' + donor.title + ' / ' + donor.artist : (liveSong ? liveSong.artist : 'Hold the phone near the speaker');
+  $('lcdTag').textContent = liveSong ? (donor ? 'SMASH READY' : 'LOCKED') : '';
+  const bits = [];
+  if (liveSong && liveSong.bpm) bits.push('LIVE ' + Math.round(liveSong.bpm));
+  if (donor && donor.bpm) bits.push('DONOR ' + Math.round(donor.bpm));
+  if (donor) bits.push($('liveStretch').checked ? 'RATE ' + liveApplied.toFixed(2) + 'X' : 'ORIGINAL SPEED');
+  $('meta').textContent = bits.length ? bits.join(' / ') : '--';
+}
+function renderLiveNudges() {
+  $('lnVal').textContent = (liveNudgeMs >= 0 ? '+' : '') + liveNudgeMs + ' ms';
+  $('lasVal').textContent = (liveShift >= 0 ? '+' : '') + liveShift.toFixed(1) + ' s';
+}
+document.querySelectorAll('[data-ln]').forEach(b => b.addEventListener('click', () => {
+  const d = parseInt(b.getAttribute('data-ln'), 10);
+  liveNudgeMs = d === 0 ? 0 : liveNudgeMs + d; renderLiveNudges(); liveLastSync = 0;
+}));
+document.querySelectorAll('[data-las]').forEach(b => b.addEventListener('click', () => {
+  const d = parseFloat(b.getAttribute('data-las'));
+  liveShift = d === 0 ? 0 : Math.round((liveShift + d) * 10) / 10; renderLiveNudges(); liveLastSync = 0;
+}));
+
+async function liveIdentify() {
+  if (liveBusy || mode !== 'live') return;
+  if (!(await openMic())) return;
+  liveBusy = true;
+  if (liveTimer) { clearTimeout(liveTimer); liveTimer = null; }
+  liveState('LISTENING');
+  setLink('busy', 'LISTENING');
+  const capturedAt = now();
+  const blob = await recordClip();
+  let data = null;
+  try {
+    const form = new FormData();
+    form.append('audio', blob, 'clip.webm');
+    form.append('capturedAt', String(capturedAt));
+    form.append('clipDurationMs', String(CLIP_MS));
+    data = await (await fetch('/api/recognize', { method: 'POST', body: form })).json();
+  } catch (e) { data = { error: 'network' }; }
+  liveBusy = false;
+  $('liveListenLabel').textContent = 'LISTEN';
+  if (!data || data.error || typeof data.offsetSeconds !== 'number') {
+    liveState(liveSong ? 'HELD' : 'NO MATCH');
+    setLink(liveSong ? 'ok' : '', liveSong ? 'LOCKED' : 'NO MATCH');
+    log('LISTEN', data && data.error ? data.error : 'no match, retrying');
+    scheduleLive(liveSong ? 30000 : 15000);
+    return;
+  }
+  const same = liveSong && normLine(liveSong.title) === normLine(data.title);
+  if (same) {
+    liveSong.offsetSeconds = data.offsetSeconds;
+    liveSong.epochMs = data.epochMs;
+    if (!liveSong.bpm && data.bpm) liveSong.bpm = data.bpm;
+    liveLastSync = 0;
+  } else {
+    liveSong = { title: data.title, artist: data.artist, offsetSeconds: data.offsetSeconds, epochMs: data.epochMs, bpm: data.bpm || null, key: data.key || null, durationSeconds: data.videoDurationSeconds || null };
+    if (!liveSong.bpm) liveSong.bpm = await bpmFor(data.title, data.artist);
+    if (liveSong.bpm) { bpmCache[(data.title + '|' + data.artist).toLowerCase()] = liveSong.bpm; store('bpm', bpmCache); }
+    $('liveBpmNow').value = liveSong.bpm || '';
+    donor = null; donorAca = null; liveDropAt = null; liveRateSet = null;
+    pauseAca();
+    clearLyrics();
+    log('LOCK', data.title + (liveSong.bpm ? ' at ' + Math.round(liveSong.bpm) + ' BPM' : ', no BPM on file'));
+    findLiveInstrumental();
+    findDonors();
+  }
+  liveState('ALIGNED');
+  setLink('ok', 'LOCKED');
+  renderLiveHeader();
+  const left = liveSong.durationSeconds ? liveSong.durationSeconds - livePosNow() : 0;
+  scheduleLive(left > 0 ? left * 1000 + 4000 : 90000);
+}
+function scheduleLive(ms) {
+  if (liveTimer) clearTimeout(liveTimer);
+  liveTimer = null;
+  if (!$('liveFollow').checked || mode !== 'live') return;
+  liveTimer = setTimeout(liveIdentify, Math.max(ms, 8000));
+}
+
+async function findLiveInstrumental() {
+  $('liveInstTag').textContent = 'SEARCHING';
+  $('liveInstResults').innerHTML = '';
+  let d = null;
+  try { d = await (await fetch('/api/youtube-search?q=' + encodeURIComponent(liveSong.title + ' ' + liveSong.artist + ' instrumental'))).json(); } catch (e) {}
+  const rows = (d && d.results ? d.results : []).filter(r => /instrumental|karaoke|no vocals|beat/i.test(decodeHtml(r.title)));
+  if (!rows.length) { liveInst = null; $('liveInstTag').textContent = 'NONE FOUND'; $('liveInstInfo').textContent = 'No instrumental upload found, the donor plays over the room'; return; }
+  pickLiveInst(rows[0]);
+  rows.slice(1, 5).forEach(r => {
+    const b = document.createElement('button');
+    b.className = 'resultRow';
+    b.innerHTML = (r.thumbnail ? '<img alt="" src="' + esc(r.thumbnail) + '">' : '<img alt="">') + '<div class="rt"><div>' + esc(decodeHtml(r.title)) + '</div><div class="rs">' + esc(decodeHtml(r.channel)) + '</div></div>';
+    b.addEventListener('click', () => pickLiveInst(r));
+    $('liveInstResults').appendChild(b);
+  });
+}
+function pickLiveInst(r) {
+  liveInst = { videoId: r.videoId, title: decodeHtml(r.title) };
+  $('liveInstInfo').textContent = liveInst.title;
+  $('liveInstInfo').style.color = 'var(--ink)';
+  $('liveInstTag').textContent = 'LOADED';
+  ensurePlayer(() => { loadedVideo = liveInst.videoId; player.cueVideoById(liveInst.videoId, Math.max(0, livePosNow())); });
+  liveLastSync = 0;
+}
+
+async function findDonors() {
+  $('liveSug').innerHTML = '<div class="resultRow"><span class="rs">LOOKING FOR SAME BPM SONGS</span></div>';
+  const live = liveSong;
+  const out = [];
+  const seen = new Set([normLine(live.title)]);
+  try {
+    const d = await (await fetch('/api/beatmatch?title=' + encodeURIComponent(live.title) + '&artist=' + encodeURIComponent(live.artist) + '&tolerance=4')).json();
+    if (d && d.found && d.candidate && d.candidate.title && !seen.has(normLine(d.candidate.title))) {
+      seen.add(normLine(d.candidate.title));
+      out.push({ title: d.candidate.title, artist: d.candidate.artist || '', bpm: d.candidate.bpm });
+    }
+  } catch (e) {}
+  if (live.bpm) {
+    Object.keys(bpmCache).forEach(k => {
+      const bpm = bpmCache[k];
+      if (!bpm) return;
+      const [t, a] = k.split('|');
+      if (/instrumental|karaoke|acapella|a cappella|beat|remix|type beat/i.test(t)) return;
+      const clean = t.replace(/\(.*?\)|\[.*?\]/g, '').trim();
+      const n = normLine(clean);
+      if (!n || seen.has(n)) return;
+      const g = bpmGap(bpm, live.bpm);
+      if (!g || Math.abs(g.pct) > 4) return;
+      seen.add(n);
+      out.push({ title: clean, artist: a || '', bpm });
+    });
+  }
+  if (live.bpm && out.length < 8) {
+    try {
+      const d = await (await fetch('/api/song-search?bpm=' + live.bpm + '&spread=2')).json();
+      (d && d.results ? d.results : []).forEach(r => {
+        const n = normLine(r.title);
+        if (!n || seen.has(n) || out.length >= 20) return;
+        seen.add(n);
+        out.push({ title: r.title, artist: r.artist, album: r.album, bpm: null, nearBpm: live.bpm });
+      });
+    } catch (e) {}
+  }
+  if (live !== liveSong) return;
+  out.forEach(o => { o.gap = live.bpm && o.bpm ? bpmGap(o.bpm, live.bpm) : null; });
+  out.sort((x, y) => (x.gap ? Math.abs(x.gap.pct) : 99) - (y.gap ? Math.abs(y.gap.pct) : 99));
+  $('liveSugTag').textContent = out.length ? out.length + ' MATCHES' : 'NONE YET';
+  if (!out.length) {
+    $('liveSug').innerHTML = '<div class="resultRow"><span class="rs">' + (live.bpm ? 'No same BPM songs in the library yet, the library grows with every song you search or hear' : 'No BPM on file for this song') + '</span></div>';
+    return;
+  }
+  $('liveSug').innerHTML = '';
+  out.slice(0, 20).forEach(o => $('liveSug').appendChild(donorRow(o)));
+  const first = out[0];
+  pickDonor({ title: first.title, artist: first.artist, bpm: first.bpm || first.nearBpm || null });
+}
+
+function donorRow(o) {
+  const b = document.createElement('button');
+  b.className = 'resultRow';
+  b.innerHTML = '<div class="rt"><div>' + esc(o.title) + '</div><div class="rs">' + esc(o.artist) + (o.album ? ' / ' + esc(o.album) : '') + '</div></div>';
+  if (o.bpm) {
+    const g = liveSong && liveSong.bpm ? bpmGap(o.bpm, liveSong.bpm) : null;
+    const tag = document.createElement('span');
+    tag.className = 'bpmTag' + (g ? ' ' + g.cls : '');
+    tag.innerHTML = Math.round(o.bpm) + ' BPM' + (g ? '<br>' + esc(g.text) : '');
+    b.appendChild(tag);
+    b.dataset.bpm = String(o.bpm);
+    b.dataset.gap = g ? String(Math.abs(g.pct)) : '999';
+  } else {
+    tagRow(b, o.title, o.artist, 'liveBpmNow');
+  }
+  b.addEventListener('click', () => pickDonor({ title: o.title, artist: o.artist, bpm: b.dataset.bpm ? parseFloat(b.dataset.bpm) : null }));
+  return b;
+}
+async function liveSongSearch(text, bpm) {
+  $('liveSug').innerHTML = '<div class="resultRow"><span class="rs">SEARCHING' + (bpm ? ' AROUND ' + Math.round(bpm) + ' BPM' : '') + '</span></div>';
+  let d = null;
+  try { d = await (await fetch('/api/song-search?' + (text ? 'q=' + encodeURIComponent(text) + '&' : '') + (bpm ? 'bpm=' + bpm + '&spread=2' : ''))).json(); } catch (e) {}
+  const rows = (d && d.results ? d.results : []).filter(r => !liveSong || normLine(r.title) !== normLine(liveSong.title));
+  $('liveSugTag').textContent = rows.length ? rows.length + ' FOUND' : 'NONE FOUND';
+  if (!rows.length) { $('liveSug').innerHTML = '<div class="resultRow"><span class="rs">' + esc(d && d.error ? d.error : 'Nothing found, try other words or a nearby BPM') + '</span></div>'; return; }
+  $('liveSug').innerHTML = '';
+  const jobs = [];
+  rows.slice(0, 25).forEach(r => {
+    const row = donorRow(r);
+    $('liveSug').appendChild(row);
+  });
+  setTimeout(() => sortByGap('liveSug'), 4000);
+}
+function runLiveSearch() {
+  const q = $('liveSearch').value.trim();
+  if (!q) return;
+  const m = q.match(/^(\d{2,3}(?:\.\d+)?)\s*(bpm)?$/i);
+  if (m) liveSongSearch('', parseFloat(m[1]));
+  else liveSongSearch(q, null);
+}
+$('liveFind').addEventListener('click', runLiveSearch);
+$('liveSearch').addEventListener('keydown', (e) => { if (e.key === 'Enter') runLiveSearch(); });
+$('liveBpmFind').addEventListener('click', () => {
+  if (!liveSong || !liveSong.bpm) { log('SEARCH', 'listen and lock a song with a BPM first, or type a BPM'); return; }
+  liveSongSearch('', liveSong.bpm);
+});
+
+async function pickDonor(o) {
+  donor = { title: o.title, artist: o.artist, bpm: o.bpm, lines: [], chorus: [] };
+  donorAca = null; liveDropAt = null; liveRateSet = null;
+  pauseAca();
+  const g = liveSong && liveSong.bpm ? bpmGap(o.bpm, liveSong.bpm) : null;
+  const fold = g && /DOUBLE/.test(g.note) ? 2 : g && /HALF/.test(g.note) ? 0.5 : 1;
+  liveRate = liveSong && liveSong.bpm && o.bpm ? liveSong.bpm / (o.bpm * fold) : 1;
+  renderLiveHeader();
+  log('DONOR', o.title + ', pulling the acapella and lyrics');
+  try {
+    const d = await (await fetch('/api/lyrics?title=' + encodeURIComponent(o.title) + '&artist=' + encodeURIComponent(o.artist))).json();
+    const hit = d && d.results && d.results[0];
+    if (hit && donor && donor.title === o.title) { donor.lines = parseLrc(hit.synced); donor.chorus = markChorus(donor.lines); renderStats(donor); }
+  } catch (e) {}
+  $('liveAcaTag').textContent = 'SEARCHING';
+  $('liveAcaResults').innerHTML = '';
+  let d = null;
+  try { d = await (await fetch('/api/youtube-search?q=' + encodeURIComponent(o.title + ' ' + o.artist + ' acapella'))).json(); } catch (e) {}
+  if (!donor || donor.title !== o.title) return;
+  const rows = (d && d.results ? d.results : []).filter(r => ACA_WORDS.test(decodeHtml(r.title)));
+  if (!rows.length) { $('liveAcaTag').textContent = 'NONE FOUND'; $('liveAcaInfo').textContent = 'No vocal only upload for this donor, pick another suggestion'; return; }
+  pickDonorAca(rows[0]);
+  rows.slice(1, 5).forEach(r => {
+    const b = document.createElement('button');
+    b.className = 'resultRow';
+    b.innerHTML = (r.thumbnail ? '<img alt="" src="' + esc(r.thumbnail) + '">' : '<img alt="">') + '<div class="rt"><div>' + esc(decodeHtml(r.title)) + '</div><div class="rs">' + esc(decodeHtml(r.channel)) + '</div></div>';
+    b.addEventListener('click', () => pickDonorAca(r));
+    $('liveAcaResults').appendChild(b);
+  });
+}
+function pickDonorAca(r) {
+  donorAca = { videoId: r.videoId, title: decodeHtml(r.title) };
+  liveDropAt = null; liveRateSet = null;
+  $('liveAcaInfo').textContent = donorAca.title;
+  $('liveAcaInfo').style.color = 'var(--ink)';
+  $('liveAcaTag').textContent = 'PARKED';
+  ensureAcaPlayer(() => { acaLoaded = donorAca.videoId; acaPlayer.cueVideoById(donorAca.videoId, 0); });
+}
+
+function liveBar() { return liveSong && liveSong.bpm ? 60 / liveSong.bpm * 4 : 2; }
+function donorCue() { const l = liveLyricsLine(); return l ? l.t : 0; }
+function armLiveDrop(fromPos) {
+  const bar = liveBar();
+  liveDropAt = Math.ceil((fromPos + 0.25) / bar) * bar;
+  liveLastSync = 0;
+  $('liveAcaTag').textContent = 'DROPS IN ' + Math.max(0, liveDropAt - fromPos).toFixed(1) + ' S';
+}
+
+function liveTick() {
+  if (!liveSong) return;
+  const pos = livePosNow();
+  const dur = liveSong.durationSeconds;
+  $('elapsed').textContent = fmt(pos);
+  $('remaining').textContent = dur ? '-' + fmt(dur - pos) : '-0:00';
+  $('progress').style.width = dur ? Math.min(100, pos / dur * 100) + '%' : '0%';
+  if (liveSong.bpm) {
+    const n = Math.floor(pos / (60 / liveSong.bpm));
+    $('lcdTag').textContent = 'BAR ' + (Math.floor(n / 4) + 1) + ' BEAT ' + ((n % 4) + 1);
+  }
+  const nowMs = Date.now();
+  const doSync = nowMs - liveLastSync > 1000;
+  if (doSync) liveLastSync = nowMs;
+
+  if (liveWantPlay && liveInst && $('liveInstOn').checked && playerReady && doSync) {
+    try {
+      const at = player.getCurrentTime() || 0;
+      const instDur = player.getDuration() || 0;
+      if (instDur && pos >= instDur - 0.5) { if (playerState === 1) player.pauseVideo(); }
+      else if (playerState !== 3 && nowMs >= instGraceUntil && (Math.abs(at - pos) > 0.5 || playerState !== 1)) {
+        if (Math.abs(at - pos) > 0.5) { player.seekTo(Math.max(0, pos), true); instGraceUntil = nowMs + 2000; }
+        if (playerState !== 1) player.playVideo();
+      }
+    } catch (e) {}
+  } else if ((!liveWantPlay || !$('liveInstOn').checked) && playerState === 1) { try { player.pauseVideo(); } catch (e) {} }
+
+  if (donor && donorAca && acaReady && liveWantPlay && $('liveAcaOn').checked) {
+    if (liveDropAt === null) armLiveDrop(pos);
+    const wantRate = $('liveStretch').checked ? liveRate : 1;
+    if (liveRateSet !== wantRate) {
+      liveRateSet = wantRate;
+      liveApplied = nearestRate(wantRate);
+      try { acaPlayer.setPlaybackRate(liveApplied); } catch (e) {}
+      renderLiveHeader();
+    }
+    const target = donorCue() + (pos - liveDropAt) * liveApplied + liveShift;
+    if (pos < liveDropAt) {
+      $('liveAcaTag').textContent = 'DROPS IN ' + (liveDropAt - pos).toFixed(1) + ' S';
+      if (liveWarmedFor !== donorAca.videoId && !acaWarming) { liveWarmedFor = donorAca.videoId; warmAca(donorCue() + liveShift); }
+      if (acaState === 1 && !acaWarming) pauseAca();
+      const l = liveLyricsLine();
+      $('lyrCur').textContent = 'Drop on the next bar';
+      $('lyrCur').classList.remove('chorus');
+      $('lyrNext').textContent = l ? l.text : '';
+      $('leadBar').style.width = Math.min(100, (1 - (liveDropAt - pos) / liveBar()) * 100) + '%';
+      lastIdx = -2;
+    } else {
+      $('liveAcaTag').textContent = 'PLAYING';
+      if (doSync) {
+        try {
+          const at = acaPlayer.getCurrentTime() || 0;
+          const acaDur = acaPlayer.getDuration() || 0;
+          if (acaDur && target >= acaDur - 0.3) { if (acaState === 1) pauseAca(); $('liveAcaTag').textContent = 'FINISHED'; }
+          else if (acaState !== 3 && nowMs >= acaGraceUntil) {
+            if (acaWarming) { acaWarming = false; acaPlayer.unMute(); }
+            if (Math.abs(at - target) > 0.5) acaSeek(target);
+            if (acaState !== 1) acaPlayer.playVideo();
+          }
+        } catch (e) {}
+      }
+      showLyrics(donor.lines, target - liveShift);
+    }
+  } else if (acaState === 1 && (!liveWantPlay || !$('liveAcaOn').checked)) pauseAca();
+}
+
+$('liveListenBtn').addEventListener('click', liveIdentify);
+$('liveStretch').addEventListener('change', () => { liveRateSet = null; liveLastSync = 0; });
+$('livePlayBtn').addEventListener('click', () => {
+  liveWantPlay = !liveWantPlay;
+  $('livePlayLabel').textContent = liveWantPlay ? 'STOP' : 'PLAY';
+  $('livePlayBtn').classList.toggle('armed', liveWantPlay);
+  if (liveWantPlay) {
+    liveLastSync = 0;
+    try { if (playerReady && liveInst && $('liveInstOn').checked) { player.seekTo(Math.max(0, livePosNow()), true); player.playVideo(); } } catch (e) {}
+    try { if (acaReady && donorAca) { acaPlayer.playVideo(); acaPlayer.pauseVideo(); } } catch (e) {}
+    log('PLAY', liveSong ? 'locked to ' + liveSong.title + ', donor drops on the next bar' : 'armed, listen to lock a song');
+  } else {
+    try { if (player) player.pauseVideo(); } catch (e) {}
+    pauseAca();
+    liveDropAt = null;
+    log('STOP', 'smash stopped');
+  }
+});
+$('liveDropBtn').addEventListener('click', () => {
+  if (!liveSong || !donor) { log('DROP', 'listen and pick a donor first'); return; }
+  const pos = livePosNow();
+  const beat = liveSong.bpm ? 60 / liveSong.bpm : 0.5;
+  liveDropAt = Math.round(pos / beat) * beat;
+  liveLastSync = 0;
+  log('DROP', 'donor dropped on the beat at ' + fmt(liveDropAt));
+});
+renderLiveNudges();
+
+/* ===== SAMPLE: tap to start, tap to stop, exports the sound and the recipe ===== */
+let sampling = false, sampRec = null, sampChunks = [], sampRecipe = null, sampStartedAt = 0, sampTimer = null, replayEnd = null;
+let samples = recall('samples') || [];
+
+function stamp() {
+  const d = new Date(), p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+}
+function currentRecipe() {
+  if (mode === 'smash') {
+    if (!tune) return null;
+    let t = 0; try { t = player.getCurrentTime() || 0; } catch (e) {}
+    return {
+      source: 'smash',
+      tune: { videoId: tune.videoId, title: tune.title },
+      aca: aca ? { videoId: aca.videoId, title: aca.title } : null,
+      words: words ? { title: words.title, artist: words.artist } : null,
+      tuneBpm: parseFloat($('tuneBpm').value) || null,
+      wordsBpm: parseFloat($('wordsBpm').value) || null,
+      fold, offsetSec, acaShift, dropAt, cueT, stretch: $('stretchOn').checked, start: t
+    };
+  }
+  if (mode === 'live') {
+    if (!liveSong) return null;
+    const pos = livePosNow();
+    const rate = liveRate || 1;
+    return {
+      source: 'live',
+      liveSong: { title: liveSong.title, artist: liveSong.artist },
+      tune: liveInst ? { videoId: liveInst.videoId, title: liveInst.title } : null,
+      aca: donorAca ? { videoId: donorAca.videoId, title: donorAca.title } : null,
+      words: donor ? { title: donor.title, artist: donor.artist } : null,
+      tuneBpm: liveSong.bpm || null,
+      wordsBpm: liveSong.bpm ? liveSong.bpm / rate : null,
+      fold: 1,
+      offsetSec: liveDropAt !== null ? liveDropAt - donorCue() / rate : 0,
+      acaShift: liveShift,
+      dropAt: liveDropAt,
+      cueT: donorCue(),
+      stretch: $('liveStretch').checked,
+      start: pos
+    };
+  }
+  return null;
+}
+
+async function startSample() {
+  const recipe = currentRecipe();
+  if (!recipe) { log('SAMPLE', mode === 'live' ? 'listen and lock a song first' : 'pick a tune first'); return; }
+  if (!(await openMic())) return;
+  sampRecipe = recipe;
+  sampChunks = [];
+  const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+  sampRec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  sampRec.ondataavailable = (e) => { if (e.data.size > 0) sampChunks.push(e.data); };
+  sampRec.onstop = finishSample;
+  sampRec.start(1000);
+  sampling = true;
+  sampStartedAt = Date.now();
+  $('sampleBtn').classList.add('on');
+  sampTimer = setInterval(() => { $('sampleLabel').textContent = 'SAMPLING ' + fmt((Date.now() - sampStartedAt) / 1000) + ' TAP TO STOP'; }, 250);
+  log('SAMPLE', 'recording, tap again to stop and export');
+}
+function stopSample() {
+  if (!sampling) return;
+  sampling = false;
+  clearInterval(sampTimer);
+  $('sampleBtn').classList.remove('on');
+  $('sampleLabel').textContent = 'TAP TO SAMPLE';
+  const end = currentRecipe();
+  if (sampRecipe) sampRecipe.end = end ? end.start : sampRecipe.start + (Date.now() - sampStartedAt) / 1000;
+  try { sampRec.stop(); } catch (e) { finishSample(); }
+}
+function finishSample() {
+  if (!sampRecipe) return;
+  const name = 'sample-' + stamp();
+  const r = Object.assign({ name, savedAt: Date.now(), seconds: Math.round((Date.now() - sampStartedAt) / 100) / 10 }, sampRecipe);
+  sampRecipe = null;
+  samples.unshift(r);
+  if (samples.length > 40) samples.pop();
+  store('samples', samples);
+  renderSamples();
+  const blob = new Blob(sampChunks, { type: (sampRec && sampRec.mimeType) || 'audio/webm' });
+  sampChunks = [];
+  if (blob.size) downloadBlob(blob, name + '.webm');
+  downloadBlob(new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }), name + '.json');
+  log('SAMPLE', 'exported ' + name + ', sound plus recipe');
+}
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+$('sampleBtn').addEventListener('click', () => { if (sampling) stopSample(); else startSample(); });
+
+function renderSamples() {
+  $('sampCount').textContent = samples.length ? samples.length + ' SAVED' : '';
+  if (!samples.length) { $('sampList').innerHTML = '<div class="sampRow"><span class="rs">Tap sample while a smash plays, tap again to stop and export</span></div>'; return; }
+  $('sampList').innerHTML = '';
+  samples.forEach((r, i) => {
+    const row = document.createElement('div');
+    row.className = 'sampRow';
+    const what = (r.words ? r.words.title : 'no words') + ' over ' + (r.source === 'live' && r.liveSong ? r.liveSong.title : (r.tune ? r.tune.title : 'no tune'));
+    row.innerHTML = '<div class="rt"><div>' + esc(what) + '</div><div class="rs">' + esc(r.name) + ' / ' + fmt(r.seconds) + '</div></div>';
+    const play = document.createElement('button'); play.className = 'seg'; play.textContent = 'REPLAY';
+    play.addEventListener('click', () => replaySample(r));
+    const exp = document.createElement('button'); exp.className = 'seg'; exp.textContent = 'EXPORT';
+    exp.addEventListener('click', () => downloadBlob(new Blob([JSON.stringify(r, null, 2)], { type: 'application/json' }), r.name + '.json'));
+    const del = document.createElement('button'); del.className = 'seg'; del.textContent = 'X';
+    del.addEventListener('click', () => { samples.splice(i, 1); store('samples', samples); renderSamples(); });
+    row.appendChild(play); row.appendChild(exp); row.appendChild(del);
+    $('sampList').appendChild(row);
+  });
+}
+
+async function replaySample(r) {
+  if (!r.tune) { log('REPLAY', 'this sample has no beat to play'); return; }
+  if (mode !== 'smash') setMode('smash');
+  tune = { videoId: r.tune.videoId, title: r.tune.title, channel: '' };
+  $('tunePicked').innerHTML = esc(tune.title) + '<div class="ps">FROM ' + esc(r.name) + '</div>';
+  $('tunePicked').classList.add('on');
+  $('tuneBpm').value = r.tuneBpm || '';
+  $('wordsBpm').value = r.wordsBpm || '';
+  fold = r.fold || 1;
+  document.querySelectorAll('[data-fold]').forEach(x => x.classList.toggle('on', parseFloat(x.getAttribute('data-fold')) === fold));
+  offsetSec = r.offsetSec || 0; renderOffset();
+  acaShift = r.acaShift || 0; renderAs();
+  loadPhase();
+  renderRatio();
+  if (r.words) {
+    words = { title: r.words.title, artist: r.words.artist, lines: [], chorus: [], bpm: r.wordsBpm };
+    $('wordsPicked').innerHTML = esc(r.words.title) + '<div class="ps">' + esc(r.words.artist) + '</div>';
+    $('wordsPicked').classList.add('on');
+    fetch('/api/lyrics?title=' + encodeURIComponent(r.words.title) + '&artist=' + encodeURIComponent(r.words.artist)).then(x => x.json()).then(d => {
+      const hit = d && d.results && d.results[0];
+      if (hit && words && words.title === r.words.title) { words.lines = parseLrc(hit.synced); words.chorus = markChorus(words.lines); buildCueList(words.lines); if (typeof r.cueT === 'number') { cueT = r.cueT; $('cueSel').value = String(r.cueT); } lastIdx = -2; renderStats(words); loadDropLog(); }
+    }).catch(() => {});
+  }
+  $('stretchOn').checked = r.stretch !== false;
+  if (typeof r.cueT === 'number') { cueT = r.cueT; acaParkedAt = null; }
+  setDropAt(typeof r.dropAt === 'number' ? r.dropAt : null, null);
+  if (r.aca) {
+    aca = { videoId: r.aca.videoId, title: r.aca.title, channel: '' };
+    $('acaInfo').innerHTML = esc(aca.title) + '<div class="rs">FROM ' + esc(r.name) + '</div>';
+    acaRateSet = null;
+    ensureAcaPlayer(() => { acaLoaded = aca.videoId; acaPlayer.cueVideoById(aca.videoId, 0); });
+  } else { aca = null; pauseAca(); }
+  renderSmashHeader();
+  replayEnd = typeof r.end === 'number' ? r.end : null;
+  wantPlay = true;
+  ensurePlayer(() => {
+    loadedVideo = tune.videoId;
+    player.loadVideoById(tune.videoId, Math.max(0, r.start || 0));
+  });
+  log('REPLAY', r.name + ' from ' + fmt(r.start) + (replayEnd !== null ? ' to ' + fmt(replayEnd) : ''));
+}
+renderSamples();
+
+/* main loop */
+setInterval(() => { if (mode === 'smash') smashTick(); else if (mode === 'karaoke') karaokeTick(); else liveTick(); }, 100);
+
+/* restore last tune */
+renderOffset(); renderRatio(); renderKn(); renderAs(); setArmed(false); loadPhase();
+if (tune) {
+  $('tunePicked').innerHTML = esc(tune.title) + '<div class="ps">' + esc(tune.channel || '') + '</div>';
+  $('tunePicked').classList.add('on');
+  lookupBpm(tune.title, '', 'tuneBpm');
+}
+renderSmashHeader();
+renderPlayKey();
+</script>
+</body>
+</html>
