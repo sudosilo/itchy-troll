@@ -1,0 +1,1 @@
+2026-10-17, v2026.10.17. Created the retro software catalog. Added retro social link buttons in the footer. Added Field Twin Glaucous, Inkrunner, Tapperator, and the catalog itself, and fixed the Control Troll address.

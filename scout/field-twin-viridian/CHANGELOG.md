@@ -1,0 +1,1 @@
+2026-10-15, v2026.10.15. First version. Added a plate reader status and reading while parked, with an upload status. Then added plate sightings, a best photo, a pass on state and color, and a page for each plate.

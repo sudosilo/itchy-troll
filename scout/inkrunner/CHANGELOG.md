@@ -1,0 +1,1 @@
+2026-10-17, v2026.10.17. Created the game as a comic ink driving sim. Added air tricks, a track loop with barricades, a crash reset, and a lap ghost. Added outer walls, a wider road, zoom out, and a brace button. Fixed a crash at the wall band and opened free driving outside the walls.

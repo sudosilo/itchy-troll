@@ -1,0 +1,1 @@
+2026-10-17, v2026.10.17. Created the app as a steering wheel drum kit with a five round calibration, a four tab looper, and room sync. Added sampling for each instrument with five sets per pad. Players now start with two pads and add more later, with striker tips and mix-up warnings.
