@@ -1,4 +1,5 @@
-const { chromium } = require('playwright');
+// Playwright loads only when a browser is needed, so the butler path runs without it.
+const chromium = { launch: (...a) => require('playwright').chromium.launch(...a) };
 const { execSync, execFileSync } = require('child_process');
 const fs = require('fs');
 
