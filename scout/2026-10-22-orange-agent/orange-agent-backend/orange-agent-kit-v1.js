@@ -10,7 +10,7 @@ const ck = (x, y) => Math.floor(x / S) + ':' + Math.floor(y / S);
 const push = (tool, args) => calls.push({tool, args});
 const walls = WALLS.map(w => ({chunk: w.chunk, seq: w.pts.length > 2 ? w.pts.concat([w.pts[0]]) : w.pts, h: w.h, zmin: w.zmin}));
 
-const line = (discipline, color, pts, meta, extra = {}) => push('place_line', Object.assign({discipline, color, pts, meta}, extra));
+const lineAll = (discipline, color, pts, meta, extra = {}) => push('place_line', Object.assign({discipline, color, pts, meta}, extra));
 const sym = (discipline, color, type, at, rot = 0, meta) => push('place_symbol', {discipline, color, type, at, rot: Math.round(rot * 1000) / 1000, meta});
 const hatch = (discipline, color, pts, pattern, spacing, angle = 0, meta, color2) => push('place_hatch', Object.assign({discipline, color, pts, pattern, spacing, angle}, color2 !== undefined ? {color2} : {}, meta ? {meta} : {}));
 const rect = (x0, y0, x1, y1, z = 0) => [P(x0, y0, z), P(x1, y0, z), P(x1, y1, z), P(x0, y1, z)];
@@ -20,6 +20,7 @@ const rounded = (x0, y0, x1, y1, r, z = 0, n = 5) => [...arc(x0 + r, y0 + r, r, 
 const vface = (ax, ay, bx, by, z0, z1) => [P(ax, ay, z0), P(bx, by, z0), P(bx, by, z1), P(ax, ay, z1)];
 const blob = (cx, cy, r, n, seed, z = 0) => { const o = []; for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; const rr = r * (1 + 0.15 * Math.sin(a * 3 + seed) + 0.07 * Math.sin(a * 5 + seed * 2)); o.push(P(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, z)); } return o; };
 const wavy = (x0, y0, x1, y1, amp, n, seed, z = 0) => { const o = []; for (let i = 0; i <= n; i++) { const t = i / n; const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1; const w = Math.sin(t * Math.PI * 2.3 + seed) * amp + Math.sin(t * 9 + seed * 2) * amp * 0.25; o.push(P(x0 + dx * t - dy / L * w, y0 + dy * t + dx / L * w, z)); } return o; };
+const line = lineAll;
 const box = (disc, col, x0, y0, x1, y1, z, meta) => line(disc, col, rect(x0, y0, x1, y1, z), meta, {closed: true});
 
 function wall(building, pts2, h, zmin, closed, color = C.struct) {
@@ -60,6 +61,8 @@ const claim = (cx, cy) => { push('claim_chunk', {chunk: [cx, cy]}); for (const e
 
 function streets(cx, cy, edges) {
   const ox = cx * S, oy = cy * S;
+  // Lines whose first point falls in a neighbor block are skipped; the neighbor draws its own side of the street.
+  const line = (d, c, pts, m, e) => { if (ck(pts[0][0], pts[0][1]) === cx + ':' + cy) return lineAll(d, c, pts, m, e); };
   const hs = HSTREET[cy], hn = HSTREET[cy + 1], vw = VSTREET[cx], ve = VSTREET[cx + 1];
   if (!hs || !hn || !vw || !ve) throw new Error('name the streets around chunk ' + cx + ',' + cy + ' first, for example HSTREET[' + (cy + 1) + '] = "New Name Street"');
   const names = [hs, hn, vw, ve];

@@ -1,0 +1,1 @@
+2026-10-18, v2026.10.18. Created the game. It is a retro desktop style fog of war maze with mines, pitfalls, flares, and color warps. It has a compass and a hidden picture that is revealed as you explore.
