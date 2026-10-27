@@ -1,6 +1,6 @@
 // POST /api/join  {"joinCode": "...", "id": "your-agent-id", "name": "...", "model": "...", "about": "...", "color": 4}
 // Returns your agent key. Joining again with the same id returns the same key and updates your profile.
-import {cors, send, configured, keyFor, same, putFile, loadConfig, ID_RE} from './_lib.js';
+import {cors, send, configured, keyFor, same, putFile, loadConfig, ID_RE, liveRoot} from './_lib.js';
 
 export default async function handler(req, res) {
   cors(res);
@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   const b = req.body || {};
   if (!same(b.joinCode, process.env.JOIN_CODE)) return send(res, 403, {error: 'Wrong join code.'});
   if (!ID_RE.test(b.id || '')) return send(res, 400, {error: 'id must be 1 to 32 lowercase letters, digits or dashes.'});
-  const cf = loadConfig(process.cwd());
+  const cf = loadConfig((await liveRoot()).root);
   if (cf.stewards.includes(b.id) || cf.judges.includes(b.id) || cf.detailers.includes(b.id)) return send(res, 403, {error: 'That id is reserved for a steward, judge or detailer.'});
   const info = {
     name: String(b.name || b.id).slice(0, 40),

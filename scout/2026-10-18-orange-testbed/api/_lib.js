@@ -57,3 +57,44 @@ export async function putFile(path, text, message) {
   if (r.ok) return {ok: true};
   return {ok: false, error: 'GitHub said ' + r.status + ': ' + (await r.text()).slice(0, 200)};
 }
+
+// Live copy of the repository data. The site is only rebuilt when code changes, so turn files are read straight from
+// GitHub: the tree of main is checked at most every 15 seconds per server instance, and only new or changed files are
+// downloaded into /tmp. The files bundled at deploy time are the fallback if GitHub cannot be reached.
+import fs from 'fs';
+import path from 'path';
+const LIVE = '/tmp/testbed-live';
+let liveAt = 0, liveSha = null, livePromise = null;
+const blobSha = new Map();
+const wanted = p => p === 'testbed.json' || /^(contrib|archive|checkpoint)\//.test(p);
+async function syncLive() {
+  const h = {'Authorization': 'Bearer ' + process.env.GITHUB_TOKEN, 'Accept': 'application/vnd.github+json', 'User-Agent': 'agent-test-bed'};
+  const ref = await fetch('https://api.github.com/repos/' + REPO + '/git/ref/heads/main', {headers: h});
+  if (!ref.ok) throw new Error('ref ' + ref.status);
+  const sha = (await ref.json()).object.sha;
+  if (sha === liveSha) return;
+  const tr = await fetch('https://api.github.com/repos/' + REPO + '/git/trees/' + sha + '?recursive=1', {headers: h});
+  if (!tr.ok) throw new Error('tree ' + tr.status);
+  const tree = (await tr.json()).tree.filter(t => t.type === 'blob' && wanted(t.path));
+  const keep = new Set(tree.map(t => t.path));
+  const todo = tree.filter(t => blobSha.get(t.path) !== t.sha);
+  for (let i = 0; i < todo.length; i += 16) await Promise.all(todo.slice(i, i + 16).map(async t => {
+    const r = await fetch('https://raw.githubusercontent.com/' + REPO + '/' + sha + '/' + t.path, {headers: {'Authorization': h.Authorization, 'User-Agent': h['User-Agent']}});
+    if (!r.ok) throw new Error('raw ' + r.status + ' ' + t.path);
+    const abs = path.join(LIVE, t.path);
+    fs.mkdirSync(path.dirname(abs), {recursive: true});
+    fs.writeFileSync(abs, Buffer.from(await r.arrayBuffer()));
+    blobSha.set(t.path, t.sha);
+  }));
+  for (const p of [...blobSha.keys()]) if (!keep.has(p)) { try { fs.rmSync(path.join(LIVE, p)); } catch (e) {} blobSha.delete(p); }
+  liveSha = sha;
+}
+// Returns {root, sha}: a folder holding the current contrib, archive, checkpoint and testbed.json from main.
+export async function liveRoot() {
+  if (!process.env.GITHUB_TOKEN) return {root: process.cwd(), sha: null};
+  if (Date.now() - liveAt > 15000 || !liveSha) {
+    if (!livePromise) livePromise = syncLive().then(() => { liveAt = Date.now(); }).finally(() => { livePromise = null; });
+    try { await livePromise; } catch (e) { if (!liveSha) return {root: process.cwd(), sha: null, error: String(e.message || e)}; }
+  }
+  return {root: LIVE, sha: liveSha};
+}

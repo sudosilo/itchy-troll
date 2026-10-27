@@ -97,11 +97,12 @@ function docMeta(text) {
   const t = String(text || '');
   const h = t.match(/^PLAY HOURS UTC:\s*([0-9 ,]+)$/m);
   const r = t.match(/^ROLE:\s*([a-z-]+)\s*$/m);
+  const mm = t.match(/^MODEL:\s*(\S+)\s*$/m);
   const hours = h ? [...new Set(h[1].split(/[\s,]+/).filter(Boolean).map(Number).filter(n => Number.isInteger(n) && n >= 0 && n < 24))].sort((x, y) => x - y) : [];
-  return { hours, role: r ? r[1] : '' };
+  return { hours, role: r ? r[1] : '', model: mm ? mm[1] : '' };
 }
-const modelShort = m => (m.match(/claude-([a-z]+)/) || [, 'm'])[1];
-const agentIdFor = (slug, model) => AGENT_KEYS[slug] ? slug : ('dq-' + slug + '-' + modelShort(model)).slice(0, 32);
+const modelShort = m => (m.match(/claude-([a-z]+)/) || [, String(m).split('/').pop().replace(/^~/, '').replace(/[^a-z0-9]+/g, '-').split('-').slice(0, 2).join('-') || 'm'])[1];
+const agentIdFor = (slug, model) => AGENT_KEYS[slug] || String(model).includes('/') ? slug : ('dq-' + slug + '-' + modelShort(model)).slice(0, 32);
 
 // ---------- small helpers ----------
 
@@ -264,6 +265,74 @@ async function callClaude(model, system, messages, tools, apiKey) {
     throw new Error('Anthropic API ' + r.status + ': ' + text.slice(0, 400));
   }
   throw new Error('Anthropic API kept refusing after retries');
+}
+
+// ---------- OpenRouter ----------
+// One key for every model company. A model name with a slash, like ~openai/gpt-latest or deepseek/deepseek-chat, always goes
+// through OpenRouter. Claude models go to Anthropic, and fall back to OpenRouter on their own when the Anthropic account has
+// no credit or OPENROUTER_FOR_CLAUDE=1 is set. Replies are turned back into the Anthropic shape so the play loop is unchanged.
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+const OPENROUTER_FOR_CLAUDE = process.env.OPENROUTER_FOR_CLAUDE === '1';
+let anthropicBroke = 0;
+const orModelFor = m => m.includes('/') ? m : ('anthropic/' + m.replace(/-(\d+)-(\d+)$/, '-$1.$2'));
+function toOpenAI(system, messages, tools) {
+  const out = [{ role: 'system', content: system }];
+  for (const m of messages) {
+    if (typeof m.content === 'string') { out.push({ role: m.role, content: m.content }); continue; }
+    if (m.role === 'assistant') {
+      const text = m.content.filter(b => b.type === 'text').map(b => b.text).join('\n');
+      const calls = m.content.filter(b => b.type === 'tool_use').map(b => ({ id: b.id, type: 'function', function: { name: b.name, arguments: JSON.stringify(b.input || {}) } }));
+      const o = { role: 'assistant', content: text || null }; if (calls.length) o.tool_calls = calls; out.push(o); continue;
+    }
+    const pics = [], texts = [];
+    for (const b of m.content) {
+      if (b.type === 'tool_result') {
+        if (Array.isArray(b.content)) {
+          out.push({ role: 'tool', tool_call_id: b.tool_use_id, content: b.content.filter(x => x.type === 'text').map(x => x.text).join('\n') || 'picture attached below' });
+          for (const x of b.content) if (x.type === 'image') pics.push({ type: 'image_url', image_url: { url: 'data:' + x.source.media_type + ';base64,' + x.source.data } });
+        } else out.push({ role: 'tool', tool_call_id: b.tool_use_id, content: String(b.content) });
+      } else if (b.type === 'text') texts.push({ type: 'text', text: b.text });
+    }
+    if (pics.length || texts.length) out.push({ role: 'user', content: texts.concat(pics.length ? [{ type: 'text', text: 'Pictures from your last tool results:' }] : [], pics) });
+  }
+  return { messages: out, tools: (tools || TOOLS).map(t => ({ type: 'function', function: { name: t.name, description: t.description || '', parameters: t.input_schema || { type: 'object', properties: {} } } })) };
+}
+async function callOpenRouter(model, system, messages, tools) {
+  if (!OPENROUTER_API_KEY) throw new Error('No OPENROUTER_API_KEY on the runner for ' + model);
+  const conv = toOpenAI(system, messages, tools);
+  const body = { model: orModelFor(model), max_tokens: MAX_TOKENS, messages: conv.messages, tools: conv.tools };
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + OPENROUTER_API_KEY, 'Content-Type': 'application/json', 'X-Title': 'blue-agent runner' },
+      body: JSON.stringify(body)
+    });
+    const text = await r.text();
+    if ([429, 500, 502, 503, 529].includes(r.status)) { await sleep(4000 * (attempt + 1)); continue; }
+    if (!r.ok) throw new Error('OpenRouter ' + r.status + ' for ' + body.model + ': ' + text.slice(0, 400));
+    const j = JSON.parse(text);
+    if (j.error) throw new Error('OpenRouter error for ' + body.model + ': ' + JSON.stringify(j.error).slice(0, 400));
+    const msg = (j.choices && j.choices[0] && j.choices[0].message) || {};
+    const content = [];
+    if (msg.content) content.push({ type: 'text', text: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content) });
+    for (const c of msg.tool_calls || []) { let input = {}; try { input = JSON.parse(c.function.arguments || '{}'); } catch { input = { _unparsed: String(c.function.arguments || '').slice(0, 2000) }; } content.push({ type: 'tool_use', id: c.id || ('call_' + crypto.randomBytes(4).toString('hex')), name: c.function.name, input }); }
+    const fr = j.choices && j.choices[0] && j.choices[0].finish_reason;
+    return { content, stop_reason: fr === 'tool_calls' ? 'tool_use' : fr === 'content_filter' ? 'refusal' : 'end_turn', usage: { input_tokens: (j.usage && j.usage.prompt_tokens) || 0, output_tokens: (j.usage && j.usage.completion_tokens) || 0 }, via: 'openrouter:' + body.model };
+  }
+  throw new Error('OpenRouter kept refusing after retries');
+}
+// Claude models always use their own Anthropic key. They only go through OpenRouter when OPENROUTER_FOR_CLAUDE=1 sends
+// all of them there, or OPENROUTER_FALLBACK=1 allows it when the Anthropic account has no credit.
+const OPENROUTER_FALLBACK = process.env.OPENROUTER_FALLBACK === '1';
+async function callModel(model, system, messages, tools, apiKey) {
+  if (model.includes('/')) return callOpenRouter(model, system, messages, tools);
+  if (OPENROUTER_API_KEY && OPENROUTER_FOR_CLAUDE) return callOpenRouter(model, system, messages, tools);
+  if (OPENROUTER_API_KEY && OPENROUTER_FALLBACK && Date.now() - anthropicBroke < 30 * 60 * 1000) return callOpenRouter(model, system, messages, tools);
+  try { return await callClaude(model, system, messages, tools, apiKey); }
+  catch (e) {
+    if (OPENROUTER_API_KEY && OPENROUTER_FALLBACK && /credit balance|billing/i.test(String(e.message))) { anthropicBroke = Date.now(); return callOpenRouter(model, system, messages, tools); }
+    throw e;
+  }
 }
 
 // Keeps the conversation inside the context window by blanking old tool results.
@@ -597,7 +666,7 @@ async function startRun(doctrineSlug, model, trigger) {
   const docs = await allDoctrines();
   const d = docs[doctrineSlug];
   if (!d) throw new Error('no doctrine named ' + doctrineSlug);
-  if (!MODELS.includes(model)) throw new Error('model not in the list: ' + model);
+  if (!MODELS.includes(model) && !(model.includes('/') && OPENROUTER_API_KEY)) throw new Error('model not in the list: ' + model);
   const agentId = agentIdFor(doctrineSlug, model);
   for (const [, a] of active) if (a.agentId === agentId) throw new Error(agentId + ' is already playing');
   const run = {
@@ -613,7 +682,8 @@ async function startRun(doctrineSlug, model, trigger) {
     run.status = 'error'; run.error = String(e.message || e).slice(0, 1000); run.ended = nowIso();
     await addEvent(run.id, { type: 'error', text: run.error });
     await setJ('dq:run:' + run.id, run);
-  }).finally(() => active.delete(run.id));
+  }).finally(() => { active.delete(run.id); publishStatus(run.agentId + ' ' + (run.status || 'ended')); });
+  publishStatus(run.agentId + ' started');
   return run;
 }
 
@@ -654,7 +724,8 @@ async function playRun(run, handle) {
   while (run.turns < MAX_TURNS && !ctx.finished) {
     if (handle.cancel) { run.status = 'stopped'; break; }
     trim(messages);
-    const res = await callClaude(run.model, system, messages, toolList, keyFor(run.doctrine));
+    const res = await callModel(run.model, system, messages, toolList, keyFor(run.doctrine));
+    if (res.via && run.via !== res.via) { run.via = res.via; await addEvent(run.id, { type: 'note', text: 'model called through ' + res.via }); }
     run.turns++;
     run.tokensIn += (res.usage && (res.usage.input_tokens + (res.usage.cache_read_input_tokens || 0) + (res.usage.cache_creation_input_tokens || 0))) || 0;
     run.tokensOut += (res.usage && res.usage.output_tokens) || 0;
@@ -705,6 +776,31 @@ async function playRun(run, handle) {
   await setJ('dq:agent:' + run.agentId, ag);
 }
 
+
+// ---------- status mirror ----------
+// Writes the newest runs to runner-status/blue-agent-status-v1.json on the runner-status branch of the runner repo,
+// so problems can be read from GitHub without anyone opening the dashboard.
+const STATUS_REPO = process.env.STATUS_REPO || 'sudosilo/blue-agent';
+let statusBusy = false, statusAgain = false;
+async function publishStatus(why) {
+  if (!GH_TOKEN) return;
+  if (statusBusy) { statusAgain = true; return; }
+  statusBusy = true;
+  try {
+    const ids = await store.lrange('dq:runs', 0, 24);
+    const runs = [];
+    for (const id of ids) { const r = await getJ('dq:run:' + id, null); if (r) runs.push({ id: r.id, via: r.via, agent: r.agentId, doctrine: r.doctrine, model: r.model, trigger: r.trigger, status: r.status, saved: r.saved, started: r.started, ended: r.ended, turns: r.turns, error: r.error ? String(r.error).slice(0, 400) : undefined, summary: r.summary ? String(r.summary).slice(0, 300) : undefined }); }
+    const s = await settings();
+    const body = { updated: nowIso(), why, version: 6, anthropicKeyEndsWith: keyEnd(ANTHROPIC_API_KEY), openrouterKeyEndsWith: keyEnd(OPENROUTER_API_KEY), openrouterForClaude: OPENROUTER_FOR_CLAUDE, openrouterFallback: process.env.OPENROUTER_FALLBACK === '1', perAgentAnthropicKeys: Object.fromEntries(Object.keys(process.env).filter(k => k.startsWith('ANTHROPIC_API_KEY_')).map(k => [k.slice(18).toLowerCase().replace(/_/g, '-'), keyEnd(process.env[k])])), agentKeyIds: Object.keys(AGENT_KEYS), settings: { autoDaily: s.autoDaily, hoursUtc: s.hoursUtc, model: s.model, doctrines: s.doctrines }, active: [...active.values()].map(a => a.agentId), runs };
+    const path = '/repos/' + STATUS_REPO + '/contents/runner-status/blue-agent-status-v1.json';
+    let ref = await gh('GET', '/repos/' + STATUS_REPO + '/git/ref/heads/runner-status');
+    if (!ref.ok) { const main = await gh('GET', '/repos/' + STATUS_REPO + '/git/ref/heads/main'); if (main.ok) await gh('POST', '/repos/' + STATUS_REPO + '/git/refs', { ref: 'refs/heads/runner-status', sha: main.json.object.sha }); }
+    const cur = await gh('GET', path + '?ref=runner-status');
+    await gh('PUT', path, { message: 'runner status: ' + why, branch: 'runner-status', content: Buffer.from(JSON.stringify(body, null, 1) + '\n').toString('base64'), sha: cur.ok ? cur.json.sha : undefined });
+  } catch (e) { console.error('status', e.message); }
+  finally { statusBusy = false; if (statusAgain) { statusAgain = false; setTimeout(() => publishStatus('catch up'), 2000); } }
+}
+
 // ---------- daily schedule ----------
 
 // Several play times a day, in UTC hours. Each doctrine plays once in each time slot, one after another.
@@ -737,16 +833,21 @@ async function autoTick() {
     const slugs = [...new Set(own.concat(wanted.length ? wanted.filter(x => docs[x]) : Object.keys(docs)))];
     for (const slug of slugs) {
       const hrs = docMeta(docs[slug].text).hours;
-      const due = (hrs.length ? hrs : s.hoursUtc).filter(h => h <= hour);
-      if (!due.length) continue;
-      const slot = due[due.length - 1]; // only the latest slot that has come due; missed earlier slots are skipped
-      const id = agentIdFor(slug, s.model);
+      const list = hrs.length ? hrs : s.hoursUtc, due = list.filter(h => h <= hour);
+      // only the latest slot that has come due; just after midnight UTC that is yesterday's last slot, so a turn missed late in the day still plays
+      const slot = due.length ? due[due.length - 1] : list[list.length - 1];
+      const slotDay = due.length ? day : new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const model = docMeta(docs[slug].text).model || s.model;
+      const id = agentIdFor(slug, model);
       const k = 'dq:lastauto:' + id;
-      if ((await store.get(k)) === day + '@' + slot) continue;
-      await store.set(k, day + '@' + slot);
+      if ((await store.get(k)) === slotDay + '@' + slot) continue;
+      await store.set(k, slotDay + '@' + slot);
       try {
-        const run = await startRun(slug, s.model, 'scheduled ' + String(slot).padStart(2, '0') + ':00 UTC');
+        const run = await startRun(slug, model, 'scheduled ' + String(slot).padStart(2, '0') + ':00 UTC');
         while (active.has(run.id)) await sleep(5000);
+        // a turn that died because an account had no money is retried on the next check instead of waiting for the next slot
+        const done = await getJ('dq:run:' + run.id, {});
+        if (done.status === 'error' && /credit|402|billing|afford|limit exceeded/i.test(String(done.error || ''))) await store.del(k);
       } catch (e) { console.error('auto', slug, e.message); }
     }
   } finally { autoBusy = false; }
@@ -780,7 +881,7 @@ async function route(req, res) {
   if (p === '/health' || p === '/') {
     let redis = store.kind === 'redis' ? 'connected' : 'memory only';
     if (store.ping) { try { await store.ping(); } catch { redis = 'down'; } }
-    return send(res, 200, { ok: true, service: 'blue-agent-api', version: 6, redis, anthropicKey: !!ANTHROPIC_API_KEY, anthropicKeyEndsWith: keyEnd(ANTHROPIC_API_KEY), agentKeys: Object.fromEntries(Object.keys(process.env).filter(k => k.startsWith('ANTHROPIC_API_KEY_')).map(k => [k.slice(18).toLowerCase().replace(/_/g, '-'), keyEnd(process.env[k])])), githubToken: !!GH_TOKEN, joinCode: !!JOIN_CODE, dashKey: !!DASH_KEY, active: active.size });
+    return send(res, 200, { ok: true, service: 'blue-agent-api', version: 6, openrouter: !!OPENROUTER_API_KEY, openrouterKeyEndsWith: keyEnd(OPENROUTER_API_KEY), redis, anthropicKey: !!ANTHROPIC_API_KEY, anthropicKeyEndsWith: keyEnd(ANTHROPIC_API_KEY), agentKeys: Object.fromEntries(Object.keys(process.env).filter(k => k.startsWith('ANTHROPIC_API_KEY_')).map(k => [k.slice(18).toLowerCase().replace(/_/g, '-'), keyEnd(process.env[k])])), githubToken: !!GH_TOKEN, joinCode: !!JOIN_CODE, dashKey: !!DASH_KEY, active: active.size });
   }
   if (!p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
   if (!authed(req, url)) return send(res, 401, { error: 'wrong or missing dashboard key' });
@@ -887,6 +988,8 @@ for (const id of await store.lrange('dq:runs', 0, 49)) {
   if (r && r.status === 'running') { r.status = 'interrupted'; r.ended = nowIso(); await setJ('dq:run:' + id, r); }
 }
 setInterval(() => autoTick().catch(e => console.error('auto', e.message)), 5 * 60 * 1000);
+setTimeout(() => publishStatus('startup'), 15000);
+setInterval(() => publishStatus('hourly'), 60 * 60 * 1000);
 setTimeout(() => autoTick().catch(e => console.error('auto', e.message)), 20000);
 http.createServer((req, res) => route(req, res).catch(e => send(res, 500, { error: String(e.message || e) }))).listen(PORT, () => {
   console.log('blue-agent-api listening on ' + PORT + ' with ' + store.kind + ' storage');
