@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Itchy Troll page filler
 // @namespace    sudosilo-itchy-troll
-// @version      1.0.0
+// @version      1.1.0
 // @description  Fills an itch.io edit page from pages/REPO.json in the itchy-troll repo
 // @match        https://itch.io/game/edit/*
 // @grant        GM_xmlhttpRequest
@@ -80,7 +80,8 @@
   }
 
   function setGenre(name) {
-    const sel = q('select[name="game[genre]"]') || q('select[name*="genre"]');
+    const sel = q('select[name="game[genre]"]') || q('select[name*="genre"]') ||
+      [...document.querySelectorAll('select')].find((s) => [...s.options].some((o) => /no genre/i.test(o.textContent)));
     if (!sel) return false;
     const want = name.trim().toLowerCase();
     const opt = [...sel.options].find((o) => o.textContent.trim().toLowerCase() === want) ||
@@ -152,10 +153,14 @@
     const missed = [];
     if (spec.tagline && !setTagline(spec.tagline)) missed.push('tagline');
     if (spec.description && !setDescription(spec.description)) missed.push('description');
-    if (spec.genre && !setGenre(spec.genre)) missed.push('genre');
     if (spec.tags && spec.tags.length && !setTags(spec.tags)) missed.push('tags');
     if (missed.length) {
       ui.msg.textContent = `Filled the rest. Could not find: ${missed.join(', ')}. Nothing saved yet.`;
+      return;
+    }
+    const skipped = spec.genre && !setGenre(spec.genre) ? ` Genre ${spec.genre} not set, pick it by hand.` : '';
+    if (skipped) {
+      ui.msg.textContent = `Filled.${skipped} Then tap Save.`;
       return;
     }
     const save = findSave();
