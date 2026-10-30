@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Itchy Troll page filler
 // @namespace    sudosilo-itchy-troll
-// @version      1.3.0
+// @version      1.3.1
 // @description  Fills an itch.io edit page from pages/REPO.json in the itchy-troll repo
 // @match        https://itch.io/game/edit/*
 // @grant        GM_xmlhttpRequest
@@ -170,7 +170,12 @@
     const opener = [...document.querySelectorAll('input, div, span, button')].find(
       (el) => (el.placeholder && /no genre/i.test(el.placeholder)) || (leaf(el) && /^\s*no genre\s*$/i.test(el.textContent))
     );
-    if (!opener) return false;
+    if (!opener) {
+      // Already set: the menu shows the wanted genre instead of No genre.
+      return [...document.querySelectorAll('input, div, span')].some(
+        (el) => (el.placeholder && el.placeholder.trim().toLowerCase() === want) || (leaf(el) && el.textContent.trim().toLowerCase() === want)
+      );
+    }
     opener.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     opener.click();
     if (opener.focus) opener.focus();
