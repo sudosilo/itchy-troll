@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name         Itchy Troll page filler
 // @namespace    sudosilo-itchy-troll
-// @version      1.3.1
+// @version      1.4.0
 // @description  Fills an itch.io edit page from pages/REPO.json in the itchy-troll repo
 // @match        https://itch.io/game/edit/*
+// @match        https://itch.io/game/new*
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
 // @connect      raw.githubusercontent.com
@@ -247,6 +248,51 @@
   }
 
   const ui = panel();
+
+  if (/^\/game\/new/.test(location.pathname)) {
+    ui.btn.textContent = 'Create next game from Itchy Troll';
+    ui.btn.onclick = async () => {
+      ui.msg.textContent = 'Loading the next game...';
+      let next;
+      try {
+        next = await load('next');
+      } catch (e) {
+        ui.msg.textContent = 'No next game queued in the repo.';
+        return;
+      }
+      const slug = String(next.repo || '').toLowerCase();
+      const title = q('input[name="game[title]"]');
+      const url = q('input[name="game[slug]"]') || q('input[name*="slug"]');
+      if (!title || !url || !slug) {
+        ui.msg.textContent = 'Could not find the title or project URL boxes.';
+        return;
+      }
+      title.value = next.title || slug;
+      poke(title);
+      await sleep(300);
+      url.value = slug;
+      poke(url);
+      const kind = [...document.querySelectorAll('select')].find((s) => [...s.options].some((o) => /^\s*HTML/i.test(o.textContent)));
+      if (kind) {
+        const opt = [...kind.options].find((o) => /^\s*HTML/i.test(o.textContent));
+        kind.value = opt.value;
+        poke(kind);
+      } else {
+        const radio = [...document.querySelectorAll('label')].find((l) => /^\s*HTML/i.test(l.textContent));
+        if (radio) radio.click();
+      }
+      await sleep(300);
+      const save = findSave() || [...document.querySelectorAll('button, input[type="submit"]')].find((b) => /save|create/i.test(b.textContent || b.value || ''));
+      if (!save) {
+        ui.msg.textContent = `Filled ${next.title}. Tap Save yourself.`;
+        return;
+      }
+      ui.msg.textContent = `Creating ${next.title} as a draft...`;
+      save.click();
+    };
+    return;
+  }
+
   ui.btn.onclick = async () => {
     const slug = slugFromPage();
     if (!slug) {
