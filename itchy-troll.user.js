@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Itchy Troll page filler
 // @namespace    sudosilo-itchy-troll
-// @version      1.2.0
+// @version      1.3.0
 // @description  Fills an itch.io edit page from pages/REPO.json in the itchy-troll repo
 // @match        https://itch.io/game/edit/*
 // @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
 // @connect      raw.githubusercontent.com
 // @updateURL    https://raw.githubusercontent.com/sudosilo/itchy-troll/main/itchy-troll.user.js
 // @downloadURL  https://raw.githubusercontent.com/sudosilo/itchy-troll/main/itchy-troll.user.js
@@ -44,6 +45,85 @@
         onerror: () => reject(new Error('Could not reach GitHub')),
       });
     });
+  }
+
+  function loadFile(rel) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: `${RAW}${rel}?t=${Date.now()}`,
+        responseType: 'arraybuffer',
+        onload: (r) => {
+          if (r.status !== 200) return reject(new Error(`Missing image pages/${rel}`));
+          const name = rel.split('/').pop();
+          resolve(new File([r.response], name, { type: name.endsWith('.jpg') ? 'image/jpeg' : 'image/png' }));
+        },
+        onerror: () => reject(new Error('Could not reach GitHub')),
+      });
+    });
+  }
+
+  // When itch.io opens a file picker, hand it our files instead.
+  let pending = null;
+  function armPicker() {
+    const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+    const proto = win.HTMLInputElement.prototype;
+    if (proto.__itchyArmed) return;
+    const orig = proto.click;
+    const patched = function () {
+      if (this.type === 'file' && pending) {
+        const files = pending;
+        pending = null;
+        giveFiles(this, files);
+        return;
+      }
+      return orig.call(this);
+    };
+    try {
+      proto.click = typeof exportFunction === 'function' ? exportFunction(patched, win) : patched;
+      proto.__itchyArmed = true;
+    } catch (e) {}
+  }
+
+  function giveFiles(input, files) {
+    const dt = new DataTransfer();
+    for (const f of files) dt.items.add(f);
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function buttonByText(re) {
+    return [...document.querySelectorAll('button, a, .button, label')].find((b) => re.test((b.textContent || '').trim()));
+  }
+
+  async function uploadVia(buttonRe, files) {
+    const btn = buttonByText(buttonRe);
+    if (!btn) return false;
+    const before = new Set(document.querySelectorAll('input[type="file"]'));
+    pending = files;
+    btn.click();
+    await sleep(800);
+    if (pending) {
+      const fresh = [...document.querySelectorAll('input[type="file"]')].find((i) => !before.has(i)) ||
+        (btn.closest('div') && btn.closest('div').querySelector('input[type="file"]'));
+      if (!fresh) {
+        pending = null;
+        return false;
+      }
+      const f = pending;
+      pending = null;
+      giveFiles(fresh, f);
+    }
+    return true;
+  }
+
+  async function waitForUploads(ms) {
+    const end = Date.now() + ms;
+    while (Date.now() < end) {
+      const busy = [...document.querySelectorAll('.upload_progress, .progress, .uploading, [class*="progress"]')].some((e) => e.offsetParent !== null);
+      if (!busy) return;
+      await sleep(1000);
+    }
   }
 
   function poke(el) {
@@ -184,9 +264,37 @@
       ui.msg.textContent = `Filled the rest. Could not find: ${missed.join(', ')}. Nothing saved yet.`;
       return;
     }
+    const imgNotes = [];
+    if (spec.cover || (spec.screenshots && spec.screenshots.length)) {
+      armPicker();
+      if (spec.cover) {
+        ui.msg.textContent = 'Uploading cover image...';
+        try {
+          const ok = await uploadVia(/upload cover image|replace cover image|cover image/i, [await loadFile(spec.cover)]);
+          imgNotes.push(ok ? 'cover uploaded' : 'cover button not found');
+        } catch (e) {
+          imgNotes.push(e.message);
+        }
+        await sleep(1500);
+      }
+      if (spec.screenshots && spec.screenshots.length) {
+        ui.msg.textContent = 'Uploading screenshots...';
+        try {
+          const files = [];
+          for (const rel of spec.screenshots) files.push(await loadFile(rel));
+          const ok = await uploadVia(/add screenshots/i, files);
+          imgNotes.push(ok ? `${files.length} screenshots uploaded` : 'screenshot button not found');
+        } catch (e) {
+          imgNotes.push(e.message);
+        }
+      }
+      await sleep(2000);
+      await waitForUploads(60000);
+    }
+    const imgText = imgNotes.length ? ` Images: ${imgNotes.join(', ')}.` : '';
     const skipped = spec.genre && !(await pickGenre(spec.genre)) ? ` Genre ${spec.genre} not set, pick it by hand.` : '';
     if (skipped) {
-      ui.msg.textContent = `Filled.${skipped} Then tap Save.`;
+      ui.msg.textContent = `Filled.${imgText}${skipped} Then tap Save.`;
       return;
     }
     const save = findSave();
@@ -194,7 +302,7 @@
       ui.msg.textContent = 'Filled. Save button not found, tap Save yourself.';
       return;
     }
-    ui.msg.textContent = 'Filled. Saving...';
+    ui.msg.textContent = `Filled.${imgText} Saving...`;
     save.click();
   };
 })();
