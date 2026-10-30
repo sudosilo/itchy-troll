@@ -1,1 +1,3 @@
-2026-10-18, v2026.10.18. Created the sandbox as a copy of the agent test bed. Synced it with the secured version of the test bed.
+Conveyor Sim changelog
+
+2026-10-28, v2026.10.28. First release. Started the conveyor simulation as a copy of the agent test bed.

@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>PDF Text Editor</title>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#eceef2; --surface:#ffffff; --ink:#1a2130; --muted:#586173; --line:#d3d8e0;
+  --mark:#ffd43b; --mark-soft:rgba(255,212,59,.28); --ok:#1f8a4c; --warn:#b45309;
+  --f-display:"Helvetica Neue",Helvetica,Arial,sans-serif;
+  --f-body:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --f-mono:ui-monospace,Menlo,Consolas,"Courier New",monospace;
+}
+*{box-sizing:border-box}
+html,body{min-height:100%;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--mark);outline-offset:2px}
+
+.bar{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px}
+.bar-in{max-width:960px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}
+.brand{font-family:var(--f-display);font-weight:800;font-size:18px;letter-spacing:-.01em;margin:0;display:flex;align-items:center;gap:8px}
+.brand i{display:inline-block;width:14px;height:18px;background:var(--mark);border-radius:2px;transform:skewX(-8deg)}
+.spacer{flex:1}
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 14px;font-weight:500;cursor:pointer;min-height:44px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.btn.primary:disabled{opacity:.4;cursor:not-allowed}
+.count{font-family:var(--f-mono);font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-variant-numeric:tabular-nums}
+
+.main{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 120px}
+.wrap{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.info{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;color:var(--muted);font-size:14px}
+.info strong{color:var(--ink);font-weight:600;overflow-wrap:anywhere}
+.tag{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;background:var(--mark);color:#1a2130;padding:2px 7px;border-radius:4px}
+.toggle{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.toggle input{width:18px;height:18px;accent-color:var(--ink)}
+.status{min-height:1.5em;font-size:14px}
+.status.err{color:var(--warn)}
+.status.ok{color:var(--ok)}
+
+.pages{display:flex;flex-direction:column;gap:22px}
+.pg{position:relative;width:100%;container-type:inline-size;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.12),0 8px 24px rgba(20,30,50,.10);line-height:0}
+.pg canvas{width:100%;height:auto;display:block}
+.pg-label{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;margin-bottom:-14px}
+.ln{position:absolute;padding:0;margin:0;border:0;background:transparent;cursor:text;border-radius:2px;line-height:1;white-space:nowrap;overflow:visible;text-align:left}
+.show .ln{box-shadow:inset 0 -2px 0 var(--mark)}
+.ln:hover,.ln:focus-visible{background:var(--mark-soft);outline:none;box-shadow:0 0 0 2px var(--mark)}
+.ln.edited{box-shadow:none}
+.show .ln.edited{box-shadow:0 0 0 1.5px var(--ok)}
+.ln.edited:hover{box-shadow:0 0 0 2px var(--ok)}
+.ln .nt{display:block;line-height:1.06;pointer-events:none}
+.empty-pg{position:absolute;left:4%;right:4%;top:4%;line-height:1.4;font-size:13px;background:var(--surface);color:var(--muted);padding:8px 12px;border-radius:6px;border:1px solid var(--line)}
+
+.sheet{position:fixed;inset:0;z-index:20;background:rgba(10,14,22,.35);display:flex;align-items:flex-end;justify-content:center}
+.card{width:100%;max-width:620px;background:var(--surface);border-radius:16px 16px 0 0;border:1px solid var(--line);
+  padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px));
+  padding-top:18px;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px}
+.card h2{margin:0;font-family:var(--f-display);font-weight:600;font-size:17px}
+.orig{margin:0;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.orig span{color:var(--ink);font-family:var(--f-mono);font-size:12.5px}
+#editInput{width:100%;font:inherit;font-size:17px;padding:12px;border:1.5px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+#editInput:focus{outline:none;border-color:var(--ink)}
+.note{margin:0;font-size:13px;color:var(--warn);min-height:1.2em}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.link{border:0;background:none;color:var(--muted);text-decoration:underline;cursor:pointer;padding:8px 2px}
+.help{font-size:13px;color:var(--muted);line-height:1.55;max-width:65ch;margin:0}
+@media (prefers-reduced-motion:no-preference){.card{animation:up .18s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.6}}}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="bar-in">
+    <h1 class="brand"><i aria-hidden="true"></i>PDF Text Editor</h1>
+    <span class="spacer"></span>
+    <span class="count" id="count">0 edits</span>
+    <button class="btn" id="openBtn" type="button">Open PDF</button>
+    <button class="btn primary" id="saveBtn" type="button" disabled>Download</button>
+    <input id="fileInput" type="file" accept="application/pdf,.pdf" hidden>
+  </div>
+</header>
+
+<main class="main">
+  <div class="wrap">
+    <div class="info">
+      <span><strong id="fileName">sample-flyer.pdf</strong></span>
+      <span class="tag" id="sampleTag">Example file</span>
+      <span class="spacer"></span>
+      <label class="toggle"><input type="checkbox" id="showToggle" checked> Highlight editable text</label>
+    </div>
+    <p class="help">Tap any highlighted line to change what it says. The new text is set in a standard font matched to the original size, weight and color. Edited lines get a green outline. Your file never leaves your device.</p>
+    <div class="status" id="status" role="status"></div>
+    <div class="pages show" id="pages"></div>
+  </div>
+</main>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <h2 id="sheetTitle">Change this line</h2>
+    <p class="orig">Original: <span id="origText"></span></p>
+    <input id="editInput" type="text" autocomplete="off" spellcheck="true">
+    <p class="note" id="fitNote"></p>
+    <div class="row">
+      <button class="link" id="revertBtn" type="button">Restore original</button>
+      <span class="spacer"></span>
+      <button class="btn" id="cancelBtn" type="button">Cancel</button>
+      <button class="btn primary" id="applyBtn" type="button">Apply</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script>
+(function(){
+const $ = id => document.getElementById(id);
+const pagesEl=$('pages'), statusEl=$('status');
+const S = { bytes:null, name:'sample-flyer', isSample:true, lines:[], edits:new Map(), current:null, loadId:0 };
+const measureCtx = document.createElement('canvas').getContext('2d');
+
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+function setStatus(msg, kind){ statusEl.textContent = msg||''; statusEl.className = 'status' + (kind?' '+kind:''); }
+function updateCount(){
+  const n = S.edits.size;
+  $('count').textContent = n + (n===1?' edit':' edits');
+  $('saveBtn').disabled = n===0;
+}
+
+function fontInfo(page, fontName, styles){
+  let raw='';
+  try{ if(page.commonObjs.has(fontName)) raw = page.commonObjs.get(fontName).name || ''; }catch(e){}
+  const fam = (styles && styles[fontName] && styles[fontName].fontFamily) || '';
+  const s = (raw+' '+fam).toLowerCase();
+  const family = /courier|mono|consol/.test(s) ? 'mono'
+    : (/times|serif|georgia|garamond|roman|minion|caslon|cambria|palatino|baskerville|bodoni/.test(s) && !/sans/.test(s)) ? 'serif' : 'sans';
+  return { raw, family, bold:/bold|black|heavy|semibold|demi|extrab/.test(s), italic:/italic|oblique/.test(s) };
+}
+function cssFont(fi){
+  return fi.family==='mono' ? '"Courier New",Courier,monospace' : fi.family==='serif' ? '"Times New Roman",Times,serif' : 'Helvetica,Arial,sans-serif';
+}
+function stdFontKey(fi){
+  if(fi.family==='mono') return fi.bold&&fi.italic?'CourierBoldOblique':fi.bold?'CourierBold':fi.italic?'CourierOblique':'Courier';
+  if(fi.family==='serif') return fi.bold&&fi.italic?'TimesRomanBoldItalic':fi.bold?'TimesRomanBold':fi.italic?'TimesRomanItalic':'TimesRoman';
+  return fi.bold&&fi.italic?'HelveticaBoldOblique':fi.bold?'HelveticaBold':fi.italic?'HelveticaOblique':'Helvetica';
+}
+
+function lum(p){ return 0.299*p[0]+0.587*p[1]+0.114*p[2]; }
+function sampleColors(ctx, r){
+  const cw=ctx.canvas.width, ch=ctx.canvas.height;
+  const x=Math.max(0,Math.floor(r.l)-3), y=Math.max(0,Math.floor(r.t)-3);
+  const w=Math.max(4,Math.min(cw-x,Math.ceil(r.w)+6)), h=Math.max(4,Math.min(ch-y,Math.ceil(r.h)+6));
+  let d; try{ d=ctx.getImageData(x,y,w,h).data; }catch(e){ return {bg:[255,255,255],fg:[0,0,0]}; }
+  const px=(i,j)=>{const k=(j*w+i)*4; return [d[k],d[k+1],d[k+2]];};
+  const border=[];
+  for(let i=0;i<w;i++){ border.push(px(i,0),px(i,1),px(i,h-1),px(i,h-2)); }
+  for(let j=0;j<h;j++){ border.push(px(0,j),px(1,j),px(w-1,j),px(w-2,j)); }
+  border.sort((a,b)=>lum(a)-lum(b));
+  const bg = border[Math.floor(border.length/2)];
+  let fg=[0,0,0], best=-1;
+  for(let j=2;j<h-2;j++) for(let i=2;i<w-2;i++){
+    const p=px(i,j); const dist=Math.abs(p[0]-bg[0])+Math.abs(p[1]-bg[1])+Math.abs(p[2]-bg[2]);
+    if(dist>best){best=dist;fg=p;}
+  }
+  if(best<40) fg = lum(bg)>128?[0,0,0]:[255,255,255];
+  return {bg,fg};
+}
+
+function buildLines(items){
+  const lines=[];
+  for(const it of items){
+    if(!it.str) continue;
+    const t=it.transform;
+    if(!(t[0]>0) || Math.abs(t[1])>0.02*Math.abs(t[0]) || Math.abs(t[2])>0.02*Math.abs(t[3])) continue;
+    const size=Math.abs(t[3]) || Math.hypot(t[0],t[1]);
+    if(size<1) continue;
+    const x=t[4], y=t[5], end=x+(it.width||0);
+    let target=null;
+    for(const L of lines){
+      if(Math.abs(L.y-y)<size*0.35 && Math.abs(L.size-size)<size*0.3 && x>L.x-size*1.2 && x<L.end+size*1.2){ target=L; break; }
+    }
+    if(!target){
+      if(!it.str.trim()) continue;
+      target={x, y, size, end, parts:[], fontName:it.fontName};
+      lines.push(target);
+    }
+    target.parts.push({x,end,str:it.str});
+    target.x=Math.min(target.x,x); target.end=Math.max(target.end,end);
+  }
+  for(const L of lines){
+    L.parts.sort((a,b)=>a.x-b.x);
+    let txt='', prevEnd=null;
+    for(const p of L.parts){
+      if(txt && prevEnd!==null && p.x-prevEnd>L.size*0.18 && !/\s$/.test(txt) && !/^\s/.test(p.str)) txt+=' ';
+      txt+=p.str; prevEnd=p.end;
+    }
+    L.text=txt.replace(/\s+/g,' ').trim();
+    L.width=L.end-L.x;
+  }
+  return lines.filter(L=>L.text);
+}
+
+async function loadPdf(bytes, name, isSample){
+  const myId=++S.loadId;
+  S.bytes=bytes.slice(0); S.name=name; S.isSample=isSample;
+  S.lines=[]; S.edits.clear(); updateCount();
+  $('fileName').textContent=name+'.pdf';
+  $('sampleTag').hidden=!isSample;
+  pagesEl.innerHTML=''; setStatus('Opening...');
+  let pdf;
+  try{ pdf = await pdfjsLib.getDocument({data:bytes.slice(0), isEvalSupported:false}).promise; }
+  catch(e){
+    setStatus(e && e.name==='PasswordException' ? 'This PDF is password protected. Remove the password, then open it again.' : 'That file could not be opened. It may be damaged or not a PDF.', 'err');
+    return;
+  }
+  const dpr=Math.min(2, window.devicePixelRatio||1);
+  let total=0;
+  for(let p=1;p<=pdf.numPages;p++){
+    if(myId!==S.loadId) return;
+    const page=await pdf.getPage(p);
+    const base=page.getViewport({scale:1});
+    const vp=page.getViewport({scale:1000/base.width});
+    if(pdf.numPages>1){ const lab=document.createElement('div'); lab.className='pg-label'; lab.textContent='Page '+p+' of '+pdf.numPages; pagesEl.appendChild(lab); }
+    const wrap=document.createElement('div'); wrap.className='pg';
+    wrap.style.aspectRatio = vp.width+' / '+vp.height;
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.round(vp.width*dpr); canvas.height=Math.round(vp.height*dpr);
+    wrap.appendChild(canvas); pagesEl.appendChild(wrap);
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    await page.render({canvasContext:ctx, viewport:vp, transform:dpr!==1?[dpr,0,0,dpr,0,0]:null}).promise;
+    const tc=await page.getTextContent();
+    const lines=buildLines(tc.items);
+    for(const L of lines){
+      const fi=fontInfo(page, L.fontName, tc.styles);
+      const s=L.size;
+      const rc=vp.convertToViewportRectangle([L.x, L.y-s*0.18, L.x+L.width, L.y+s*0.88]);
+      const l=Math.min(rc[0],rc[2]), t=Math.min(rc[1],rc[3]), r=Math.max(rc[0],rc[2]), b=Math.max(rc[1],rc[3]);
+      const col=sampleColors(ctx,{l:l*dpr,t:t*dpr,w:(r-l)*dpr,h:(b-t)*dpr});
+      const line={ id:S.lines.length, pageIndex:p-1, x:L.x, y:L.y, size:s, width:L.width, text:L.text, fi, bg:col.bg, fg:col.fg,
+        pct:{l:l/vp.width*100, t:t/vp.height*100, w:(r-l)/vp.width*100, h:(b-t)/vp.height*100, fs:(s*vp.scale)/vp.width*100} };
+      const btn=document.createElement('button');
+      btn.type='button'; btn.className='ln';
+      btn.style.left=line.pct.l+'%'; btn.style.top=line.pct.t+'%';
+      btn.style.width=line.pct.w+'%'; btn.style.height=line.pct.h+'%';
+      btn.setAttribute('aria-label','Edit text: '+line.text);
+      btn.addEventListener('click',()=>openSheet(line));
+      line.el=btn; wrap.appendChild(btn); S.lines.push(line);
+    }
+    total+=lines.length;
+    if(!lines.length){
+      const n=document.createElement('div'); n.className='empty-pg';
+      n.textContent='No editable text on this page. Scanned pages are pictures of text, so their words cannot be changed here.';
+      wrap.appendChild(n);
+    }
+  }
+  setStatus(total ? '' : 'No editable text was found in this PDF.', total?'':'err');
+}
+
+function paintLine(line){
+  const btn=line.el, has=S.edits.has(line.id);
+  btn.classList.toggle('edited',has);
+  btn.innerHTML='';
+  if(!has){ btn.style.background=''; btn.style.width=line.pct.w+'%'; btn.style.minWidth=''; btn.setAttribute('aria-label','Edit text: '+line.text); return; }
+  const txt=S.edits.get(line.id);
+  btn.style.background='rgb('+line.bg.join(',')+')';
+  btn.style.width='auto'; btn.style.minWidth=line.pct.w+'%';
+  const sp=document.createElement('span'); sp.className='nt';
+  sp.textContent=txt || ' ';
+  sp.style.fontSize=line.pct.fs+'cqw';
+  sp.style.fontFamily=cssFont(line.fi);
+  sp.style.fontWeight=line.fi.bold?'700':'400';
+  sp.style.fontStyle=line.fi.italic?'italic':'normal';
+  sp.style.color='rgb('+line.fg.join(',')+')';
+  btn.appendChild(sp);
+  btn.setAttribute('aria-label','Edit text (changed): '+txt);
+}
+
+function openSheet(line){
+  S.current=line;
+  $('origText').textContent=line.text;
+  const input=$('editInput');
+  input.value=S.edits.has(line.id)?S.edits.get(line.id):line.text;
+  $('revertBtn').hidden=!S.edits.has(line.id);
+  $('sheet').hidden=false;
+  checkFit();
+  setTimeout(()=>{ input.focus(); input.select(); },30);
+}
+function closeSheet(){ $('sheet').hidden=true; if(S.current && S.current.el) S.current.el.focus({preventScroll:true}); S.current=null; }
+function checkFit(){
+  const line=S.current; if(!line) return;
+  measureCtx.font=(line.fi.italic?'italic ':'')+(line.fi.bold?'700 ':'400 ')+'100px '+cssFont(line.fi);
+  const a=measureCtx.measureText(line.text).width, b=measureCtx.measureText($('editInput').value).width;
+  const pct=a? Math.round((b/a-1)*100) : 0;
+  $('fitNote').textContent = pct>8 ? 'New text runs about '+pct+'% wider than the original and may overlap things next to it.' : '';
+}
+function applyEdit(){
+  const line=S.current; if(!line) return;
+  const v=$('editInput').value;
+  if(v===line.text) S.edits.delete(line.id); else S.edits.set(line.id,v);
+  paintLine(line); updateCount(); setStatus('');
+  closeSheet();
+}
+$('editInput').addEventListener('input',checkFit);
+$('editInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();applyEdit();} if(e.key==='Escape'){e.preventDefault();closeSheet();} });
+$('applyBtn').addEventListener('click',applyEdit);
+$('cancelBtn').addEventListener('click',closeSheet);
+$('revertBtn').addEventListener('click',()=>{ const l=S.current; if(!l) return; S.edits.delete(l.id); paintLine(l); updateCount(); closeSheet(); });
+$('sheet').addEventListener('click',e=>{ if(e.target===$('sheet')) closeSheet(); });
+$('showToggle').addEventListener('change',e=>pagesEl.classList.toggle('show',e.target.checked));
+window.addEventListener('beforeunload',e=>{ if(S.edits.size){ e.preventDefault(); e.returnValue=''; } });
+
+$('openBtn').addEventListener('click',()=>$('fileInput').click());
+$('fileInput').addEventListener('change',async e=>{
+  const f=e.target.files && e.target.files[0]; if(!f) return;
+  const buf=new Uint8Array(await f.arrayBuffer());
+  e.target.value='';
+  await loadPdf(buf, f.name.replace(/\.pdf$/i,''), false);
+});
+
+function sanitize(font,s){
+  let out='';
+  for(const ch of s.replace(/[\u2028\u2029\n\r\t]/g,' ')){ try{ font.encodeText(ch); out+=ch; }catch(e){ out+='?'; } }
+  return out;
+}
+function wrapContents(doc,page){
+  const {PDFName,PDFArray,pushGraphicsState,popGraphicsState}=PDFLib;
+  const ctx=doc.context, node=page.node, key=PDFName.of('Contents');
+  const C=node.get(key); if(!C) return;
+  const start=ctx.register(ctx.contentStream([pushGraphicsState()]));
+  const end=ctx.register(ctx.contentStream([popGraphicsState()]));
+  let arr = C instanceof PDFArray ? C : null;
+  if(!arr){ const look=ctx.lookup(C); if(look instanceof PDFArray) arr=look; }
+  const list = arr ? arr.asArray() : [C];
+  node.set(key, ctx.obj([start,...list,end]));
+}
+async function buildPdf(){
+  const {PDFDocument,StandardFonts,rgb}=PDFLib;
+  const doc=await PDFDocument.load(S.bytes,{ignoreEncryption:true, updateMetadata:false});
+  const fonts={}, wrapped=new Set();
+  for(const [id,newText] of S.edits){
+    const L=S.lines[id], page=doc.getPage(L.pageIndex);
+    if(!wrapped.has(L.pageIndex)){ try{ wrapContents(doc,page); }catch(e){ console.warn(e); } wrapped.add(L.pageIndex); }
+    const k=stdFontKey(L.fi);
+    if(!fonts[k]) fonts[k]=await doc.embedFont(StandardFonts[k]);
+    const font=fonts[k], txt=sanitize(font,newText), s=L.size;
+    const newW=txt?font.widthOfTextAtSize(txt,s):0;
+    page.drawRectangle({x:L.x-s*0.06, y:L.y-s*0.26, width:Math.max(L.width,newW)+s*0.12, height:s*1.22,
+      color:rgb(L.bg[0]/255,L.bg[1]/255,L.bg[2]/255), borderWidth:0});
+    if(txt) page.drawText(txt,{x:L.x, y:L.y, size:s, font, color:rgb(L.fg[0]/255,L.fg[1]/255,L.fg[2]/255)});
+  }
+  return doc.save();
+}
+function saveBlob(blob, filename){
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download=filename; a.rel='noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+$('saveBtn').addEventListener('click',async()=>{
+  const btn=$('saveBtn'); btn.disabled=true; setStatus('Building your PDF...');
+  try{
+    const out=await buildPdf();
+    const fname=S.name+'-edited.pdf';
+    saveBlob(new Blob([out],{type:'application/pdf'}), fname);
+    setStatus('Saved '+fname,'ok');
+  }catch(e){
+    console.error(e);
+    setStatus('Could not build the edited PDF. If the file is password protected, remove the password and try again.','err');
+  }finally{ updateCount(); }
+});
+
+async function makeSample(){
+  const {PDFDocument,StandardFonts,rgb}=PDFLib;
+  const doc=await PDFDocument.create();
+  const page=doc.addPage([612,792]);
+  const hb=await doc.embedFont(StandardFonts.HelveticaBold), h=await doc.embedFont(StandardFonts.Helvetica), ti=await doc.embedFont(StandardFonts.TimesRomanItalic);
+  page.drawRectangle({x:0,y:672,width:612,height:120,color:rgb(0.11,0.16,0.29)});
+  page.drawText('SATURDAY NIGHT LINEUP',{x:54,y:722,size:30,font:hb,color:rgb(1,1,1)});
+  page.drawText('Live in the Showroom',{x:54,y:694,size:15,font:h,color:rgb(1,0.83,0.23)});
+  page.drawText('The Desert Strings',{x:54,y:600,size:40,font:hb,color:rgb(0.11,0.16,0.29)});
+  page.drawText('Doors open 7:00 PM, show starts at 8:00 PM',{x:54,y:560,size:16,font:h,color:rgb(0.2,0.2,0.22)});
+  page.drawText('Tickets $25 at the box office',{x:54,y:534,size:16,font:h,color:rgb(0.2,0.2,0.22)});
+  page.drawRectangle({x:54,y:430,width:504,height:70,color:rgb(1,0.95,0.78)});
+  page.drawText('Friday, November 14',{x:72,y:468,size:20,font:hb,color:rgb(0.55,0.25,0.05)});
+  page.drawText('Must be 21 or older to attend',{x:72,y:444,size:13,font:h,color:rgb(0.55,0.25,0.05)});
+  page.drawText('This is an example file. Tap Open PDF to edit your own.',{x:54,y:80,size:13,font:ti,color:rgb(0.4,0.4,0.45)});
+  return doc.save();
+}
+
+(async()=>{
+  if(!window.pdfjsLib || !window.PDFLib){ setStatus('The editor could not load its PDF tools. Check your connection and reload the page.','err'); return; }
+  try{ await loadPdf(await makeSample(),'sample-flyer',true); }
+  catch(e){ console.error(e); setStatus('Open a PDF to get started.'); }
+})();
+})();
+</script>
+</body>
+</html>

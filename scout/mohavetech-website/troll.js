@@ -402,3 +402,14 @@
     });
   };
 })();
+/* vizmark */
+(function () {
+  function addViz() {
+    if (document.querySelector('script[src^="viz-menu.js"]')) return;
+    var s = document.createElement("script");
+    s.src = "viz-menu.js?v=" + Date.now();
+    document.body.appendChild(s);
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addViz);
+  else addViz();
+})();
