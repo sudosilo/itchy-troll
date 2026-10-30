@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Itchy Troll page filler
 // @namespace    sudosilo-itchy-troll
-// @version      1.1.0
+// @version      1.2.0
 // @description  Fills an itch.io edit page from pages/REPO.json in the itchy-troll repo
 // @match        https://itch.io/game/edit/*
 // @grant        GM_xmlhttpRequest
@@ -76,6 +76,32 @@
       editor.dispatchEvent(new Event('input', { bubbles: true }));
       editor.dispatchEvent(new Event('keyup', { bubbles: true }));
     }
+    return true;
+  }
+
+  function sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
+  }
+
+  async function pickGenre(name) {
+    if (setGenre(name)) return true;
+    const want = name.trim().toLowerCase();
+    const leaf = (el) => el.children.length === 0 && el.offsetParent !== null;
+    const opener = [...document.querySelectorAll('input, div, span, button')].find(
+      (el) => (el.placeholder && /no genre/i.test(el.placeholder)) || (leaf(el) && /^\s*no genre\s*$/i.test(el.textContent))
+    );
+    if (!opener) return false;
+    opener.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    opener.click();
+    if (opener.focus) opener.focus();
+    await sleep(400);
+    const opt = [...document.querySelectorAll('li, div, span, a, button')].find(
+      (el) => leaf(el) && el.textContent.trim().toLowerCase() === want
+    );
+    if (!opt) return false;
+    opt.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    opt.click();
+    await sleep(300);
     return true;
   }
 
@@ -158,7 +184,7 @@
       ui.msg.textContent = `Filled the rest. Could not find: ${missed.join(', ')}. Nothing saved yet.`;
       return;
     }
-    const skipped = spec.genre && !setGenre(spec.genre) ? ` Genre ${spec.genre} not set, pick it by hand.` : '';
+    const skipped = spec.genre && !(await pickGenre(spec.genre)) ? ` Genre ${spec.genre} not set, pick it by hand.` : '';
     if (skipped) {
       ui.msg.textContent = `Filled.${skipped} Then tap Save.`;
       return;
