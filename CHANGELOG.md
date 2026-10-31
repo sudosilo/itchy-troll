@@ -1,4 +1,12 @@
-2026-10-26, v2026.10.26. Shipped Atlas of Tiles again. Skipped the browser install on the command line only path.
+Itchy Troll changelog
+
+2026-10-30, v2026.10.30. Added a browser userscript that fills in a game's page on the publishing site from a saved page file, including description, tagline, genre, and tags. It picks the genre from the site's own dropdown, treats a genre that is already set as done, uploads cover and gameplay screenshots, and can create new pages. Added EDMIA cover and gameplay screenshots and queued Gladhand Dockyard next. Page text is now pasted by hand, so the page workflow was removed.
+
+2026-10-29, v2026.10.29. The scout looked over the repos for new candidates.
+
+2026-10-28, v2026.10.28. The scout looked over the repos for new candidates.
+
+2026-10-27, v2026.10.27. Shipped Atlas of Tiles. The ship log and the ledger were updated, and the scout looked over the repos for new candidates.
 
 2026-10-25, v2026.10.25. Added a gated Atlas of Tiles build with bundled fonts and phone fixes, and shipped it.
 
