@@ -260,7 +260,7 @@
     var view = document.createElement("div");
     view.id = "links-view";
     view.className = "hidden";
-    view.innerHTML = '<h2>Free Links</h2><p class="tag">A plain index of free, useful links. <a href="https://free-as-in-links.vercel.app" target="_blank" rel="noopener">open full page</a></p><iframe id="links-frame" title="Free Links" loading="lazy"></iframe>';
+    view.innerHTML = '<h2>Free Links</h2><p class="tag">A plain index of free, useful links. <a href="https://free-as-in-links.vercel.app" target="_blank" rel="noopener">open full page</a> or <a href="linkrain.html">watch them rain</a></p><iframe id="links-frame" title="Free Links" loading="lazy"></iframe>';
     var cat = document.getElementById("category-view");
     if (cat) cat.parentNode.insertBefore(view, cat);
     if (typeof window.showLinks !== "function") {
@@ -412,4 +412,33 @@
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", addViz);
   else addViz();
+})();
+/* itchmark */
+(function () {
+  function badges(map) {
+    var links = document.querySelectorAll("#category-view a, #alpha-view a");
+    Array.prototype.forEach.call(links, function (a) {
+      var p = a.parentNode, name = a.textContent.trim(), page = map && map[name];
+      if (!p || !page || p.getAttribute("data-itch")) return;
+      p.setAttribute("data-itch", "1");
+      var b = document.createElement("button");
+      b.type = "button";
+      b.textContent = "itch";
+      b.title = "Play " + name + " on itch.io";
+      b.setAttribute("aria-label", "Play " + name + " on itch.io");
+      b.style.cssText = "margin-left:8px;background:black;color:#b48cf0;border:1px solid #8a4bd6;padding:1px 5px;cursor:pointer;line-height:1;font-family:monospace;font-size:11px;";
+      b.onclick = function () { window.open(page, "_blank", "noopener"); };
+      var gh = p.querySelector(".gh-btn");
+      (gh || a).insertAdjacentElement("afterend", b);
+    });
+  }
+  function go() {
+    if (window.ITCH) { window.ITCH.then(badges); return; }
+    var s = document.createElement("script");
+    s.src = "itch.js?v=" + Math.floor(Date.now() / 600000);
+    s.onload = function () { window.ITCH.then(function (m) { badges(m); setTimeout(function () { badges(m); }, 2500); }); };
+    document.body.appendChild(s);
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", go);
+  else go();
 })();

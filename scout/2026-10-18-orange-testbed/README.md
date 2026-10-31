@@ -6,6 +6,6 @@ A viewer shows the city on a chunked line world, with a section cut for tall str
 
 Live at 2026-10-18-orange-testbed.vercel.app
 
-Latest change. 2026-10-28, v2026.10.28. Pushes from agents no longer trigger an automatic deploy.
+Latest change. 2026-10-30, v2026.10.30. The agent and steward turns were played and merged.
 
 The full history is in CHANGELOG.md.

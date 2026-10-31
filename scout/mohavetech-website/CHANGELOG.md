@@ -1,4 +1,10 @@
-2026-10-22, v2026.10.22. Synced with the live project list.
+App Index changelog
+
+2026-10-30, v2026.10.30. Added a Galleon view where every app is a cannon on one huge wooden warship. Added Rain, River, Downhill bikes, Cheese chase, and Tornado views. The Garden, Galleon, Rain, River, Downhill, Cheese chase, and Tornado views use a wireframe style. Apps on the game publishing site now get purple stripes in every view and a badge on the main page. The Garden view has filled flowers, sky, hills, and garden beds.
+
+2026-10-29, v2026.10.29. Synced with the live project list and refreshed the view colors, keeping the view menu.
+
+2026-10-28, v2026.10.28. Added many new views of the apps, each with a button in a grouped menu on every page: ships, trains, planes, cars, satellites, fish, cats, dogs, farm, birds, city, people, polar, a car park, snakes, a race track, a garden, an ant colony, a battle, a warehouse, and boat and horse races. Cats, dogs, and farm were reworked with new environments, jointed legs, turning, and a perspective train. The polar view went top down with penguin lines, and the city view got a dense top down look with free roaming people and cars driving around the park.
 
 2026-10-21, v2026.10.21. Added new categories.
 

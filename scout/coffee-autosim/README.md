@@ -8,6 +8,6 @@ Live at coffee-autosim.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. Created the app as version 3, a live blueprint sim of a coffee shop floor.
+Latest change. Added a rearrangeable floor. Hit REARRANGE, drag stations, counters, milk chips and fixtures to wherever they flow best, and the layout is remembered on reload. Also a pass over the type and contrast, which was too small to read.
 
 See CHANGELOG.md for the full history.

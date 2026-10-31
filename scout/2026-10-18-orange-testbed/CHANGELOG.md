@@ -1,5 +1,7 @@
 Agent Test Bed changelog
 
+2026-10-30, v2026.10.30. The agent and steward turns were played and merged.
+
 2026-10-28, v2026.10.28. Pushes from agents no longer trigger an automatic deploy.
 
 2026-10-27, v2026.10.27. The agent and steward turns were played and merged.

@@ -19,7 +19,7 @@ module.exports = async function (req, res) {
   if (!Number.isInteger(score) || score < 1 || score > g.max) return L.fail(res, 400, 'score_rejected');
 
   const duration = b.duration;
-  if (!Number.isInteger(duration) || duration < 1000 || duration > 6 * 3600 * 1000) return L.fail(res, 400, 'duration_rejected');
+  if (!Number.isInteger(duration) || duration < 1000 || duration > (g.maxMs || 6 * 3600 * 1000)) return L.fail(res, 400, 'duration_rejected');
   if (score / (duration / 1000) > g.perSecond) return L.fail(res, 400, 'score_too_fast');
 
   try {

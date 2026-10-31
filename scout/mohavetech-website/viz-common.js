@@ -17,7 +17,8 @@ function build(RAW,DATES,REAL){
       sizeF:kb?Math.min(1.5,0.9+0.12*Math.log2(kb/1000)):0.82+0.36*h32(name,4)};
   });
 }
-function load(cb){
+function load(cb0){
+  const cb=list=>(window.ITCH||Promise.resolve()).then(()=>cb0(window.itchApply?window.itchApply(list):list));
   if(window.FLEET_DATA){const d=window.FLEET_DATA;cb(build(d.RAW,d.DATES,d.REAL));return;}
   fetch('fleet.html').then(r=>r.text()).then(src=>{
     const RAW=src.split('const RAW=`')[1].split('`;')[0];
@@ -47,6 +48,26 @@ function boat(c,kind,L,col,side){
   else{const w=L*0.28;poly(c,[[L/2,0],[L*.15,-w/2],[-L*.45,-w*.38],[-L/2,0],[-L*.45,w*.38],[L*.15,w/2]],col);poly(c,[[L*.12,0],[-L*.2,(side||1)*L*.32],[-L*.45,(side||1)*L*.22]],col);}
 }
 function selRing(c,x,y,r){c.strokeStyle=INK;c.lineWidth=2;c.setLineDash([5,4]);c.beginPath();c.arc(x,y,r,0,6.283);c.stroke();c.setLineDash([]);}
-window.VZ={AGE,INK,MUTED,MOTION,h32,load,open,close,ageText,sizeText,poly,line,box,ring,label,boat,selRing,get sel(){return sel;}};
+
+function wire(c){
+  if(c._wired)return c;c._wired=1;
+  const F=c.fill.bind(c),FR=c.fillRect.bind(c);
+  function col(fs){
+    if(typeof fs!=='string')return (typeof CanvasGradient!=='undefined'&&fs instanceof CanvasGradient)?null:fs;
+    const t=fs.replace(/\s/g,'');let r,g,b,a=1,m;
+    if((m=t.match(/^#([0-9a-f]{6})$/i))){const n=parseInt(m[1],16);r=n>>16&255;g=n>>8&255;b=n&255;}
+    else if((m=t.match(/^#([0-9a-f]{3})$/i))){r=parseInt(m[1][0]+m[1][0],16);g=parseInt(m[1][1]+m[1][1],16);b=parseInt(m[1][2]+m[1][2],16);}
+    else if((m=t.match(/^rgba?\(([\d.]+),([\d.]+),([\d.]+)(?:,([\d.]+))?\)$/))){r=+m[1];g=+m[2];b=+m[3];a=m[4]==null?1:+m[4];}
+    else return fs;
+    if(a<0.6)return null;
+    if((0.299*r+0.587*g+0.114*b)/255>0.86)return MUTED;
+    return fs;
+  }
+  c.fill=function(){const k=col(this.fillStyle);if(!k)return;this.save();this.strokeStyle=k;this.lineWidth=1.1;this.shadowBlur=0;this.stroke();this.restore();};
+  c.fillRect=function(x,y,w,h){const k=col(this.fillStyle);if(!k)return;this.save();this.strokeStyle=k;this.lineWidth=1.1;this.strokeRect(x,y,w,h);this.restore();};
+  c.bg=function(color,w,h){this.save();this.fillStyle=color;FR(0,0,w,h);this.restore();};
+  return c;
+}
+window.VZ={wire,AGE,INK,MUTED,MOTION,h32,load,open,close,ageText,sizeText,poly,line,box,ring,label,boat,selRing,get sel(){return sel;}};
 })();
 (function(){if(!document.querySelector('script[src="viz-menu.js"]')){const s=document.createElement('script');s.src='viz-menu.js';document.head.appendChild(s);}})();
