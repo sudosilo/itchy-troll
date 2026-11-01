@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decimal Day Clock</title>
+<style>
+:root{--bg:#f6f4ee;--ink:#1b1b1b;--mute:#6b6b6b;--line:#d8d4c7;--main:#2a6f4f;--pocket:#b4501e;--pocketbg:#fbeee3}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px 16px}
+body.pocket{background:var(--pocketbg)}
+h1{font-size:18px;margin:0 0 4px;font-weight:600}
+.sub{color:var(--mute);font-size:13px;margin-bottom:24px;text-align:center}
+.card{width:100%;max-width:420px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:16px}
+.head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.label{font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em}
+.big{font-family:ui-monospace,monospace;font-size:52px;font-weight:700;letter-spacing:.02em;line-height:1}
+.big.main{color:var(--main)}
+.big.pocket{color:var(--pocket)}
+.big.plain{font-size:34px;color:var(--ink)}
+.row{display:flex;gap:10px;margin-top:10px;font-size:13px;color:var(--mute);font-family:ui-monospace,monospace}
+.track{position:relative;height:18px;background:#ece8dc;border-radius:9px;overflow:hidden;margin-top:12px}
+.tmain{position:absolute;left:0;top:0;height:100%;width:92.5926%;background:#cfe3d8}
+.tpocket{position:absolute;right:0;top:0;height:100%;width:7.4074%;background:#f0c9ae}
+.needle{position:absolute;top:0;width:3px;height:100%;background:var(--ink)}
+.ibtn{width:26px;height:26px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--mute);font-family:Georgia,serif;font-style:italic;font-weight:700;font-size:14px;cursor:pointer;padding:0;line-height:1}
+.ibtn:active{background:#ece8dc}
+.info{display:none;margin-top:14px;padding:14px;background:#faf8f2;border:1px solid var(--line);border-radius:10px;font-size:13px;color:var(--mute);line-height:1.55}
+.info.open{display:block}
+.info p{margin:0 0 10px}
+.info p:last-child{margin-bottom:0}
+.special{color:var(--pocket);font-weight:600}
+.tz{width:100%;margin-top:12px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font-size:14px}
+.btn{padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font-size:14px;cursor:pointer}
+.btn:active{background:#ece8dc}
+.cal-nav{display:flex;gap:8px;align-items:center;margin:12px 0}
+.cal-nav .mid{flex:1;white-space:pre-line;line-height:1.4;text-align:center;font-family:ui-monospace,monospace;font-size:13px;color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(10,1fr);gap:4px}
+.cell{aspect-ratio:1;border:1px solid var(--line);border-radius:6px;background:#fff;font-family:ui-monospace,monospace;font-size:12px;position:relative;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;color:var(--ink)}
+.cell{flex-direction:column;line-height:1.15}
+.cell small{font-size:8px;color:var(--mute);margin-top:1px}
+.cell.today small{color:#dff0e6}
+.cell.mrow{border-top:2px solid #8a8576}
+.cell.orbit{border-top:3px solid var(--pocket)}
+.cell.sdec{background:#f0c9ae}
+.cell.today.sdec{background:var(--main)}
+.cell.shortwk{background:var(--pocketbg)}
+.cell.today.shortwk{background:var(--main)}
+.cell.today{background:var(--main);color:#fff;border-color:var(--main)}
+.cell.sel{outline:2px solid var(--ink);outline-offset:1px}
+.cell.note::after{content:'';position:absolute;bottom:3px;width:4px;height:4px;border-radius:50%;background:var(--pocket)}
+.cell.today.note::after{background:#fff}
+.goto{display:flex;gap:8px;margin-top:12px}
+.goto input{flex:1;min-width:0;padding:8px;border:1px solid var(--line);border-radius:8px;font-size:14px}
+.editor{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.editor .dn{font-family:ui-monospace,monospace;font-size:22px;font-weight:700}
+.editor .meta{font-size:13px;color:var(--mute);margin:4px 0 10px;line-height:1.5}
+.editor textarea{width:100%;min-height:120px;padding:10px;border:1px solid var(--line);border-radius:10px;font-size:15px;font-family:system-ui,sans-serif;resize:vertical;color:var(--ink);background:#fff}
+.editor .acts{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:var(--mute)}
+</style>
+</head>
+<body>
+<h1>Decimal Day Clock</h1>
+
+<div class="card">
+<div class="head"><div class="label" id="phase">Block</div><button class="ibtn" id="ib1" aria-label="About the decimal clock">i</button></div>
+<div class="big main" id="clock">0.00.00</div>
+<div class="row"><span id="r1"></span></div>
+<div class="track"><div class="tmain"></div><div class="tpocket"></div><div class="needle" id="needle"></div></div>
+<div class="info" id="in1">
+<p>One day is 86,400 SI seconds. Each tick is one SI second, the same length as today. A minute is 100 ticks. A block is 100 minutes, which is 10,000 ticks.</p>
+<p>The day starts at your local midnight. Blocks 0 through 7 fill 80,000 ticks. The last 6,400 ticks of the day are the short hour, counted as 64 minutes of 100 ticks.</p>
+<p><span class="special">The short hour is the special hour.</span> By default it starts at 10:13:20 PM on the old clock, at the end of the day where people are usually done, so anything done inside it is on purpose.</p>
+</div>
+</div>
+
+<div class="card">
+<div class="head"><div class="label">Sexagesimal civil time</div><button class="ibtn" id="ib2" aria-label="Why sexagesimal civil time is flawed">i</button></div>
+<div class="big plain" id="normal">0:00:00 AM</div>
+<div class="row"><span id="normaldate"></span></div>
+<input class="tz" id="tzsearch" type="search" placeholder="Search time zones" autocomplete="off" aria-label="Search time zones">
+<select class="tz" id="tz" aria-label="Time zone for sexagesimal civil time" style="margin-top:8px"></select>
+<div class="info" id="in2">
+<p>The normal clock mixes bases. Seconds and minutes count to 60, hours count to 24, and days count to 7. Every addition needs a carry in a different base. 2h 45m plus 1h 30m only works if you stop and convert.</p>
+<p>The units were set by habit from Babylonian base 60 and the Egyptian 24 hour split, long before anyone could measure time. The second was fitted to them later.</p>
+<p>It also lies about the sun. Time zones and daylight saving move the clock an hour while the sun stays put, so the same moment has a different number depending on where you stand and what month it is.</p>
+<p>The decimal day has one base. Every unit is 100 of the one below it, so math is moving a decimal point. 3.50.00 plus 1.25.00 is 4.75.00. Durations add, subtract and scale in your head. Fast math makes planning, time management and setting expectations easier, and less friction in the day is better for the soul.</p>
+</div>
+</div>
+
+<div class="card">
+<div class="head"><div class="label">Since 1970</div><button class="ibtn" id="ib3" aria-label="About the 1970 count">i</button></div>
+<div class="big plain" id="unixdays">0.00000</div>
+<div class="row"><span id="unixticks"></span></div>
+<div class="info" id="in3">
+<p>Computers count time as a running total of ticks since midnight UTC on January 1, 1970. That total is the calendar computers use. No hours, no zones, no daylight saving.</p>
+<p>The top number is whole days since then, with the part of the day as a decimal. The line under it is the same moment as a plain tick count.</p>
+</div>
+</div>
+
+<div class="card">
+<div class="head"><div class="label">Day count</div><button class="ibtn" id="ib5" aria-label="About the day count">i</button></div>
+<div class="big plain" id="daycount">0.00000</div>
+<div class="row"><span id="milli"></span></div>
+<div class="info" id="in5">
+<p>This is how much of the current day has passed. It starts at 0 at your local midnight and climbs toward 1. When it reaches the whole number 1, the day is over and the count resets to 0 for the next day.</p>
+<p>A milliday is one thousandth of a day, 86.4 SI seconds. A centiday is one hundredth of a day. So 0.392 of a day is 392 millidays or 39.2 centidays. The whole number of millidays is the same amount as the decimal day count, just counted in thousandths.</p>
+</div>
+</div>
+
+<div class="card" id="calcard">
+<div class="head"><div class="label">Day notepad</div><button class="ibtn" id="ib4" aria-label="About the day notepad">i</button></div>
+<div class="info" id="in4">
+<p>Days are counted up from January 1, 1970, using your local date. An orbit is one trip around the sun, 365 or 366 days. A decaday is 10 days, a month is 30 days, and a hectoday is 100 days. Each orbit is 12 months, 360 days, then a short decaday of 5 or 6 days that holds the leftover, so every orbit starts over at day 0 with whole numbers.</p>
+<p>Each page is one hectoday: three full ones, then a short hectoday of 65 or 66 days. Each row is a decaday. A darker line starts each month, which is every 3 rows. Tinted cells are the short hectoday, and the darker tint is the short decaday. The orange bar marks day 0 of a new orbit. There are no 7 day weeks.</p>
+<p>The small number under each day is the old calendar month and day, for correlation. Tap a day to write a note. A dot marks days with a note. Notes are saved in this browser on this device only.</p>
+</div>
+<div class="cal-nav"><button class="btn" id="cprev" aria-label="Previous page">&lt;</button><div class="mid" id="chead"></div><button class="btn" id="cnext" aria-label="Next page">&gt;</button></div>
+<div class="grid" id="cgrid"></div>
+<div class="goto"><input id="cgo" type="number" inputmode="numeric" placeholder="Go to day number"><button class="btn" id="cgobtn">Go</button><button class="btn" id="ctoday">Today</button></div>
+<div class="editor" id="ceditor">
+<div class="dn" id="cdn"></div>
+<div class="meta" id="cmeta"></div>
+<textarea id="cnote" placeholder="Write a note for this day"></textarea>
+<div class="acts"><span id="cstate"></span><button class="btn" id="cclear">Clear note</button></div>
+</div>
+</div>
+
+<script>
+function pad(n,w){return String(n).padStart(w,'0')}
+function wire(b,p){
+  document.getElementById(b).addEventListener('click',function(){
+    document.getElementById(p).classList.toggle('open');
+  });
+}
+wire('ib1','in1');
+wire('ib2','in2');
+wire('ib3','in3');
+wire('ib5','in5');
+function tick(){
+  var now=new Date();
+  var start=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  var end=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);
+  var frac=(now-start)/(end-start);
+  var t=frac*86400;
+  var ti=Math.floor(t);
+  var clock=document.getElementById('clock');
+  var phase=document.getElementById('phase');
+  var pocket=ti>=80000;
+  document.body.classList.toggle('pocket',pocket);
+  clock.className='big '+(pocket?'pocket':'main');
+  if(!pocket){
+    var b=Math.floor(ti/10000);
+    var m=Math.floor((ti%10000)/100);
+    var s=ti%100;
+    phase.textContent='Block '+b+' of 7';
+    clock.textContent=b+'.'+pad(m,2)+'.'+pad(s,2);
+    document.getElementById('r1').textContent='ticks left in block '+(10000-(ti%10000));
+  }else{
+    var p=ti-80000;
+    var pm=Math.floor(p/100);
+    var ps=p%100;
+    phase.textContent='Short hour';
+    clock.textContent='S.'+pad(pm,2)+'.'+pad(ps,2);
+    document.getElementById('r1').textContent='ticks left in short hour '+(6400-p);
+  }
+  document.getElementById('needle').style.left=(frac*100)+'%';
+  document.getElementById('daycount').textContent=frac.toFixed(5);
+  document.getElementById('milli').textContent=Math.floor(frac*1000)+' millidays, '+(frac*100).toFixed(2)+' centidays';
+  var ut=now.getTime()/1000;
+  document.getElementById('unixdays').textContent=(ut/86400).toFixed(5);
+  document.getElementById('unixticks').textContent=Math.floor(ut).toLocaleString('en-US')+' ticks';
+  var zone=document.getElementById('tz').value||undefined;
+  var tf=new Intl.DateTimeFormat('en-US',{timeZone:zone,hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true});
+  var df=new Intl.DateTimeFormat('en-US',{timeZone:zone,weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  document.getElementById('normal').textContent=tf.format(now);
+  document.getElementById('normaldate').textContent=df.format(now);
+}
+(function(){
+  var sel=document.getElementById('tz');
+  var local=Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC';
+  var zones=[];
+  try{zones=Intl.supportedValuesOf('timeZone').slice()}catch(e){}
+  if(zones.indexOf('UTC')<0)zones.unshift('UTC');
+  if(zones.indexOf(local)<0)zones.unshift(local);
+  var search=document.getElementById('tzsearch');
+  var aliases={
+    PST:['America/Los_Angeles','America/Vancouver','America/Tijuana'],
+    MST:['America/Denver','America/Phoenix','America/Boise','America/Edmonton'],
+    CST:['America/Chicago','America/Mexico_City','America/Winnipeg'],
+    EST:['America/New_York','America/Toronto','America/Detroit'],
+    AKST:['America/Anchorage'],HST:['Pacific/Honolulu'],
+    AST:['America/Puerto_Rico','America/Halifax'],
+    GMT:['UTC','Europe/London','Africa/Abidjan'],UTC:['UTC'],Z:['UTC'],
+    BST:['Europe/London'],
+    CET:['Europe/Paris','Europe/Berlin','Europe/Madrid','Europe/Rome','Europe/Amsterdam','Europe/Zurich'],
+    EET:['Europe/Athens','Europe/Helsinki','Europe/Kiev','Europe/Kyiv','Africa/Cairo'],
+    WET:['Europe/Lisbon'],MSK:['Europe/Moscow'],
+    IST:['Asia/Kolkata','Asia/Calcutta','Europe/Dublin'],PKT:['Asia/Karachi'],
+    JST:['Asia/Tokyo'],KST:['Asia/Seoul'],SGT:['Asia/Singapore'],HKT:['Asia/Hong_Kong'],
+    AEST:['Australia/Sydney','Australia/Melbourne','Australia/Brisbane'],
+    ACST:['Australia/Adelaide','Australia/Darwin'],AWST:['Australia/Perth'],
+    NZST:['Pacific/Auckland'],SAST:['Africa/Johannesburg'],WAT:['Africa/Lagos'],
+    EAT:['Africa/Nairobi'],CAT:['Africa/Harare']
+  };
+  var alt={PDT:'PST',MDT:'MST',CDT:'CST',EDT:'EST',AKDT:'AKST',ADT:'AST',BST:'BST',CEST:'CET',EEST:'EET',WEST:'WET',AEDT:'AEST',ACDT:'ACST',NZDT:'NZST',
+    PT:'PST',MT:'MST',CT:'CST',ET:'EST',AKT:'AKST',IRST:'IRST'};
+  var nowD=new Date();
+  var abbr={};
+  zones.forEach(function(z){
+    try{
+      var parts=new Intl.DateTimeFormat('en-US',{timeZone:z,timeZoneName:'short'}).formatToParts(nowD);
+      for(var i=0;i<parts.length;i++){if(parts[i].type==='timeZoneName'){abbr[z]=parts[i].value;break;}}
+    }catch(e){}
+  });
+  function labelOf(z){return z.replace(/_/g,' ')+(abbr[z]?' ('+abbr[z]+')':'');}
+  function fill(q,keep){
+    sel.innerHTML='';
+    var n=0;
+    var key=q.toUpperCase();
+    if(alt[key])key=alt[key];
+    var exact=aliases[key]||null;
+    zones.forEach(function(z){
+      var label=labelOf(z);
+      if(q){
+        var hit;
+        if(exact){hit=exact.indexOf(z)>=0||(abbr[z]&&abbr[z].toUpperCase()===q.toUpperCase());}
+        else{hit=label.toLowerCase().indexOf(q)>=0;}
+        if(!hit)return;
+      }
+      var o=document.createElement('option');
+      o.value=z;o.textContent=label;
+      sel.appendChild(o);
+      n++;
+    });
+    if(n===0){
+      var e=document.createElement('option');
+      e.value='';e.textContent='No match';
+      sel.appendChild(e);
+      return;
+    }
+    if(keep&&zones.indexOf(keep)>=0&&Array.prototype.some.call(sel.options,function(o){return o.value===keep}))sel.value=keep;
+  }
+  var saved=null;
+  try{saved=localStorage.getItem('decimalday-tz')}catch(e){}
+  var start=(saved&&zones.indexOf(saved)>=0)?saved:local;
+  fill('',start);
+  sel.value=start;
+  function save(){
+    if(!sel.value)return;
+    try{localStorage.setItem('decimalday-tz',sel.value)}catch(e){}
+  }
+  sel.addEventListener('change',function(){save();tick();});
+  search.addEventListener('input',function(){
+    var q=search.value.trim().toLowerCase();
+    fill(q,null);
+    if(sel.value){sel.selectedIndex=0;save();}
+    tick();
+  });
+})();
+tick();
+setInterval(tick,100);
+(function(){
+  var YEAR=365.2425;
+  var notes={};
+  var KEY='decimalday-notes';
+  try{notes=JSON.parse(localStorage.getItem(KEY)||'{}')||{}}catch(e){notes={}}
+  function persist(){try{localStorage.setItem(KEY,JSON.stringify(notes));return true}catch(e){return false}}
+  function todayNum(){var n=new Date();return Math.floor(Date.UTC(n.getFullYear(),n.getMonth(),n.getDate())/86400000);}
+  function orbitOf(d){return Math.floor(d/YEAR);}
+  function orbitStart(o){return Math.ceil(o*YEAR);}
+  function locate(d){
+    var o=orbitOf(d),din=d-orbitStart(o);
+    var w=Math.min(3,Math.floor(din/100));
+    var inm=din<360;
+    return {o:o,din:din,w:w,cell:din-w*100,m:inm?Math.floor(din/30):12,dm:inm?Math.floor((din%30)/10):null,dd:inm?din%10:din-360};
+  }
+  function pageInfo(pi){
+    var o=Math.floor(pi/4),w=pi%4;
+    var len=orbitStart(o+1)-orbitStart(o);
+    var base=orbitStart(o)+w*100;
+    var count=w<3?100:len-300;
+    return {o:o,w:w,base:base,count:count};
+  }
+  var today=todayNum();
+  var sel=today;
+  var pi=(function(){var l=locate(today);return l.o*4+l.w;})();
+  var grid=document.getElementById('cgrid');
+  var head=document.getElementById('chead');
+  var ta=document.getElementById('cnote');
+  function fmtd(d){return new Date(d*86400000).toLocaleDateString('en-US',{timeZone:'UTC',month:'short',day:'numeric',year:'numeric'});}
+  function renderGrid(){
+    grid.innerHTML='';
+    var pg=pageInfo(pi);
+    for(var i=0;i<pg.count;i++){
+      var d=pg.base+i;
+      var b=document.createElement('button');
+      var cls='cell';
+      var dino=d-orbitStart(pg.o);
+      if(pg.w===3)cls+=' shortwk';
+      if(dino>=360)cls+=' sdec';
+      else if(Math.floor(dino/10)%3===0)cls+=' mrow';
+      if(d===today)cls+=' today';
+      if(d===sel)cls+=' sel';
+      if(notes[d])cls+=' note';
+      if(pg.w===0&&i===0)cls+=' orbit';
+      b.className=cls;
+      var gd=new Date(d*86400000);
+      b.innerHTML='<span>'+String(i).padStart(2,'0')+'</span><small>'+(gd.getUTCMonth()+1)+'/'+gd.getUTCDate()+'</small>';
+      b.setAttribute('data-d',d);
+      b.setAttribute('aria-label','Day '+d);
+      grid.appendChild(b);
+    }
+    head.textContent='Orbit '+pg.o+', hectoday '+pg.w+' of 3'+(pg.w===3?', short hectoday':'')+'\ndays '+pg.base+' to '+(pg.base+pg.count-1)+'\nold calendar '+fmtd(pg.base)+' to '+fmtd(pg.base+pg.count-1);
+  }
+  function renderEditor(){
+    document.getElementById('cdn').textContent='Day '+sel+(sel===today?' (today)':'');
+    var l=locate(sel);
+    var civil=new Date(sel*86400000).toLocaleDateString('en-US',{timeZone:'UTC',weekday:'long',month:'long',day:'numeric',year:'numeric'});
+    var where=(l.m<12)?('Month '+l.m+' of 11, decaday '+l.dm+' of 2, day '+l.dd+'.'):('Short decaday, day '+l.dd+'.');
+    document.getElementById('cmeta').textContent='Orbit '+l.o+'. Hectoday '+l.w+' of 3'+(l.w===3?' (short)':'')+', cell '+String(l.cell).padStart(2,'0')+'. '+where+' Day '+l.din+' of the orbit. Old calendar: '+civil+'.';
+    ta.value=notes[sel]||'';
+    document.getElementById('cstate').textContent=notes[sel]?'Saved on this device':'';
+  }
+  function go(d){
+    if(isNaN(d)||d<0)return;
+    sel=Math.floor(d);var l=locate(sel);pi=l.o*4+l.w;renderGrid();renderEditor();
+  }
+  grid.addEventListener('click',function(e){
+    var t=e.target.closest('.cell');if(!t)return;
+    sel=parseInt(t.getAttribute('data-d'),10);renderGrid();renderEditor();
+  });
+  document.getElementById('cprev').addEventListener('click',function(){if(pi>0){pi--;renderGrid();}});
+  document.getElementById('cnext').addEventListener('click',function(){pi++;renderGrid();});
+  document.getElementById('ctoday').addEventListener('click',function(){today=todayNum();go(today);});
+  document.getElementById('cgobtn').addEventListener('click',function(){go(parseInt(document.getElementById('cgo').value,10));});
+  document.getElementById('cgo').addEventListener('keydown',function(e){if(e.key==='Enter')go(parseInt(this.value,10));});
+  ta.addEventListener('input',function(){
+    var v=ta.value;
+    if(v.trim()===''){delete notes[sel];}else{notes[sel]=v;}
+    var ok=persist();
+    document.getElementById('cstate').textContent=notes[sel]?(ok?'Saved on this device':'Could not save on this device'):'';
+    renderGrid();
+  });
+  document.getElementById('cclear').addEventListener('click',function(){
+    delete notes[sel];persist();ta.value='';renderGrid();renderEditor();
+  });
+  wire('ib4','in4');
+  setInterval(function(){
+    var t=todayNum();
+    if(t!==today){var wasToday=(sel===today);today=t;if(wasToday){sel=today;}var l=locate(sel);pi=l.o*4+l.w;renderGrid();renderEditor();}
+  },30000);
+  renderGrid();renderEditor();
+})();
+</script>
+</body>
+</html>

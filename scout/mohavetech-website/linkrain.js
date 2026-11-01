@@ -1,5 +1,5 @@
 (function(){
-const SRC='https://raw.githubusercontent.com/sudosilo/free-as-in-links/main/index.html';
+const SRC='freelinks.html';
 const cv=document.getElementById('cv'),ctx=VZ.wire(cv.getContext('2d')),MOTION=VZ.MOTION;
 const countEl=document.getElementById('count');
 countEl.textContent='loading links...';

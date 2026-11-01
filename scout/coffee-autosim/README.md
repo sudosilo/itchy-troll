@@ -8,6 +8,6 @@ Live at coffee-autosim.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. Added a rearrangeable floor. Hit REARRANGE, drag stations, counters, milk chips and fixtures to wherever they flow best, and the layout is remembered on reload. Also a pass over the type and contrast, which was too small to read.
+Latest change. 2026-10-30, v2026.10.30. Added a rearrangeable floor. A new Rearrange button lets you drag stations, counters, and fixtures to wherever they flow best, and the layout is remembered when you reload. Baristas walk to the new positions. Text and contrast were made easier to read.
 
 See CHANGELOG.md for the full history.

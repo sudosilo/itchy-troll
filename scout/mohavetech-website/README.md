@@ -8,6 +8,6 @@ Live at mohavetech-website.vercel.app.
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-10-30, v2026.10.30. Added a Galleon view where every app is a cannon on one huge wooden warship. Added Rain, River, Downhill bikes, Cheese chase, and Tornado views. The Garden, Galleon, Rain, River, Downhill, Cheese chase, and Tornado views use a wireframe style. Apps on the game publishing site now get purple stripes in every view and a badge on the main page. The Garden view has filled flowers, sky, hills, and garden beds.
+Latest change. 2026-10-31, v2026.10.31. Added link rain, where every free link falls as a raindrop colored by category. A Free Links page is now hosted on its own site. The index was synced with the live deployments and retired apps were dropped.
 
 Full history is in CHANGELOG.md.

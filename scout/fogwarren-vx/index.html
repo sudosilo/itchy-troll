@@ -64,6 +64,21 @@ button{font:inherit;color:#000}
 .stats{background:#fff;padding:8px;margin:4px 0 10px}
 .stats .row{padding:1px 0}
 .big{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-weight:bold;font-size:13px}
+.field{display:flex;align-items:center;gap:6px;margin:0 0 6px}
+.field label{width:62px;flex:none}
+.field input{flex:1;min-width:0;height:26px;border:0;padding:3px 6px;background:#fff;font:13px Tahoma,Verdana,sans-serif;-webkit-user-select:text;user-select:text;outline:none;border-radius:0;-webkit-appearance:none;appearance:none}
+.field input.tag{flex:none;width:64px;text-transform:uppercase;font:bold 16px "Courier New",Courier,monospace;letter-spacing:3px;color:#0a4bd6}
+.smsg{min-height:16px;font-size:11px;color:#000080;margin:2px 0 4px}
+.scorebig{font:bold 26px "Courier New",Courier,monospace;color:#0a4bd6;text-align:center;margin:2px 0 6px}
+.brd{background:#fff;padding:4px;margin:4px 0 8px;max-height:46vh;overflow:auto}
+.brow{display:flex;align-items:center;gap:8px;padding:3px 4px;font-size:12px}
+.brow:nth-child(even){background:#eef4ff}
+.brow.me{background:#000080;color:#fff}
+.brow span{width:22px;text-align:right;flex:none}
+.brow b{width:38px;flex:none;font-family:"Courier New",Courier,monospace;letter-spacing:1px}
+.brow em{font-style:normal;width:56px;text-align:right;flex:none}
+.brow a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#0000ee}
+.brow.me a{color:#9fd0ff}
 </style>
 </head>
 <body>
@@ -141,6 +156,7 @@ button{font:inherit;color:#000}
   <div class="it" data-act="sound">Sound</div>
 </div>
 <div class="drop raised" id="m-help">
+  <div class="it" data-act="board">High Scores...</div>
   <div class="it" data-act="howto">How to Play</div>
   <div class="it" data-act="about">About FogWarren</div>
 </div>
@@ -149,7 +165,7 @@ button{font:inherit;color:#000}
 <script>
 (function(){
 'use strict';
-var VER='fogwarren-vx v1';
+var VER='fogwarren-vx v2';
 var T=20;
 var SIZES={small:{r:19,label:'Small'},big:{r:35,label:'Big'},huge:{r:51,label:'Huge'},colossal:{r:71,label:'Colossal'}};
 var ORDER=['small','big','huge','colossal'];
@@ -500,22 +516,89 @@ function win(){
   setTimeout(function(){if(S===tok){status('Escaped in '+fmt(t)+'.');winDialog(t,prev,rec)}},4400);
 }
 function fmt(s){s=Math.max(0,s|0);var m=(s/60)|0,r=s%60;return m+':'+(r<10?'0':'')+r}
+var SIZE_BASE={small:1000,big:3000,huge:6000,colossal:12000},SIZE_PAR={small:60,big:180,huge:360,colossal:720};
+function scoreParts(t){
+  var base=SIZE_BASE[cfg.size],bonus=Math.max(0,SIZE_PAR[cfg.size]-t)*10,pen=S.blasts*250+S.falls*100;
+  return {base:base,bonus:bonus,pen:pen,total:Math.max(1,Math.round(base+bonus-pen))};
+}
+var SCORES_URL='https://2026-10-30-orange-scores.vercel.app',SCORES_GAME='fogwarren-vx';
+function scoresCall(path,opts){
+  opts=opts||{};
+  var ctl=typeof AbortController==='function'?new AbortController():null,timer=ctl?setTimeout(function(){ctl.abort()},8000):null;
+  if(ctl)opts.signal=ctl.signal;
+  return fetch(SCORES_URL+path,opts).then(function(r){return r.json()})
+    .catch(function(){return {ok:false,error:'offline'}})
+    .then(function(j){if(timer)clearTimeout(timer);return j||{ok:false,error:'offline'}});
+}
+function cleanTag(t){return String(t||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3)}
+function cleanLink(v){v=String(v||'').trim().replace(/\s+/g,'');if(!v)return '';if(!/^https?:\/\//i.test(v))v='https://'+v;return v}
+var SCORE_ERRORS={tag_rejected:'That tag is not allowed. Try another.',slow_down:'The scoreboard needs a few seconds between scores. Try again.',
+  score_rejected:'The scoreboard did not accept that score.',duration_rejected:'The scoreboard did not accept that run time.',score_too_fast:'The scoreboard did not accept that score.',unknown_game:'FogWarren is not on the scoreboard yet.',
+  link_invalid:'That link does not look like a web address. Try yoursite.com',link_too_long:'That link is too long. Try a shorter one.',link_rejected:'That link is not allowed. Try another or leave it blank.',link_flagged:'That link is on a blocked list. Try another or leave it blank.',link_check_failed:'The link check did not finish. Try again or leave the link blank.',links_disabled:'Links are not open on the scoreboard yet. Leave the link blank for now.',
+  offline:'Could not reach the scoreboard. Try again in a moment.',service_unavailable:'The scoreboard is down. Try again later.'};
+function boardRows(el,board,mine){
+  el.innerHTML='';
+  if(!board.length){el.innerHTML='<div class="brow"><i>No scores yet. Be the first.</i></div>';return}
+  board.forEach(function(r){
+    var d=document.createElement('div');d.className='brow'+(r.id===mine?' me':'');
+    var a=document.createElement('span');a.textContent=r.rank;
+    var b=document.createElement('b');b.textContent=r.tag;
+    var c=document.createElement('em');c.textContent=r.score;
+    d.appendChild(a);d.appendChild(b);d.appendChild(c);
+    if(r.link&&/^https?:\/\//i.test(r.link)){var l=document.createElement('a');l.href=r.link;l.target='_blank';l.rel='noopener noreferrer nofollow ugc';l.textContent=r.domain||r.link.replace(/^https?:\/\//i,'');d.appendChild(l)}
+    el.appendChild(d);
+  });
+}
+function showBoard(note,mine){
+  var m=dialog('High Scores',(note?'<p>'+note+'</p>':'')+'<div class="smsg" id="bMsg">Loading the scoreboard...</div><div class="brd sunken" id="bList"></div>',[{label:'OK',def:true,cancel:true}]);
+  scoresCall('/api/board?game='+SCORES_GAME+'&limit=25').then(function(r){
+    var msg=m.querySelector('#bMsg');
+    if(!r.ok){msg.textContent=SCORE_ERRORS[r.error]||SCORE_ERRORS.offline;return}
+    msg.textContent='';boardRows(m.querySelector('#bList'),r.board||[],mine);
+  });
+}
 function winDialog(t,prev,rec){
-  var pct=Math.round(S.seenFloors/S.floorCount*100);
+  var pct=Math.round(S.seenFloors/S.floorCount*100),sp=scoreParts(t),tok=S,dur=Math.max(1000,Math.round(S.elapsed*1000));
+  var tg=LS.get('tag',''),lk=LS.get('link','');
   var body='<div class="big">'+faceSvg('cool',34)+'<span>You escaped the warren!</span></div>'+
+    '<div class="scorebig">'+sp.total+'</div>'+
     '<div class="stats sunken">'+
+    '<div class="row"><span>'+SIZES[cfg.size].label+' maze</span><b>'+sp.base+'</b></div>'+
+    '<div class="row"><span>Speed bonus</span><b>'+sp.bonus+'</b></div>'+
+    '<div class="row"><span>Blasts and falls</span><b>'+(sp.pen?'-'+sp.pen:'0')+'</b></div>'+
     '<div class="row"><span>Time</span><b>'+fmt(t)+'</b></div>'+
     '<div class="row"><span>Steps</span><b>'+S.steps+'</b></div>'+
     '<div class="row"><span>Maze seen</span><b>'+pct+'%</b></div>'+
-    '<div class="row"><span>Mine blasts</span><b>'+S.blasts+'</b></div>'+
-    '<div class="row"><span>Pitfalls</span><b>'+S.falls+'</b></div>'+
     '<div class="row"><span>Best '+SIZES[cfg.size].label+' time</span><b>'+(rec?'New record!':fmt(prev))+'</b></div>'+
-    '</div><p>The hidden picture was '+imgName()+'.</p>';
-  var btns=[{label:'Next Maze',def:true,fn:function(){newGame()}}];
+    '</div>'+
+    '<div class="field"><label for="fTag">Initials</label><input id="fTag" class="tag sunken" maxlength="3" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="AAA"></div>'+
+    '<div class="field"><label for="fLink">Your site</label><input id="fLink" class="sunken" maxlength="60" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="url" placeholder="optional, yoursite.com"></div>'+
+    '<div class="smsg" id="fMsg"></div>'+
+    '<p>The hidden picture was '+imgName()+'.</p>';
+  var sent=false;
+  var btns=[{label:'Submit Score',id:'fSend',def:true,keep:true,fn:function(close,btn){
+    if(sent)return;
+    var tag=cleanTag(m.querySelector('#fTag').value),msg=m.querySelector('#fMsg');
+    if(!tag){msg.textContent='Type up to three letters or numbers for your initials.';m.querySelector('#fTag').focus();return}
+    var raw=m.querySelector('#fLink').value.trim(),link=cleanLink(raw);
+    if(link.length>60){msg.textContent=SCORE_ERRORS.link_too_long;return}
+    LS.set('tag',tag);LS.set('link',raw);
+    btn.disabled=true;msg.textContent='Sending your score...';
+    scoresCall('/api/score',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({game:SCORES_GAME,tag:tag.padEnd(3,' '),link:link,score:sp.total,duration:dur})})
+    .then(function(r){
+      if(!r.ok){btn.disabled=false;msg.textContent=SCORE_ERRORS[r.error]||SCORE_ERRORS.offline;return}
+      sent=true;close();status('Score sent. Tap the smiley for a new maze.');
+      showBoard('Your score is in at rank '+(r.rank||'?')+'.',r.entry&&r.entry.id);
+    });
+  }}];
+  btns.push({label:'Next Maze',fn:function(){newGame()}});
   var ix=ORDER.indexOf(cfg.size);
   if(ix<ORDER.length-1)btns.push({label:'Bigger Maze',fn:function(){cfg.size=ORDER[ix+1];saveCfg();syncMenus();newGame()}});
   btns.push({label:'Admire',cancel:true,fn:function(){status('Tap the smiley for a new maze.')}});
-  dialog('Congratulations',body,btns);
+  var m=dialog('Congratulations',body,btns);
+  var ti=m.querySelector('#fTag');ti.value=tg;m.querySelector('#fLink').value=lk;
+  ti.addEventListener('input',function(){var c=cleanTag(this.value);if(c!==this.value)this.value=c});
 }
 
 /* ---------- drawing helpers ---------- */
@@ -741,14 +824,15 @@ function dialog(title,html,btns){
   var bar=m.querySelector('.dbtns'),done=false;
   function find(p){for(var i=0;i<btns.length;i++)if(btns[i][p])return btns[i];return null}
   function close(b){if(done)return;done=true;m.remove();modals--;document.removeEventListener('keydown',kh,true);if(b&&b.fn)b.fn()}
-  btns.forEach(function(b){var el=document.createElement('button');el.className='btn raised'+(b.def?' def':'');el.textContent=b.label;el.addEventListener('click',function(){close(b)});bar.appendChild(el)});
+  btns.forEach(function(b){var el=document.createElement('button');el.className='btn raised'+(b.def?' def':'');el.textContent=b.label;if(b.id)el.id=b.id;el.addEventListener('click',function(){if(b.keep){if(b.fn)b.fn(close,el)}else close(b)});bar.appendChild(el)});
   m.querySelector('[data-x]').addEventListener('click',function(){close(find('cancel'))});
   function kh(e){
-    if(e.key==='Enter'){e.preventDefault();e.stopPropagation();close(find('def')||btns[0])}
+    if(e.key==='Enter'){e.preventDefault();e.stopPropagation();var d=find('def')||btns[0];if(d.keep){if(d.fn)d.fn(close,m.querySelector('#'+d.id))}else close(d)}
     else if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close(find('cancel'))}
   }
   document.addEventListener('keydown',kh,true);
   document.body.appendChild(m);
+  return m;
 }
 function iconURL(fn,txt){
   var c=mk(40),x=c.getContext('2d'),f=hex('#f2f2ee');
@@ -767,6 +851,7 @@ function howTo(){
     '<p><img src="'+iconURL(drawPrism)+'">A prism is a color warp. It repaints the maze and swaps the hidden picture.</p>'+
     '<p><img src="'+iconURL(drawCompass)+'">A compass points at the exit for a while.</p>'+
     '<p>Every floor and wall block is secretly a piece of a picture. Reach the exit to reveal it, or hide your own photo in the maze from the File menu.</p>'+
+    '<p>Your score starts from the maze size, gains a speed bonus for beating par, and loses points for every blast and fall. Put your initials and an optional link on the shared high score board when you win. Help, High Scores shows the board any time.</p>'+
     '<p>Move with the arrow buttons, the arrow keys, or by dragging across the maze. Hold a button to keep walking.</p>';
   dialog('How to Play',body,[{label:'OK',def:true,cancel:true}]);
 }
@@ -819,6 +904,7 @@ function doAct(a){
     case 'mines':cfg.mines=!cfg.mines;saveCfg();syncMenus();newGame(S?S.seed:null);break;
     case 'traps':cfg.traps=!cfg.traps;saveCfg();syncMenus();newGame(S?S.seed:null);break;
     case 'sound':cfg.sound=!cfg.sound;saveCfg();syncMenus();if(cfg.sound)sfx('pick');break;
+    case 'board':showBoard();break;
     case 'howto':howTo();break;
     case 'about':about();break;
   }

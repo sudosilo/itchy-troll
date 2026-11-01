@@ -8,6 +8,6 @@ Live at aliens-win.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. Created the app as the first version of the game. A second push triggered a production build.
+Latest change. 2026-10-31, v2026.10.31. Added a handoff document for the project. The game itself did not change.
 
 See CHANGELOG.md for the full history.

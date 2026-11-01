@@ -260,13 +260,13 @@
     var view = document.createElement("div");
     view.id = "links-view";
     view.className = "hidden";
-    view.innerHTML = '<h2>Free Links</h2><p class="tag">A plain index of free, useful links. <a href="https://free-as-in-links.vercel.app" target="_blank" rel="noopener">open full page</a> or <a href="linkrain.html">watch them rain</a></p><iframe id="links-frame" title="Free Links" loading="lazy"></iframe>';
+    view.innerHTML = '<h2>Free Links</h2><p class="tag">A plain index of free, useful links. <a href="freelinks.html" target="_blank" rel="noopener">open full page</a> or <a href="linkrain.html">watch them rain</a></p><iframe id="links-frame" title="Free Links" loading="lazy"></iframe>';
     var cat = document.getElementById("category-view");
     if (cat) cat.parentNode.insertBefore(view, cat);
     if (typeof window.showLinks !== "function") {
       window.showLinks = function () {
         var frame = document.getElementById("links-frame");
-        if (!frame.getAttribute("src")) frame.setAttribute("src", "https://free-as-in-links.vercel.app");
+        if (!frame.getAttribute("src")) frame.setAttribute("src", "freelinks.html");
         ["stats-view", "alpha-view", "category-view"].forEach(function (id) { var e = document.getElementById(id); if (e) e.classList.add("hidden"); });
         view.classList.remove("hidden");
         document.getElementById("menu").classList.remove("open");
