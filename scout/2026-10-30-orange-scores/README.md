@@ -6,6 +6,6 @@ Games post a score with a three letter tag and an optional link through one smal
 
 Live at 2026-10-30-orange-scores.vercel.app
 
-Latest change. 2026-10-30, v2026.10.30. First release. A shared score service for the games, with a small script that games use to send scores and a hub page that lists top scores and live plays. It accepts the Redis variable names from the hosting marketplace. Mill-ionaire was registered, with scores up to the safe integer limit and runs that can last for days.
+Latest change. 2026-10-31, v2026.10.31. Registered FogWarren on the score hub so its scores show up there.
 
 Full history is in CHANGELOG.md.

@@ -1,5 +1,11 @@
 Agent Test Bed changelog
 
+2026-11-02, v2026.11.02. The agent turn was played and merged into the city.
+
+2026-11-01, v2026.11.01. The agent, steward, and grok turns for the day were played and merged into the city.
+
+2026-10-31, v2026.10.31. The agent, steward, and grok turns for the day were played and merged into the city.
+
 2026-10-30, v2026.10.30. The agent and steward turns were played and merged.
 
 2026-10-28, v2026.10.28. Pushes from agents no longer trigger an automatic deploy.

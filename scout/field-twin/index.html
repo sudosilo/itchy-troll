@@ -697,6 +697,12 @@
     font-size: 14px;
     border-radius: 8px;
   }
+  body.pip header, body.pip #twinTabs, body.pip #actionBar, body.pip #violetView, body.pip .leaflet-control-container, body.pip #panel, body.pip #menuOverlay, body.pip #sideMenu { display: none !important; }
+  body.pip { overflow: hidden; }
+  body.pip #navBanner { position: fixed !important; top: 4px !important; bottom: auto !important; left: 6px !important; right: auto !important; }
+  body.pip #navBanner button { display: none !important; }
+  body.pip #navBanner div div:first-child { font-size: 13px !important; }
+  body.pip #navBanner div div + div { font-size: 10px !important; }
 </style>
 </head>
 <body>
@@ -746,6 +752,7 @@
   <button class="secondary tg" id="hzWorkBtn" aria-pressed="false"><span>CONSTRUCTION</span><i class="tg-sw" aria-hidden="true"></i></button>
   <button class="secondary tg" id="hzFatalBtn" aria-pressed="false"><span>CRASH HISTORY</span><i class="tg-sw" aria-hidden="true"></i></button>
   <h3>Look things up</h3>
+  <button class="secondary" id="lockersBtn">LOCKERS</button>
   <button class="secondary" id="searchBtn">SEARCH</button>
   <button class="secondary" id="timelineBtn">TIMELINE</button>
   <button class="secondary" id="dayLogBtn">DAY LOG</button>
@@ -2443,6 +2450,22 @@ function initHere() {
     }
   });
   map.addControl(new Locate());
+  if (window.FieldTwinNative && typeof window.FieldTwinNative.enterPip === 'function') {
+    const Pip = L.Control.extend({
+      options: { position: 'topleft' },
+      onAdd: function () {
+        const bar = L.DomUtil.create('div', 'leaflet-bar');
+        const a = L.DomUtil.create('a', 'here-btn', bar);
+        a.href = '#';
+        a.title = 'Shrink the map to a floating window';
+        a.setAttribute('aria-label', 'Shrink the map to a floating window');
+        a.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#0b4ea2" stroke-width="2.4" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><rect x="11.5" y="11" width="8" height="6.5" rx="1" fill="#0b4ea2"/></svg>';
+        L.DomEvent.on(a, 'click', ev => { L.DomEvent.stop(ev); ftEnterPip(); });
+        return bar;
+      }
+    });
+    map.addControl(new Pip());
+  }
   document.getElementById('hereToggleBtn').addEventListener('click', () => {
     hereOn = !hereOn;
     try { localStorage.setItem('hereOn', hereOn ? '1' : '0'); } catch (e) {}
@@ -2541,7 +2564,7 @@ function showForm(entry) {
     html += '</div>';
   });
   html += '</div>';
-  html += '<div class="question">Photo, optional</div>';
+  html += '<div class="question">Photos, optional, take as many as you want</div>';
   html += '<input type="file" id="photoInput" accept="image/*" capture="environment" style="width:100%;font-size:13px;">';
   html += '<div id="photoPreview"></div>';
   html += '<div class="question">Context, optional, overrides the questions below</div>';
@@ -2581,31 +2604,23 @@ function showForm(entry) {
     });
   });
   let photoData = entry.photo || '';
+  if (!entry.morePhotoData) entry.morePhotoData = [];
   const photoInput = document.getElementById('photoInput');
   const photoPreview = document.getElementById('photoPreview');
-  if (photoData) {
-    photoPreview.innerHTML = '<img src="' + photoData + '" style="max-width:100%;margin-top:6px;">';
-  }
+  const drawPreview = () => {
+    const all = (photoData ? [photoData] : []).concat(entry.morePhotoData);
+    photoPreview.innerHTML = all.length ? '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px;">' + all.map(d => '<img src="' + d + '" style="width:100%;aspect-ratio:1;object-fit:cover;border:2px solid #0b4ea2;border-radius:6px;">').join('') + '</div><div class="meta-line">' + all.length + (all.length === 1 ? ' photo' : ' photos') + ', tap the box again to add another</div>' : '';
+  };
+  drawPreview();
   photoInput.addEventListener('change', () => {
     const file = photoInput.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        const maxDim = 900;
-        let w = img.width;
-        let h = img.height;
-        if (w > h && w > maxDim) { h = Math.round(h * maxDim / w); w = maxDim; }
-        else if (h > maxDim) { w = Math.round(w * maxDim / h); h = maxDim; }
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        photoData = canvas.toDataURL('image/jpeg', 0.7);
-        photoPreview.innerHTML = '<img src="' + photoData + '" style="max-width:100%;margin-top:6px;">';
-      };
-      img.src = reader.result;
+    reader.onload = async () => {
+      const d = await shrinkDataUrl(reader.result, 1600, 0.75);
+      if (!photoData) photoData = d; else entry.morePhotoData.push(d);
+      photoInput.value = '';
+      drawPreview();
     };
     reader.readAsDataURL(file);
   });
@@ -2677,6 +2692,9 @@ function showForm(entry) {
     lastSaveSignature = signature;
     const beforeScore = scoreEntries(entries).total;
     entries.unshift(entry);
+    const extraPhotos = entry.morePhotoData || [];
+    delete entry.morePhotoData;
+    extraPhotos.forEach(d => ftphAdd(d, { entry_id: entry.id, lat: entry.lat, lon: entry.lon }));
     saveEntries().catch(() => {}).then(() => {
       renderMarkers();
       map.setView([entry.lat, entry.lon], 15);
@@ -5083,8 +5101,18 @@ function showEntry(entry, fromHistory) {
       });
     }
   }
-  html += '<div class="panel-actions"><button id="editEntryBtn">EDIT</button><button class="secondary" id="closeEntryBtn">' + (fromHistory ? 'BACK' : 'CLOSE') + '</button></div>';
+  html += ftphGridHtml(ftphFor(entry.id), 'More photos');
+  html += '<button class="secondary" id="entryAddPhoto" style="width:100%;margin-top:8px;">ADD PHOTO</button>';
+  const lockerHere = hasPos(entry) ? ftpNear(entry.lat, entry.lon, 80, 'locker') : null;
+  html += '<div class="panel-actions"><button id="editEntryBtn">EDIT</button>' + (hasPos(entry) ? '<button class="secondary" id="lockerPageBtn">' + (lockerHere ? 'LOCKER PAGE' : 'MAKE LOCKER') + '</button>' : '') + '<button class="secondary" id="closeEntryBtn">' + (fromHistory ? 'BACK' : 'CLOSE') + '</button></div>';
   panel.innerHTML = html;
+  ftphFill(panel);
+  document.getElementById('entryAddPhoto').addEventListener('click', () => ftphPick(async d => {
+    await ftphAdd(d, { entry_id: entry.id, lat: entry.lat, lon: entry.lon });
+    showEntry(entry, fromHistory);
+  }));
+  const lpb = document.getElementById('lockerPageBtn');
+  if (lpb) lpb.addEventListener('click', () => showLocker(lockerHere || ftpMakeLocker(entry)));
   panel.scrollTop = 0;
   panel.classList.add('open');
   if (!entry.photo && entry.photoPath) {
@@ -5267,6 +5295,11 @@ async function init() {
   document.getElementById('mileageBtn').addEventListener('click', () => {
     closeMenu();
     showMileage();
+  });
+
+  document.getElementById('lockersBtn').addEventListener('click', () => {
+    closeMenu();
+    showLockers();
   });
 
   document.getElementById('debriefsBtn').addEventListener('click', () => {
@@ -6157,10 +6190,8 @@ let navState = null;
 const NAV_ROUTER = 'https://router.project-osrm.org/route/v1/driving/';
 
 function navMeters(a, b) { return dmCrow(a.lat, a.lon, b.lat, b.lon) * 1609.34; }
-function navSay(text) {
-  try { if (window.FieldTwinNative && typeof window.FieldTwinNative.speak === 'function') { window.FieldTwinNative.speak(text); return; } } catch (e) {}
-  try { if (window.speechSynthesis) { window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } } catch (e) {}
-}
+// Spoken directions are turned off: the route is silent on the phone app and the website.
+function navSay(text) {}
 function navFeet(m) {
   const mi = m / 1609.34;
   if (mi >= 0.2) return (Math.round(mi * 10) / 10) + ' miles';
@@ -6182,13 +6213,14 @@ function navSites() {
   return Object.keys(by).map(k => { by[k].words = ' ' + by[k].words.toLowerCase().replace(/[^a-z0-9]+/g, ' '); return by[k]; });
 }
 function navMatch(q, sites) {
-  const toks = q.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(t => t.length > 1 && ['the', 'to', 'on', 'at', 'go', 'going', 'in', 'of', 'and', 'part', 'town', 'address', 'is', 'its', 'supposed', 'hey'].indexOf(t) === -1);
+  const toks = q.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(t => t.length > 1 && ['the', 'to', 'on', 'at', 'go', 'going', 'in', 'of', 'and', 'part', 'town', 'address', 'is', 'its', 'supposed', 'hey', 'want', 'take', 'me', 'navigate'].indexOf(t) === -1);
   if (!toks.length) return [];
   return sites.map(s => {
-    let hit = 0;
-    toks.forEach(t => { if (s.words.indexOf(' ' + t) !== -1) hit++; });
-    return { s: s, score: hit / toks.length + Math.min(s.visits, 10) * 0.01 };
-  }).filter(x => x.score >= 0.5).sort((a, b) => b.score - a.score).slice(0, 5).map(x => x.s);
+    let hit = 0, nameHit = 0;
+    const nm = ' ' + String(s.pname || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' ';
+    toks.forEach(t => { if (s.words.indexOf(' ' + t) !== -1) hit++; if (nm.indexOf(' ' + t + ' ') !== -1) nameHit++; });
+    return { s: s, score: hit / toks.length + nameHit + (s.imp || Math.min(s.visits, 10) * 0.01) };
+  }).filter(x => x.score >= 0.5).sort((a, b) => b.score - a.score).filter((x, i, all) => all[0].score < 1 || x.score >= 1).slice(0, 6).map(x => x.s);
 }
 
 async function navAsk(text, sites, me) {
@@ -6197,7 +6229,7 @@ async function navAsk(text, sites, me) {
   const headers = { 'Content-Type': 'application/json' };
   try { await apiAuthHeaders(headers); } catch (e) {}
   const body = JSON.stringify({ text: text, near: me ? { lat: me.lat, lon: me.lon } : null,
-    sites: sites.sort((a, b) => b.visits - a.visits).slice(0, 60).map(s => ({ id: s.id, label: s.label, kind: (CATEGORIES[s.cat] || {}).label || s.cat, visits: s.visits })) });
+    sites: sites.slice().sort((a, b) => (b.imp || 0) - (a.imp || 0) || b.visits - a.visits).slice(0, 80).map(s => ({ id: s.id, label: (s.name ? s.name + ', ' : '') + s.label, kind: (CATEGORIES[s.cat] || {}).label || s.cat, visits: s.visits })) });
   try {
     const res = await fetch(base.replace(/\/+$/, '') + '/destination', { method: 'POST', headers: headers, body: body });
     if (!res.ok) return null;
@@ -6243,7 +6275,7 @@ function showGo() {
   const input = document.getElementById('goText');
   const list = document.getElementById('goList');
   const msg = document.getElementById('goMsg');
-  const sites = navSites();
+  const sites = ftpPool(navSites());
   let choices = [];
   const paint = (items, title) => {
     choices = items;
@@ -6255,8 +6287,9 @@ function showGo() {
   let t = null;
   input.addEventListener('input', () => {
     clearTimeout(t);
-    t = setTimeout(() => paint(navMatch(input.value, sites), 'Places you logged'), 250);
+    t = setTimeout(() => input.value.trim() ? paint(navMatch(input.value, sites), 'Your places') : paint(ftpTop(sites), 'Your top places'), 250);
   });
+  paint(ftpTop(sites), 'Your top places');
   input.addEventListener('keydown', ev => { if (ev.key === 'Enter') document.getElementById('goFind').click(); });
   document.getElementById('goFind').addEventListener('click', async () => {
     const q = input.value.trim();
@@ -6310,7 +6343,7 @@ function navWords(s) {
   return 'Turn ' + (mod || 'ahead') + road;
 }
 
-// Hands the destination to Google Maps for turn by turn driving there.
+// Hands the destination to the phone maps app for turn by turn driving there.
 function openGoogleMaps(dest) {
   const url = 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=' + encodeURIComponent(dest.lat + ',' + dest.lon);
   if (window.FieldTwinNative && typeof window.FieldTwinNative.openUrl === 'function') {
@@ -6345,24 +6378,72 @@ async function navDraw(from) {
   const first = r.steps[1] || r.steps[0];
   navSay('Route ready, ' + Math.round(r.miles) + ' miles. ' + (first ? first.text : ''));
 }
+// Floating window (picture in picture) for the phone app: only the map and the next turn show while it floats.
+function ftEnterPip() {
+  try { if (window.FieldTwinNative && window.FieldTwinNative.enterPip()) return; } catch (e) {}
+  setStatus('floating window is not available on this phone');
+}
+function ftPipAuto() {
+  try { if (window.FieldTwinNative && typeof window.FieldTwinNative.setAutoPip === 'function') window.FieldTwinNative.setAutoPip(!!navState); } catch (e) {}
+}
+window.ftPip = function (on) {
+  ftPipOn = !!on;
+  document.body.classList.toggle('pip', ftPipOn);
+  if (ftPipOn) { try { closePanel(); } catch (e) {} if (navState) navState.follow = true; }
+  ftPipSize();
+  [60, 250, 600, 1200, 2000].forEach(t => setTimeout(ftPipCenter, t));
+};
+let ftPipOn = false;
+// Sizes the map to exactly the floating window, measured by the phone, so it fills the window from its top left corner.
+function ftPipSize() {
+  const m = document.getElementById('map');
+  if (!ftPipOn) { m.style.cssText = ''; const nb = document.getElementById('navBanner'); if (nb) nb.style.width = ''; return; }
+  let w = 0, h = 0;
+  try { const z = String(window.FieldTwinNative.pipSize()).split(','); w = +z[0]; h = +z[1]; } catch (e) {}
+  if (!(w > 0 && h > 0)) { w = window.innerWidth; h = window.innerHeight; }
+  m.style.cssText = 'position:fixed;left:0;top:0;right:auto;bottom:auto;width:' + w + 'px;height:' + h + 'px;z-index:1;';
+  const b = document.getElementById('navBanner');
+  if (b) b.style.width = Math.max(40, w - 12) + 'px';
+}
+// Checks with the phone every second whether the app is floating, in case the phone's own notice does not reach the page.
+setInterval(() => {
+  try {
+    if (!window.FieldTwinNative || typeof window.FieldTwinNative.isPip !== 'function') return;
+    const on = !!window.FieldTwinNative.isPip();
+    if (on !== ftPipOn) window.ftPip(on);
+    else if (on) { const before = document.getElementById('map').style.width; ftPipSize(); if (document.getElementById('map').style.width !== before) ftPipCenter(); }
+  } catch (e) {}
+}, 1000);
+// The window shrinks after Android says it is floating, so after every size change refit the map and put me back in the middle.
+function ftPipCenter() {
+  if (ftPipOn) ftPipSize();
+  try { map.invalidateSize({ pan: false }); } catch (e) {}
+  const s = mySpot();
+  if (s && (ftPipOn || (navState && navState.follow))) map.setView([s.lat, s.lon], ftPipOn ? Math.max(map.getZoom(), 16) : map.getZoom(), { animate: false });
+  navBanner();
+}
+window.addEventListener('resize', () => { if (document.body.classList.contains('pip')) ftPipCenter(); });
 function navBanner() {
   let b = document.getElementById('navBanner');
   const ctl = document.querySelector('.leaflet-top.leaflet-left');
-  if (!navState) { if (b) b.remove(); if (ctl) ctl.style.marginTop = ''; return; }
+  if (ctl) ctl.style.marginTop = '';
+  ftPipAuto();
+  if (!navState) { if (b) b.remove(); return; }
   if (!b) {
     b = document.createElement('div');
     b.id = 'navBanner';
-    b.style.cssText = 'position:absolute;left:10px;right:10px;top:calc(var(--head-h) + var(--tabs-h, 0px) + 8px);z-index:1001;background:#ffffff;color:#0a1b2e;border:3px solid #0a1b2e;box-shadow:4px 4px 0 #0a1b2e;padding:10px 12px;font-size:18px;font-weight:700;display:flex;gap:10px;align-items:center;justify-content:space-between;';
+    b.style.cssText = 'position:absolute;left:12px;right:12px;bottom:calc(var(--dock-h, 86px) + env(safe-area-inset-bottom, 0px) + 30px);z-index:1001;color:#0a1b2e;display:flex;gap:8px;align-items:center;pointer-events:none;';
     document.body.appendChild(b);
   }
   const r = navState.route, st = r && r.steps[navState.next];
   const me = mySpot();
   const dist = st && me ? navFeet(navMeters(me, st)) : '';
-  b.innerHTML = '<div style="flex:1;"><div>' + escapeHtml(st ? st.text : 'Getting a route') + '</div><div style="font-size:13px;font-weight:400;">' + (dist ? 'in ' + dist + ', ' : '') + (r ? Math.round(r.miles) + ' miles total' : '') + '</div></div>' +
-    '<div style="display:flex;flex-direction:column;gap:6px;flex:0 0 auto;">' +
-    '<button id="navGmaps" style="text-transform:none;padding:8px 10px;font-size:13px;min-height:0;background:#0b4ea2;color:#fff;border:2px solid #0a1b2e;border-radius:6px;">Google Maps</button>' +
-    '<div style="display:flex;gap:6px;"><button class="secondary" id="navCenter" style="padding:8px 10px;font-size:13px;min-height:0;">Center</button><button class="secondary" id="navEndBtn" style="padding:8px 10px;font-size:13px;min-height:0;">End</button></div></div>';
-  if (ctl) ctl.style.marginTop = (b.offsetHeight + 8) + 'px';
+  const halo = 'text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 6px #fff,0 0 6px #fff;';
+  const dot = 'pointer-events:auto;width:34px;height:34px;min-height:0;padding:0;border-radius:50%;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;border:2px solid #0a1b2e;box-shadow:none;text-transform:none;';
+  b.innerHTML = '<div style="flex:1;min-width:0;' + halo + '"><div style="font-size:16px;font-weight:800;">' + escapeHtml(st ? st.text : 'Getting a route') + '</div><div style="font-size:12px;font-weight:600;">' + (dist ? 'in ' + dist + ', ' : '') + (r ? Math.round(r.miles) + ' mi total' : '') + '</div></div>' +
+    '<button id="navGmaps" title="Maps" aria-label="Open in maps" style="' + dot + 'background:#0b4ea2;color:#fff;">\u{1F5FA}</button>' +
+    '<button id="navCenter" title="Center" aria-label="Center on me" style="' + dot + 'background:#fff;color:#0b4ea2;font-size:20px;">\u25CE</button>' +
+    '<button id="navEndBtn" title="End" aria-label="End route" style="' + dot + 'background:#fff;color:#0a1b2e;font-size:18px;font-weight:800;">\u2715</button>';
   document.getElementById('navGmaps').addEventListener('click', () => { if (navState) openGoogleMaps(navState.dest); });
   document.getElementById('navEndBtn').addEventListener('click', () => navEnd('Route ended.'));
   document.getElementById('navCenter').addEventListener('click', () => { if (navState) { navState.follow = true; const s = mySpot(); if (s) map.panTo([s.lat, s.lon]); } });
@@ -6413,6 +6494,342 @@ function navEnd(note) {
 }
 
 document.getElementById('goDockBtn').addEventListener('click', showGo);
+</script>
+<script>
+// Places: named lockers, plus spots you drove to or picked in GO. GO lists these first, ranked by how often you
+// arrived, picked or logged there. Saved on this phone and in the cloud table field_twin_places for your other phones.
+let ftPlaces = [];
+try { ftPlaces = JSON.parse(localStorage.getItem('ftPlaces') || '[]') || []; } catch (e) { ftPlaces = []; }
+function ftpSaveLocal() { try { localStorage.setItem('ftPlaces', JSON.stringify(ftPlaces)); } catch (e) {} }
+function ftpId() { try { return crypto.randomUUID(); } catch (e) { return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2); } }
+function ftpDist(lat1, lon1, lat2, lon2) { return dmCrow(lat1, lon1, lat2, lon2) * 1609.34; }
+function ftpNear(lat, lon, m, kind) {
+  let best = null, bd = m || 80;
+  ftPlaces.forEach(p => { if (kind && p.kind !== kind) return; const d = ftpDist(lat, lon, p.lat, p.lon); if (d <= bd) { bd = d; best = p; } });
+  return best;
+}
+function ftpRow(p) {
+  return { id: p.id, kind: p.kind, name: p.name || '', lat: p.lat, lon: p.lon, address: p.address || '', notes: p.notes || '',
+    arrivals: p.arrivals || 0, searches: p.searches || 0, last_at: p.last_at || null, updated_at: p.updated_at };
+}
+async function ftpPush(p) {
+  p.updated_at = new Date().toISOString();
+  ftpSaveLocal();
+  if (typeof cloudReady !== 'function' || !cloudReady()) { p.dirty = true; ftpSaveLocal(); return; }
+  try { const r = await sb.from('field_twin_places').upsert(ftpRow(p), { onConflict: 'id' }); p.dirty = !!r.error; } catch (e) { p.dirty = true; }
+  ftpSaveLocal();
+}
+async function ftpPull() {
+  if (typeof cloudReady !== 'function' || !cloudReady()) return;
+  try {
+    const r = await sb.from('field_twin_places').select('*').range(0, 4999);
+    if (r.error) return;
+    const byId = {};
+    ftPlaces.forEach(p => { byId[p.id] = p; });
+    (r.data || []).forEach(row => {
+      const mine = byId[row.id];
+      if (!mine || (!mine.dirty && String(row.updated_at) > String(mine.updated_at || ''))) {
+        byId[row.id] = { id: row.id, kind: row.kind, name: row.name, lat: row.lat, lon: row.lon, address: row.address, notes: row.notes,
+          arrivals: row.arrivals, searches: row.searches, last_at: row.last_at, updated_at: row.updated_at };
+      }
+    });
+    ftPlaces = Object.keys(byId).map(k => byId[k]);
+    ftpSaveLocal();
+    for (const p of ftPlaces.filter(x => x.dirty)) await ftpPush(p);
+  } catch (e) {}
+}
+// Pulls a locker name out of notes: "locker Lasso", "Lasso locker", "named Lasso", or a note that is just the name.
+const FTP_SKIP = ['amazon', 'hub', 'parcel', 'the', 'this', 'that', 'a', 'an', 'at', 'big', 'small', 'new', 'old', 'locker', 'lockers', 'counter', 'is', 'was', 'and', 'to', 'of', 'in', 'on', 'for', 'with', 'no', 'yes', 'unit', 'kiosk', 'outdoor', 'indoor', 'apex', 'quadient', 'unknown', 'unbranded'];
+function ftpNameFrom(text) {
+  const t = String(text || '').trim();
+  if (!t) return '';
+  const pats = [/\blocker\s*(?:name)?\s*[:#-]?\s*([A-Za-z][A-Za-z'-]{1,24})/i, /\b([A-Za-z][A-Za-z'-]{1,24})\s+locker\b/i, /\b(?:named|called|name\s*[:-]?)\s*([A-Za-z][A-Za-z'-]{1,24})/i];
+  for (const re of pats) { const m = t.match(re); if (m && FTP_SKIP.indexOf(m[1].toLowerCase()) === -1) return m[1]; }
+  if (/^[A-Za-z][A-Za-z'-]{1,24}$/.test(t) && FTP_SKIP.indexOf(t.toLowerCase()) === -1) return t;
+  return '';
+}
+function ftpNoteTexts(e) {
+  const out = [];
+  if (e.context) out.push(e.context);
+  (e.questions || []).forEach((q, i) => {
+    const qt = typeof q === 'string' ? q : (q && q.text) || '';
+    const a = (e.answers || [])[i];
+    if (typeof a === 'string' && a && /note|comment|name|context|detail/i.test(qt)) out.push(a);
+  });
+  return out;
+}
+function ftpCap(w) { return w.charAt(0).toUpperCase() + w.slice(1); }
+// Every spot logged as a parcel locker becomes a locker place, named from its notes when a name is in there.
+function ftpSeedLockers() {
+  let changed = [];
+  const byKey = {};
+  entries.forEach(e => {
+    if (e.category !== 'amazon_locker' || !hasPos(e)) return;
+    let p = ftpNear(e.lat, e.lon, 80, 'locker');
+    if (!p) {
+      p = { id: ftpId(), kind: 'locker', name: '', lat: e.lat, lon: e.lon, address: e.addressLabel || '', notes: '', arrivals: 0, searches: 0, last_at: null };
+      const other = ftpNear(e.lat, e.lon, 80, 'place');
+      if (other) { p.arrivals = other.arrivals || 0; p.searches = other.searches || 0; p.last_at = other.last_at; ftPlaces = ftPlaces.filter(x => x !== other); }
+      ftPlaces.push(p);
+      changed.push(p);
+    }
+    if (!p.name && !p.nameSet) {
+      for (const t of ftpNoteTexts(e)) { const n = ftpNameFrom(t); if (n) { p.name = ftpCap(n); if (changed.indexOf(p) === -1) changed.push(p); break; } }
+    }
+  });
+  if (changed.length) { ftpSaveLocal(); changed.forEach(p => ftpPush(p)); }
+}
+function ftpMakeLocker(entry) {
+  let p = ftpNear(entry.lat, entry.lon, 80, null);
+  if (p) { p.kind = 'locker'; }
+  else { p = { id: ftpId(), kind: 'locker', name: '', lat: entry.lat, lon: entry.lon, address: entry.addressLabel || '', notes: '', arrivals: 0, searches: 0, last_at: null }; ftPlaces.push(p); }
+  ftpPush(p);
+  return p;
+}
+function ftpBump(dest, field) {
+  if (!dest || !isFinite(dest.lat) || !isFinite(dest.lon)) return;
+  let p = dest.placeId ? ftPlaces.find(x => x.id === dest.placeId) : null;
+  if (!p) p = ftpNear(dest.lat, dest.lon, 80, null);
+  if (!p) {
+    p = { id: ftpId(), kind: 'place', name: dest.name && !/^locker /i.test(dest.name) ? dest.name : '', lat: dest.lat, lon: dest.lon, address: dest.label || '', notes: '', arrivals: 0, searches: 0, last_at: null };
+    ftPlaces.push(p);
+  }
+  p[field] = (p[field] || 0) + 1;
+  p.last_at = new Date().toISOString();
+  ftpPush(p);
+}
+function ftpLabel(p) { return p.kind === 'locker' ? (p.name ? 'Locker ' + p.name : 'Locker, no name yet') : (p.name || ''); }
+// Merges places with logged spots into one list for GO. Importance: arrivals count most, then picks, then entries logged there.
+function ftpPool(sites) {
+  const used = new Set();
+  const out = ftPlaces.map(p => {
+    let visits = 0, words = '';
+    sites.forEach(s => { if (ftpDist(p.lat, p.lon, s.lat, s.lon) <= 80) { visits += s.visits; words += s.words; used.add(s); } });
+    const name = ftpLabel(p);
+    const w = ' ' + [p.name, p.address, p.notes, p.kind === 'locker' ? 'locker lockers' : ''].join(' ').toLowerCase().replace(/[^a-z0-9]+/g, ' ') + words;
+    const days = p.last_at ? (Date.now() - new Date(p.last_at).getTime()) / 86400000 : 999;
+    const imp = Math.min(0.6, (p.arrivals || 0) * 0.06 + (p.searches || 0) * 0.03 + visits * 0.01) + (days < 14 ? 0.05 : 0);
+    return { id: 'place:' + p.id, placeId: p.id, lat: p.lat, lon: p.lon, name: name, pname: p.name, label: p.address || 'Saved place', cat: p.kind === 'locker' ? 'amazon_locker' : '', visits: visits, words: w, imp: imp, kind: p.kind, rank: (p.arrivals || 0) * 3 + (p.searches || 0) * 2 + visits, last: p.last_at ? new Date(p.last_at).getTime() : 0 };
+  });
+  sites.forEach(s => { if (!used.has(s)) { s.imp = Math.min(s.visits, 10) * 0.01; s.rank = s.visits; out.push(s); } });
+  return out;
+}
+function ftpTop(pool) {
+  return pool.slice().sort((a, b) => (b.rank || 0) - (a.rank || 0) || (b.last || 0) - (a.last || 0)).slice(0, 6);
+}
+
+
+// Photo archive: every photo goes straight up to the photos storage in the cloud, listed in the table
+// field_twin_photos with the entry or locker it belongs to. A photo waits on this phone only until it uploads.
+let ftPhotos = [];
+try { ftPhotos = JSON.parse(localStorage.getItem('ftPhotos') || '[]') || []; } catch (e) { ftPhotos = []; }
+function ftphSave() { try { localStorage.setItem('ftPhotos', JSON.stringify(ftPhotos)); } catch (e) {} }
+async function ftphUploadOne(ph) {
+  if (!ph.pending || typeof cloudReady !== 'function' || !cloudReady()) return;
+  const data = await photoGet('x:' + ph.id).catch(() => '');
+  if (!data) return;
+  const path = cloudUser.id + '/extra/' + ph.id + '.jpg';
+  try {
+    const up = await sb.storage.from('photos').upload(path, dataUrlToBlob(data), { upsert: true, contentType: 'image/jpeg' });
+    if (up.error) return;
+    const row = await sb.from('field_twin_photos').upsert({ id: ph.id, entry_id: ph.entry_id || null, place_id: ph.place_id || null, path: path, lat: ph.lat, lon: ph.lon, ts: ph.ts }, { onConflict: 'id' });
+    if (row.error) return;
+    ph.path = path;
+    ph.pending = false;
+    ftphSave();
+    photoDelete('x:' + ph.id);
+  } catch (e) {}
+}
+let ftphBusy = false;
+async function ftphFlush() {
+  if (ftphBusy) return;
+  ftphBusy = true;
+  try { for (const ph of ftPhotos.filter(x => x.pending)) await ftphUploadOne(ph); } finally { ftphBusy = false; }
+}
+async function ftphAdd(data, meta) {
+  const ph = { id: ftpId(), entry_id: meta.entry_id || null, place_id: meta.place_id || null, lat: meta.lat, lon: meta.lon, ts: new Date().toISOString(), pending: true };
+  await photoPut('x:' + ph.id, data);
+  ftPhotos.push(ph);
+  ftphSave();
+  setStatus('uploading photo');
+  await ftphUploadOne(ph);
+  setStatus(ph.pending ? 'photo saved on this phone, it uploads once you are signed in' : 'photo uploaded');
+  return ph;
+}
+async function ftphPull() {
+  if (typeof cloudReady !== 'function' || !cloudReady()) return;
+  try {
+    const out = [];
+    for (let from = 0; from < 50000; from += 1000) {
+      const r = await sb.from('field_twin_photos').select('*').range(from, from + 999);
+      if (r.error) return;
+      out.push(...(r.data || []));
+      if ((r.data || []).length < 1000) break;
+    }
+    const pending = ftPhotos.filter(x => x.pending);
+    ftPhotos = out.map(r => ({ id: r.id, entry_id: r.entry_id, place_id: r.place_id, path: r.path, lat: r.lat, lon: r.lon, ts: r.ts, pending: false }))
+      .concat(pending.filter(x => !out.some(r => r.id === x.id)));
+    ftphSave();
+  } catch (e) {}
+  ftphFlush();
+}
+function ftphFor(entryId) { return ftPhotos.filter(x => x.entry_id === entryId).sort((a, b) => String(b.ts).localeCompare(String(a.ts))); }
+function ftphAt(p) {
+  return ftPhotos.filter(x => x.place_id === p.id || (isFinite(x.lat) && isFinite(x.lon) && x.lat !== null && ftpDist(p.lat, p.lon, x.lat, x.lon) <= 80))
+    .sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+}
+const ftphUrlCache = {};
+async function ftphSrc(ph) {
+  if (ph.pending) return await photoGet('x:' + ph.id).catch(() => '');
+  const c = ftphUrlCache[ph.id];
+  if (c && c.until > Date.now()) return c.url;
+  const url = await cloudPhotoUrl(ph.path).catch(() => '');
+  if (url) ftphUrlCache[ph.id] = { url: url, until: Date.now() + 50 * 60000 };
+  return url;
+}
+function ftphGridHtml(list, title) {
+  if (!list.length) return '';
+  return '<div class="question">' + title + '</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">' +
+    list.map(ph => '<img data-xph="' + ph.id + '" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;border:2px solid #0b4ea2;border-radius:6px;background:#eef4fb;cursor:pointer;">').join('') + '</div>';
+}
+// Loads each photo square, and a tap opens that photo full size.
+function ftphFill(root) {
+  root.querySelectorAll('img[data-xph]').forEach(im => {
+    const ph = ftPhotos.find(x => x.id === im.getAttribute('data-xph'));
+    if (!ph) return;
+    ftphSrc(ph).then(u => { if (u) im.src = u; });
+    im.addEventListener('click', ev => { ev.stopPropagation(); ftphView(ph); });
+  });
+}
+function ftphView(ph) {
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;inset:0;z-index:5000;background:rgba(10,27,46,0.92);display:flex;align-items:center;justify-content:center;padding:12px;';
+  box.innerHTML = '<img alt="" style="max-width:100%;max-height:100%;border:3px solid #0b4ea2;border-radius:8px;background:#fff;">';
+  box.addEventListener('click', () => box.remove());
+  document.body.appendChild(box);
+  ftphSrc(ph).then(u => { if (u) box.querySelector('img').src = u; });
+}
+// In the phone app the camera needs Android's permission first. Without it a photo tap does nothing at all,
+// so ask for it and have the next tap take the photo.
+function ftCameraReady() {
+  try {
+    const n = window.FieldTwinNative;
+    if (n && typeof n.hasCamera === 'function' && !n.hasCamera()) { n.askCamera(); setStatus('allow the camera, then tap the photo button again'); return false; }
+  } catch (e) {}
+  return true;
+}
+document.addEventListener('click', ev => {
+  const t = ev.target;
+  if (t && t.tagName === 'INPUT' && t.type === 'file' && !ftCameraReady()) ev.preventDefault();
+}, true);
+function ftphPick(done) {
+  if (!ftCameraReady()) return;
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*';
+  inp.setAttribute('capture', 'environment');
+  inp.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;';
+  document.body.appendChild(inp);
+  inp.addEventListener('change', () => {
+    const file = inp.files[0];
+    inp.remove();
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => done(await shrinkDataUrl(reader.result, 1600, 0.75));
+    reader.readAsDataURL(file);
+  });
+  inp.click();
+}
+// GO picks and arrivals raise a place's rank.
+(function () {
+  const start = navStart, end = navEnd;
+  navStart = async function (dest) { ftpBump(dest, 'searches'); return start(dest); };
+  navEnd = function (note) { if (note === 'Arrived.' && navState) ftpBump(navState.dest, 'arrivals'); return end(note); };
+  const pull = cloudPull;
+  cloudPull = async function () { const r = await pull.apply(this, arguments); await ftpPull(); ftpSeedLockers(); await ftphPull(); return r; };
+})();
+setTimeout(ftpSeedLockers, 2500);
+
+function ftpStopsAt(p) {
+  return entries.filter(e => hasPos(e) && ftpDist(p.lat, p.lon, e.lat, e.lon) <= 80 && e.category !== 'odometer' && e.category !== 'mileday')
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+}
+function showLockers() {
+  ftpSeedLockers();
+  const panel = document.getElementById('panel');
+  const list = ftPlaces.filter(p => p.kind === 'locker');
+  let html = '<h2>LOCKERS</h2><div class="meta-line">Every spot logged as a parcel locker. Tap one to name it and see its visits and photos.</div>';
+  html += '<input type="text" id="lockerFind" autocomplete="off" placeholder="Locker name or street">';
+  html += '<div id="lockerRows"></div>';
+  html += '<div class="panel-actions"><button class="secondary" id="lockersClose">CLOSE</button></div>';
+  panel.innerHTML = html;
+  panel.scrollTop = 0;
+  panel.classList.add('open');
+  const rows = document.getElementById('lockerRows');
+  const draw = q => {
+    q = (q || '').toLowerCase().trim();
+    const shown = list.filter(p => !q || (p.name + ' ' + p.address).toLowerCase().indexOf(q) !== -1)
+      .sort((a, b) => (a.name ? 0 : 1) - (b.name ? 0 : 1) || String(a.name || a.address).localeCompare(String(b.name || b.address)));
+    rows.innerHTML = shown.length ? shown.map(p => '<div class="mi-row" data-lk="' + p.id + '"><b style="color:#0b4ea2;">' + escapeHtml(ftpLabel(p)) + '</b><br><span class="meta-line">' + escapeHtml(p.address || '') + ' &nbsp; ' + ftpStopsAt(p).length + ' logged</span></div>').join('')
+      : '<div class="meta-line">No lockers yet. Log a stop as a parcel locker, or open any entry and tap MAKE LOCKER.</div>';
+    rows.querySelectorAll('[data-lk]').forEach(el => el.addEventListener('click', () => showLocker(ftPlaces.find(x => x.id === el.getAttribute('data-lk')))));
+  };
+  draw('');
+  document.getElementById('lockerFind').addEventListener('input', ev => draw(ev.target.value));
+  document.getElementById('lockersClose').addEventListener('click', closePanel);
+}
+function showLocker(p) {
+  if (!p) return;
+  const panel = document.getElementById('panel');
+  const stops = ftpStopsAt(p);
+  const pics = stops.filter(e => e.photo || e.photoPath);
+  let html = '<h2 style="text-transform:none;">' + escapeHtml(ftpLabel(p)) + '</h2>';
+  html += '<div class="meta-line">' + escapeHtml(p.address || '') + '</div>';
+  html += '<div class="meta-line">arrived ' + (p.arrivals || 0) + ', picked in GO ' + (p.searches || 0) + ', logged ' + stops.length + '</div>';
+  html += '<div class="question">Locker name</div><input type="text" id="lockerName" autocomplete="off" placeholder="Name, like Lasso" value="' + escapeHtml(p.name || '').replace(/"/g, '&quot;') + '">';
+  html += '<div class="question">Locker notes</div><textarea id="lockerNotes" rows="3" placeholder="Gate code, where to park, which bank">' + escapeHtml(p.notes || '') + '</textarea>';
+  html += '<div style="display:flex;gap:10px;margin:10px 0;"><button id="lockerSave" style="flex:1;">SAVE</button><button class="secondary" id="lockerGo" style="flex:1;">GO HERE</button></div>';
+  const extra = ftphAt(p);
+  html += '<button class="secondary" id="lockerAddPhoto" style="width:100%;margin:6px 0;">ADD PHOTO OF THIS LOCKER</button>';
+  if (pics.length || extra.length) {
+    html += '<div class="question">Photos, newest first</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">' +
+      extra.map(ph => '<img data-xph="' + ph.id + '" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;border:2px solid #0b4ea2;border-radius:6px;background:#eef4fb;cursor:pointer;">').join('') +
+      pics.map(e => '<img data-ph="' + e.id + '" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;border:2px solid #0b4ea2;border-radius:6px;background:#eef4fb;cursor:pointer;"' + (e.photo ? ' src="' + e.photo + '"' : '') + '>').join('') + '</div>';
+  } else {
+    html += '<div class="meta-line">No photos here yet.</div>';
+  }
+  html += '<div class="question">Visits</div>';
+  html += stops.length ? stops.map(e => {
+    const note = ftpNoteTexts(e).join(' ').slice(0, 140);
+    return '<div class="mi-row" data-st="' + e.id + '"><b>' + new Date(e.timestamp).toLocaleDateString() + '</b> ' + escapeHtml((CATEGORIES[e.category] || {}).label || '') + (note ? '<br><span class="meta-line">' + escapeHtml(note) + '</span>' : '') + '</div>';
+  }).join('') : '<div class="meta-line">Nothing logged here yet.</div>';
+  html += '<div class="panel-actions"><button class="secondary" id="lockerBack">ALL LOCKERS</button><button class="secondary" id="lockerClose">CLOSE</button></div>';
+  panel.innerHTML = html;
+  panel.scrollTop = 0;
+  panel.classList.add('open');
+  pics.forEach(e => { if (!e.photo && e.photoPath) cloudPhotoUrl(e.photoPath).then(u => { const im = panel.querySelector('[data-ph="' + e.id + '"]'); if (im && u) im.src = u; }).catch(() => {}); });
+  ftphFill(panel);
+  document.getElementById('lockerAddPhoto').addEventListener('click', () => ftphPick(async d => {
+    await ftphAdd(d, { place_id: p.id, lat: p.lat, lon: p.lon });
+    showLocker(p);
+  }));
+  panel.querySelectorAll('[data-ph],[data-st]').forEach(el => el.addEventListener('click', () => {
+    const e = entries.find(x => x.id === (el.getAttribute('data-ph') || el.getAttribute('data-st')));
+    if (e) showEntry(e);
+  }));
+  document.getElementById('lockerSave').addEventListener('click', () => {
+    p.name = document.getElementById('lockerName').value.trim();
+    p.notes = document.getElementById('lockerNotes').value.trim();
+    p.nameSet = true;
+    p.kind = 'locker';
+    ftpPush(p);
+    setStatus('locker saved');
+    showLocker(p);
+  });
+  document.getElementById('lockerGo').addEventListener('click', () => navStart({ lat: p.lat, lon: p.lon, name: ftpLabel(p), label: p.address, placeId: p.id }));
+  document.getElementById('lockerBack').addEventListener('click', showLockers);
+  document.getElementById('lockerClose').addEventListener('click', closePanel);
+}
 </script>
 <script>
 // Keeps the bottom panel above the on-screen keyboard: lifts it by however much of the screen the keyboard covers,
