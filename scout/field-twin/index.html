@@ -586,6 +586,14 @@
     line-height: 16px;
     opacity: 0.92;
   }
+  .cam-cluster { background: #00838f !important; gap: 1px; letter-spacing: -0.3px; }
+  .cam-label { display: none; }
+  .cam-labels .cam-label { display: block; }
+  @keyframes fcStar { 0% { background: rgba(255,0,0,0.42); } 16% { background: rgba(255,170,0,0.42); } 33% { background: rgba(255,240,0,0.42); } 50% { background: rgba(0,220,90,0.42); } 66% { background: rgba(0,140,255,0.42); } 83% { background: rgba(170,60,255,0.42); } 100% { background: rgba(255,0,0,0); } }
+  #fcStar { position: fixed; inset: 0; z-index: 4500; pointer-events: none; animation: fcStar 0.3s linear 4; }
+  .fc-msg { padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .fc-msg b { color: #0b4ea2; }
+  .fc-msg.mine b { color: var(--text); }
   .ft-cluster {
     border-radius: 50%;
     background: var(--accent);
@@ -751,8 +759,16 @@
   <button class="secondary tg" id="hzCrashBtn" aria-pressed="false"><span>CRASHES</span><i class="tg-sw" aria-hidden="true"></i></button>
   <button class="secondary tg" id="hzWorkBtn" aria-pressed="false"><span>CONSTRUCTION</span><i class="tg-sw" aria-hidden="true"></i></button>
   <button class="secondary tg" id="hzFatalBtn" aria-pressed="false"><span>CRASH HISTORY</span><i class="tg-sw" aria-hidden="true"></i></button>
-  <h3>Look things up</h3>
+  <h3>Field chat</h3>
+  <button class="secondary tg" id="fieldChatBtn" aria-pressed="false"><span>FIELD CHAT ALERTS</span><i class="tg-sw" aria-hidden="true"></i></button>
+  <button class="secondary" id="fieldChatOpen">OPEN FIELD CHAT</button>
+  <h3>Companion screen</h3>
+  <button class="secondary tg native-only" id="companionBtn" aria-pressed="false" hidden><span>FT COMPANION</span><i class="tg-sw" aria-hidden="true"></i></button>
+  <div class="hz-label native-only" id="companionText" hidden>Off.</div>
+  <h3>Lockers</h3>
+  <button class="secondary tg" id="teamLockersBtn" aria-pressed="false"><span>ALL LOCKERS</span><i class="tg-sw" aria-hidden="true"></i></button>
   <button class="secondary" id="lockersBtn">LOCKERS</button>
+  <h3>Look things up</h3>
   <button class="secondary" id="searchBtn">SEARCH</button>
   <button class="secondary" id="timelineBtn">TIMELINE</button>
   <button class="secondary" id="dayLogBtn">DAY LOG</button>
@@ -1523,7 +1539,7 @@ function initMap() {
     markersLayer = L.layerGroup().addTo(map);
   }
   map.on('click', (ev) => { if (pinPlacing) finishPinPlacement(ev.latlng); });
-  map.on('zoomend', () => { if (camerasVisible) renderCameras(); });
+  map.on('zoomend', () => { if (camerasVisible) camLabels(); });
   setTimeout(() => map.invalidateSize(), 200);
   setTimeout(() => { map.invalidateSize(); renderMarkers(); }, 800);
 }
@@ -2832,16 +2848,39 @@ async function loadCameras(force) {
   }
 }
 
+// Cameras sit in teal bubbles with a count, the same way stops cluster, so hundreds of them do not all draw at once.
+// Road names show under single cameras only when zoomed in close.
+function camLabels() {
+  const el = map.getContainer();
+  el.classList.toggle('cam-labels', map.getZoom() >= 14);
+}
 function renderCameras() {
-  if (!cameraLayer) cameraLayer = L.layerGroup();
+  if (!cameraLayer) {
+    cameraLayer = L.markerClusterGroup ? L.markerClusterGroup({
+      maxClusterRadius: 80,
+      showCoverageOnHover: false,
+      spiderfyOnMaxZoom: true,
+      chunkedLoading: true,
+      iconCreateFunction: function (cluster) {
+        const n = cluster.getChildCount();
+        const size = n < 10 ? 32 : (n < 50 ? 38 : 44);
+        return L.divIcon({
+          html: '<div class="ft-cluster cam-cluster" style="width:' + size + 'px;height:' + size + 'px;font-size:' + (n < 100 ? 14 : 12) + 'px;">' + n + '</div>',
+          className: 'field-twin-badge',
+          iconSize: [size, size],
+          iconAnchor: [size / 2, size / 2]
+        });
+      }
+    }) : L.layerGroup();
+  }
   cameraLayer.clearLayers();
-  const zoom = map.getZoom();
-  const showLabels = zoom >= 14;
+  camLabels();
+  const batch = [];
   cameras.forEach(c => {
     const marker = L.marker([c.lat, c.lon], {
       icon: L.divIcon({
         html: '<div style="width:30px;height:30px;border-radius:50%;background:' + (c.online === false ? '#9aa7b1' : '#00838f') + ';opacity:' + (c.online === false ? '0.55' : '1') + ';border:3px solid #ffffff;box-shadow:0 2px 6px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:15px;">\u{1F4F9}</div>' +
-              (showLabels ? '<div style="position:absolute;top:32px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:10px;background:rgba(255,255,255,0.9);padding:1px 4px;border-radius:3px;color:#14202e;">' + escapeHtml(c.roadway || '') + '</div>' : ''),
+              '<div class="cam-label" style="position:absolute;top:32px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:10px;background:rgba(255,255,255,0.9);padding:1px 4px;border-radius:3px;color:#14202e;">' + escapeHtml(c.roadway || '') + '</div>',
         className: 'field-twin-badge',
         iconSize: [30, 30],
         iconAnchor: [15, 15]
@@ -2849,8 +2888,9 @@ function renderCameras() {
       zIndexOffset: 500
     });
     marker.on('click', () => showCamera(c));
-    marker.addTo(cameraLayer);
+    batch.push(marker);
   });
+  if (cameraLayer.addLayers) cameraLayer.addLayers(batch); else batch.forEach(m => m.addTo(cameraLayer));
 }
 
 function playStream(video, url) {
@@ -5297,6 +5337,10 @@ async function init() {
     showMileage();
   });
 
+  document.getElementById('teamLockersBtn').addEventListener('click', () => ftTeamSet(!ftTeamOn));
+  document.getElementById('companionBtn').addEventListener('click', () => ftcSet(!ftcOn));
+  document.getElementById('fieldChatBtn').addEventListener('click', () => fcSetAlerts(!fcAlerts));
+  document.getElementById('fieldChatOpen').addEventListener('click', () => { closeMenu(); fcOpen(); });
   document.getElementById('lockersBtn').addEventListener('click', () => {
     closeMenu();
     showLockers();
@@ -6266,6 +6310,7 @@ function showGo() {
   let html = '<h2>GO</h2>';
   html += '<div class="meta-line">Say or type where you are going. Tap the microphone on your keyboard to talk.</div>';
   html += '<input type="text" id="goText" autocomplete="off" placeholder="Store, street or address">';
+  html += '<button class="secondary tg" id="goAirport" aria-pressed="' + (avoidAirport ? 'true' : 'false') + '" style="width:100%;margin:6px 0;"><span>AVOID AIRPORT</span><i class="tg-sw" aria-hidden="true"></i></button>';
   html += '<div id="goList"></div>';
   html += '<div class="meta-line" id="goMsg"></div>';
   html += '<div class="panel-actions"><button id="goFind">FIND IT</button>' + (navState ? '<button class="secondary" id="goStop">END ROUTE</button>' : '') + '<button class="secondary" id="goClose">CLOSE</button></div>';
@@ -6274,6 +6319,11 @@ function showGo() {
   panel.classList.add('open');
   const input = document.getElementById('goText');
   const list = document.getElementById('goList');
+  document.getElementById('goAirport').addEventListener('click', () => {
+    avoidAirport = !avoidAirport;
+    try { localStorage.setItem('avoidAirport', avoidAirport ? '1' : '0'); } catch (e) {}
+    setToggle('goAirport', avoidAirport);
+  });
   const msg = document.getElementById('goMsg');
   const sites = ftpPool(navSites());
   let choices = [];
@@ -6317,16 +6367,54 @@ function showGo() {
   setTimeout(() => input.focus(), 200);
 }
 
-async function navRoute(from, to) {
-  const url = NAV_ROUTER + from.lon + ',' + from.lat + ';' + to.lon + ',' + to.lat + '?overview=full&geometries=geojson&steps=true';
+// Las Vegas airport fence: the terminal loops, the runways and the tunnel connector, where routes keep sending you
+// "continue forward" onto roads that do not exist. With Avoid airport on, routes that enter the fence are thrown out.
+const AIRPORT_FENCE = [
+  { s: 36.0745, n: 36.0945, w: -115.1715, e: -115.1340 },
+  { s: 36.0600, n: 36.0700, w: -115.1580, e: -115.1460 }
+];
+const AIRPORT_VIAS = [
+  { lat: 36.1002, lon: -115.1521 },
+  { lat: 36.0716, lon: -115.1192 },
+  { lat: 36.0870, lon: -115.1830 },
+  { lat: 36.0566, lon: -115.1186 },
+  { lat: 36.0717, lon: -115.1745 }
+];
+let avoidAirport = true;
+try { avoidAirport = localStorage.getItem('avoidAirport') !== '0'; } catch (e) {}
+function navInFence(lat, lon) { return AIRPORT_FENCE.some(b => lat >= b.s && lat <= b.n && lon >= b.w && lon <= b.e); }
+function navHitsAirport(r, from, to) {
+  if (navInFence(from.lat, from.lon) || navInFence(to.lat, to.lon)) return false;
+  return r.line.some(p => navInFence(p[0], p[1]));
+}
+function navParse(r) {
+  const steps = [];
+  const last = r.legs.length - 1;
+  r.legs.forEach((l, li) => l.steps.forEach(s => {
+    const t = s.maneuver.type;
+    if ((t === 'arrive' && li < last) || (t === 'depart' && li > 0)) return;
+    steps.push({ lat: s.maneuver.location[1], lon: s.maneuver.location[0], text: navWords(s), said: false });
+  }));
+  return { line: r.geometry.coordinates.map(c => [c[1], c[0]]), miles: r.distance / 1609.34, mins: r.duration / 60, steps: steps };
+}
+async function navFetch(points, alts) {
+  const url = NAV_ROUTER + points.map(p => p.lon + ',' + p.lat).join(';') + '?overview=full&geometries=geojson&steps=true' + (alts ? '&alternatives=3' : '');
   const res = await fetch(url);
   if (!res.ok) throw new Error('the router did not answer');
   const j = await res.json();
   if (!j.routes || !j.routes.length) throw new Error('no road route found');
-  const r = j.routes[0];
-  const steps = [];
-  r.legs.forEach(l => l.steps.forEach(s => steps.push({ lat: s.maneuver.location[1], lon: s.maneuver.location[0], text: navWords(s), said: false })));
-  return { line: r.geometry.coordinates.map(c => [c[1], c[0]]), miles: r.distance / 1609.34, mins: r.duration / 60, steps: steps };
+  return j.routes.map(navParse);
+}
+async function navRoute(from, to) {
+  if (!avoidAirport) return (await navFetch([from, to], false))[0];
+  const first = await navFetch([from, to], true);
+  const clean = first.filter(r => !navHitsAirport(r, from, to));
+  if (clean.length) return clean[0];
+  const tries = await Promise.all(AIRPORT_VIAS.map(v => navFetch([from, v, to], false).then(x => x[0]).catch(() => null)));
+  const ok = tries.filter(r => r && !navHitsAirport(r, from, to)).sort((a, b) => a.mins - b.mins);
+  if (ok.length) { setStatus('route goes around the airport'); return ok[0]; }
+  setStatus('no way around the airport found, this route goes through it');
+  return first[0];
 }
 function navWords(s) {
   const m = s.maneuver, road = s.name ? ' onto ' + s.name : '';
@@ -6510,7 +6598,7 @@ function ftpNear(lat, lon, m, kind) {
 }
 function ftpRow(p) {
   return { id: p.id, kind: p.kind, name: p.name || '', lat: p.lat, lon: p.lon, address: p.address || '', notes: p.notes || '',
-    arrivals: p.arrivals || 0, searches: p.searches || 0, last_at: p.last_at || null, updated_at: p.updated_at };
+    arrivals: p.arrivals || 0, searches: p.searches || 0, last_at: p.last_at || null, updated_at: p.updated_at, source: p.source || null };
 }
 async function ftpPush(p) {
   p.updated_at = new Date().toISOString();
@@ -6530,7 +6618,7 @@ async function ftpPull() {
       const mine = byId[row.id];
       if (!mine || (!mine.dirty && String(row.updated_at) > String(mine.updated_at || ''))) {
         byId[row.id] = { id: row.id, kind: row.kind, name: row.name, lat: row.lat, lon: row.lon, address: row.address, notes: row.notes,
-          arrivals: row.arrivals, searches: row.searches, last_at: row.last_at, updated_at: row.updated_at };
+          arrivals: row.arrivals, searches: row.searches, last_at: row.last_at, updated_at: row.updated_at, source: row.source || null };
       }
     });
     ftPlaces = Object.keys(byId).map(k => byId[k]);
@@ -6740,6 +6828,331 @@ function ftphPick(done) {
   });
   inp.click();
 }
+
+// ALL LOCKERS switch: loads every locker anyone on Field Twin has mapped into your own list, shares the name, spot
+// and address of yours back, and shows every locker as a pin on the map. Tap a pin to open its locker page.
+let ftTeamOn = false;
+try { ftTeamOn = localStorage.getItem('ftTeamOn') === '1'; } catch (e) {}
+let ftLockerLayer = null;
+function ftTeamSet(on) {
+  ftTeamOn = on;
+  try { localStorage.setItem('ftTeamOn', on ? '1' : '0'); } catch (e) {}
+  setToggle('teamLockersBtn', on);
+  if (on) ftTeamSync().then(ftLockerPins); else ftLockerPins();
+}
+// The team list always lives in the original Field Twin project, read without signing in, so a copy of Field Twin
+// that signs into its own Supabase project can still preload it. Sharing your lockers back needs you signed in here.
+const FT_TEAM_URL = 'https://zasyjjoypkpvyqdueums.supabase.co';
+const FT_TEAM_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inphc3lqam95cGtwdnlxZHVldW1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMjk1NjQsImV4cCI6MjEwNjgwNTU2NH0.PZrUvG4qsTpMQeihXbbzaFYUAAJ9YV7FtxLTkcQGFVI';
+async function ftTeamSync() {
+  ftpSeedLockers();
+  try {
+    if (typeof cloudReady === 'function' && cloudReady() && SUPABASE_URL === FT_TEAM_URL) {
+      const mine = ftPlaces.filter(p => p.kind === 'locker' && p.source !== 'team');
+      for (let i = 0; i < mine.length; i += 200) {
+        const rows = mine.slice(i, i + 200).map(p => ({ id: p.id, name: p.name || '', lat: p.lat, lon: p.lon, address: p.address || '', updated_at: new Date().toISOString() }));
+        await sb.from('field_twin_team_lockers').upsert(rows, { onConflict: 'id' });
+      }
+    }
+    const all = [];
+    for (let from = 0; from < 20000; from += 1000) {
+      const res = await fetch(FT_TEAM_URL + '/rest/v1/field_twin_team_lockers?select=id,name,lat,lon,address&order=id', {
+        headers: { apikey: FT_TEAM_KEY, Authorization: 'Bearer ' + FT_TEAM_KEY, Range: from + '-' + (from + 999) } });
+      if (!res.ok) { setStatus('team locker list is not set up yet'); return; }
+      const rows = await res.json();
+      all.push(...rows);
+      if (rows.length < 1000) break;
+    }
+    let added = 0;
+    all.forEach(t => {
+      const near = ftpNear(t.lat, t.lon, 80, 'locker');
+      if (near) { if (!near.name && t.name) { near.name = t.name; ftpPush(near); } return; }
+      const p = { id: ftpId(), kind: 'locker', name: t.name || '', lat: t.lat, lon: t.lon, address: t.address || '', notes: '', arrivals: 0, searches: 0, last_at: null, source: 'team' };
+      ftPlaces.push(p);
+      ftpPush(p);
+      added++;
+    });
+    ftpSaveLocal();
+    setStatus(added ? 'loaded ' + added + ' lockers from the team list' : 'team locker list is up to date');
+  } catch (e) { setStatus('could not reach the team locker list'); }
+}
+function ftLockerPins() {
+  if (ftLockerLayer) { map.removeLayer(ftLockerLayer); ftLockerLayer = null; }
+  if (!ftTeamOn) return;
+  ftLockerLayer = L.layerGroup();
+  ftPlaces.filter(p => p.kind === 'locker').forEach(p => {
+    const icon = L.divIcon({ className: '', iconSize: [26, 26], iconAnchor: [13, 13],
+      html: '<div style="width:22px;height:22px;transform:rotate(45deg);background:#0b4ea2;border:2px solid #ffffff;box-shadow:0 0 0 2px #0a1b2e;display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(-45deg);font-size:11px;line-height:1;">\u{1F4E6}</span></div>' });
+    L.marker([p.lat, p.lon], { icon: icon, title: ftpLabel(p) }).on('click', () => showLocker(p)).addTo(ftLockerLayer);
+  });
+  ftLockerLayer.addTo(map);
+}
+// Asks OpenStreetMap for every parcel locker marked as Amazon within about a hundred miles of Las Vegas, or of you
+// when you are farther away, and adds the ones you do not have yet.
+async function ftOsmLockers() {
+  const me = mySpot();
+  const c = me && ftpDist(me.lat, me.lon, 36.17, -115.14) > 160000 ? me : { lat: 36.17, lon: -115.14 };
+  const box = [c.lat - 1.45, c.lon - 1.8, c.lat + 1.45, c.lon + 1.8].map(x => x.toFixed(3)).join(',');
+  const q = '[out:json][timeout:60];(nwr["amenity"="parcel_locker"]["brand"~"Amazon",i](' + box + ');nwr["amenity"="parcel_locker"]["operator"~"Amazon",i](' + box + ');nwr["amenity"="parcel_locker"]["name"~"Amazon",i](' + box + '););out center tags;';
+  let data = null;
+  for (const host of ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter']) {
+    try {
+      const res = await fetch(host, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q) });
+      if (res.ok) { data = await res.json(); break; }
+    } catch (e) {}
+  }
+  if (!data) return { error: true };
+  const seen = new Set();
+  let found = 0, added = 0;
+  (data.elements || []).forEach(el => {
+    if (seen.has(el.type + el.id)) return;
+    seen.add(el.type + el.id);
+    const lat = el.lat !== undefined ? el.lat : el.center && el.center.lat;
+    const lon = el.lon !== undefined ? el.lon : el.center && el.center.lon;
+    if (!isFinite(lat) || !isFinite(lon)) return;
+    found++;
+    const t = el.tags || {};
+    let name = String(t.name || t.ref || '').replace(/^amazon\s*(hub)?\s*(locker|counter)?\s*[-:+]?\s*/i, '').trim();
+    if (/^amazon/i.test(name)) name = '';
+    const addr = [[t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' '), t['addr:city']].filter(Boolean).join(', ');
+    const near = ftpNear(lat, lon, 80, 'locker');
+    if (near) { if (!near.name && name) { near.name = name; ftpPush(near); } return; }
+    const p = { id: ftpId(), kind: 'locker', name: name, lat: lat, lon: lon, address: addr || (t.description || ''), notes: '', arrivals: 0, searches: 0, last_at: null, source: 'osm' };
+    ftPlaces.push(p);
+    ftpPush(p);
+    added++;
+  });
+  ftpSaveLocal();
+  ftLockerPins();
+  return { found: found, added: added };
+}
+setTimeout(() => { setToggle('teamLockersBtn', ftTeamOn); if (ftTeamOn) ftTeamSync().then(ftLockerPins); }, 3000);
+
+// FT Companion: the dashboard screen board. When linked, it gets the route and turns, its GPS takes over from the
+// phone's for following the route, and its road roughness readings are saved with where they were measured.
+let ftcOn = false, ftcState = 'off', ftcPos = null, ftcRoad = [];
+try { ftcOn = localStorage.getItem('ftcOn') === '1'; ftcRoad = JSON.parse(localStorage.getItem('ftcRoad') || '[]') || []; } catch (e) {}
+function ftcNative() { return window.FieldTwinNative && typeof window.FieldTwinNative.companionStart === 'function'; }
+function ftcText() {
+  const el = document.getElementById('companionText');
+  if (!el) return;
+  const words = { off: 'Off.', asking: 'Waiting for Bluetooth permission.', searching: 'Looking for FT Companion.', connecting: 'Connecting.', linked: 'Linked.', lost: 'Link lost, looking again.', 'not found': 'Not found yet, still looking.', 'bluetooth off': 'Bluetooth is off on this phone.', 'no permission': 'Bluetooth permission was not allowed.', 'scan failed': 'Search failed, trying again.', 'wrong device': 'Found a device that is not FT Companion.' };
+  el.textContent = (words[ftcState] || ftcState) + (ftcPos && Date.now() - ftcPos.t < 5000 ? ' Using its GPS.' : '') + (ftcRoad.length ? ' Road readings saved: ' + ftcRoad.length + '.' : '');
+}
+function ftcSet(on) {
+  ftcOn = on;
+  try { localStorage.setItem('ftcOn', on ? '1' : '0'); } catch (e) {}
+  setToggle('companionBtn', on);
+  if (!ftcNative()) return;
+  try { ftcState = on ? String(window.FieldTwinNative.companionState() || 'searching') : 'off'; } catch (e) { ftcState = on ? 'searching' : 'off'; }
+  if (on && ftcState === 'off') ftcState = 'searching';
+  try { if (on) window.FieldTwinNative.companionStart(); else window.FieldTwinNative.companionStop(); } catch (e) {}
+  ftcText();
+}
+function ftcSend(cmd) { if (ftcOn && ftcState === 'linked' && ftcNative()) { try { window.FieldTwinNative.companionSend(cmd); } catch (e) {} } }
+function ftcClean(t) { return String(t || '').replace(/[|;\n\r]/g, ' ').slice(0, 60); }
+// Sends the whole route: line points in small batches, then each turn, then start.
+function ftcSendRoute() {
+  if (!navState || !navState.route) return;
+  const r = navState.route;
+  ftcSend('R0');
+  const line = r.line || [];
+  const step = Math.max(1, Math.ceil(line.length / 450));
+  let batch = [];
+  for (let i = 0; i < line.length; i += step) {
+    batch.push(line[i][0].toFixed(5) + ',' + line[i][1].toFixed(5));
+    if (batch.length === 9) { ftcSend('RP|' + batch.join(';') + ';'); batch = []; }
+  }
+  const last = line[line.length - 1];
+  if (last) batch.push(last[0].toFixed(5) + ',' + last[1].toFixed(5));
+  if (batch.length) ftcSend('RP|' + batch.join(';') + ';');
+  (r.steps || []).slice(0, 80).forEach(st => ftcSend('RS|' + st.lat.toFixed(5) + '|' + st.lon.toFixed(5) + '|' + ftcClean(st.text)));
+  ftcSend('RG');
+}
+function ftcSendLockers() {
+  const me = mySpot();
+  let list = ftPlaces.filter(p => p.kind === 'locker');
+  if (me) list.sort((a, b) => ftpDist(me.lat, me.lon, a.lat, a.lon) - ftpDist(me.lat, me.lon, b.lat, b.lon));
+  ftcSend('L0');
+  list.slice(0, 120).forEach(p => ftcSend('L|' + p.lat.toFixed(5) + '|' + p.lon.toFixed(5)));
+}
+window.ftCompanionIn = function (kind, text) {
+  if (kind === 'state') {
+    const was = ftcState;
+    ftcState = text;
+    ftcText();
+    if (text === 'linked' && was !== 'linked') {
+      setStatus('FT Companion linked');
+      ftcSendLockers();
+      if (navState && navState.route) ftcSendRoute();
+    }
+    return;
+  }
+  const f = String(text).split('|');
+  if (kind === 'pos' && f[0] === 'P') {
+    ftcPos = { lat: +f[1], lon: +f[2], speed: +f[3], course: +f[4], sats: +f[5], t: Date.now() };
+  } else if (kind === 'pos' && f[0] === 'O' && navState && !navState.busy) {
+    navState.busy = true;
+    navDraw({ lat: +f[1], lon: +f[2] }).catch(() => {}).then(() => { navState && (navState.busy = false); });
+  } else if (kind === 'road' && f[0] === 'Q') {
+    ftcRoad.push({ lat: +f[1], lon: +f[2], rms: +f[3], peak: +f[4], speed: +f[5], t: new Date().toISOString() });
+    if (ftcRoad.length > 20000) ftcRoad = ftcRoad.slice(-20000);
+    if (ftcRoad.length % 30 === 0) { try { localStorage.setItem('ftcRoad', JSON.stringify(ftcRoad)); } catch (e) {} ftcText(); }
+  }
+};
+// The board's GPS wins whenever it has a fresh fix, so the phone can leave its own GPS idle.
+(function () {
+  const phoneSpot = mySpot;
+  mySpot = function () {
+    if (ftcPos && Date.now() - ftcPos.t < 5000) return { lat: ftcPos.lat, lon: ftcPos.lon, acc: 5, t: ftcPos.t, src: 'companion' };
+    return phoneSpot();
+  };
+  const draw = navDraw;
+  navDraw = async function (from) { const r = await draw(from); ftcSendRoute(); return r; };
+  const end2 = navEnd;
+  navEnd = function (note) { ftcSend('X'); return end2(note); };
+  const banner = navBanner;
+  let lastTurn = '';
+  navBanner = function () {
+    const r = banner.apply(this, arguments);
+    if (navState && navState.route) {
+      const st = navState.route.steps[navState.next];
+      const me = mySpot();
+      if (st && st.text !== lastTurn) { lastTurn = st.text; ftcSend('T|' + ftcClean(st.text)); }
+      if (st && me) ftcSend('D|' + Math.round(navMeters(me, st)) + '|-1');
+    } else lastTurn = '';
+    return r;
+  };
+})();
+// When the board has no GPS fix yet, the phone's position keeps its map centered.
+setInterval(() => {
+  if (ftcState !== 'linked' || (ftcPos && Date.now() - ftcPos.t < 5000)) return;
+  const me = mySpot();
+  if (me) ftcSend('H|' + me.lat.toFixed(6) + '|' + me.lon.toFixed(6));
+}, 5000);
+setTimeout(() => {
+  setToggle('companionBtn', ftcOn);
+  ftcText();
+  if (ftcOn && ftcNative()) ftcSet(true);
+}, 3500);
+
+// Field Chat: a room inside the Cat Command Chat backend, shared members, names and invites, its own messages
+// (room field). With alerts on, a message from someone else flashes the screen in rainbow colors for a moment,
+// on the full map, the floating window and the companion screen alike. No sound and no text pops up.
+const FC_URL = 'https://vogxdikogfaxhwcgajfg.supabase.co';
+const FC_KEY = 'sb_publishable_b9N7M8W5NpGgsus1ZUQgaw_3QQBxFm1';
+let fc = null, fcUser = null, fcMember = false, fcChan = null, fcMsgs = [], fcNames = {}, fcAlerts = false, fcUnread = 0;
+try { fcAlerts = localStorage.getItem('fcAlerts') === '1'; } catch (e) {}
+function fcClient() {
+  if (!fc && window.supabase) fc = window.supabase.createClient(FC_URL, FC_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: 'fieldchat-auth' } });
+  return fc;
+}
+async function fcStart() {
+  const c = fcClient();
+  if (!c) return false;
+  try {
+    let s = (await c.auth.getSession()).data.session;
+    if (!s) { const r = await c.auth.signInAnonymously(); s = r.data && r.data.session; }
+    if (!s) return false;
+    fcUser = s.user;
+    const mem = await c.from('chat_members').select('joined_at').eq('user_id', fcUser.id).maybeSingle();
+    fcMember = !!(mem.data);
+    if (fcMember) { await fcLoadNames(); fcListen(); }
+    return true;
+  } catch (e) { return false; }
+}
+async function fcLoadNames() {
+  try { const n = await fc.from('chat_names').select('id,name,color'); (n.data || []).forEach(x => { fcNames[x.id] = x; }); } catch (e) {}
+}
+function fcName(id) { return id === (fcUser && fcUser.id) ? 'You' : ((fcNames[id] && fcNames[id].name) || 'Someone'); }
+function fcListen() {
+  if (fcChan || !fc) return;
+  fcChan = fc.channel('field-room')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: 'room=eq.field' }, p => {
+      const m = p.new;
+      if (!m || fcMsgs.some(x => x.id === m.id)) return;
+      fcMsgs.push(m);
+      if (!fcNames[m.sender]) fcLoadNames();
+      const mine = fcUser && m.sender === fcUser.id;
+      const open = document.getElementById('fcList');
+      if (open) fcDraw(); else if (!mine) { fcUnread++; fcBadge(); }
+      if (!mine && fcAlerts) fcFlash();
+    })
+    .subscribe();
+}
+function fcFlash() {
+  const old = document.getElementById('fcStar');
+  if (old) old.remove();
+  const d = document.createElement('div');
+  d.id = 'fcStar';
+  document.body.appendChild(d);
+  setTimeout(() => d.remove(), 1300);
+  if (typeof ftcSend === 'function') ftcSend('F');
+}
+function fcBadge() {
+  const b = document.getElementById('fieldChatOpen');
+  if (b) b.textContent = fcUnread ? 'OPEN FIELD CHAT (' + fcUnread + ' NEW)' : 'OPEN FIELD CHAT';
+}
+async function fcSetAlerts(on) {
+  fcAlerts = on;
+  try { localStorage.setItem('fcAlerts', on ? '1' : '0'); } catch (e) {}
+  setToggle('fieldChatBtn', on);
+  if (on) { await fcStart(); if (!fcMember) setStatus('open Field Chat once to join with an invite code'); }
+}
+function fcDraw() {
+  const list = document.getElementById('fcList');
+  if (!list) return;
+  list.innerHTML = fcMsgs.slice(-80).map(m => '<div class="fc-msg' + (fcUser && m.sender === fcUser.id ? ' mine' : '') + '"><b>' + escapeHtml(fcName(m.sender)) + '</b> <span class="meta-line">' + new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + '</span><br>' + escapeHtml(m.body || (m.file_name ? 'shared a file' : '')) + '</div>').join('') || '<div class="meta-line">No messages yet.</div>';
+  list.scrollTop = list.scrollHeight;
+}
+async function fcOpen() {
+  const panel = document.getElementById('panel');
+  panel.innerHTML = '<h2>FIELD CHAT</h2><div class="meta-line" id="fcMsg">Connecting.</div>';
+  panel.classList.add('open');
+  if (!(await fcStart())) { document.getElementById('fcMsg').textContent = 'Could not reach the chat. Check the signal and try again.'; return; }
+  fcUnread = 0; fcBadge();
+  if (!fcMember) {
+    panel.innerHTML = '<h2>FIELD CHAT</h2><div class="meta-line">Field Chat shares members with Cat Command Chat. Get an invite code from someone in it, or make one yourself in Cat Command Chat by tapping your own face, then Invite someone.</div>' +
+      '<input type="text" id="fcCode" autocomplete="off" placeholder="Invite code"><input type="text" id="fcNameIn" autocomplete="off" placeholder="Your name in the chat">' +
+      '<div class="meta-line" id="fcErr"></div><div class="panel-actions"><button id="fcJoin">JOIN</button><button class="secondary" id="fcClose">CLOSE</button></div>';
+    document.getElementById('fcClose').addEventListener('click', closePanel);
+    document.getElementById('fcJoin').addEventListener('click', async () => {
+      const code = document.getElementById('fcCode').value.trim();
+      const name = document.getElementById('fcNameIn').value.trim();
+      const err = document.getElementById('fcErr');
+      if (!code || !name) { err.textContent = 'Type the invite code and your name.'; return; }
+      err.textContent = 'Joining.';
+      const r = await fc.rpc('join_chat', { code: code });
+      if (r.error || r.data !== true) { err.textContent = 'That code did not work. Check it with the person who invited you.'; return; }
+      await fc.from('chat_names').upsert({ id: fcUser.id, name: name, color: '#0b4ea2' });
+      fcMember = true;
+      await fcLoadNames();
+      fcListen();
+      fcOpen();
+    });
+    return;
+  }
+  panel.innerHTML = '<h2>FIELD CHAT</h2><div id="fcList" style="max-height:46vh;overflow-y:auto;margin:6px 0;"></div>' +
+    '<textarea id="fcText" rows="2" placeholder="Message the field crew"></textarea>' +
+    '<div class="panel-actions"><button id="fcSend">SEND</button><button class="secondary" id="fcClose">CLOSE</button></div>';
+  document.getElementById('fcClose').addEventListener('click', closePanel);
+  const send = async () => {
+    const t = document.getElementById('fcText');
+    const body = t.value.trim();
+    if (!body) return;
+    t.value = '';
+    const r = await fc.from('chat_messages').insert({ body: body, room: 'field' }).select().single();
+    if (r.error) { t.value = body; setStatus('message did not send, ' + r.error.message); return; }
+    if (r.data && !fcMsgs.some(x => x.id === r.data.id)) { fcMsgs.push(r.data); fcDraw(); }
+  };
+  document.getElementById('fcSend').addEventListener('click', send);
+  try {
+    const r = await fc.from('chat_messages').select('*').eq('room', 'field').is('deleted_at', null).order('id', { ascending: false }).limit(80);
+    if (!r.error) fcMsgs = (r.data || []).reverse();
+  } catch (e) {}
+  fcDraw();
+}
+setTimeout(() => { setToggle('fieldChatBtn', fcAlerts); if (fcAlerts) fcStart(); }, 4000);
 // GO picks and arrivals raise a place's rank.
 (function () {
   const start = navStart, end = navEnd;
@@ -6758,8 +7171,9 @@ function showLockers() {
   ftpSeedLockers();
   const panel = document.getElementById('panel');
   const list = ftPlaces.filter(p => p.kind === 'locker');
-  let html = '<h2>LOCKERS</h2><div class="meta-line">Every spot logged as a parcel locker. Tap one to name it and see its visits and photos.</div>';
+  let html = '<h2>LOCKERS</h2><div class="meta-line">Lockers you logged, plus any loaded from the team list or open map data. Tap one to name it and see its visits and photos.</div>';
   html += '<input type="text" id="lockerFind" autocomplete="off" placeholder="Locker name or street">';
+  html += '<button class="secondary" id="lockerOsm" style="width:100%;margin:6px 0;">ADD LOCKERS FROM OPEN MAP DATA</button><div class="meta-line" id="lockerOsmMsg"></div>';
   html += '<div id="lockerRows"></div>';
   html += '<div class="panel-actions"><button class="secondary" id="lockersClose">CLOSE</button></div>';
   panel.innerHTML = html;
@@ -6770,13 +7184,20 @@ function showLockers() {
     q = (q || '').toLowerCase().trim();
     const shown = list.filter(p => !q || (p.name + ' ' + p.address).toLowerCase().indexOf(q) !== -1)
       .sort((a, b) => (a.name ? 0 : 1) - (b.name ? 0 : 1) || String(a.name || a.address).localeCompare(String(b.name || b.address)));
-    rows.innerHTML = shown.length ? shown.map(p => '<div class="mi-row" data-lk="' + p.id + '"><b style="color:#0b4ea2;">' + escapeHtml(ftpLabel(p)) + '</b><br><span class="meta-line">' + escapeHtml(p.address || '') + ' &nbsp; ' + ftpStopsAt(p).length + ' logged</span></div>').join('')
+    rows.innerHTML = shown.length ? '<div class="meta-line">' + shown.length + (shown.length === 1 ? ' locker' : ' lockers') + '</div>' + shown.map(p => '<div class="mi-row" data-lk="' + p.id + '"><b style="color:#0b4ea2;">' + escapeHtml(ftpLabel(p)) + '</b><br><span class="meta-line">' + escapeHtml(p.address || '') + ' &nbsp; ' + ftpStopsAt(p).length + ' logged' + (p.source === 'team' ? ', from the team list' : p.source === 'osm' ? ', from open map data' : '') + '</span></div>').join('')
       : '<div class="meta-line">No lockers yet. Log a stop as a parcel locker, or open any entry and tap MAKE LOCKER.</div>';
     rows.querySelectorAll('[data-lk]').forEach(el => el.addEventListener('click', () => showLocker(ftPlaces.find(x => x.id === el.getAttribute('data-lk')))));
   };
   draw('');
   document.getElementById('lockerFind').addEventListener('input', ev => draw(ev.target.value));
   document.getElementById('lockersClose').addEventListener('click', closePanel);
+  document.getElementById('lockerOsm').addEventListener('click', async () => {
+    const msg = document.getElementById('lockerOsmMsg');
+    msg.textContent = 'Searching open map data for Amazon lockers within about a hundred miles. This takes a moment.';
+    const r = await ftOsmLockers();
+    msg.textContent = r.error ? 'Open map data did not answer, try again in a minute.' : 'Found ' + r.found + ' Amazon lockers in open map data, ' + r.added + ' of them were new and are now in your list.';
+    if (!r.error && r.added) setTimeout(showLockers, 1800);
+  });
 }
 function showLocker(p) {
   if (!p) return;
@@ -6824,6 +7245,7 @@ function showLocker(p) {
     p.kind = 'locker';
     ftpPush(p);
     setStatus('locker saved');
+    ftLockerPins();
     showLocker(p);
   });
   document.getElementById('lockerGo').addEventListener('click', () => navStart({ lat: p.lat, lon: p.lon, name: ftpLabel(p), label: p.address, placeId: p.id }));

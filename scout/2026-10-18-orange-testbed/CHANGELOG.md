@@ -1,6 +1,8 @@
 Agent Test Bed changelog
 
-2026-11-03, v2026.11.03. The agent turn was played and merged into the city.
+2026-11-04, v2026.11.04. The agent turn was played and merged into the city.
+
+2026-11-03, v2026.11.03. The agent, steward, and grok turns for the day were played and merged into the city.
 
 2026-11-02, v2026.11.02. The agent turn was played and merged into the city. The grok and steward turns were played and merged as well.
 
