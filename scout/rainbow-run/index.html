@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#d6eef9">
+<title>Rainbow Run</title>
+<style>
+:root{
+  color-scheme:light;
+  --ink:#1f2433;
+  --soft:#5b6478;
+  --card:#ffffffee;
+  --line:#c9d3e0;
+  --go:#2f8f5b;
+  --warn:#c4631d;
+  --chip:#eef3f9;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#d6eef9;overflow:hidden;
+  font-family:ui-rounded,"SF Pro Rounded","Nunito","Trebuchet MS",system-ui,sans-serif;color:var(--ink)}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:manipulation}
+#panel{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));top:calc(12px + env(safe-area-inset-top,0px));
+  width:min(340px,calc(100% - 24px));max-height:calc(100% - 24px);overflow:auto;
+  background:var(--card);border:2px solid var(--ink);border-radius:14px;padding:14px 14px 12px;
+  box-shadow:4px 4px 0 var(--ink)}
+#panel{transition:opacity .6s ease}
+#panel.fading{opacity:0}
+#panel[hidden]{display:none}
+#menu{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));top:calc(12px + env(safe-area-inset-top,0px));
+  width:48px;height:44px;padding:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;
+  background:var(--card);border:2px solid var(--ink);border-radius:12px;box-shadow:3px 3px 0 var(--ink);transition:opacity .6s ease}
+#menu span{display:block;width:24px;height:3px;border-radius:2px;background:var(--ink)}
+#menu.gone{opacity:0;pointer-events:none}
+h1{margin:0 0 2px;font-size:22px;letter-spacing:.01em}
+.sub{margin:0 0 12px;color:var(--soft);font-size:14px;line-height:1.35}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px}
+input{font:inherit;font-size:16px;padding:8px 10px;border:2px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);min-width:0;flex:1}
+input:focus-visible,button:focus-visible{outline:3px solid #3d74d8;outline-offset:2px}
+button{font:inherit;font-size:15px;padding:8px 12px;border:2px solid var(--ink);border-radius:10px;background:var(--chip);color:var(--ink);cursor:pointer}
+button.on{background:var(--ink);color:#fff}
+.status{font-size:14px;padding:4px 10px;border-radius:999px;background:var(--chip);color:var(--soft)}
+.status[data-s="live"]{background:#dff3e7;color:var(--go)}
+.status[data-s="reconnecting"],.status[data-s="connecting"],.status[data-s="sign in"],.status[data-s="update needed"]{background:#fbeadb;color:var(--warn)}
+.spot{display:flex;align-items:center;gap:8px}
+.spot b{font-size:18px;min-width:76px;text-align:center}
+.note{font-size:13px;color:var(--soft);margin:2px 0 0;line-height:1.35}
+#authRow[hidden],#rowSize[hidden]{display:none}
+.group{font-size:13px;color:var(--soft);margin:2px 0 4px}
+#scenes .row{gap:6px;margin:0 0 8px}
+#scenes button{font-size:14px;padding:6px 10px}
+#wall{position:fixed;left:0;top:0;border:0;transform-origin:0 0;pointer-events:none;background:#eef3f5;opacity:0;transition:opacity .4s ease}
+canvas{z-index:1}
+#panel,#menu{z-index:2}
+</style>
+</head>
+<body>
+<canvas id="sky" aria-label="A picture that runs across every phone in the room"></canvas>
+
+<button id="menu" class="gone" aria-label="Open the Rainbow Run panel"><span></span><span></span><span></span></button>
+
+<div id="panel">
+  <h1>Rainbow Run</h1>
+  <p class="sub">Line up phones in spot order, a row or a grid. Spots count left to right, then down. For rain, a row stacks top to bottom. The picture runs from one screen onto the next.</p>
+
+  <div class="row">
+    <input id="room" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="room code" aria-label="Room code">
+    <button id="join">Join</button>
+  </div>
+  <div class="row">
+    <span class="status" id="syncStatus" data-s="off">not in a room</span>
+    <span class="status" id="clockStat" data-s="off">clock off</span>
+  </div>
+
+  <div class="row" id="authRow" hidden>
+    <input id="authEmail" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="email" aria-label="Email">
+    <input id="authPass" type="password" autocomplete="current-password" placeholder="password" aria-label="Password">
+    <button id="authIn">Sign in</button>
+    <span class="status" id="authMsg" data-s="off" hidden></span>
+  </div>
+
+  <div class="row" id="layouts">
+    <button data-layout="row" class="on">Row</button>
+    <button data-layout="quad">Quad</button>
+    <button data-layout="nine">Nine</button>
+  </div>
+  <div class="row spot">
+    <button id="left" aria-label="Move one spot back">&#9664;</button>
+    <b id="spotOut">Spot 1</b>
+    <button id="right" aria-label="Move one spot on">&#9654;</button>
+    <button id="auto" class="on">Auto</button>
+  </div>
+  <div class="row spot" id="rowSize">
+    <button id="fewer" aria-label="One phone fewer in the row">&#8722;</button>
+    <b id="rowOut">Row of 1</b>
+    <button id="more" aria-label="One phone more in the row">+</button>
+  </div>
+  <div class="row spot">
+    <b id="fitOut">Fit 100%</b>
+    <button id="zoomOut" aria-label="Zoom out">&#8722;</button>
+    <button id="zoomIn" aria-label="Zoom in">+</button>
+    <button id="up" aria-label="Move the picture up">&#9650;</button>
+    <button id="down" aria-label="Move the picture down">&#9660;</button>
+    <button id="fitReset">Reset</button>
+  </div>
+
+  <div id="scenes">
+    <p class="group">Wall</p>
+    <div class="row"><button data-scene="crow" class="on">Crow</button><button data-scene="highway">Highway</button><button data-scene="rain">Rain</button><button data-scene="stars">Stars</button></div>
+    <p class="group">Roads</p>
+    <div class="row"><button data-scene="cars">Cars</button><button data-scene="carpark">Car park</button><button data-scene="race">Car race</button><button data-scene="bikes">Downhill bikes</button><button data-scene="cheese">Cheese roll</button></div>
+    <p class="group">Sky</p>
+    <div class="row"><button data-scene="planes">Planes</button><button data-scene="birds">Birds</button><button data-scene="satellites">Satellites</button><button data-scene="polar">Polar</button><button data-scene="tornado">Tornado</button></div>
+    <p class="group">Water</p>
+    <div class="row"><button data-scene="fish">Fish</button><button data-scene="galleon">Galleon</button><button data-scene="river">River</button><button data-scene="boatrace">Boat race</button></div>
+    <p class="group">Animals</p>
+    <div class="row"><button data-scene="cats">Cats</button><button data-scene="dogs">Dogs</button><button data-scene="farm">Farm</button><button data-scene="horserace">Horse race</button><button data-scene="ants">Ants</button><button data-scene="snakes">Snakes</button><button data-scene="people">People</button></div>
+    <p class="group">Screensavers</p>
+    <div class="row"><button data-scene="plasma">Plasma</button><button data-scene="lines">Lines</button><button data-scene="warp">Warp</button><button data-scene="pipes">Pipes</button><button data-scene="matrix">Matrix</button><button data-scene="blob">Blob</button><button data-scene="bounce">Bounce</button></div>
+    <p class="group">Places</p>
+    <div class="row"><button data-scene="city">City</button><button data-scene="garden">Garden</button><button data-scene="warehouse">Warehouse</button><button data-scene="battle">Battle</button></div>
+  </div>
+
+  <div class="row">
+    <button id="sound">Sound off</button>
+    <button id="full">Full screen</button>
+  </div>
+  <p class="note" id="pace">Own pace, 100 bpm</p>
+  <p class="note">This panel fades after a few seconds. Tap the menu button to bring it back.</p>
+</div>
+
+<script src="stompbox-lab-v3-config.js"></script>
+<script src="stompbox-lab-v3-supabase.js"></script>
+<script src="stompbox-lab-v3-auth.js"></script>
+<script src="stompbox-lab-v3-sync.js"></script>
+<script src="stompbox-lab-v2-clock.js"></script>
+<script>
+"use strict";
+/* Rainbow Run, a visualizer pedal for the stompbox API.
+   It joins a stompbox room under its own app name. The server hands each Rainbow Run phone a seat,
+   and the seat is the phone's spot in the row. Every phone reads the same server clock and the same
+   loop tempo, works out where the crow is on the long runway, and draws only its own slice of it. */
+const APP="rainbow-run",SCHEMA=1;
+const SYNC_URL=(window.STOMPBOX_LAB_CONFIG&&window.STOMPBOX_LAB_CONFIG.syncUrl)||"";
+const OWN_BPM=100;
+
+function keep(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){}return null}
+
+/* ---------- room and spot ---------- */
+let seat=0,count=1,loopState=null;
+/* Scenes that run inside wall.html: the mohave.wtf visualizers (f is the script, sc picks its variant)
+   and the coffeekit screensavers (g is ck, sc is the mode). */
+const MWS={cars:{f:"cars"},carpark:{f:"carpark"},race:{f:"race",sc:"cars"},bikes:{f:"downhill",sc:"bike"},cheese:{f:"downhill",sc:"cheese"},
+  planes:{f:"planes"},birds:{f:"birds"},satellites:{f:"satellites"},polar:{f:"polar"},tornado:{f:"tornado"},
+  fish:{f:"fish"},galleon:{f:"galleon"},river:{f:"river"},boatrace:{f:"race",sc:"boats"},
+  cats:{f:"quad",sc:"cats"},dogs:{f:"quad",sc:"dogs"},farm:{f:"quad",sc:"farm"},horserace:{f:"race",sc:"horses"},
+  ants:{f:"ants"},snakes:{f:"snakes"},people:{f:"people"},city:{f:"city"},garden:{f:"garden"},warehouse:{f:"warehouse"},battle:{f:"battle"},
+  plasma:{g:"ck",sc:"plasma"},lines:{g:"ck",sc:"lines"},warp:{g:"ck",sc:"warp"},pipes:{g:"ck",sc:"pipes"},matrix:{g:"ck",sc:"matrix"},blob:{g:"ck",sc:"blob"},bounce:{g:"ck",sc:"bounce"}};
+const SCENES=["crow","highway","rain","stars"].concat(Object.keys(MWS));
+const LAYOUTS={row:null,quad:[2,2],nine:[3,3]};
+let layout=LAYOUTS.hasOwnProperty(keep(APP+"-layout"))?keep(APP+"-layout"):"row";
+/* Fit belongs to this phone only: a small zoom and an up or down nudge, so screens with different shapes line up. */
+let zoom=parseFloat(keep(APP+"-zoom"))||1,nudge=parseFloat(keep(APP+"-nudge"))||0;
+let scene=SCENES.indexOf(keep(APP+"-scene"))>=0?keep(APP+"-scene"):"crow";
+let manualSpot=parseInt(keep(APP+"-spot"),10)||0;
+let manualRow=parseInt(keep(APP+"-row"),10)||0;
+function live(){return sync.status==="live"}
+/* Row size comes from the server while live. A row size set by hand wins, so phones still line up when the room drops. */
+function total(){return Math.max(1,manualRow||count)}
+/* Columns and rows of the whole wall of phones. */
+/* In a row, rain turns the row on its side: the phones stack top to bottom, spot 1 at the top. */
+function grid(){if(layout==="row")return scene==="rain"?[1,total()]:[total(),1];return LAYOUTS[layout]}
+function slots(){const q=grid();return q[0]*q[1]}
+function spot(){return Math.min(slots(),Math.max(1,manualSpot||seat+1))}
+
+/* ---------- clock, login, socket ---------- */
+const clockStat=document.getElementById("clockStat"),statusEl=document.getElementById("syncStatus");
+const clock=createServerClock({
+  send:m=>sync.send(m.type,m),
+  onChange:(o,rtt)=>{clockStat.dataset.s=clock.synced?"live":"off";clockStat.textContent=clock.synced?"clock locked, trip "+Math.round(rtt)+" ms":"clock off"},
+});
+const SUPA=window.STOMPBOX_LAB_SUPABASE||{};
+const auth=createAuth({app:APP,url:SUPA.url||"",key:SUPA.key||"",onChange:()=>{
+  renderAuth();
+  if(sync.status==="live"&&auth.token)sync.send("auth",{token:auth.token});else sync.connect();
+}});
+const sync=createBoardSync({
+  app:APP,schema:SCHEMA,url:SYNC_URL,
+  ready:()=>!auth.on||!!auth.token,
+  onOpen:()=>{if(auth.on)sync.send("auth",{token:auth.token})},
+  /* The scene and the layout are the board values, so every phone in the room matches. */
+  exportState:()=>({scene:scene,layout:layout}),
+  loadState:st=>{if(st&&SCENES.indexOf(st.scene)>=0)setScene(st.scene,false);if(st&&LAYOUTS.hasOwnProperty(st.layout))setLayout(st.layout,false);return true},
+  applyChange:(path,value)=>{if(path==="scene"&&SCENES.indexOf(value)>=0)setScene(value,false);if(path==="layout"&&LAYOUTS.hasOwnProperty(value))setLayout(value,false)},
+  onStatus:s=>{
+    statusEl.dataset.s=s;
+    statusEl.textContent=s==="off"?"sync off":s==="no room"?"not in a room":s;
+    if(s==="live")clock.start();else{clock.stop();loopState=null}
+    renderSpot();renderPace();
+  },
+});
+sync.on("pong",m=>clock.pong(m));
+sync.on("seat",m=>{if(typeof m.seat==="number")seat=m.seat;if(typeof m.count==="number")count=m.count;renderSpot()});
+sync.on("loop",m=>{loopState=m.state||null;renderPace()});
+sync.on("auth",m=>{if(!m.ok){say(m.reason||"sign in again");auth.refresh()}else say("")});
+
+/* ---------- shared timing ---------- */
+function nowMs(){return clock.synced?clock.now():Date.now()}
+function bandOn(){const s=loopState;return !!(live()&&s&&s.playing&&!s.idle&&typeof s.tempo==="number"&&typeof s.epoch==="number")}
+/* Beat count at server time t. Follows the band loop while it plays, otherwise a fixed pace from the clock. */
+function beatAt(t){
+  if(!bandOn())return t/(60000/OWN_BPM);
+  const s=loopState,bo=s.barOffset||0,mpb=60000/s.tempo;
+  const p=s.pending;
+  if(p&&typeof p.atBar==="number"&&typeof p.tempo==="number"){
+    const tAt=s.epoch+(p.atBar-bo)*4*mpb;
+    if(t>=tAt)return p.atBar*4+(t-tAt)/(60000/p.tempo);
+  }
+  return bo*4+(t-s.epoch)/mpb;
+}
+function timeOfBeat(b){
+  if(!bandOn())return b*(60000/OWN_BPM);
+  const s=loopState,bo=s.barOffset||0,mpb=60000/s.tempo,p=s.pending;
+  if(p&&typeof p.atBar==="number"&&typeof p.tempo==="number"&&b>=p.atBar*4){
+    return s.epoch+(p.atBar-bo)*4*mpb+(b-p.atBar*4)*(60000/p.tempo);
+  }
+  return s.epoch+(b-bo*4)*mpb;
+}
+
+/* ---------- the crow ---------- */
+const UP=[
+"........k..............",
+".......kks.............",
+"......kkks.............",
+".....kkkks.............",
+"....kkkkks.......kkk...",
+"....kkkkkss....kkkkkk..",
+"...kkkkkkkkkkkkkkkekkbb",
+"kkkkkkkkkkkkkkkkkkkkbbb",
+".kkkkkkkkkkkkkkkkkkk...",
+"kkk..kkkkkkkkkkkkk.....",
+"........kkkkkkk........",
+".......................",
+".......................",
+".......................",
+"......................."];
+const MID=[
+".......................",
+".......................",
+".......................",
+".......................",
+".................kkk...",
+"....kkkkk......kkkkkk..",
+"..kkkkkkkkkkkkkkkekkkbb",
+"kkkkkkkkkkkkkkkkkkkkbbb",
+".kkkkkkkkkkkkkkkkkkk...",
+"kkk..kkkkkkkkkkkkk.....",
+"........kkkkkkk........",
+".......................",
+".......................",
+".......................",
+"......................."];
+const DOWN=[
+".......................",
+".......................",
+".......................",
+".......................",
+".................kkk...",
+"...............kkkkkk..",
+"...kkkkkkkkkkkkkkkekkbb",
+"kkkkkkkkkkkkkkkkkkkkbbb",
+".kkkkkkkkkkkkkkkkkkk...",
+"kkk.kkkkkkkkkkkkkk.....",
+"....kkkkks.kkkk........",
+".....kkkks.............",
+"......kkks.............",
+".......kks.............",
+"........k.............."];
+const FRAMES=[UP,MID,DOWN,MID];
+const SPRITE_COLORS={k:"#1d2130",s:"#41507a",b:"#4b4d57",e:"#ffffff"};
+const CW=23,CH=15;
+
+const RAINBOW=["#e8403a","#f28c28","#f5cf2c","#4cb84a","#3a84e0","#7b52c9"];
+
+/* ---------- drawing ---------- */
+const cv=document.getElementById("sky"),g=cv.getContext("2d");
+let W=0,H=0,DPR=1;
+function size(){DPR=Math.min(2,window.devicePixelRatio||1);W=innerWidth;H=innerHeight;cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);g.setTransform(DPR,0,0,DPR,0,0);g.imageSmoothingEnabled=false}
+addEventListener("resize",size);size();
+
+function hash(n){const x=Math.sin(n*127.1)*43758.5453;return x-Math.floor(x)}
+/* VIEW describes this phone's window onto the wall. Drawing happens in wall pixels for y, with this
+   phone's row already shifted into place, and in this phone's own pixels for x. XM is the extra
+   margin drawn past each side edge so a zoomed out phone has no blank border. */
+let VIEW={cols:1,rows:1,cx:0,cy:0,WH:0,XM:0};
+function wallRect(){return [-VIEW.XM,VIEW.cy*H-H*0.35,W+2*VIEW.XM,H*1.7]}
+function fillWall(col){const r=wallRect();g.fillStyle=col;g.fillRect(r[0],r[1],r[2],r[3])}
+/* Height of the crow, as a share of the screen, at a given beat count. */
+function flightY(b){
+  if(VIEW.rows>1)return 0.5+0.36*Math.sin(b*Math.PI/4)+0.05*Math.sin(b*Math.PI*0.75);
+  return 0.46+0.13*Math.sin(b*Math.PI/4)+0.04*Math.sin(b*Math.PI*0.75);
+}
+
+function drawSky(left,u,secs){
+  const WH=VIEW.WH,grd=g.createLinearGradient(0,0,0,WH);
+  grd.addColorStop(0,"#bfe3f7");grd.addColorStop(0.62,"#e6f4fb");grd.addColorStop(1,"#fbeedb");
+  fillWall(grd);
+  const n=VIEW.cols;
+  /* clouds drift in world space, so they slide from one phone to the next */
+  const span=n+2;
+  for(let i=0;i<Math.max(3,n*2)*VIEW.rows;i++){
+    let wx=(hash(i+1)*span-secs*0.03*(0.6+hash(i+9)*0.6))%span;if(wx<0)wx+=span;wx-=1;
+    const x=(wx-left)*W,y=WH*(0.06+hash(i+5)*(VIEW.rows>1?0.6:0.32)),c=Math.max(3,Math.round(u*1.2));
+    if(x<-30*c-VIEW.XM||x>W+30*c+VIEW.XM)continue;
+    g.fillStyle="#ffffff";
+    const blocks=[[0,2,16,3],[3,1,10,1],[5,0,5,1],[2,5,12,1]];
+    blocks.forEach(([bx,by,bw,bh])=>g.fillRect(Math.round(x+bx*c),Math.round(y+by*c),bw*c,bh*c));
+  }
+  /* mesas sit on the ground in world space too */
+  const ground=WH-H*0.14,step=Math.max(4,Math.round(u*1.5));
+  g.fillStyle="#e7b98f";
+  for(let px=-Math.ceil(VIEW.XM/step)*step;px<W+VIEW.XM+step;px+=step){
+    const wx=left+px/W,k=Math.floor(wx*6);
+    const h=hash(k*3.1)>0.55?H*(0.05+hash(k)*0.09):H*0.015;
+    g.fillRect(px,Math.round(ground-h),step,Math.ceil(h)+1);
+  }
+  g.fillStyle="#d9a27a";g.fillRect(-VIEW.XM,Math.round(ground),W+2*VIEW.XM,H);
+}
+
+function drawTrail(left,headX,b,u){
+  /* The trail is the path the crow just flew. One screen is one bar, four beats. */
+  const band=Math.max(2,Math.round(u*1.1)),stripe=band*6,seg=Math.max(4,Math.round(u*2));
+  const tail=headX-2.2;
+  const nose=headX-(CW*Math.max(2,Math.round(u))*0.55)/W;
+  const m=VIEW.XM/W,x0=Math.max(tail,left-m),x1=Math.min(nose,left+1+m);
+  if(x1<=x0)return;
+  for(let px=Math.floor((x0-left)*W/seg)*seg;px<=(x1-left)*W;px+=seg){
+    const wx=left+px/W;if(wx<tail||wx>nose)continue;
+    const back=headX-wx,bt=b-back*4;
+    const wob=(Math.floor((wx*W)/seg)%2)?band*0.5:-band*0.5;
+    const top=Math.round(VIEW.WH*flightY(bt)-stripe/2+wob);
+    const fade=Math.min(1,(wx-tail)/0.35);
+    g.globalAlpha=fade;
+    for(let i=0;i<6;i++){g.fillStyle=RAINBOW[i];g.fillRect(px,top+i*band,seg,band)}
+  }
+  g.globalAlpha=1;
+}
+
+function drawCrow(left,headX,b,u){
+  const c=Math.max(2,Math.round(u)),frame=FRAMES[Math.floor(b*4)%4];
+  const x=Math.round((headX-left)*W-CW*c*0.82),y=Math.round(VIEW.WH*flightY(b)-CH*c*0.5);
+  if(x>W+VIEW.XM||x+CW*c<-VIEW.XM)return;
+  for(let r=0;r<CH;r++){const row=frame[r];for(let q=0;q<CW;q++){const ch=row[q];if(ch==="."||!ch)continue;g.fillStyle=SPRITE_COLORS[ch];g.fillRect(x+q*c,y+r*c,c,c)}}
+  /* a blue sheen along the back */
+  g.fillStyle=SPRITE_COLORS.s;g.fillRect(x+8*c,y+7*c,6*c,c);
+}
+
+function drawSpotNumber(){
+  if(panel.hidden)return;
+  const s=spot(),fs=Math.round(Math.min(W,H)*0.5);
+  g.font="800 "+fs+"px ui-rounded,system-ui,sans-serif";g.textAlign="right";g.textBaseline="bottom";
+  g.fillStyle="rgba(31,36,51,0.12)";g.fillText(String(s),W-H*0.05,H*0.98);
+}
+
+/* ---------- the highway, seen from above ---------- */
+const CAR_COLORS=["#e8403a","#3a84e0","#f5cf2c","#ffffff","#4cb84a","#f28c28","#7b52c9","#9aa3b2","#1d2130","#2aa7a1"];
+/* Six lanes, three each way. Speed is in screens per beat, so the band tempo speeds the traffic up. */
+const LANES=[{y:0.30,dir:-1,v:0.105},{y:0.38,dir:-1,v:0.085},{y:0.46,dir:-1,v:0.065},
+             {y:0.58,dir:1,v:0.07},{y:0.66,dir:1,v:0.09},{y:0.74,dir:1,v:0.11}];
+function roundRect(x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();g.fill()}
+function drawVehicle(nose,cy,dir,len,wid,col,truck){
+  const x=dir>0?nose-len:nose,y=cy-wid/2,r=Math.max(2,wid*0.22);
+  g.fillStyle="rgba(31,36,51,0.18)";roundRect(x+2,y+3,len,wid,r);
+  if(truck){
+    const cab=len*0.24,gap=len*0.03,cx=dir>0?x+len-cab:x,tx=dir>0?x:x+cab+gap;
+    g.fillStyle="#f4f6f9";roundRect(tx,y,len-cab-gap,wid,r*0.5);
+    g.fillStyle="#c9d3e0";g.fillRect(tx+len*0.04,y+wid*0.15,len-cab-gap-len*0.08,wid*0.08);
+    g.fillStyle=col;roundRect(cx,y+wid*0.04,cab,wid*0.92,r);
+    g.fillStyle="#2b3448";g.fillRect(dir>0?cx+cab*0.5:cx+cab*0.2,y+wid*0.18,cab*0.3,wid*0.64);
+  }else{
+    g.fillStyle=col;roundRect(x,y,len,wid,r);
+    g.fillStyle="#2b3448";
+    const front=dir>0?x+len*0.58:x+len*0.2,rear=dir>0?x+len*0.12:x+len*0.72;
+    g.fillRect(front,y+wid*0.14,len*0.2,wid*0.72);g.fillRect(rear,y+wid*0.18,len*0.14,wid*0.64);
+    g.fillStyle="rgba(255,255,255,0.35)";g.fillRect(x+len*0.36,y+wid*0.2,len*0.2,wid*0.6);
+  }
+  g.fillStyle="#fff3b0";const hx=dir>0?x+len-3:x+1;g.fillRect(hx,y+wid*0.1,2,wid*0.2);g.fillRect(hx,y+wid*0.7,2,wid*0.2);
+}
+function drawHighway(left,b,row){
+  const n=VIEW.cols,XM=VIEW.XM;
+  g.fillStyle="#e9d3b1";g.fillRect(-XM,-H*0.35,W+2*XM,H*1.7);
+  g.fillStyle="#d8bb93";
+  for(let i=0;i<40;i++){const wx=Math.floor(left*20)/20+hash(i+Math.floor(left)*99)*1.2-0.1,x=(wx-left)*W;g.fillRect(x,H*(hash(i*7)<0.5?0.06+hash(i*3)*0.12:0.84+hash(i*5)*0.1),6,6)}
+  const top=H*0.24,bot=H*0.80;
+  const lw=Math.max(2,H*0.006),X0=-XM,WW=W+2*XM;
+  g.fillStyle="#5f6573";g.fillRect(X0,top,WW,bot-top);
+  g.fillStyle="#f5cf2c";g.fillRect(X0,H*0.515,WW,lw);g.fillRect(X0,H*0.525,WW,lw);
+  g.fillStyle="#ffffff";g.fillRect(X0,top+2,WW,lw);g.fillRect(X0,bot-2-lw,WW,lw);
+  /* lane dashes sit in world space, so they line up from phone to phone */
+  const dash=0.06,gap=0.06;
+  [0.34,0.42,0.62,0.70].forEach(ly=>{
+    let wx=Math.floor((left-XM/W)/(dash+gap))*(dash+gap);
+    for(;wx<left+1+XM/W;wx+=dash+gap){g.fillRect((wx-left)*W,H*ly-1,dash*W,Math.max(2,H*0.006))}
+  });
+  const len=H*0.075,wid=H*0.05,span=n+2;
+  LANES.forEach((ln,li)=>{
+    const k=Math.max(3,Math.round(span*3.2)),spacing=span/k;
+    for(let j=0;j<k;j++){
+      const seed=li*101+j+row*5003;
+      const base=(j+hash(seed)*0.35)*spacing;
+      let wx=(base+ln.dir*ln.v*b)%span;if(wx<0)wx+=span;wx-=1;
+      const truck=hash(seed+7)<0.16,L=truck?len*2.1:len;
+      const px=(wx-left)*W;if(px<-L*1.2-XM||px>W+L*1.2+XM)continue;
+      drawVehicle(px,H*ln.y,ln.dir,L,wid,CAR_COLORS[Math.floor(hash(seed+3)*CAR_COLORS.length)],truck);
+    }
+  });
+}
+
+/* ---------- rain, in the single line style of the mohave.wtf rain page ---------- */
+/* Every shape is a thin colored line on a pale flat ground. Shapes that sit in front of others are
+   filled with the ground color first, so lines behind them hide and the look stays pure line work.
+   In a row of phones the rain runs top to bottom: spot 1 is the top of the sky and the last spot is
+   the water. A grid of phones uses the whole wall. */
+const MW={land:"#eef3f5",ink:"#123a4a",muted:"#4f6f7c",hill:"#9fb08a",cloud:"#7d8f99",sun:"#e07800",
+  drops:["#1e9e3e","#c49a00","#e07800","#d93636","#8c8c8c","#123a4a","#2f6fd6"]};
+/* Wind, the same on every phone. It swings both ways over about a minute. */
+function windAt(b){return 0.42*Math.sin(b*Math.PI*2/96)+0.14*Math.sin(b*Math.PI*2/37+1)}
+function windSum(b){return -0.42*96/(Math.PI*2)*Math.cos(b*Math.PI*2/96)-0.14*37/(Math.PI*2)*Math.cos(b*Math.PI*2/37+1)}
+function lineIn(col,w){g.strokeStyle=col;g.lineWidth=w||1.1;g.lineJoin="round";g.lineCap="round"}
+function solid(){g.fillStyle=MW.land;g.fill();g.stroke()}
+function drawRain(left,b){
+  const cols=VIEW.cols,rows=VIEW.rows,T=Math.max(0.85,Math.min(1.6,H/300)),WH=VIEW.WH,HZ=WH-H*0.38,XM=VIEW.XM;
+  const v0=VIEW.cy*H-H*0.35,v1=VIEW.cy*H+H*1.35,X=wx=>(wx-left)*W,seen=(px,py,m)=>px>-XM-m&&px<W+XM+m&&py>v0-m&&py<v1+m;
+  fillWall(MW.land);
+  /* the sun, high on the right of the wall */
+  {const sx=X(cols*0.8),sy=H*0.13,r=H*0.055;
+   if(seen(sx,sy,r*3)){lineIn(MW.sun);g.beginPath();g.arc(sx,sy,r,0,6.283);g.stroke();
+     for(let i=0;i<10;i++){const a=i*0.628+b*0.02;g.beginPath();g.moveTo(sx+Math.cos(a)*r*1.35,sy+Math.sin(a)*r*1.35);g.lineTo(sx+Math.cos(a)*r*1.8,sy+Math.sin(a)*r*1.8);g.stroke()}}}
+  /* an airplane now and then along the very top, with a dashed contrail */
+  {const per=64,c=Math.floor(b/per),q=(b-c*per)/28;
+   if(q<1){const dir=c%2?-1:1,wx=dir>0?-0.3+q*(cols+0.6):cols+0.3-q*(cols+0.6),px=X(wx),py=H*0.055,sz=T*9;
+     if(seen(px,py,W)){lineIn(MW.muted);g.setLineDash([4,5]);g.beginPath();g.moveTo(px-dir*sz*1.6,py);g.lineTo(px-dir*W*0.7,py+1);g.stroke();g.setLineDash([]);
+       lineIn(MW.ink);g.save();g.translate(px,py);g.scale(dir,1);g.beginPath();
+       g.moveTo(-sz*1.5,-sz*0.15);g.lineTo(sz*1.2,-sz*0.15);g.quadraticCurveTo(sz*1.7,0,sz*1.2,sz*0.15);g.lineTo(-sz*1.5,sz*0.15);g.closePath();solid();
+       g.beginPath();g.moveTo(-sz*1.3,-sz*0.15);g.lineTo(-sz*1.6,-sz*0.65);g.lineTo(-sz*1.1,-sz*0.15);g.stroke();
+       g.beginPath();g.moveTo(sz*0.1,0);g.lineTo(-sz*0.5,sz*0.7);g.lineTo(-sz*0.15,sz*0.7);g.lineTo(sz*0.45,0);g.stroke();g.restore();}}}
+  /* a hot air balloon drifts through once in a while */
+  {const per=120,c=Math.floor(b/per),q=(b-c*per)/100;
+   if(q<1){const dir=c%2?1:-1,wx=dir>0?-0.3+q*(cols+0.6):cols+0.3-q*(cols+0.6),px=X(wx),py=Math.min(HZ-H*0.3,WH*0.32)+Math.sin(b*0.3)*H*0.02,r=T*14;
+     if(seen(px,py,r*3)){g.save();g.translate(px,py);lineIn("#d93636");
+       g.beginPath();g.arc(0,0,r,Math.PI*0.85,Math.PI*0.15);g.lineTo(r*0.35,r*1.35);g.lineTo(-r*0.35,r*1.35);g.closePath();solid();
+       lineIn("#c49a00");for(const k of [-0.45,0,0.45]){g.beginPath();g.moveTo(k*r*0.8,-r*0.98+Math.abs(k)*r*0.25);g.quadraticCurveTo(k*r*1.5,0,k*r*0.35,r*1.32);g.stroke()}
+       lineIn(MW.ink);g.beginPath();g.moveTo(-r*0.3,r*1.35);g.lineTo(-r*0.22,r*1.75);g.moveTo(r*0.3,r*1.35);g.lineTo(r*0.22,r*1.75);g.stroke();
+       g.beginPath();g.rect(-r*0.24,r*1.75,r*0.48,r*0.32);solid();g.restore();}}}
+  /* two flocks of distant birds, one each way */
+  for(const fl of [{per:40,len:22,y:0.42,dir:1,n:5},{per:56,len:30,y:0.62,dir:-1,n:4}]){
+    const c=Math.floor(b/fl.per),q=(b-c*fl.per)/fl.len;if(q>=1)continue;
+    const by=Math.min(HZ-H*0.12,fl.y*HZ);lineIn(MW.ink,1);
+    for(let i=0;i<fl.n;i++){
+      const wx=(fl.dir>0?-0.3+q*(cols+0.6):cols+0.3-q*(cols+0.6))-fl.dir*i*0.035,px=X(wx),py=by+(i%2?1:-1)*i*T*4+Math.sin(b*2+i)*T*2,s=T*(4+hash(i+c)*1.5),f=Math.sin(b*9+i*1.7);
+      if(!seen(px,py,20))continue;
+      g.beginPath();g.moveTo(px-s,py-s*0.3*f);g.quadraticCurveTo(px-s*0.5,py-s*0.6*f,px,py);g.quadraticCurveTo(px+s*0.5,py-s*0.6*f,px+s,py-s*0.3*f);g.stroke();
+    }
+  }
+  /* rain clouds along the top, carried by the wind */
+  {const span=cols+2.4,drift=0.02*windSum(b),n=Math.max(3,Math.round(span*(W>H?2.4:1.4)));
+   for(let i=0;i<n;i++){
+     let wx=(hash(i*11+1)*span+drift)%span;if(wx<0)wx+=span;wx-=1.2;
+     const sc=0.7+hash(i*11+2)*0.7,yb=H*(0.16+hash(i*11+3)*0.12),px=X(wx);
+     if(!seen(px,yb,H*0.4))continue;
+     lineIn(hash(i*11+4)<0.6?MW.cloud:MW.muted);
+     const bumps=4+Math.floor(hash(i*11+5)*3);let x=px;
+     g.beginPath();g.moveTo(px,yb);
+     for(let j=0;j<bumps;j++){const r=H*(0.022+0.03*hash(i*11+6+j))*sc*(j===0||j===bumps-1?0.7:1);g.arc(x+r,yb,r,Math.PI,0);x+=2*r}
+     g.closePath();solid();
+   }}
+  /* the far shore and the water, on the bottom of the wall */
+  if(v1>HZ-H*0.2){
+    lineIn(MW.hill);g.beginPath();
+    for(let px=-Math.ceil(XM/10)*10;px<=W+XM+10;px+=10){const wx=left+px/W,y=HZ-T*(12+8*Math.sin(wx*9+1)+5*Math.sin(wx*21));px>-Math.ceil(XM/10)*10?g.lineTo(px,y):g.moveTo(px,y)}
+    g.stroke();
+    lineIn(MW.muted);g.beginPath();g.moveTo(-XM,HZ);g.lineTo(W+XM,HZ);g.stroke();
+    lineIn("rgba(79,111,124,0.22)",1);
+    for(let i=1;i<12;i++){
+      const y=HZ+(WH-HZ)*Math.pow(i/12,1.6);g.beginPath();
+      for(let px=-Math.ceil(XM/12)*12;px<=W+XM+12;px+=12){const wx=left+px/W,yy=y+Math.sin(wx*40+b*0.9+i)*1.2*T*(1+i*0.1);px>-Math.ceil(XM/12)*12?g.lineTo(px,yy):g.moveTo(px,yy)}
+      g.stroke();
+    }
+    /* a distant sailboat creeping along the horizon */
+    {const span=cols+0.8;let wx=(b*0.004)%span-0.4;const px=X(wx),py=HZ+(WH-HZ)*0.1,s=T*7;
+     if(seen(px,py,40)){g.save();g.translate(px,py);lineIn(MW.ink);
+       g.beginPath();g.moveTo(-s*1.3,0);g.lineTo(s*1.3,0);g.lineTo(s*0.9,s*0.45);g.lineTo(-s*0.9,s*0.45);g.closePath();solid();
+       g.beginPath();g.moveTo(0,0);g.lineTo(0,-s*2.6);g.stroke();
+       g.beginPath();g.moveTo(s*0.15,-s*2.5);g.lineTo(s*1.2,-s*0.25);g.lineTo(s*0.15,-s*0.25);g.closePath();solid();
+       g.beginPath();g.moveTo(-s*0.15,-s*2.1);g.lineTo(-s*0.9,-s*0.25);g.lineTo(-s*0.15,-s*0.25);g.closePath();solid();g.restore();}}
+  }
+  /* mist streaks in the sky lean with the wind */
+  const wNow=windAt(b);lineIn("rgba(120,140,155,0.35)",1);
+  for(let i=0;i<Math.round((cols+1)*22*rows);i++){
+    const per=0.9+hash(i+300)*0.6,q=((b/per+hash(i+301))%1+1)%1,wx=-0.5+hash(i+302)*(cols+1)+q*wNow*0.15;
+    const px=X(wx),y=H*0.2+q*(HZ-H*0.2);if(!seen(px,y,20))continue;
+    const l=(6+hash(i+303)*10)*T;g.beginPath();g.moveTo(px,y);g.lineTo(px+l*wNow*0.9,y+l);g.stroke();
+  }
+  /* the drops, and the rings where they land */
+  g.lineWidth=1.1;
+  const span=cols+2.4,k=Math.round(span*16*rows),FALL=0.58,stretch=Math.sqrt(rows);
+  for(let i=0;i<k;i++){
+    const P=(2.2+hash(i*3+1)*1.8)*stretch,off=hash(i*3+2)*P,u=b+off,c=Math.floor(u/P),q=u-c*P,F=P*FALL;
+    if(q<F)drawDrop(i,c,q/F,left,span,HZ,T,P,off,seen);
+    const ra=q>=F?q-F:q+P-F,rc=q>=F?c:c-1;
+    if(ra<1.6)drawRipple(i,rc,ra/1.6,left,span,HZ,T,P,off,seen);
+  }
+  /* now and then a fish jumps near the front, in the middle of the wall */
+  {const per=24,c=Math.floor(b/per),q=(b-c*per)/1.6,base=WH-H*0.1,x0=cols/2+(hash(c*5+1)-0.5)*0.3,dir=hash(c*5+2)<0.5?-1:1,reach=0.12;
+   if(q<1){const wx=x0+dir*reach*q,px=X(wx),py=base-Math.sin(q*Math.PI)*H*0.17,s=T*8;
+     if(seen(px,py,40)){const ang=Math.atan2(-Math.cos(q*Math.PI)*H*0.17*Math.PI,dir*reach*W);
+       g.save();g.translate(px,py);g.rotate(ang);g.scale(dir,1);lineIn("#2f6fd6");
+       g.beginPath();g.ellipse(0,0,s,s*0.38,0,0,6.283);solid();
+       g.beginPath();g.moveTo(-s*0.9,0);g.lineTo(-s*1.5,-s*0.4);g.lineTo(-s*1.5,s*0.4);g.closePath();solid();
+       g.beginPath();g.arc(s*0.55,-s*0.08,s*0.07,0,6.283);g.stroke();g.restore();}}
+   for(const [t0,wx] of [[0,x0],[1,x0+dir*reach]]){const a=(q-t0)*1.6/0.9;if(a<0||a>=1)continue;
+     const px=X(wx);if(!seen(px,base,60))continue;lineIn("#2f6fd6");
+     for(let j=0;j<2;j++){const kk=a-j*0.25;if(kk<=0)continue;g.globalAlpha=1-kk;const R=T*(6+22*kk);g.beginPath();g.ellipse(px,base,R,R*0.3,0,0,6.283);g.stroke()}
+     g.globalAlpha=1;}}
+}
+function dropAt(i,c,span,HZ,P,off){
+  const sd=i*977+c*131,depth=hash(sd+1),rows=VIEW.rows;
+  /* the wind when this drop let go sets how far it blows sideways on the way down */
+  const drift=windAt(c*P-off)*(0.5+0.35*rows);
+  return {x0:-1.2+hash(sd)*span-drift/2,drift,depth,top:H*(0.17+hash(sd+4)*0.08),
+    land:HZ+(VIEW.WH-HZ)*(0.08+0.88*depth),s:0.6+0.5*depth,
+    sz:0.7+hash(sd+2)*0.8,col:MW.drops[Math.floor(hash(sd+3)*MW.drops.length)]};
+}
+function drawDrop(i,c,p,left,span,HZ,T,P,off,seen){
+  const d=dropAt(i,c,span,HZ,P,off),px=(d.x0+d.drift*p-left)*W,y=d.top+(d.land-d.top)*Math.pow(p,1.35),r=4.2*T*d.sz*d.s;
+  if(!seen(px,y,30))return;
+  const tilt=Math.atan2(d.drift*W,(d.land-d.top)*1.35*Math.max(0.3,Math.pow(p,0.35)));
+  g.save();g.translate(px,y);g.rotate(-tilt);g.strokeStyle=d.col;g.beginPath();
+  g.moveTo(0,-r*2.4);g.bezierCurveTo(r*0.9,-r*0.9,r,r*0.2,0,r);g.bezierCurveTo(-r,r*0.2,-r*0.9,-r*0.9,0,-r*2.4);g.stroke();
+  g.restore();
+}
+function drawRipple(i,c,k,left,span,HZ,T,P,off,seen){
+  const d=dropAt(i,c,span,HZ,P,off),px=(d.x0+d.drift-left)*W,max=(18+16*d.sz)*T*d.s;
+  if(!seen(px,d.land,max+10))return;
+  g.strokeStyle=d.col;
+  for(let j=0;j<3;j++){const kk=k-j*0.18;if(kk<=0)continue;const R=max*kk;
+    g.globalAlpha=(1-kk)*0.9;g.lineWidth=Math.max(0.8,2.2*T*d.s*(1-kk));
+    g.beginPath();g.ellipse(px,d.land,R,R*0.32,0,0,6.283);g.stroke();}
+  if(k<0.16){g.globalAlpha=1-k/0.16;g.lineWidth=1.1;
+    for(let j=0;j<5;j++){const a=3.14+j*0.785,h=k*1.6*90*T*d.s*0.25;g.beginPath();g.arc(px+Math.cos(a)*h*0.6,d.land+Math.sin(a)*h-h*0.2,1.6*T*d.s,0,6.283);g.stroke()}}
+  g.globalAlpha=1;g.lineWidth=1.1;
+}
+
+/* ---------- stars, the mohave.wtf starfield spread over the whole wall ---------- */
+/* One vanishing point sits in the middle of the wall, so stars fly out from the center phone and on
+   across the others. It is drawn on a light ground, with darker cousins of the site colors. */
+const STAR_COLORS=["#0097a7","#c2185b","#c49a00","#1e9e3e","#e07800","#2f6fd6"];
+const STAR_SPRITES={
+  tree:[[0,2,"#8b5a2b"],[0,1,"#1e9e3e"],[-1,0,"#1e9e3e"],[0,0,"#1e9e3e"],[1,0,"#1e9e3e"]],
+  house:[[-1,1,"#cc4444"],[0,1,"#cc4444"],[1,1,"#cc4444"],[-1,0,"#9aa3b2"],[0,0,"#9aa3b2"],[1,0,"#9aa3b2"],[0,-1,"#8b5a2b"]],
+  bird:[[-1,0,"#333333"],[0,-1,"#333333"],[1,0,"#333333"]]};
+const SPRITE_NAMES=Object.keys(STAR_SPRITES);
+function drawStars(left,b){
+  fillWall("#f4f7fa");
+  const WW=VIEW.cols*W,WH=VIEW.WH,cx=WW/2,cy=WH/2,XM=VIEW.XM,yTop=VIEW.cy*H-H*0.35,yBot=VIEW.cy*H+H*1.35;
+  const k=Math.round(140*Math.sqrt(VIEW.cols*VIEW.rows)*1.4),zs=72*b,px1=Math.max(1,H/700);
+  for(let i=0;i<k;i++){
+    const u=zs+hash(i*5+1)*1000,c=Math.floor(u/1000),z=1000-(u-c*1000);
+    if(z<4)continue;
+    const sd=i*7919+c*1049,x=(hash(sd)-0.5)*2,y=(hash(sd+1)-0.5)*2;
+    const sc=200/z,sx=cx+x*sc*cx-left*W,sy=cy+y*sc*cy;
+    if(sx<-XM||sx>W+XM||sy<yTop||sy>yBot)continue;
+    const size=Math.max(0.5,(1000-z)/150)*px1,col=hash(sd+2)<0.2?"#123a4a":STAR_COLORS[Math.floor(hash(sd+3)*STAR_COLORS.length)];
+    /* a short streak back toward the center stands in for the fading trail on the site */
+    const sc2=200/Math.min(1000,z+40),tx=cx+x*sc2*cx-left*W,ty=cy+y*sc2*cy;
+    g.globalAlpha=0.45;g.strokeStyle=col;g.lineWidth=Math.max(0.6,size*0.5);g.beginPath();g.moveTo(tx,ty);g.lineTo(sx,sy);g.stroke();g.globalAlpha=1;
+    const shape=hash(sd+4)<0.07?SPRITE_NAMES[Math.floor(hash(sd+5)*SPRITE_NAMES.length)]:null;
+    if(shape&&size>6*px1){const p=size/3;STAR_SPRITES[shape].forEach(q=>{g.fillStyle=q[2];g.fillRect(sx+q[0]*p,sy-q[1]*p,p,p)})}
+    else{g.fillStyle=col;g.fillRect(sx,sy,size,size)}
+  }
+}
+
+/* ---------- mohave.wtf visualizers across the wall ---------- */
+/* wall.html is sized to the whole wall, one fixed size slot per phone, so every phone runs the same
+   simulation. Each phone scales the frame to cover its own screen and slides it so only its slot shows.
+   The scene restarts together on every phone every few minutes, which keeps small drifts from building up. */
+const PERIOD=360000;let wallEl=null,wallKey="";
+function wallSync(t){
+  if(!MWS[scene]){if(wallEl){wallEl.remove();wallEl=null;wallKey=""}return false}
+  const land=W>=H,SW=land?640:360,SH=land?360:640,q=grid(),cols=q[0],rows=q[1],s=spot()-1,cx=s%cols,cy=Math.floor(s/cols);
+  const cyc=Math.floor(t/PERIOD),key=[scene,cols,rows,SW,cyc].join("|");
+  const sc=Math.max(W/SW,H/SH)*zoom;
+  if(key!==wallKey){
+    if(wallEl)wallEl.remove();
+    const wW=cols*SW,wH=rows*SH,dpr=Math.max(1,Math.min((window.devicePixelRatio||1)*sc,Math.sqrt(6e6/(wW*wH))));
+    let seed=cyc;for(const ch of scene)seed=(seed*31+ch.charCodeAt(0))|0;
+    const m=MWS[scene];wallEl=document.createElement("iframe");wallEl.id="wall";wallEl.setAttribute("aria-hidden","true");wallEl.tabIndex=-1;
+    wallEl.style.width=wW+"px";wallEl.style.height=wH+"px";
+    wallEl.src="wall.html?s="+(m.f||"")+"&g="+(m.g||"")+"&sc="+(m.sc||"")+"&seed="+(seed>>>0)+"&dpr="+(Math.round(dpr*4)/4);
+    document.body.insertBefore(wallEl,cv);wallKey=key;
+  }
+  const ox=(W-SW*sc)/2-cx*SW*sc,oy=(H-SH*sc)/2-cy*SH*sc+nudge*H;
+  wallEl.style.transform="translate("+ox+"px,"+oy+"px) scale("+sc+")";
+  /* the band beat for scenes that move to music, as a beat count at a time since the scene started */
+  try{const cw=wallEl.contentWindow,ep=cyc*PERIOD;if(cw&&!cw.__band)cw.__band=function(ms){return {active:bandOn(),beat:beatAt(ep+ms)}}}catch(e){}
+  try{const cw=wallEl.contentWindow;if(cw&&cw.__tick){const st=cw.__tick(t-cyc*PERIOD);if(st==="live"&&!wallEl._shown){wallEl._shown=true;wallEl.style.opacity=1}}}catch(e){}
+  return true;
+}
+
+function frame(){
+  const t=nowMs(),b=beatAt(t),secs=t/1000;
+  if(wallSync(t)){g.setTransform(DPR,0,0,DPR,0,0);g.clearRect(0,0,W,H);drawSpotNumber();requestAnimationFrame(frame);return}
+  const q=grid(),cols=q[0],rows=q[1],s=spot()-1,cx=s%cols,cy=Math.floor(s/cols),u=H/56;
+  VIEW={cols,rows,cx,cy,WH:rows*H,XM:W*(0.04+Math.max(0,(1/zoom-1)/2))};
+  g.setTransform(DPR,0,0,DPR,0,0);
+  g.fillStyle="#eef3f5";g.fillRect(0,0,W,H);
+  /* zoom around the middle of the screen, nudge up or down, then shift this phone's row into place */
+  g.translate(W/2,H/2+nudge*H);g.scale(zoom,zoom);g.translate(-W/2,-H/2-cy*H);
+  const left=cx;
+  if(scene==="highway"){g.save();g.translate(0,cy*H);drawHighway(left,b,cy);g.restore()}
+  else if(scene==="rain"){drawRain(left,b)}
+  else if(scene==="stars"){drawStars(left,b)}
+  else{
+    const runway=cols+1.9;
+    let bars=b/4;let headX=bars%runway;if(headX<0)headX+=runway;headX-=0.6;
+    drawSky(left,u,secs);
+    drawTrail(left,headX,b,u);
+    drawCrow(left,headX,b,u);
+  }
+  g.setTransform(DPR,0,0,DPR,0,0);
+  drawSpotNumber();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ---------- original chiptune, scheduled on the shared beat ---------- */
+const N=n=>440*Math.pow(2,(n-69)/12);
+const LEAD=[76,0,79,0,81,79,76,0,74,0,76,79,0,72,0,0,76,0,79,0,84,81,79,0,81,0,79,76,74,0,72,0];
+const BASS=[48,48,45,45,41,41,43,43];
+let actx=null,soundOn=false,nextStep=null,schedTimer=null;
+function blip(type,freq,when,len,vol){
+  const o=actx.createOscillator(),v=actx.createGain();
+  o.type=type;o.frequency.value=freq;
+  v.gain.setValueAtTime(0.0001,when);v.gain.exponentialRampToValueAtTime(vol,when+0.008);
+  v.gain.exponentialRampToValueAtTime(0.0001,when+len);
+  o.connect(v);v.connect(actx.destination);o.start(when);o.stop(when+len+0.02);
+}
+function schedule(){
+  if(!soundOn||!actx)return;
+  const t=nowMs(),b=beatAt(t),ahead=b+0.6;
+  if(nextStep===null||nextStep<Math.ceil(b*4)||nextStep>Math.ceil(b*4)+8)nextStep=Math.ceil(b*4);
+  while(nextStep/4<ahead){
+    const st=nextStep,when=actx.currentTime+(timeOfBeat(st/4)-t)/1000;
+    if(when>=actx.currentTime){
+      const i=((st%32)+32)%32,note=LEAD[i];
+      const len=(timeOfBeat((st+1)/4)-timeOfBeat(st/4))/1000;
+      if(note)blip("square",N(note),when,len*0.9,0.07);
+      if(i%4===0)blip("triangle",N(BASS[(i/4)|0]),when,len*3.6,0.16);
+    }
+    nextStep++;
+  }
+}
+const soundBtn=document.getElementById("sound");
+soundBtn.addEventListener("click",()=>{
+  if(!actx){const AC=window.AudioContext||window.webkitAudioContext;actx=new AC()}
+  actx.resume();soundOn=!soundOn;nextStep=null;
+  soundBtn.textContent=soundOn?"Sound on":"Sound off";soundBtn.classList.toggle("on",soundOn);
+  clearInterval(schedTimer);if(soundOn)schedTimer=setInterval(schedule,40);
+});
+
+/* ---------- panel ---------- */
+const panel=document.getElementById("panel"),roomEl=document.getElementById("room");
+/* The panel fades away after a few quiet seconds and leaves the menu button in the corner. */
+const menuBtn=document.getElementById("menu");
+let fadeTimer=null,hideTimer=null;
+function showPanel(){
+  clearTimeout(hideTimer);panel.hidden=false;panel.classList.remove("fading");menuBtn.classList.add("gone");
+  armFade();
+}
+function armFade(){clearTimeout(fadeTimer);fadeTimer=setTimeout(fadePanel,5000)}
+function fadePanel(){
+  if(panel.contains(document.activeElement)&&document.activeElement.tagName==="INPUT"){armFade();return}
+  panel.classList.add("fading");menuBtn.classList.remove("gone");
+  hideTimer=setTimeout(()=>{panel.hidden=true},600);
+}
+menuBtn.addEventListener("click",showPanel);
+["pointerdown","keydown","input"].forEach(ev=>panel.addEventListener(ev,()=>{if(!panel.hidden&&!panel.classList.contains("fading"))armFade()}));
+armFade();
+function setScene(v,send){
+  scene=v;keep(APP+"-scene",v);
+  document.querySelectorAll("#scenes button").forEach(bt=>bt.classList.toggle("on",bt.dataset.scene===v));
+  if(send)sync.change("scene",v);
+}
+document.querySelectorAll("#scenes button").forEach(bt=>bt.addEventListener("click",()=>setScene(bt.dataset.scene,true)));
+function setLayout(v,send){
+  layout=v;keep(APP+"-layout",v);
+  document.querySelectorAll("#layouts button").forEach(bt=>bt.classList.toggle("on",bt.dataset.layout===v));
+  renderSpot();
+  if(send)sync.change("layout",v);
+}
+document.querySelectorAll("#layouts button").forEach(bt=>bt.addEventListener("click",()=>setLayout(bt.dataset.layout,true)));
+function setFit(z,n){
+  zoom=Math.round(Math.min(1.25,Math.max(0.8,z))*100)/100;nudge=Math.round(Math.min(0.2,Math.max(-0.2,n))*1000)/1000;
+  keep(APP+"-zoom",String(zoom));keep(APP+"-nudge",String(nudge));renderSpot();
+}
+document.getElementById("zoomOut").addEventListener("click",()=>setFit(zoom-0.02,nudge));
+document.getElementById("zoomIn").addEventListener("click",()=>setFit(zoom+0.02,nudge));
+document.getElementById("up").addEventListener("click",()=>setFit(zoom,nudge-0.01));
+document.getElementById("down").addEventListener("click",()=>setFit(zoom,nudge+0.01));
+document.getElementById("fitReset").addEventListener("click",()=>setFit(1,0));
+function renderSpot(){
+  document.getElementById("spotOut").textContent="Spot "+spot()+" of "+slots();
+  document.getElementById("rowOut").textContent="Row of "+total();
+  document.getElementById("rowSize").hidden=layout!=="row";
+  document.getElementById("fitOut").textContent="Fit "+Math.round(zoom*100)+"%";
+  document.getElementById("auto").classList.toggle("on",!manualSpot&&!manualRow);
+}
+function renderPace(){
+  document.getElementById("pace").textContent=bandOn()?"Flying with the band loop at "+Math.round(loopState.tempo)+" bpm":"Own pace, "+OWN_BPM+" bpm, until the band loop plays";
+}
+function setSpot(v){manualSpot=v;keep(APP+"-spot",v?String(v):null);renderSpot()}
+document.getElementById("left").addEventListener("click",()=>setSpot(Math.max(1,spot()-1)));
+document.getElementById("right").addEventListener("click",()=>setSpot(Math.min(slots(),spot()+1)));
+function setRow(v){manualRow=v;keep(APP+"-row",v?String(v):null);renderSpot()}
+document.getElementById("fewer").addEventListener("click",()=>setRow(Math.max(1,total()-1)));
+document.getElementById("more").addEventListener("click",()=>setRow(Math.min(12,total()+1)));
+document.getElementById("auto").addEventListener("click",()=>{setRow(0);setSpot(0)});
+function join(){const r=sync.setRoom(roomEl.value);roomEl.value=r;if(!r)statusEl.textContent="type a room code first"}
+document.getElementById("join").addEventListener("click",join);
+roomEl.addEventListener("keydown",e=>{if(e.key==="Enter")join()});
+
+document.getElementById("full").addEventListener("click",()=>{
+  const d=document.documentElement;
+  if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
+  else if(d.requestFullscreen)d.requestFullscreen().then(()=>{if(screen.orientation&&screen.orientation.lock)screen.orientation.lock("landscape").catch(()=>{})}).catch(()=>{});
+});
+
+/* keep the screen awake while the crow flies */
+let lock=null;
+async function wake(){try{if("wakeLock" in navigator&&document.visibilityState==="visible"&&!lock){lock=await navigator.wakeLock.request("screen");lock.addEventListener("release",()=>{lock=null})}}catch(e){}}
+document.addEventListener("visibilitychange",wake);document.addEventListener("click",wake);wake();
+
+/* login, only shown while the Supabase values are present */
+const authMsg=document.getElementById("authMsg");
+function say(t){authMsg.textContent=t||"";authMsg.hidden=!t}
+function renderAuth(){document.getElementById("authRow").hidden=!auth.on||!!auth.token}
+document.getElementById("authIn").addEventListener("click",async()=>{
+  const e=document.getElementById("authEmail").value.trim(),p=document.getElementById("authPass").value;
+  if(!e||!p){say("type an email and password");return}
+  try{say("signing in");await auth.signIn(e,p);say("")}catch(err){say(err.message||"sign in failed")}
+});
+
+/* a room in the address, like ?room=band1, joins on load */
+const fromUrl=new URLSearchParams(location.search).get("room");
+roomEl.value=sync.room||"";
+renderAuth();setLayout(layout,false);renderSpot();renderPace();setScene(scene,false);
+if(fromUrl){sync.setRoom(fromUrl);roomEl.value=sync.room}else sync.connect();
+</script>
+</body>
+</html>

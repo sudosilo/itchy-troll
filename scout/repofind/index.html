@@ -521,19 +521,21 @@ button:disabled{ opacity:0.55 !important; }
   <div class="tabs" id="tabs-menu">
     <div class="tab active" data-view="alerts">ALERTS</div>
     <div class="tab" data-view="find">FIND</div>
+    <div class="tab" data-view="resolve">RESOLVE</div>
     <div class="tab" data-view="watch">WATCH</div>
     <div class="tab" data-view="mylist">MY LIST</div>
     <div class="tab" data-view="archive">ARCHIVE</div>
     <div class="tab" data-view="shodan">SHODAN</div>
     <div class="tab" data-view="catalog">CATALOG</div>
     <div class="tab" data-view="sitewatch">SITE WATCH</div>
+    <div class="tab" data-view="rabbit">RABBIT</div>
     <div class="tab" data-view="backup">BACKUP</div>
   </div>
 </div>
 
 <!-- ALERTS VIEW -->
 <div class="view active" id="view-alerts">
-  <div class="banner">backend not wired yet, showing demo data. real alerts will replace this once poller.js and the api are live.</div>
+  <div class="banner">shows demo data until a backend url is set in Backup. once set, this pulls real alerts from the api instead.</div>
   <div class="panel">
     <label>filter by category</label>
     <div class="chips" id="alert-filters">
@@ -624,7 +626,7 @@ button:disabled{ opacity:0.55 !important; }
 
 <!-- WATCH VIEW -->
 <div class="view" id="view-watch">
-  <div class="banner">watch is the permanent keyed list. it runs local only until the railway backend is wired, then syncs to redis and gets ai summaries from the readme.</div>
+  <div class="banner">watch is the permanent keyed list. it saves locally right away and also syncs to the backend once a url is set in Backup. ai summaries from the readme still need a piece on the backend that doesn't exist yet.</div>
   <div class="panel">
     <label for="watch-key">admin key</label>
     <input type="password" id="watch-key" placeholder="set once, stored on this device only">
@@ -678,6 +680,52 @@ button:disabled{ opacity:0.55 !important; }
   </div>
   <div class="count" id="sh-count"></div>
   <div id="sh-results"></div>
+</div>
+
+<!-- RESOLVE VIEW -->
+<div class="view" id="view-resolve">
+  <div class="banner">resolve looks up software by what it is for. type a purpose, label the good results with a bucket and the kinds of data they handle, and they join your catalog. labels stay on this device and go out with backup and export.</div>
+  <div class="panel">
+    <label for="rs-q">what should the software do</label>
+    <input type="text" id="rs-q" placeholder="xxxxxxxx">
+    <label for="rs-lang">language, optional</label>
+    <input type="text" id="rs-lang" placeholder="xxxxxxxx">
+    <button id="rs-go">resolve</button>
+    <div class="status" id="rs-status"></div>
+  </div>
+  <div class="panel">
+    <label for="rs-user">load every public repo from one github account</label>
+    <input type="text" id="rs-user" placeholder="xxxxxxxx">
+    <button id="rs-user-go">load repos to label</button>
+    <div class="status" id="rs-user-status"></div>
+  </div>
+  <div class="count" id="rs-count"></div>
+  <div id="rs-results"></div>
+  <div class="panel">
+    <label for="rs-bucket-filter">your catalog</label>
+    <select id="rs-bucket-filter"></select>
+    <div class="btn-row">
+      <button class="btn-ghost" id="rs-export">export catalog json</button>
+    </div>
+    <div class="status" id="rs-cat-status"></div>
+  </div>
+  <div id="rs-catalog"></div>
+</div>
+
+<!-- RABBIT VIEW -->
+<div class="view" id="view-rabbit">
+  <div class="banner">rabbit runs the stumble terms on its own. each black window pulls a random repo, types out one of its files, holds it for ten seconds, then clears and pulls something different. every pull is logged below.</div>
+  <div class="panel">
+    <div class="btn-row">
+      <button id="rb-toggle">start</button>
+      <button class="btn-ghost" id="rb-export">export log json</button>
+      <button class="btn-ghost" id="rb-clear">clear log</button>
+    </div>
+    <div class="status" id="rb-status"></div>
+  </div>
+  <div id="rb-grid"></div>
+  <div class="count" id="rb-count"></div>
+  <div id="rb-log"></div>
 </div>
 
 <!-- SHODAN VIEW -->
@@ -777,6 +825,12 @@ button:disabled{ opacity:0.55 !important; }
 <div class="view" id="view-backup">
   <div class="banner">everything in Watch, My List, Site Watch, catalog entries filed from Find, and the Shodan key lives only in this browser on this device right now. Export All bundles all of it into one file. Import All reads that file back in on any device, so an investigation started here can pick back up somewhere else exactly where it left off.</div>
   <div class="panel">
+    <label for="ba-apibase">backend url, once the api service is live</label>
+    <input type="text" id="ba-apibase" placeholder="https://your-api.up.railway.app">
+    <button id="ba-apibase-save">save and test</button>
+    <div class="status" id="ba-apibase-status"></div>
+  </div>
+  <div class="panel">
     <label>export</label>
     <button id="ba-export">export all</button>
     <div class="status" id="ba-export-status"></div>
@@ -789,6 +843,30 @@ button:disabled{ opacity:0.55 !important; }
 </div>
 
 <script>
+/* ---------- backend connection, empty until the api service is live ---------- */
+function apiBase(){
+  return (localStorage.getItem('tp_api_base') || '').replace(/\/$/, '');
+}
+async function apiGet(path){
+  const base = apiBase();
+  if(!base) return null;
+  const res = await fetch(base + path);
+  if(!res.ok) throw new Error('server answered ' + res.status);
+  return res.json();
+}
+async function apiPost(path, body){
+  const base = apiBase();
+  if(!base) return null;
+  const res = await fetch(base + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json().catch(function(){ return {}; });
+  if(!res.ok) throw new Error(data.error || ('server answered ' + res.status));
+  return data;
+}
+
 /* ---------- tabs, now inside a hamburger menu ---------- */
 const tabs = document.querySelectorAll('.tab');
 const views = document.querySelectorAll('.view');
@@ -848,6 +926,7 @@ function daysAgoIso(n){
 }
 
 let alertFilter = 'all';
+let liveAlerts = null;
 const alertFiltersEl = document.getElementById('alert-filters');
 alertFiltersEl.addEventListener('click', function(e){
   const chip = e.target.closest('.chip');
@@ -859,9 +938,21 @@ alertFiltersEl.addEventListener('click', function(e){
   renderAlerts();
 });
 
+async function loadLiveAlerts(){
+  if(!apiBase()) return;
+  try {
+    const rows = await apiGet('/');
+    liveAlerts = rows;
+    renderAlerts();
+  } catch(e){
+    liveAlerts = null;
+  }
+}
+
 function renderAlerts(){
   const listEl = document.getElementById('alerts-list');
-  const filtered = DEMO_ALERTS.filter(function(a){
+  const source = liveAlerts || DEMO_ALERTS;
+  const filtered = source.filter(function(a){
     return alertFilter === 'all' || a.category === alertFilter;
   });
   if(filtered.length === 0){
@@ -890,6 +981,7 @@ function renderAlerts(){
   listEl.innerHTML = html;
 }
 renderAlerts();
+loadLiveAlerts();
 
 /* ---------- FIND ---------- */
 const q = document.getElementById('q');
@@ -1100,13 +1192,39 @@ function addToWatch(fullname){
     saveWatch(data);
   }
   renderWatch();
-  alert(fullname + ' added to watch (local only, not yet synced to backend)');
+  if(apiBase()){
+    apiPost('/watchlist', { repo: fullname, category: 'critical', key: key })
+      .then(function(){ alert(fullname + ' added to watch, synced to backend'); })
+      .catch(function(err){ alert(fullname + ' saved locally, backend sync failed, ' + err.message); });
+  } else {
+    alert(fullname + ' added to watch (local only, no backend url set yet)');
+  }
 }
 function removeFromWatch(fullname){
   const data = loadWatch();
   delete data[fullname];
   saveWatch(data);
   renderWatch();
+  if(apiBase()){
+    const key = localStorage.getItem('tp_admin_key') || '';
+    apiPost('/watchlist/remove', { repo: fullname, key: key }).catch(function(){});
+  }
+}
+async function loadLiveWatch(){
+  if(!apiBase()) return;
+  try {
+    const rows = await apiGet('/watchlist');
+    const data = loadWatch();
+    rows.forEach(function(r){
+      if(!data[r.repo]){
+        data[r.repo] = { category: r.category, addedAt: new Date().toISOString(), summary: null, summaryUpdatedAt: null };
+      } else {
+        data[r.repo].category = r.category;
+      }
+    });
+    saveWatch(data);
+    renderWatch();
+  } catch(e){}
 }
 function renderWatch(){
   const search = document.getElementById('watch-search').value.trim().toLowerCase();
@@ -1144,6 +1262,7 @@ document.getElementById('watch-search').addEventListener('input', renderWatch);
 const savedKey = localStorage.getItem('tp_admin_key');
 if(savedKey) document.getElementById('watch-key').value = savedKey;
 renderWatch();
+loadLiveWatch();
 
 /* ---------- MY LIST (no key, local only, always) ---------- */
 function loadMyList(){
@@ -2449,6 +2568,23 @@ function eqOpenCatalogForm(fullname, desc, lang, cardEl){
     eqSaveDiscovered(list);
     formEl.querySelector('.eq-form-status').textContent = 'filed into ' + EQ_DB[cat].label;
     eqRenderDiscoveredList();
+    if(apiBase()){
+      const key = localStorage.getItem('tp_admin_key') || '';
+      apiPost('/catalog', {
+        name: fullname,
+        category: cat,
+        capability_tags: [],
+        vendor: vendor || fullname.split('/')[0],
+        license: 'unknown, verify on repo',
+        url: 'github.com/' + fullname,
+        discovered_from_repo: fullname,
+        key: key
+      }).then(function(){
+        formEl.querySelector('.eq-form-status').textContent = 'filed into ' + EQ_DB[cat].label + ', synced to backend';
+      }).catch(function(err){
+        formEl.querySelector('.eq-form-status').textContent = 'filed into ' + EQ_DB[cat].label + ', backend sync failed, ' + err.message;
+      });
+    }
   });
 }
 
@@ -2510,6 +2646,27 @@ async function swCheckOne(url){
   var data = swLoad();
   var entry = data[url];
   if(!entry) return;
+
+  if(apiBase()){
+    try {
+      var relayResult = await apiPost('/check', { url: url, nickname: entry.nickname });
+      var now = new Date().toISOString();
+      entry.history.unshift({ hash: relayResult.hash, checked_at: now, changed: relayResult.changed });
+      entry.history = entry.history.slice(0, 50);
+      entry.lastHash = relayResult.hash;
+      entry.lastCheckedAt = now;
+      entry.lastError = null;
+      swSay(relayResult.changed ? 'changed since last check, via backend relay' : 'no change detected, via backend relay', true);
+    } catch(err){
+      entry.lastError = 'backend relay reachable but the check failed, ' + err.message;
+      entry.lastCheckedAt = new Date().toISOString();
+      swSay(entry.lastError, false);
+    }
+    swSave(data);
+    swRender();
+    return;
+  }
+
   try {
     var res = await fetch(url);
     if(!res.ok){ throw new Error('server answered ' + res.status); }
@@ -2527,7 +2684,7 @@ async function swCheckOne(url){
     entry.lastError = null;
     swSay(changed ? 'changed since last check' : 'no change detected', true);
   } catch(err){
-    entry.lastError = 'request failed, this url likely blocks cross origin requests from a browser, this needs a backend relay to check';
+    entry.lastError = 'request failed, this url likely blocks cross origin requests from a browser, set a backend url in Backup to check this one through the relay instead';
     entry.lastCheckedAt = new Date().toISOString();
     swSay(entry.lastError, false);
   }
@@ -2625,7 +2782,29 @@ async function swCheckAll(){
 document.getElementById('sw-checkall').addEventListener('click', swCheckAll);
 
 /* ---------- BACKUP, export and import everything stored on this device ---------- */
-var BACKUP_KEYS = ['tp_mylist', 'tp_watch', 'tp_admin_key', 'tp_sitewatch', 'tp_eq_discovered', 'sd_api_key'];
+var BACKUP_KEYS = ['tp_mylist', 'tp_watch', 'tp_admin_key', 'tp_sitewatch', 'tp_eq_discovered', 'sd_api_key', 'tp_api_base', 'rf_resolver', 'rf_resolver_log', 'rf_rabbit_log'];
+
+var savedApiBase = localStorage.getItem('tp_api_base');
+if(savedApiBase) document.getElementById('ba-apibase').value = savedApiBase;
+document.getElementById('ba-apibase-save').addEventListener('click', async function(){
+  var val = document.getElementById('ba-apibase').value.trim().replace(/\/$/, '');
+  var statusEl = document.getElementById('ba-apibase-status');
+  if(!val){
+    localStorage.removeItem('tp_api_base');
+    statusEl.textContent = 'cleared, everything falls back to local only again';
+    return;
+  }
+  localStorage.setItem('tp_api_base', val);
+  statusEl.textContent = 'saved, testing connection';
+  try {
+    await apiGet('/');
+    statusEl.textContent = 'connected, alerts, watch, catalog, and site watch now sync to this backend';
+    loadLiveAlerts();
+    loadLiveWatch();
+  } catch(err){
+    statusEl.textContent = 'saved, but could not reach it yet, ' + err.message;
+  }
+});
 
 function baExportAll(){
   var bundle = { exported: new Date().toISOString(), source: 'repo find backup', data: {} };
@@ -2655,8 +2834,12 @@ function baRefreshEverything(){
   if(savedSw) document.getElementById('sw-key').value = savedSw;
   var savedShodan = localStorage.getItem('sd_api_key');
   if(savedShodan) sdKey.value = savedShodan;
+  var savedApi = localStorage.getItem('tp_api_base');
+  document.getElementById('ba-apibase').value = savedApi || '';
   eqRenderDiscoveredList();
   eqRenderLookup();
+  loadLiveAlerts();
+  loadLiveWatch();
 }
 
 document.getElementById('ba-import-file').addEventListener('change', function(e){
@@ -2719,7 +2902,7 @@ document.getElementById('eq-stumble-btn').addEventListener('click', eqStumble);
 
 /* ---------- STUMBLE, alerts ---------- */
 document.getElementById('al-stumble-btn').addEventListener('click', function(){
-  var filtered = DEMO_ALERTS.filter(function(a){ return alertFilter === 'all' || a.category === alertFilter; });
+  var filtered = (liveAlerts || DEMO_ALERTS).filter(function(a){ return alertFilter === 'all' || a.category === alertFilter; });
   var el = document.getElementById('al-stumble-result');
   if(!filtered.length){ el.innerHTML = '<div class="empty">nothing in this filter to stumble into</div>'; return; }
   var a = filtered[Math.floor(Math.random() * filtered.length)];
@@ -2798,6 +2981,471 @@ document.getElementById('sw-stumble-btn').addEventListener('click', async functi
   var after = swLoad()[url];
   statusEl.textContent = after.lastError ? (data[url].nickname || url) + ', ' + after.lastError : (data[url].nickname || url) + ', rechecked, hash ' + after.lastHash.slice(0,12);
 });
+</script>
+<script>
+/* ---------- RESOLVE, software looked up by purpose ---------- */
+var RS_KEY = 'rf_resolver';
+var RS_LOG_KEY = 'rf_resolver_log';
+var RS_START_BUCKETS = ['vehicles and maintenance', 'money and payments', 'maps and routes', 'music and audio', 'games', 'search and discovery', 'notes and writing', 'monitoring and alerts', 'hardware and devices'];
+var rsLast = [];
+
+function rsEsc(s){
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function rsLoad(){
+  try { return JSON.parse(localStorage.getItem(RS_KEY) || '{}'); } catch(e){ return {}; }
+}
+function rsSave(data){
+  try { localStorage.setItem(RS_KEY, JSON.stringify(data)); } catch(e){}
+}
+function rsLog(entry){
+  var log;
+  try { log = JSON.parse(localStorage.getItem(RS_LOG_KEY) || '[]'); } catch(e){ log = []; }
+  entry.at = new Date().toISOString();
+  log.push(entry);
+  if(log.length > 2000) log = log.slice(-2000);
+  try { localStorage.setItem(RS_LOG_KEY, JSON.stringify(log)); } catch(e){}
+}
+function rsBuckets(){
+  var set = {};
+  RS_START_BUCKETS.forEach(function(b){ set[b] = true; });
+  var data = rsLoad();
+  Object.keys(data).forEach(function(k){ if(data[k].bucket) set[data[k].bucket] = true; });
+  return Object.keys(set).sort();
+}
+function rsEra(dateStr){
+  var d = new Date(dateStr);
+  if(!dateStr || isNaN(d.getTime())) return 'unknown';
+  return (Math.floor(d.getUTCFullYear() / 10) * 10) + 's';
+}
+function rsTypes(text){
+  return String(text || '').split(',').map(function(t){ return t.trim().toLowerCase(); }).filter(Boolean);
+}
+function rsFromGithub(r){
+  return {
+    url: r.html_url,
+    name: r.full_name,
+    host: 'github',
+    era: rsEra(r.created_at),
+    language: r.language || 'unknown',
+    license: (r.license && r.license.spdx_id && r.license.spdx_id !== 'NOASSERTION') ? r.license.spdx_id : 'none listed',
+    description: r.description || '',
+    stars: r.stargazers_count || 0
+  };
+}
+function rsFromArchive(o){
+  return {
+    url: o.url,
+    name: o.url.replace(/^https?:\/\//, ''),
+    host: 'software heritage',
+    era: 'unknown',
+    language: 'unknown',
+    license: 'unknown',
+    description: '',
+    stars: 0
+  };
+}
+
+async function rsSearchGithub(intent, lang){
+  var q = intent + ' in:name,description,readme' + (lang ? ' language:' + lang : '');
+  var res = await fetch('https://api.github.com/search/repositories?q=' + encodeURIComponent(q) + '&per_page=15');
+  if(!res.ok) throw new Error('github ' + res.status);
+  var body = await res.json();
+  return (body.items || []).map(rsFromGithub);
+}
+async function rsSearchArchive(intent){
+  var words = intent.split(/\s+/).filter(function(w){ return w.length > 3; });
+  if(!words.length) return [];
+  var res = await fetch('https://archive.softwareheritage.org/api/1/origin/search/' + encodeURIComponent(words.join(' ')) + '/?limit=10&with_visit=true');
+  if(!res.ok) return [];
+  var items = await res.json();
+  return Array.isArray(items) ? items.map(rsFromArchive) : [];
+}
+
+function rsCardHtml(rec, i, saved){
+  var label = saved ? saved : null;
+  var bucketOpts = rsBuckets().map(function(b){
+    return '<option value="' + rsEsc(b) + '"' + (label && label.bucket === b ? ' selected' : '') + '>' + rsEsc(b) + '</option>';
+  }).join('') + '<option value="__new">new bucket</option>';
+  return '<div class="card">' +
+    '<div class="card-name"><a href="' + rsEsc(rec.url) + '" target="_blank" rel="noopener">' + rsEsc(rec.name) + '</a></div>' +
+    (rec.description ? '<div>' + rsEsc(rec.description) + '</div>' : '') +
+    '<div class="card-meta">' +
+      '<span>' + rsEsc(rec.host) + '</span>' +
+      '<span>' + rsEsc(rec.era) + '</span>' +
+      '<span>' + rsEsc(rec.language) + '</span>' +
+      '<span>license ' + rsEsc(rec.license) + '</span>' +
+      (label ? '<span>in ' + rsEsc(label.bucket) + '</span>' : '') +
+    '</div>' +
+    '<label>bucket</label>' +
+    '<select data-rs-bucket="' + i + '">' + bucketOpts + '</select>' +
+    '<input type="text" data-rs-newbucket="' + i + '" placeholder="xxxxxxxx" style="display:none">' +
+    '<label>kinds of data, separated by commas</label>' +
+    '<input type="text" data-rs-types="' + i + '" placeholder="xxxxxxxx" value="' + rsEsc(label ? label.datatypes.join(', ') : '') + '">' +
+    '<label>what it does, in plain words</label>' +
+    '<input type="text" data-rs-desc="' + i + '" placeholder="xxxxxxxx" value="' + rsEsc(label ? label.plain : '') + '">' +
+    '<div class="btn-row"><button class="btn-ghost" data-rs-save="' + i + '">' + (label ? 'update label' : 'save to catalog') + '</button></div>' +
+  '</div>';
+}
+
+function rsRenderResults(list, intent){
+  var box = document.getElementById('rs-results');
+  var data = rsLoad();
+  rsLast = list;
+  document.getElementById('rs-count').textContent = list.length ? list.length + ' result' + (list.length === 1 ? '' : 's') : '';
+  if(!list.length){
+    box.innerHTML = '<div class="empty">nothing matched, try fewer or plainer words</div>';
+    return;
+  }
+  box.innerHTML = list.map(function(rec, i){ return rsCardHtml(rec, i, data[rec.url]); }).join('');
+  Array.prototype.forEach.call(box.querySelectorAll('[data-rs-bucket]'), function(sel){
+    sel.addEventListener('change', function(){
+      var nb = box.querySelector('[data-rs-newbucket="' + sel.getAttribute('data-rs-bucket') + '"]');
+      nb.style.display = sel.value === '__new' ? '' : 'none';
+    });
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-rs-save]'), function(btn){
+    btn.addEventListener('click', function(){ rsSaveResult(Number(btn.getAttribute('data-rs-save')), intent, btn); });
+  });
+}
+
+async function rsAttachSwhid(url){
+  try {
+    var res = await fetch('https://archive.softwareheritage.org/api/1/origin/' + encodeURIComponent(url) + '/visit/latest/?require_snapshot=true');
+    if(!res.ok) return;
+    var v = await res.json();
+    if(!v.snapshot) return;
+    var data = rsLoad();
+    if(data[url]){ data[url].swhid = 'swh:1:snp:' + v.snapshot; rsSave(data); rsRenderCatalog(); }
+  } catch(e){}
+}
+
+function rsSaveResult(i, intent, btn){
+  var rec = rsLast[i];
+  if(!rec) return;
+  var box = document.getElementById('rs-results');
+  var sel = box.querySelector('[data-rs-bucket="' + i + '"]');
+  var bucket = sel.value === '__new' ? box.querySelector('[data-rs-newbucket="' + i + '"]').value.trim().toLowerCase() : sel.value;
+  if(!bucket){ btn.textContent = 'name the new bucket first'; return; }
+  var data = rsLoad();
+  var old = data[rec.url] || {};
+  data[rec.url] = {
+    url: rec.url, name: rec.name, host: rec.host, era: rec.era, language: rec.language,
+    license: rec.license, description: rec.description,
+    bucket: bucket,
+    datatypes: rsTypes(box.querySelector('[data-rs-types="' + i + '"]').value),
+    plain: box.querySelector('[data-rs-desc="' + i + '"]').value.trim(),
+    swhid: old.swhid || '',
+    saved: old.saved || new Date().toISOString(),
+    updated: new Date().toISOString()
+  };
+  rsSave(data);
+  rsLog({ type: 'save', intent: intent || '', url: rec.url, rank: i, bucket: bucket });
+  btn.textContent = 'saved';
+  if(!data[rec.url].swhid) rsAttachSwhid(rec.url);
+  rsRenderCatalog();
+}
+
+async function rsResolve(){
+  var intent = document.getElementById('rs-q').value.trim();
+  var lang = document.getElementById('rs-lang').value.trim();
+  var status = document.getElementById('rs-status');
+  var go = document.getElementById('rs-go');
+  if(!intent){ status.textContent = 'type what the software should do first'; return; }
+  go.disabled = true;
+  status.textContent = 'searching github and software heritage...';
+  var gh = [], sh = [], note = '';
+  try { gh = await rsSearchGithub(intent, lang); } catch(e){ note = ', github search failed or hit its hourly limit'; }
+  if(!lang){ try { sh = await rsSearchArchive(intent); } catch(e){} }
+  var seen = {};
+  var all = gh.concat(sh).filter(function(r){ if(seen[r.url]) return false; seen[r.url] = true; return true; });
+  rsLog({ type: 'search', intent: intent, language: lang, results: all.length });
+  rsRenderResults(all, intent);
+  status.textContent = 'done' + note;
+  go.disabled = false;
+}
+
+async function rsLoadUser(){
+  var user = document.getElementById('rs-user').value.trim();
+  var status = document.getElementById('rs-user-status');
+  if(!user){ status.textContent = 'type a github account name first'; return; }
+  status.textContent = 'loading repos...';
+  var all = [];
+  try {
+    for(var page = 1; page <= 10; page++){
+      var res = await fetch('https://api.github.com/users/' + encodeURIComponent(user) + '/repos?per_page=100&sort=updated&page=' + page);
+      if(!res.ok){ status.textContent = 'github said ' + res.status; break; }
+      var items = await res.json();
+      all = all.concat(items.map(rsFromGithub));
+      if(items.length < 100) break;
+    }
+  } catch(e){ status.textContent = 'request failed, check connection'; }
+  rsLog({ type: 'load-account', results: all.length });
+  rsRenderResults(all, '');
+  if(all.length) status.textContent = all.length + ' repos loaded, label them below';
+}
+
+function rsRenderCatalog(){
+  var data = rsLoad();
+  var keys = Object.keys(data);
+  var filter = document.getElementById('rs-bucket-filter');
+  var current = filter.value || '__all';
+  var counts = {};
+  keys.forEach(function(k){ var b = data[k].bucket || 'unsorted'; counts[b] = (counts[b] || 0) + 1; });
+  filter.innerHTML = '<option value="__all">all buckets (' + keys.length + ')</option>' +
+    Object.keys(counts).sort().map(function(b){ return '<option value="' + rsEsc(b) + '">' + rsEsc(b) + ' (' + counts[b] + ')</option>'; }).join('');
+  filter.value = (current === '__all' || counts[current]) ? current : '__all';
+  var shown = keys.filter(function(k){ return filter.value === '__all' || data[k].bucket === filter.value; });
+  var box = document.getElementById('rs-catalog');
+  if(!keys.length){ box.innerHTML = '<div class="empty">no labeled software yet, resolve something and save it</div>'; return; }
+  box.innerHTML = shown.map(function(k){
+    var r = data[k];
+    return '<div class="card">' +
+      '<div class="card-name"><a href="' + rsEsc(r.url) + '" target="_blank" rel="noopener">' + rsEsc(r.name) + '</a></div>' +
+      (r.plain ? '<div>' + rsEsc(r.plain) + '</div>' : '') +
+      '<div class="card-meta"><span>' + rsEsc(r.bucket) + '</span><span>' + rsEsc(r.era) + '</span><span>' + rsEsc(r.language) + '</span><span>license ' + rsEsc(r.license) + '</span></div>' +
+      (r.datatypes.length ? '<div class="card-meta"><span>data: ' + rsEsc(r.datatypes.join(', ')) + '</span></div>' : '') +
+      (r.swhid ? '<div class="card-meta"><span>' + rsEsc(r.swhid) + '</span></div>' : '') +
+      '<div class="btn-row"><button class="btn-ghost" data-rs-nb="' + rsEsc(k) + '">neighbors</button><button class="btn-ghost" data-rs-del="' + rsEsc(k) + '">remove</button></div>' +
+      '<div data-rs-nbout="' + rsEsc(k) + '"></div>' +
+    '</div>';
+  }).join('');
+  Array.prototype.forEach.call(box.querySelectorAll('[data-rs-nb]'), function(btn){
+    btn.addEventListener('click', function(){ rsNeighbors(btn.getAttribute('data-rs-nb')); });
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-rs-del]'), function(btn){
+    btn.addEventListener('click', function(){
+      var d = rsLoad(); delete d[btn.getAttribute('data-rs-del')]; rsSave(d); rsRenderCatalog();
+    });
+  });
+}
+
+function rsNeighbors(url){
+  var data = rsLoad();
+  var me = data[url];
+  var out = document.querySelector('[data-rs-nbout="' + url.replace(/"/g, '\\"') + '"]');
+  if(!me || !out) return;
+  var mine = {};
+  me.datatypes.forEach(function(t){ mine[t] = true; });
+  var hits = Object.keys(data).filter(function(k){ return k !== url; }).map(function(k){
+    var shared = data[k].datatypes.filter(function(t){ return mine[t]; });
+    return { rec: data[k], shared: shared };
+  }).filter(function(h){ return h.shared.length; }).sort(function(a, b){ return b.shared.length - a.shared.length; });
+  rsLog({ type: 'neighbors', url: url, results: hits.length });
+  if(!me.datatypes.length){ out.innerHTML = '<div class="empty">add kinds of data to this one first</div>'; return; }
+  out.innerHTML = hits.length ? hits.map(function(h){
+    return '<div class="card-meta"><span>' + rsEsc(h.rec.name) + '</span><span>shares ' + rsEsc(h.shared.join(', ')) + '</span></div>';
+  }).join('') : '<div class="empty">nothing else shares this data yet</div>';
+}
+
+document.getElementById('rs-go').addEventListener('click', rsResolve);
+document.getElementById('rs-q').addEventListener('keydown', function(e){ if(e.key === 'Enter') rsResolve(); });
+document.getElementById('rs-user-go').addEventListener('click', rsLoadUser);
+document.getElementById('rs-bucket-filter').addEventListener('change', rsRenderCatalog);
+document.getElementById('rs-export').addEventListener('click', function(){
+  var log;
+  try { log = JSON.parse(localStorage.getItem(RS_LOG_KEY) || '[]'); } catch(e){ log = []; }
+  var bundle = { exported: new Date().toISOString(), records: rsLoad(), log: log };
+  var blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'resolver-catalog.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  document.getElementById('rs-cat-status').textContent = 'exported ' + Object.keys(rsLoad()).length + ' records';
+});
+rsRenderCatalog();
+</script>
+<style id="rabbit-style">
+#rb-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0;}
+@media (min-width:900px){#rb-grid{grid-template-columns:1fr 1fr 1fr;}}
+.rb-win{background:#000;color:#3cff6b;border:2px solid #000;height:42vh;overflow:hidden;display:flex;flex-direction:column;font-family:'Courier New', Courier, monospace;}
+.rb-head{color:#000;background:#3cff6b;font-size:11px;padding:3px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rb-body{flex:1;margin:0;padding:6px;font-size:10px;line-height:1.25;white-space:pre-wrap;word-break:break-all;overflow:hidden;color:#3cff6b;background:#000;}
+.rb-body.rb-hold{color:#b8ffc8;}
+</style>
+<script>
+/* ---------- RABBIT, windows that fill with random code ---------- */
+var RB_LOG_KEY = 'rf_rabbit_log';
+var RB_HOLD_MS = 10000;
+var RB_TERMS = [].concat(
+  (typeof FIND_STUMBLE_TERMS !== 'undefined' ? FIND_STUMBLE_TERMS : []),
+  (typeof ARCHIVE_STUMBLE_TERMS !== 'undefined' ? ARCHIVE_STUMBLE_TERMS : [])
+);
+if(!RB_TERMS.length) RB_TERMS = ['retro terminal', 'synthesizer', 'emulator', 'ascii art'];
+var RB_FILES = {
+  'Python': ['main.py', 'app.py', '__main__.py', 'setup.py'],
+  'JavaScript': ['index.js', 'main.js', 'app.js', 'src/index.js'],
+  'TypeScript': ['src/index.ts', 'index.ts', 'src/main.ts'],
+  'C': ['main.c', 'src/main.c', 'Makefile'],
+  'C++': ['main.cpp', 'src/main.cpp', 'CMakeLists.txt'],
+  'Rust': ['src/main.rs', 'src/lib.rs', 'Cargo.toml'],
+  'Go': ['main.go', 'cmd/main.go', 'go.mod'],
+  'Java': ['pom.xml', 'build.gradle'],
+  'HTML': ['index.html'],
+  'Shell': ['install.sh', 'run.sh'],
+  'Lua': ['main.lua', 'init.lua'],
+  'Ruby': ['Gemfile', 'lib/main.rb'],
+  'Assembly': ['main.asm', 'main.s'],
+  'Arduino': ['src/main.cpp'],
+  'Processing': ['sketch.pde']
+};
+var rbRunning = false;
+var rbPool = [];
+var rbSeen = {};
+var rbLastTerm = '';
+var rbSearching = null;
+var rbWins = [];
+
+function rbEsc(s){
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function rbLoadLog(){
+  try { return JSON.parse(localStorage.getItem(RB_LOG_KEY) || '[]'); } catch(e){ return []; }
+}
+function rbAddLog(entry){
+  var log = rbLoadLog();
+  log.unshift(entry);
+  if(log.length > 500) log = log.slice(0, 500);
+  try { localStorage.setItem(RB_LOG_KEY, JSON.stringify(log)); } catch(e){}
+  rbRenderLog();
+}
+function rbRenderLog(){
+  var log = rbLoadLog();
+  document.getElementById('rb-count').textContent = log.length ? log.length + ' pull' + (log.length === 1 ? '' : 's') + ' logged' : '';
+  document.getElementById('rb-log').innerHTML = log.length ? log.slice(0, 60).map(function(e){
+    return '<div class="card">' +
+      '<div class="card-name"><a href="' + rbEsc(e.url) + '" target="_blank" rel="noopener">' + rbEsc(e.repo) + '</a></div>' +
+      '<div class="card-meta"><span>' + rbEsc(e.file) + '</span><span>' + rbEsc(e.language) + '</span><span>found by ' + rbEsc(e.term) + '</span><span>' + rbEsc(String(e.at).replace('T', ' ').slice(0, 19)) + '</span></div>' +
+    '</div>';
+  }).join('') : '<div class="empty">nothing pulled yet, press start</div>';
+}
+function rbStatus(t){ document.getElementById('rb-status').textContent = t; }
+function rbVisible(){ return document.getElementById('view-rabbit').classList.contains('active'); }
+function rbSleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+async function rbFillPool(){
+  if(rbSearching) return rbSearching;
+  rbSearching = (async function(){
+    var term = rbLastTerm;
+    while(term === rbLastTerm) term = RB_TERMS[Math.floor(Math.random() * RB_TERMS.length)];
+    rbLastTerm = term;
+    var page = 1 + Math.floor(Math.random() * 5);
+    try {
+      var res = await fetch('https://api.github.com/search/repositories?q=' + encodeURIComponent(term) + '&per_page=50&page=' + page);
+      if(!res.ok){ rbStatus('github search said ' + res.status + ', waiting a minute'); await rbSleep(60000); return; }
+      var body = await res.json();
+      var fresh = (body.items || []).filter(function(r){ return !rbSeen[r.full_name] && !r.fork; }).map(function(r){
+        return { repo: r.full_name, branch: r.default_branch || 'main', language: r.language || 'unknown', url: r.html_url, term: term };
+      });
+      fresh.sort(function(){ return Math.random() - 0.5; });
+      rbPool = rbPool.concat(fresh);
+    } catch(e){ rbStatus('search failed, check connection'); await rbSleep(15000); }
+  })();
+  await rbSearching;
+  rbSearching = null;
+}
+
+async function rbNextRepo(){
+  var tries = 0;
+  while(!rbPool.length && rbRunning && tries < 5){ await rbFillPool(); tries++; }
+  if(!rbPool.length) return null;
+  var lang = rbPool.length > 1 ? rbPool[0].language : '';
+  var idx = 0;
+  for(var i = 0; i < rbPool.length; i++){ if(rbPool[i].language !== lang){ idx = i; break; } }
+  var pick = rbPool.splice(Math.random() < 0.5 ? 0 : idx, 1)[0];
+  rbSeen[pick.repo] = true;
+  return pick;
+}
+
+async function rbFetchFile(pick){
+  var generic = ['main.py', 'index.js', 'main.c', 'main.go', 'src/main.rs', 'src/main.cpp', 'src/index.js', 'app.py', 'index.html', 'Makefile', 'package.json', 'setup.py', 'CMakeLists.txt'];
+  var names = (RB_FILES[pick.language] || []).slice();
+  generic.forEach(function(g){ if(names.indexOf(g) < 0) names.push(g); });
+  names = names.concat(['README.md', 'readme.md', 'README']);
+  for(var i = 0; i < names.length; i++){
+    try {
+      var res = await fetch('https://raw.githubusercontent.com/' + pick.repo + '/' + encodeURIComponent(pick.branch) + '/' + names[i]);
+      if(res.ok){
+        var text = await res.text();
+        if(text.trim().length > 40) return { file: names[i], text: text.slice(0, 12000) };
+      }
+    } catch(e){}
+  }
+  return null;
+}
+
+function rbMakeWindows(){
+  var grid = document.getElementById('rb-grid');
+  var n = window.innerWidth >= 900 ? 6 : 4;
+  grid.innerHTML = '';
+  rbWins = [];
+  for(var i = 0; i < n; i++){
+    var w = document.createElement('div');
+    w.className = 'rb-win';
+    w.innerHTML = '<div class="rb-head">waiting</div><pre class="rb-body"></pre>';
+    grid.appendChild(w);
+    rbWins.push(w);
+  }
+}
+
+async function rbRunWindow(w, delay){
+  await rbSleep(delay);
+  var head = w.querySelector('.rb-head');
+  var body = w.querySelector('.rb-body');
+  while(rbRunning){
+    if(!rbVisible()){ await rbSleep(1000); continue; }
+    body.classList.remove('rb-hold');
+    body.textContent = '';
+    head.textContent = 'searching...';
+    var pick = await rbNextRepo();
+    if(!rbRunning) break;
+    if(!pick){ await rbSleep(5000); continue; }
+    head.textContent = pick.repo;
+    var got = await rbFetchFile(pick);
+    if(!got) continue;
+    head.textContent = pick.repo + ' / ' + got.file;
+    rbAddLog({ repo: pick.repo, file: got.file, language: pick.language, term: pick.term, url: pick.url + '/blob/' + pick.branch + '/' + got.file, at: new Date().toISOString() });
+    var pos = 0;
+    while(rbRunning && pos < got.text.length && body.scrollHeight <= body.clientHeight + 2){
+      var step = 2 + Math.floor(Math.random() * 6);
+      body.textContent += got.text.slice(pos, pos + step);
+      pos += step;
+      await rbSleep(16);
+    }
+    if(!rbRunning) break;
+    body.classList.add('rb-hold');
+    await rbSleep(RB_HOLD_MS);
+  }
+  head.textContent = 'stopped';
+}
+
+function rbStart(){
+  if(rbRunning) return;
+  rbRunning = true;
+  document.getElementById('rb-toggle').textContent = 'stop';
+  rbStatus('running, windows fill while this tab is open');
+  rbMakeWindows();
+  rbWins.forEach(function(w, i){ rbRunWindow(w, i * 1500); });
+}
+function rbStop(){
+  rbRunning = false;
+  document.getElementById('rb-toggle').textContent = 'start';
+  rbStatus('stopped');
+}
+
+document.getElementById('rb-toggle').addEventListener('click', function(){ if(rbRunning) rbStop(); else rbStart(); });
+document.getElementById('rb-clear').addEventListener('click', function(){
+  try { localStorage.removeItem(RB_LOG_KEY); } catch(e){}
+  rbRenderLog();
+});
+document.getElementById('rb-export').addEventListener('click', function(){
+  var blob = new Blob([JSON.stringify({ exported: new Date().toISOString(), pulls: rbLoadLog() }, null, 2)], { type: 'application/json' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'rabbit-log.json';
+  document.body.appendChild(a); a.click(); a.remove();
+});
+rbRenderLog();
 </script>
 
 </body>
