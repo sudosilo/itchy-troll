@@ -300,7 +300,6 @@
     "threat-atlas": "threat-atlas-v3",
     "tile-spinner": "tilespinneratlas",
     "dronesim-blue": "dronesim",
-    "coffeekit1": "coffeekit",
     "rat-site": "rat",
     "skwiggle": "skwiggle-v105",
     "rtss": "RTSS"

@@ -13,8 +13,24 @@ let W,H,DPR,t=0,plasma_buf,plasma_ctx;
 
 /* ---- the beat, from Rainbow Run's shared loop ---- */
 const audio={level:0,bass:0,mid:0,treble:0,beat:false,beatPulse:0,active:false};
-let lastBeat=null;
+let lastBeat=null;const bassHistory=[];
+/* Sound playing on this phone (a song, the microphone or the chiptune) drives the shapes the way the
+   original did with its microphone. With no sound on, the band loop's beat drives them. */
+function heard(a){
+  const fd=a.freq,td=a.time;let sum=0;
+  for(let i=0;i<1024;i++){const v=(td[i]-128)/128;sum+=v*v}
+  audio.level=Math.min(1,Math.sqrt(sum/1024)*3.2);
+  const len=fd.length,bassEnd=Math.floor(len*0.12),midEnd=Math.floor(len*0.5);let b=0,m=0,tr=0;
+  for(let i=0;i<bassEnd;i++)b+=fd[i];for(let i=bassEnd;i<midEnd;i++)m+=fd[i];for(let i=midEnd;i<len;i++)tr+=fd[i];
+  audio.bass=(b/bassEnd)/255;audio.mid=(m/(midEnd-bassEnd))/255;audio.treble=(tr/(len-midEnd))/255;
+  bassHistory.push(audio.bass);if(bassHistory.length>30)bassHistory.shift();
+  const avgBass=bassHistory.reduce(function(x,y){return x+y},0)/bassHistory.length;
+  audio.beat=audio.bass>avgBass*1.35&&audio.bass>0.18;if(audio.beat)audio.beatPulse=1;
+  audio.beatPulse*=0.9;audio.active=true;
+}
 function band(){
+  const heardNow=window.__audio?window.__audio():null;
+  if(heardNow){heard(heardNow);return}
   const f=window.__band,s=f?f(performance.now()):null;
   if(!s||!s.active){audio.active=false;audio.level=audio.bass=audio.mid=audio.treble=0;audio.beat=false;audio.beatPulse*=0.9;lastBeat=null;return}
   const b=s.beat,whole=Math.floor(b),frac=b-whole;

@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Drive-Thru Dental Simulator</title>
+<style>
+:root{--sky:#9cccf0;--stucco:#e4d6b8;--red:#c7372f;--mint:#3fb5a3;--mintdark:#2a8a7b;--ink:#22303a;--paper:#fbfaf6;--line:#cfc6b3;--cream:#fff6d6}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--paper);color:var(--ink);font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif}
+body{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.wrap{max-width:720px;margin:0 auto;padding:10px}
+.ticker{overflow:hidden;white-space:nowrap;background:var(--red);color:#fff;font-weight:700;border-radius:6px;padding:7px 0;font-size:15px}
+.ticker span{display:inline-block;padding-left:100%;animation:tick 40s linear infinite}
+@keyframes tick{to{transform:translateX(-100%)}}
+@media (prefers-reduced-motion:reduce){.ticker span{animation:none;padding-left:10px}}
+canvas{width:100%;height:auto;display:block;border-radius:10px;margin-top:8px;background:var(--sky)}
+.hud{display:flex;justify-content:space-between;font-weight:700;margin:8px 2px;font-size:16px}
+.bubble{background:#fff;border:2px solid var(--ink);border-radius:14px;padding:10px 12px;min-height:60px;font-size:18px;line-height:1.35}
+.tray{margin-top:8px;padding:8px 10px;border:2px dashed var(--line);border-radius:10px;min-height:44px;background:#fff;font-size:16px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+button{font:inherit;font-weight:700;border:2px solid var(--ink);border-radius:10px;padding:12px 6px;background:#fff;color:var(--ink);cursor:pointer;font-size:15px}
+button:focus-visible{outline:3px solid var(--mint);outline-offset:2px}
+button:active{transform:translateY(1px)}
+.proc{background:#eaf7f4}
+.row{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:8px;margin-top:8px}
+.go{background:var(--mint);color:#fff;border-color:var(--mintdark)}
+.again{background:var(--cream)}
+.overlay{position:fixed;inset:0;background:rgba(251,250,246,.94);display:none;align-items:center;justify-content:center;padding:20px;z-index:5}
+.overlay.on{display:flex}
+.card{background:#fff;border:3px solid var(--ink);border-radius:16px;padding:20px;max-width:420px;text-align:center}
+.card h2{margin:0 0 8px;font-size:24px}
+.card p{font-size:17px;line-height:1.45;margin:8px 0 14px}
+.card button{width:100%;margin-top:8px}
+.log{font-size:14px;margin-top:10px;color:#4a5660;min-height:40px;line-height:1.4}
+.fine{font-size:12px;color:#7a838a;margin-top:12px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="ticker"><span id="tick"></span></div>
+<canvas id="scene" width="800" height="420" aria-label="Drive-thru dental building with cars in line"></canvas>
+<div class="hud"><span id="money">$0</span><span id="count">Cars left: 10</span></div>
+<div class="bubble" id="bubble">The window is closed.</div>
+<div class="tray" id="tray">Tray is empty.</div>
+<div class="grid" id="procs"></div>
+<div class="row">
+<button class="again" id="again">Say again?</button>
+<button id="clear">Clear tray</button>
+<button class="go" id="serve">Hand out window</button>
+</div>
+<div class="log" id="log"></div>
+<div class="fine">Not responsible for cheese found in fillings. Please have your insurance card ready at the first window.</div>
+</div>
+
+<div class="overlay on" id="ov"><div class="card" id="card"></div></div>
+
+<script>
+const PROCS=[
+{id:'xray',name:'X-ray',plural:'X-rays',a:'an X-ray',price:40},
+{id:'check',name:'Checkup',plural:'checkups',a:'a checkup',price:30},
+{id:'clean',name:'Cleaning',plural:'cleanings',a:'a cleaning',price:35},
+{id:'fill',name:'Filling',plural:'fillings',a:'a filling',price:60},
+{id:'white',name:'Whitening',plural:'whitenings',a:'a tooth whitening',price:80},
+{id:'brace',name:'Braces tighten',plural:'braces tightenings',a:'a braces tighten',price:50}
+];
+const P=Object.fromEntries(PROCS.map(p=>[p.id,p]));
+const WORD=['zero','one','two','three'];
+const OPEN=['Hi, can I get ','Yeah, lemme get ','Uh, I will do ','Can I get ','Hey, I need ','Okay so, '];
+const CLOSE=['.','. No ice.','. I am double parked.','. Extra numbing.','. Can you make it quick?','. And a cup for spitting.'];
+const GOOD=['Five stars. Got a whitening and never unbuckled.','Fillings were fast. They said pull forward while the numbing kicked in.','X-ray came in a paper bag. Very convenient.','Best checkup I have had with the engine running.','They asked if I wanted to make it a large. I said yes. No idea what I got.'];
+const BAD=['Asked for {o}. Got something else. One star.','Wrong procedure. My mouth is still open.','They told me to pull around and wait. I have been waiting with my mouth open.'];
+const WALK=['Waited too long at the speaker. Drove to a sit-down dentist like it is 1995.','Line was four cars deep for a cleaning. One star.','Honked twice, no one answered. My cavity and I left.'];
+const MIX_OK=['Came for fillings, left with a grilled cheese and a hot coffee. Five stars, will return.','Did not get whitened but the coffee will stain them anyway, so it evens out.','You know what, this works. Cheese counts as calcium.'];
+const MIX_BAD=['I asked for {o}. They handed me a grilled cheese and a hot coffee. The coffee was hot though.','Grilled cheese got stuck in my old filling. Ironic. One star.'];
+const TICK=['Now open: drive-thru dental and orthodontics','Drive-thru orthodontist coming soon','Ask about Combo #3: two fillings and a whitening','Pull forward to the numbing lane','Free X-ray with any large coffee','Please do not honk during root canals'];
+const COLORS=['#d9473b','#3b7bd9','#f2c230','#9aa4ab','#ffffff','#4fa36b','#9b59b6','#e8833a'];
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+document.getElementById('tick').textContent=TICK.join('        ');
+
+function makeOrder(){
+ const ids=[...PROCS].sort(()=>Math.random()-.5).slice(0,1+Math.floor(Math.random()*3)).map(p=>p.id);
+ const order={};ids.forEach(id=>order[id]=id==='fill'||id==='xray'?1+Math.floor(Math.random()*(id==='fill'?3:2)):1);
+ const text=pick(OPEN)+plainOrder(order)+pick(CLOSE);
+ const garbled=Math.random()<.3;
+ let shown=text;
+ if(garbled){const w=text.split(' ');for(let i=2;i<w.length;i++)if(Math.random()<.35)w[i]='*krrsh*';shown=w.join(' ')}
+ return{order,text,shown,garbled};
+}
+function plainOrder(o){
+ const parts=Object.entries(o).map(([id,n])=>n>1?WORD[n]+' '+P[id].plural:P[id].a);
+ return parts.length>1?parts.slice(0,-1).join(', ')+' and '+parts[parts.length-1]:parts[0];
+}
+
+const cv=document.getElementById('scene'),cx=cv.getContext('2d');
+const W=800,H=420,WIN_TARGET=510;
+function fit(){const r=window.devicePixelRatio||1;cv.width=W*r;cv.height=H*r;cx.setTransform(r,0,0,r,0,0)}
+fit();addEventListener('resize',fit);
+
+let cars=[],tray={},floaters=[],money=0,served=0,mixups=0,walkoffs=0,toSpawn=10,spawnTimer=0,shiftOn=false,last=0,shownId=null,idSeq=0,paused=false;
+const $=id=>document.getElementById(id);
+
+function newCar(){const o=makeOrder();return{id:++idSeq,x:-220,color:pick(COLORS),order:o.order,text:o.text,shown:o.shown,patience:1,leaving:false}}
+function queue(){return cars.filter(c=>!c.leaving)}
+function front(){return queue()[0]}
+function arrived(c){return c&&Math.abs(c.x-WIN_TARGET)<14}
+
+function review(t){$('log').textContent='Latest review: "'+t+'"'}
+function float(c,text,color){floaters.push({x:c.x+75,y:300,text,color,life:1.6})}
+function leave(c){c.leaving=true;tray={};renderTray();shownId=null;updateHud()}
+function updateHud(){$('money').textContent=(money<0?'-$':'$')+Math.abs(money);$('count').textContent='Cars left: '+(toSpawn+queue().length)}
+
+function renderTray(){
+ const e=Object.entries(tray).filter(([,n])=>n>0);
+ $('tray').textContent=e.length?'Tray: '+e.map(([id,n])=>P[id].name+(n>1?' x'+n:'')).join(', '):'Tray is empty.';
+}
+function renderBubble(){
+ const c=front();
+ if(!shiftOn){return}
+ if(!c||!arrived(c)){$('bubble').textContent='Waiting for the next car...';return}
+ if(shownId!==c.id){shownId=c.id;$('bubble').textContent='Speaker: "'+c.shown+'"'}
+}
+
+PROCS.forEach(p=>{const b=document.createElement('button');b.className='proc';b.textContent=p.name;b.onclick=()=>{tray[p.id]=(tray[p.id]||0)+1;renderTray()};$('procs').appendChild(b)});
+$('clear').onclick=()=>{tray={};renderTray()};
+$('again').onclick=()=>{const c=front();if(!arrived(c))return;c.shown=c.text;c.patience=Math.max(.05,c.patience-.12);$('bubble').textContent='Speaker: "'+c.text+'"'};
+$('serve').onclick=serve;
+
+function same(a,b){const k=new Set([...Object.keys(a),...Object.keys(b)]);for(const id of k)if((a[id]||0)!==(b[id]||0))return false;return true}
+function total(o){return Object.entries(o).reduce((s,[id,n])=>s+P[id].price*n,0)}
+
+function serve(){
+ const c=front();if(!shiftOn||paused||!arrived(c))return;
+ if(!Object.keys(tray).length){$('bubble').textContent='The tray is empty. Add procedures first.';return}
+ if(Math.random()<.18){mixup(c);return}
+ if(same(tray,c.order)){const base=total(c.order),tip=Math.round(base*.25*c.patience);money+=base+tip;served++;float(c,'+$'+(base+tip),'#2a8a7b');review(pick(GOOD))}
+ else{money-=10;float(c,'Wrong order','#c7372f');review(pick(BAD).replace('{o}',plainOrder(c.order)))}
+ leave(c);
+}
+function mixup(c){
+ paused=true;
+ show('Kitchen mixup','The back sent out a grilled cheese and a hot coffee instead.',[
+  ['Hand it over anyway',()=>{mixups++;if(Math.random()<.5){money+=12;float(c,'+$12 cheese','#2a8a7b');review(pick(MIX_OK))}else{money-=15;float(c,'Cheese rage','#c7372f');review(pick(MIX_BAD).replace('{o}',plainOrder(c.order)))}leave(c);close()}],
+  ['Remake it (costs time)',()=>{c.patience=Math.max(.05,c.patience-.25);close()}]
+ ]);
+}
+function walkOff(c){walkoffs++;money-=5;float(c,'Drove off','#c7372f');review(pick(WALK));leave(c)}
+
+function show(title,text,btns){
+ const card=$('card');card.innerHTML='';
+ const h=document.createElement('h2');h.textContent=title;const p=document.createElement('p');p.textContent=text;card.append(h,p);
+ btns.forEach(([label,fn])=>{const b=document.createElement('button');b.textContent=label;b.onclick=fn;card.appendChild(b)});
+ $('ov').classList.add('on');card.querySelector('button').focus();
+}
+function close(){$('ov').classList.remove('on');paused=false}
+
+function start(){
+ cars=[];tray={};floaters=[];money=0;served=0;mixups=0;walkoffs=0;toSpawn=10;spawnTimer=0;shownId=null;shiftOn=true;
+ renderTray();updateHud();$('log').textContent='';close();
+}
+function endShift(){
+ shiftOn=false;
+ const stars=Math.max(1,Math.min(5,Math.round(served/2+(money>0?1:0)-walkoffs/3)));
+ $('bubble').textContent='Shift over. The window is closed.';
+ show('Shift over','Earned $'+money+'. Served '+served+' correctly, '+mixups+' kitchen mixups, '+walkoffs+' drove off. Health inspector rating: '+'★'.repeat(stars)+'☆'.repeat(5-stars)+'.',[['Start next shift',start]]);
+}
+
+function rr(x,y,w,h,r){cx.beginPath();cx.moveTo(x+r,y);cx.arcTo(x+w,y,x+w,y+h,r);cx.arcTo(x+w,y+h,x,y+h,r);cx.arcTo(x,y+h,x,y,r);cx.arcTo(x,y,x+w,y,r);cx.closePath();cx.fill()}
+function ell(x,y,rx,ry){cx.beginPath();cx.ellipse(x,y,rx,ry,0,0,Math.PI*2);cx.fill()}
+
+function drawScene(t){
+ const g=cx.createLinearGradient(0,0,0,300);g.addColorStop(0,'#78b3e3');g.addColorStop(1,'#e2eff8');cx.fillStyle=g;cx.fillRect(0,0,W,H);
+ cx.fillStyle='rgba(255,255,255,.9)';
+ [[100,60],[400,38],[650,84]].forEach(([x,y])=>{const ox=(x+t/60)%(W+240)-120;ell(ox,y,70,15);ell(ox+45,y-9,42,14);ell(ox-40,y+3,36,11)});
+ cx.fillStyle='#b9a68c';cx.beginPath();cx.moveTo(0,250);cx.lineTo(90,215);cx.lineTo(170,240);cx.lineTo(260,205);cx.lineTo(380,235);cx.lineTo(520,210);cx.lineTo(640,232);cx.lineTo(800,212);cx.lineTo(800,300);cx.lineTo(0,300);cx.fill();
+ cx.fillStyle='#e4d6b8';cx.fillRect(110,118,570,182);
+ cx.fillStyle='#c9b48f';cx.fillRect(110,262,570,38);
+ cx.fillStyle='#fff';cx.fillRect(130,130,470,40);
+ cx.fillStyle='#2f56a8';cx.font='italic 700 21px "Trebuchet MS",sans-serif';cx.fillText('DRIVE-THRU DENTAL & ORTHODONTICS',142,158);
+ cx.fillStyle='#2f56a8';cx.fillRect(130,92,104,32);cx.fillStyle='#fff';cx.font='700 15px "Trebuchet MS",sans-serif';cx.fillText('$49 X-RAY',140,114);
+ cx.fillStyle='#2b2b2b';cx.fillRect(300,184,92,116);cx.fillStyle='#495a66';cx.fillRect(316,200,26,40);cx.fillRect(350,200,26,40);
+ cx.fillStyle='#f6e27a';cx.fillRect(410,188,128,46);cx.fillStyle='#22303a';cx.font='700 12px "Trebuchet MS",sans-serif';cx.fillText('DRIVE-THRU',418,206);cx.fillText('ORTHODONTIST',418,220);cx.fillStyle='#c7372f';cx.fillText('COMING SOON',418,232);
+ cx.fillStyle='#1f3340';cx.fillRect(560,186,92,66);
+ cx.fillStyle='#3fb5a3';rr(588,226,36,26,6);
+ cx.fillStyle='#e0b48a';ell(606,212,13,14);
+ cx.fillStyle='#bfe9e1';cx.fillRect(596,214,20,8);
+ cx.fillStyle='#c7372f';cx.font='700 11px "Trebuchet MS",sans-serif';cx.fillText('PICKUP & SPIT',566,182);
+ cx.fillStyle='#6b5a44';cx.fillRect(222,260,8,62);
+ cx.fillStyle='#333';cx.fillRect(176,196,100,70);
+ cx.fillStyle='#c7372f';cx.fillRect(176,196,100,14);cx.fillStyle='#fff';cx.font='700 10px "Trebuchet MS",sans-serif';cx.fillText('MENU',212,207);
+ cx.font='9px "Trebuchet MS",sans-serif';['Checkup 30','X-ray 40','Filling 60','Whiten 80','Combo #3 ask'].forEach((s,i)=>cx.fillText(s,182,222+i*10));
+ cx.strokeStyle='#5e4a35';cx.lineWidth=5;cx.beginPath();cx.moveTo(730,300);cx.lineTo(724,200);cx.moveTo(726,240);cx.lineTo(700,205);cx.moveTo(726,230);cx.lineTo(756,196);cx.stroke();
+ cx.fillStyle='#6f8f4e';ell(724,190,40,22);ell(696,202,26,15);ell(760,188,26,16);ell(740,176,24,13);
+ cx.fillStyle='#d6d3cc';cx.fillRect(0,300,W,22);
+ cx.strokeStyle='#d24a4a';cx.lineWidth=2;cx.beginPath();cx.moveTo(60,309);cx.lineTo(96,305);cx.moveTo(380,312);cx.lineTo(412,308);cx.moveTo(402,304);cx.lineTo(404,316);cx.stroke();
+ cx.fillStyle='#a9a59d';cx.fillRect(0,320,W,4);
+ cx.fillStyle='#5f6366';cx.fillRect(0,324,W,96);
+ cx.fillStyle='#f2f2f2';for(let x=-((t/20)%0);x<W;x+=70)cx.fillRect(x,404,36,4);
+}
+
+function drawCar(c){
+ const x=c.x,y=322;
+ cx.fillStyle='rgba(0,0,0,.18)';ell(x+75,y+74,78,7);
+ cx.fillStyle=c.color;rr(x+28,y+6,90,32,10);rr(x,y+28,152,36,10);
+ cx.fillStyle='#bfe0f2';rr(x+36,y+11,34,22,4);rr(x+76,y+11,36,22,4);
+ cx.fillStyle='#e0b48a';ell(x+95,y+21,8,9);
+ cx.fillStyle='#7a2f2f';ell(x+99,y+25,3,2.5);
+ cx.fillStyle='#222';ell(x+34,y+64,13,13);ell(x+120,y+64,13,13);
+ cx.fillStyle='#bbb';ell(x+34,y+64,5,5);ell(x+120,y+64,5,5);
+ cx.fillStyle='#ffe9a6';rr(x+144,y+34,8,8,2);
+ if(!c.leaving){cx.fillStyle='#e3e3e3';cx.fillRect(x+25,y-12,100,7);cx.fillStyle=c.patience>.5?'#3fb5a3':c.patience>.25?'#e8b33a':'#c7372f';cx.fillRect(x+25,y-12,100*Math.max(0,c.patience),7)}
+}
+
+function frame(t){
+ const dt=Math.min(.05,(t-last)/1000||0);last=t;
+ if(shiftOn&&!paused){
+  const q=queue();
+  spawnTimer-=dt;
+  if(q.length<4&&toSpawn>0&&spawnTimer<=0){cars.push(newCar());toSpawn--;spawnTimer=3+Math.random()*3;updateHud()}
+  queue().forEach((c,i)=>{const tx=WIN_TARGET-i*170;c.x+=(tx-c.x)*Math.min(1,dt*2.5);
+   if(i===0&&arrived(c)){c.patience-=dt/34;if(c.patience<=0)walkOff(c)}else c.patience=Math.max(.15,c.patience-dt/160)});
+  cars.forEach(c=>{if(c.leaving)c.x+=dt*380});
+  cars=cars.filter(c=>c.x<W+220);
+  renderBubble();
+  if(!queue().length&&toSpawn===0&&!cars.length)endShift();
+ }
+ drawScene(t);
+ cars.slice().reverse().forEach(drawCar);
+ floaters.forEach(f=>{f.life-=dt;f.y-=dt*30;cx.globalAlpha=Math.max(0,Math.min(1,f.life));cx.fillStyle=f.color;cx.font='700 22px "Trebuchet MS",sans-serif';cx.fillText(f.text,f.x-40,f.y);cx.globalAlpha=1});
+ floaters=floaters.filter(f=>f.life>0);
+ requestAnimationFrame(frame);
+}
+
+show('Drive-Thru Dental','Take the order at the speaker, build the tray, and hand it out the window. Ten cars per shift. Watch out for the back, they sometimes send lunch instead.',[['Open the window',start]]);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

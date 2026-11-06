@@ -1,0 +1,3 @@
+Field Dispatch changelog
+
+2026-11-04, v2026.11.04. Created Field Dispatch, a field service dispatch game on a real map of Nevada. Crews take tickets from an open board and follow real road routes between start and end points. Added real cameras to repair, satellite passes, plate reader service contracts at known locations that you can decline, and stashed wireless site scans with a daily cap. A movement badge uses motion sensing and a rule that you must drive 25 mph for 2 minutes. Added Tickets, Crew, Stock, Cameras, and Shop tabs and a restart option. The game code was split into smaller parts without changing how it plays.

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monthly Reviews</title>
+<style>
+:root { --bg: #f6f5f1; --card: #ffffff; --ink: #1d2320; --muted: #5d6661; --line: #d9dcd6; --accent: #1f7a4a; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: Arial, Helvetica, sans-serif; }
+body { padding: 16px; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.tabs button { font: 600 14px Arial, sans-serif; padding: 8px 14px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 6px; cursor: pointer; }
+.tabs button.on { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+.deck { position: relative; max-width: 960px; margin: 0 auto; }
+.slide { background: var(--card); border: 1px solid var(--line); border-radius: 10px; aspect-ratio: 16 / 9; padding: 5% 6%; display: flex; flex-direction: column; justify-content: center; overflow: auto; }
+@media (max-width: 640px) { .slide { aspect-ratio: auto; min-height: 70vh; padding: 24px 20px; } }
+.kicker { font: 600 13px monospace; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; }
+h1 { font-size: clamp(26px, 4.5vw, 46px); margin: 0 0 14px; line-height: 1.1; }
+h2 { font-size: clamp(20px, 3.2vw, 32px); margin: 0 0 16px; line-height: 1.15; }
+p { font-size: clamp(15px, 1.9vw, 19px); line-height: 1.5; margin: 0 0 12px; color: var(--ink); }
+.note { color: var(--muted); font-size: clamp(13px, 1.5vw, 15px); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+.stat b { display: block; font-size: clamp(30px, 5vw, 48px); color: var(--accent); line-height: 1; margin-bottom: 8px; }
+.stat span { font-size: 14px; color: var(--muted); line-height: 1.35; }
+.bars { display: flex; flex-direction: column; gap: 10px; margin: 6px 0 12px; }
+.bar { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 10px; font-size: 14px; }
+.bar .track { background: #eceee9; border-radius: 4px; height: 26px; position: relative; }
+.bar .fill { background: var(--accent); height: 100%; border-radius: 4px; }
+.bar .v { position: absolute; left: 8px; top: 4px; font: 600 14px monospace; color: #ffffff; }
+.bar .v.out { color: var(--ink); }
+.stack { display: flex; height: 34px; border-radius: 6px; overflow: hidden; margin: 6px 0 12px; }
+.stack div { height: 100%; }
+.keys { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 14px; margin-bottom: 12px; }
+.keys i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips span { font: 13px monospace; background: #eceee9; border-radius: 4px; padding: 4px 8px; }
+.listlabel { font: 600 13px Arial, sans-serif; color: var(--muted); margin: 6px 0 8px; }
+.nav { display: flex; align-items: center; justify-content: space-between; max-width: 960px; margin: 12px auto 0; }
+.nav button { font: 600 15px Arial, sans-serif; padding: 10px 18px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 6px; cursor: pointer; }
+.nav button:disabled { opacity: 0.4; cursor: default; }
+.count { font: 14px monospace; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="tabs" id="tabs"></div>
+<div class="deck"><div class="slide" id="slide"></div></div>
+<div class="nav"><button id="prev">Back</button><span class="count" id="count"></span><button id="next">Next</button></div>
+<script src="monthlies-data.js?v=1793930958"></script>
+<script>
+(function () {
+  var month = null, idx = 0;
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function render(s) {
+    var h = "";
+    if (s.kicker) h += '<div class="kicker">' + esc(s.kicker) + "</div>";
+    h += s.type === "title" ? "<h1>" + esc(s.heading) + "</h1>" : "<h2>" + esc(s.heading) + "</h2>";
+    if (s.type === "stats") {
+      h += '<div class="stats">' + s.stats.map(function (x) { return '<div class="stat"><b>' + esc(x.value) + "</b><span>" + esc(x.label) + "</span></div>"; }).join("") + "</div>";
+    }
+    if (s.type === "bars") {
+      var max = Math.max.apply(null, s.bars.map(function (b) { return b.value; }));
+      h += '<div class="bars">' + s.bars.map(function (b) {
+        var pct = Math.round(b.value / max * 100);
+        return '<div class="bar"><span>' + esc(b.label) + '</span><div class="track"><div class="fill" style="width:' + pct + '%"></div><span class="v' + (pct < 12 ? " out" : "") + '"' + (pct < 12 ? ' style="left:calc(' + pct + '% + 8px)"' : "") + ">" + b.value + "</span></div></div>";
+      }).join("") + "</div>";
+    }
+    if (s.type === "stack") {
+      var tot = s.parts.reduce(function (a, p) { return a + p.value; }, 0);
+      h += '<div class="stack">' + s.parts.map(function (p) { return '<div title="' + esc(p.label) + '" style="width:' + (p.value / tot * 100) + "%;background:" + p.color + '"></div>'; }).join("") + "</div>";
+      h += '<div class="keys">' + s.parts.map(function (p) { return "<span><i style=\"background:" + p.color + '"></i>' + esc(p.label) + ": " + p.value + "</span>"; }).join("") + "</div>";
+    }
+    if (s.body) h += "<p>" + esc(s.body) + "</p>";
+    if (s.note) h += '<p class="note">' + esc(s.note) + "</p>";
+    if (s.list) {
+      if (s.listLabel) h += '<div class="listlabel">' + esc(s.listLabel) + "</div>";
+      h += '<div class="chips">' + s.list.map(function (x) { return "<span>" + esc(x) + "</span>"; }).join("") + "</div>";
+    }
+    return h;
+  }
+  function show() {
+    var n = month.slides.length;
+    idx = Math.max(0, Math.min(idx, n - 1));
+    document.getElementById("slide").innerHTML = render(month.slides[idx]);
+    document.getElementById("count").textContent = (idx + 1) + " / " + n;
+    document.getElementById("prev").disabled = idx === 0;
+    document.getElementById("next").disabled = idx === n - 1;
+    Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) { b.classList.toggle("on", b.dataset.id === month.id); });
+    history.replaceState(null, "", "#" + month.id + "/" + (idx + 1));
+  }
+  function open(id, slide) {
+    month = MONTHLIES.filter(function (m) { return m.id === id; })[0] || MONTHLIES[0];
+    idx = slide || 0;
+    show();
+  }
+  var tabs = document.getElementById("tabs");
+  if (window.self !== window.top) tabs.style.display = "none";
+  MONTHLIES.forEach(function (m) {
+    var b = document.createElement("button");
+    b.textContent = m.title; b.dataset.id = m.id;
+    b.onclick = function () { open(m.id, 0); };
+    tabs.appendChild(b);
+  });
+  document.getElementById("prev").onclick = function () { idx--; show(); };
+  document.getElementById("next").onclick = function () { idx++; show(); };
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight") { idx++; show(); }
+    if (e.key === "ArrowLeft") { idx--; show(); }
+  });
+  var x0 = null;
+  document.getElementById("slide").addEventListener("touchstart", function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+  document.getElementById("slide").addEventListener("touchend", function (e) {
+    if (x0 === null) return;
+    var dx = e.changedTouches[0].clientX - x0; x0 = null;
+    if (Math.abs(dx) > 50) { idx += dx < 0 ? 1 : -1; show(); }
+  });
+  var hash = location.hash.slice(1).split("/");
+  open(hash[0], hash[1] ? parseInt(hash[1], 10) - 1 : 0);
+})();
+</script>
+</body>
+</html>

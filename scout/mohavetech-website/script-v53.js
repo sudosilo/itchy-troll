@@ -6,6 +6,7 @@ const baseDates = {
   "2026-10-30-orange-scores": "2026-11-02",
   "2026-11-01-orange-decimalday": "2026-11-02",
   "2026-11-04-field-dispatch": "2026-11-04",
+  "2026-11-05-drive-thru-dental": "2026-11-05",
   "67-idea-generator": "2026-11-04",
   "67-press-proccessor": "2026-10-08",
   "a-canticle-for-pajamastan": "2026-11-01",
@@ -34,8 +35,8 @@ const baseDates = {
   "chromatogram": "2026-08-16",
   "circuit-musicfx": "2026-09-11",
   "cockpit-racer": "2026-10-23",
-  "coffee-autosim": "2026-11-01",
-  "coffeekit1": "2026-06-23",
+  "coffee-autosim": "2026-11-05",
+  "coffeekit1": "2026-11-05",
   "control-troll": "2026-11-05",
   "conveyor-sim": "2026-10-30",
   "cypher-wars": "2026-09-11",
@@ -69,7 +70,7 @@ const baseDates = {
   "hoofer-sync": "2026-10-25",
   "infinicanvan": "2026-11-02",
   "inkrunner": "2026-10-25",
-  "itchy-troll": "2026-11-04",
+  "itchy-troll": "2026-11-05",
   "j30p4rdy": "2026-11-01",
   "kat-chat": "2026-10-31",
   "kvs": "2026-10-10",
@@ -79,7 +80,7 @@ const baseDates = {
   "ming-globe": "2026-10-31",
   "mission-operator": "2026-10-30",
   "mission-operator-next": "2026-10-30",
-  "mohave-wtf": "2026-10-25",
+  "mohave-wtf": "2026-11-05",
   "mohavetech-contracts": "2026-10-18",
   "nanoverse": "2026-11-02",
   "note-note-note": "2026-10-20",
@@ -100,7 +101,7 @@ const baseDates = {
   "polygon-arcade": "2026-09-13",
   "qsr-receipt-sim": "2026-10-08",
   "qsr-timeline": "2026-10-28",
-  "rainbow-run": "2026-11-04",
+  "rainbow-run": "2026-11-05",
   "rat-site": "2026-10-21",
   "rat30-deck": "2026-10-08",
   "repofind": "2026-11-04",
@@ -109,7 +110,6 @@ const baseDates = {
   "rosetta-pone": "2026-10-26",
   "rtss": "2026-10-22",
   "scope-listener": "2026-10-14",
-  "screensaver-musicfx": "2026-06-21",
   "secureops": "2026-10-21",
   "shared-server": "2026-10-26",
   "shitty-ass-finance": "2026-10-02",
@@ -139,9 +139,8 @@ const baseDates = {
   "topo-wars": "2026-10-03",
   "topo-wars-server": "2026-10-26",
   "torque-converter": "2026-10-24",
-  "tower-builder-one": "2026-09-02",
+  "tower-builder-one": "2026-11-05",
   "tractor-tool": "2026-10-24",
-  "tunnelfx": "2026-06-20",
   "virality-snapshot": "2026-09-28",
   "virality-trader": "2026-09-28",
   "welcome-to-the-madness": "2026-07-10"
@@ -247,6 +246,17 @@ function showStats() {
   renderStats();
 }
 
+function showMonthly(id) {
+  const frame = document.getElementById('monthly-frame');
+  frame.src = 'monthlies.html#' + id;
+  frame.style.display = 'block';
+  document.querySelectorAll('#monthly-tabs button').forEach(b => {
+    const on = b.dataset.id === id;
+    b.style.background = on ? '#00ff00' : 'black';
+    b.style.color = on ? 'black' : '#00ff00';
+  });
+}
+
 function renderStats() {
   const el = document.getElementById('stats-view');
   const now = Date.now();
@@ -280,6 +290,14 @@ function renderStats() {
   html += '<p>Updated in the last 7 days: ' + thisWeek + '</p>';
   html += '<p>Updated the 7 days before that: ' + lastWeek + '</p>';
   html += '<p>' + (thisWeek >= lastWeek ? 'Up' : 'Down') + ' week over week by ' + Math.abs(thisWeek - lastWeek) + '</p>';
+
+  if (typeof MONTHLIES !== 'undefined' && MONTHLIES.length) {
+    html += '<h2>Monthly Reviews</h2><div id="monthly-tabs">';
+    MONTHLIES.forEach(m => {
+      html += '<button onclick="showMonthly(\'' + m.id + '\')" data-id="' + m.id + '" style="background:black;color:#00ff00;border:1px solid #00ff00;font-family:monospace;font-size:14px;padding:6px 12px;margin:0 6px 6px 0;cursor:pointer">' + m.title + '</button>';
+    });
+    html += '</div><iframe id="monthly-frame" title="Monthly review" style="display:none;width:100%;max-width:1000px;height:80vh;border:1px solid #00ff00;background:#f6f5f1"></iframe>';
+  }
 
   html += '<h2>Deploy Timeline</h2>';
   sortedWeeks.forEach(w => {

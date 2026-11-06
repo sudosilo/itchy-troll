@@ -101,11 +101,11 @@ var MOHAVE_CATALOG = [
  {
   "id": "coffeekit1",
   "url": "https://coffeekit1.vercel.app",
-  "line": "Multimedia and Audio",
+  "line": "Entertainment Software",
   "date": "2026-06-23",
   "title": "CoffeeKit One",
-  "tag": "The original coffee kit.",
-  "blurb": "The first title in the CoffeeKit line, from the Mohave Tech multimedia group. Full spec sheet in preparation.",
+  "tag": "Read the ticket. Work the bar. Beat the rush.",
+  "blurb": "A barista game. Drink tickets come up on the kitchen display, you tap the stations in the right order to build each one, and every order you nail adds to your score while the drive-thru line keeps growing.",
   "ver": "",
   "spec": null
  },
@@ -411,17 +411,6 @@ var MOHAVE_CATALOG = [
   }
  },
  {
-  "id": "tunnelfx",
-  "url": "https://tunnelfx.vercel.app",
-  "line": "Multimedia and Audio",
-  "date": "2026-06-20",
-  "title": "TunnelFX",
-  "tag": "Into the tunnel.",
-  "blurb": "A tunnel visualizer from the MusicFX series. Full spec sheet in preparation.",
-  "ver": "",
-  "spec": null
- },
- {
   "id": "aliens-win",
   "url": "https://aliens-win.vercel.app",
   "line": "Entertainment Software",
@@ -550,12 +539,12 @@ var MOHAVE_CATALOG = [
  {
   "id": "coffee-autosim",
   "url": "https://coffee-autosim.vercel.app",
-  "line": "Entertainment Software",
+  "line": "Business Solutions",
   "date": "2026-10-11",
   "title": "COFFEE AUTOSIM",
-  "tag": "The automated coffee kiosk, simulated.",
-  "blurb": "A live blueprint simulation of an automated coffee kiosk, with drive-thru lanes, kitchen display, and baristas all running on their own.",
-  "ver": "3.0",
+  "tag": "Run a shift. Find the bottleneck.",
+  "blurb": "A coffee shop shift simulator. Set walk-in, drive-thru and mobile traffic, crew size and espresso heads, run a timed shift on the live blueprint, and get a report on ticket times, lost cars, staff busy time and the station holding everyone up.",
+  "ver": "4.0",
   "spec": {
    "engine": "Standard HTML interface",
    "audio": "None",
