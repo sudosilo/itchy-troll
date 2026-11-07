@@ -8,6 +8,6 @@ Live at repofind-delta.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. Added the Rabbit tab, where black windows fill with code from random repos found by the stumble terms, hold for ten seconds, then refill, with every pull logged.
+Latest change. 2026-11-04, v2026.11.04. Added the Resolve tab. Look up software by purpose across GitHub and Software Heritage, label results with a bucket, kinds of data and a plain description, load any account's public repos, and export. Added the Rabbit tab, where black windows fill with code from a random repo found by the stumble terms, hold for ten seconds, then refill. Every pull is logged, exportable, and included in backup.
 
 See CHANGELOG.md for the full history.

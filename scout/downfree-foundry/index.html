@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Road Layers</title>
+<style>
+:root{
+  --bg:#f6f4ef;--card:#ffffff;--ink:#1e2328;--muted:#5d6670;--line:#ddd8cc;
+  --accent:#d2601a;--accent-ink:#ffffff;--soft:#fbeee4;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 2px}
+.sub{color:var(--muted);font-size:14px;margin:0 0 14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin:0 0 14px}
+.card h2{font-size:15px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+label{font-size:14px}
+input[type=file]{width:100%;font-size:15px}
+.clip{border:1px solid var(--line);border-radius:10px;padding:10px;margin:10px 0 0}
+video.thumbvid{width:100%;max-height:60vh;display:block;border-radius:6px;background:#e9e5dc;object-fit:contain}
+.clip-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sw{width:14px;height:14px;border-radius:4px;flex:none}
+.name{font-weight:600;word-break:break-all;flex:1;min-width:120px}
+.row{display:flex;align-items:center;gap:10px;margin-top:8px}
+.row input[type=range]{flex:1}
+.num{width:70px;text-align:right;font-variant-numeric:tabular-nums}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid label{display:flex;flex-direction:column;gap:4px}
+.grid input,.grid select{font-size:15px;padding:6px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+button{font:inherit;font-weight:600;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);border-radius:10px;padding:10px 14px;cursor:pointer}
+button.ghost{background:#fff;color:var(--accent)}
+button:disabled{opacity:.45;cursor:default}
+.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+canvas{width:100%;height:auto;display:block;border-radius:8px;background:#e9e5dc}
+.status{font-size:14px;color:var(--muted);margin-top:8px;min-height:20px;font-variant-numeric:tabular-nums}
+.bar{height:6px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;width:0;background:var(--accent)}
+.layers{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px}
+.layers label{display:flex;align-items:center;gap:6px}
+.hint{font-size:13px;color:var(--muted);margin:6px 0 0}
+a.save{display:inline-block;margin-top:10px;color:var(--accent);font-weight:600}
+</style>
+</head>
+<body>
+<main>
+<h1>Road Layers</h1>
+<p class="sub">Masking test. Cars from several drives stacked onto one road.</p>
+
+<section class="card">
+<h2>1. Clips</h2>
+<input id="files" type="file" accept="video/*" multiple>
+<p class="hint">Pick two or more clips of the same stretch of road. The clip marked Base supplies the road.</p>
+<div id="clipList"></div>
+</section>
+
+<section class="card" id="alignCard" hidden>
+<h2>2. Line up</h2>
+<p class="hint" style="margin-top:0">Each drive started recording at a different spot on the road. Line up makes every clip start at the same spot. Tap Auto line up first.</p>
+<div class="btns" style="margin:0 0 10px"><button id="autoBtn">Auto line up</button></div>
+<canvas id="alignCanvas"></canvas>
+<div class="layers"><label><input type="radio" name="amode" value="flip" checked> Flip between them</label><label><input type="radio" name="amode" value="blend"> See through</label></div>
+<p class="hint" id="alignHint">The picture flips between the Base clip and one other clip. When they are lined up, the road, signs and hills stay still and only the cars change. If things jump, nudge that clip's Start slider.</p>
+</section>
+
+<section class="card">
+<h2>3. Build</h2>
+<div class="grid">
+<label>Length (seconds)<input id="dur" type="number" min="1" max="30" step="1" value="6"></label>
+<label>Frames per second<input id="fps" type="number" min="2" max="15" step="1" value="8"></label>
+<label>Width (pixels)<select id="width"><option>480</option><option selected>640</option><option>854</option></select></label>
+<label>Detection strength<input id="conf" type="number" min="0.1" max="0.9" step="0.05" value="0.35"></label>
+</div>
+<div class="layers"><label><input id="layerBase" type="checkbox" checked> Layer base clip cars too</label></div>
+<div class="btns"><button id="buildBtn" disabled>Build composite</button></div>
+<div class="bar"><i id="barFill"></i></div>
+<div class="status" id="status">Load clips to start.</div>
+</section>
+
+<section class="card" id="outCard" hidden>
+<h2>4. Result</h2>
+<canvas id="out"></canvas>
+<div class="row"><input id="scrub" type="range" min="0" max="0" value="0"><span class="num" id="frameNum">0</span></div>
+<div class="layers" id="layerToggles"></div>
+<div class="layers"><label><input id="tint" type="checkbox"> Tint masks by clip</label></div>
+<div class="btns">
+<button id="playBtn">Play</button>
+<button id="recBtn" class="ghost">Record video</button>
+</div>
+<div id="saveWrap"></div>
+<div class="status" id="outStatus"></div>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<script src="ff/ffmpeg.js"></script>
+<script>
+ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
+ort.env.wasm.numThreads = 1;
+
+const COLORS = ["#d2601a","#1f6f8b","#3f8f3a","#8a3fa0","#b8901a","#c23b4a","#2d6e5e","#6b4f2a"];
+const VEHICLE_CLASSES = [2,3,5,7]; // car, motorcycle, bus, truck
+const MODEL_SIZE = 640;
+
+const $ = id => document.getElementById(id);
+const clips = [];
+let baseIdx = 0;
+let selectedIdx = -1;
+let session = null;
+let frames = [];
+let outW = 0, outH = 0, outFps = 8;
+let busy = false;
+
+const work = document.createElement("canvas");
+const workCtx = work.getContext("2d", { willReadFrequently: true });
+const lb = document.createElement("canvas");
+lb.width = MODEL_SIZE; lb.height = MODEL_SIZE;
+const lbCtx = lb.getContext("2d", { willReadFrequently: true });
+const tintCanvas = document.createElement("canvas");
+const tintCtx = tintCanvas.getContext("2d");
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Each clip video is shown right in its card. Firefox only decodes frames for videos it can see.
+function waitFrame(v, ms){
+  return new Promise(resolve => {
+    let done = false;
+    const finish = () => { if (!done){ done = true; resolve(); } };
+    if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(finish);
+    setTimeout(finish, ms);
+  });
+}
+
+function seekTo(v, t){
+  return new Promise(resolve => {
+    t = Math.max(0, Math.min(t, (v.duration || 0) - 0.05));
+    let done = false;
+    const finish = async () => {
+      if (done) return; done = true;
+      v.removeEventListener("seeked", finish);
+      for (let k = 0; k < 20 && v.readyState < 2; k++) await sleep(50);
+      await waitFrame(v, 250);
+      resolve();
+    };
+    v.addEventListener("seeked", finish);
+    setTimeout(finish, 4000);
+    if (Math.abs(v.currentTime - t) < 0.0005) v.currentTime = t + 0.001; else v.currentTime = t;
+  });
+}
+
+function isBlack(ctx, w, h){
+  const d = ctx.getImageData(0, 0, w, h).data;
+  let sum = 0, n = 0;
+  for (let i = 0; i < d.length; i += 64){ sum += d[i + 3] ? d[i] + d[i + 1] + d[i + 2] : 0; n++; }
+  return sum / n < 6;
+}
+let blankWarned = false;
+
+// Draws a video frame, retrying once if the browser handed back a black frame.
+async function drawVideo(v, ctx, w, h){
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(v, 0, 0, w, h);
+  for (let k = 0; k < 4 && isBlack(ctx, w, h); k++){
+    await sleep(150);
+    await waitFrame(v, 300);
+    ctx.drawImage(v, 0, 0, w, h);
+  }
+  if (isBlack(ctx, w, h) && !blankWarned){
+    blankWarned = true;
+    setStatus("The browser is returning empty frames from this video. Tell Claude.");
+  }
+}
+
+function loadClip(file){
+  return new Promise((resolve, reject) => {
+    const v = document.createElement("video");
+    v.muted = true; v.playsInline = true; v.preload = "auto";
+    v.setAttribute("muted", ""); v.setAttribute("playsinline", "");
+    v.className = "thumbvid";
+    $("clipList").appendChild(v);
+    v.src = URL.createObjectURL(file);
+    v.addEventListener("loadeddata", async () => {
+      try { await v.play(); } catch (e) {}
+      await waitFrame(v, 400);
+      v.pause();
+      resolve(v);
+    }, { once: true });
+    v.addEventListener("error", () => reject(new Error("Could not open " + file.name)), { once: true });
+    v.load();
+  });
+}
+
+$("files").addEventListener("change", async e => {
+  const list = [...e.target.files];
+  if (!list.length) return;
+  setStatus("Opening clips...");
+  for (const f of list){
+    try {
+      const v = await loadClip(f);
+      clips.push({ id: nextClipId++, file: f, mounted: null, name: f.name, video: v, offset: 0, enabled: true, thumb: null, range: null, num: null });
+    } catch (err){ setStatus(err.message); }
+  }
+  e.target.value = "";
+  if (selectedIdx < 0 && clips.length > 1) selectedIdx = baseIdx === 0 ? 1 : 0;
+  renderClips();
+  for (const c of clips) await drawThumb(c);
+  updateAlign();
+  $("buildBtn").disabled = clips.length < 2;
+  setStatus(clips.length < 2 ? "Add at least one more clip." : clips.length + " clips ready.");
+});
+
+async function drawThumb(c){
+  await seekTo(c.video, c.offset);
+}
+
+function setOffset(c, val){
+  c.offset = Math.round(val * 10) / 10;
+  if (c.range) c.range.value = c.offset;
+  if (c.num) c.num.textContent = c.offset.toFixed(1) + "s";
+}
+
+function renderClips(){
+  const wrap = $("clipList");
+  wrap.innerHTML = "";
+  clips.forEach((c, i) => {
+    const d = document.createElement("div");
+    d.className = "clip";
+    const dur = c.video.duration || 0;
+    d.innerHTML =
+      '<div class="clip-top"><span class="sw" style="background:' + COLORS[i % COLORS.length] + '"></span>' +
+      '<span class="name"></span>' +
+      '<label><input type="radio" name="base"' + (i === baseIdx ? " checked" : "") + '> Base</label></div>' +
+      '<div class="vslot" style="margin-top:8px"></div>' +
+      '<div class="row"><span style="font-size:14px">Start</span><input type="range" min="0" max="' + Math.max(0, dur - 0.1).toFixed(1) + '" step="0.1" value="' + c.offset + '"><span class="num">' + c.offset.toFixed(1) + 's</span></div>' +
+      '<div class="hint">Length ' + dur.toFixed(1) + "s</div>";
+    d.querySelector(".name").textContent = "Clip " + (i + 1) + ": " + c.name;
+    d.querySelector(".vslot").appendChild(c.video);
+    c.thumb = c.video;
+    c.range = d.querySelector("input[type=range]");
+    c.num = d.querySelector(".num");
+    d.querySelector("input[type=radio]").addEventListener("change", () => {
+      baseIdx = i;
+      if (selectedIdx === i) selectedIdx = clips.findIndex((_, k) => k !== i);
+      renderClips();
+      Promise.all([]).then(async () => { for (const cc of clips) await drawThumb(cc); updateAlign(); });
+    });
+    let thumbTimer = null;
+    c.range.addEventListener("input", () => {
+      setOffset(c, parseFloat(c.range.value));
+      if (i !== baseIdx) selectedIdx = i;
+      clearTimeout(thumbTimer);
+      thumbTimer = setTimeout(async () => { await drawThumb(c); updateAlign(); }, 120);
+    });
+    wrap.appendChild(d);
+  });
+}
+
+// Line up view: flips between the base frame and the selected clip, or blends them.
+const alignA = document.createElement("canvas"), alignB = document.createElement("canvas");
+let flipShowB = false, flipTimer = null, hasB = false;
+
+function alignMode(){ const r = document.querySelector("input[name=amode]:checked"); return r ? r.value : "flip"; }
+
+function paintAlign(){
+  const cv = $("alignCanvas");
+  if (!alignA.width) return;
+  cv.width = alignA.width; cv.height = alignA.height;
+  const ctx = cv.getContext("2d");
+  if (!hasB){ ctx.drawImage(alignA, 0, 0); return; }
+  if (alignMode() === "blend"){
+    ctx.globalAlpha = 1; ctx.drawImage(alignA, 0, 0);
+    ctx.globalAlpha = 0.5; ctx.drawImage(alignB, 0, 0); ctx.globalAlpha = 1;
+  } else {
+    ctx.drawImage(flipShowB ? alignB : alignA, 0, 0);
+    const label = flipShowB ? "Clip " + (selectedIdx + 1) : "Base (clip " + (baseIdx + 1) + ")";
+    ctx.font = "bold 20px system-ui,sans-serif";
+    const tw = ctx.measureText(label).width;
+    ctx.fillStyle = "rgba(255,255,255,0.85)"; ctx.fillRect(8, 8, tw + 16, 30);
+    ctx.fillStyle = COLORS[(flipShowB ? selectedIdx : baseIdx) % COLORS.length];
+    ctx.fillText(label, 16, 30);
+  }
+}
+
+function startFlip(){
+  clearInterval(flipTimer);
+  flipTimer = setInterval(() => { if (alignMode() === "flip" && hasB){ flipShowB = !flipShowB; paintAlign(); } }, 700);
+}
+document.querySelectorAll("input[name=amode]").forEach(r => r.addEventListener("change", paintAlign));
+
+let alignRunning = false, alignAgain = false;
+async function updateAlign(){
+  if (!clips.length || busy) return;
+  if (alignRunning){ alignAgain = true; return; }
+  alignRunning = true;
+  do {
+    alignAgain = false;
+    const base = clips[baseIdx];
+    const W = 480, H = evenSize(W, base);
+    alignA.width = W; alignA.height = H; alignB.width = W; alignB.height = H;
+    const other = clips[selectedIdx];
+    hasB = !!(other && selectedIdx !== baseIdx);
+    try {
+      const a = await grabFrame(base, base.offset, W, H);
+      alignA.getContext("2d").drawImage(a, 0, 0); a.close();
+      if (hasB){
+        const b = await grabFrame(other, other.offset, W, H);
+        alignB.getContext("2d").drawImage(b, 0, 0); b.close();
+      }
+      if (!busy) setStatus(clips.length + " clips ready.");
+    } catch (err){ setStatus("Could not read frames: " + (err && err.message ? err.message : err)); }
+    $("alignCard").hidden = false;
+    paintAlign();
+  } while (alignAgain);
+  alignRunning = false;
+  startFlip();
+}
+
+// Auto line up: finds the moment in each clip that looks most like the base frame.
+const SIG_W = 64, SIG_H = 36;
+const sigCanvas = document.createElement("canvas");
+sigCanvas.width = SIG_W; sigCanvas.height = SIG_H;
+const sigCtx = sigCanvas.getContext("2d", { willReadFrequently: true });
+
+function signature(img){
+  sigCtx.drawImage(img, 0, 0, SIG_W, SIG_H);
+  if (img.close) img.close();
+  const d = sigCtx.getImageData(0, 0, SIG_W, SIG_H).data;
+  // edge strength image, so different sun and sky on different days matter less
+  const g = new Float32Array(SIG_W * SIG_H);
+  for (let i = 0, p = 0; i < g.length; i++, p += 4) g[i] = 0.3 * d[p] + 0.59 * d[p + 1] + 0.11 * d[p + 2];
+  const e = new Float32Array(SIG_W * SIG_H);
+  for (let y = 1; y < SIG_H - 1; y++) for (let x = 1; x < SIG_W - 1; x++){
+    const i = y * SIG_W + x;
+    e[i] = Math.abs(g[i + 1] - g[i - 1]) + Math.abs(g[i + SIG_W] - g[i - SIG_W]);
+  }
+  let m = 0; for (const x of e) m += x; m /= e.length;
+  let sd = 0; for (const x of e) sd += (x - m) * (x - m); sd = Math.sqrt(sd / e.length) || 1;
+  for (let i = 0; i < e.length; i++) e[i] = (e[i] - m) / sd;
+  return e;
+}
+
+function diff(a, b){ let s = 0; for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]); return s / a.length; }
+
+$("autoBtn").addEventListener("click", async () => {
+  if (busy || clips.length < 2) return;
+  busy = true; $("autoBtn").disabled = true; $("buildBtn").disabled = true;
+  try {
+    const base = clips[baseIdx];
+    const ref = signature(await grabFrame(base, base.offset, SIG_W, SIG_H));
+    const others = clips.map((_, k) => k).filter(k => k !== baseIdx);
+    for (let n = 0; n < others.length; n++){
+      const c = clips[others[n]];
+      const dur = c.video.duration || 0;
+      const step = dur > 120 ? 2 : dur > 30 ? 1 : 0.25;
+      let best = Infinity, bestT = 0;
+      for (let t = 0; t < dur - 0.1; t += step){
+        const sc = diff(ref, signature(await grabFrame(c, t, SIG_W, SIG_H)));
+        if (sc < best){ best = sc; bestT = t; }
+        setStatus("Lining up clip " + (others[n] + 1) + ": " + Math.round(100 * t / dur) + "%");
+      }
+      // finer passes around the best spot
+      for (const fine of [0.25, 0.1]){
+        const center = bestT, span = fine === 0.25 ? step : 0.25;
+        for (let t = Math.max(0, center - span); t <= Math.min(dur - 0.1, center + span); t += fine){
+          const sc = diff(ref, signature(await grabFrame(c, t, SIG_W, SIG_H)));
+          if (sc < best){ best = sc; bestT = t; }
+        }
+      }
+      setOffset(c, bestT);
+      await drawThumb(c);
+    }
+    setStatus("Lined up. Check the flipping picture, then build.");
+    selectedIdx = others[0];
+  } finally {
+    busy = false; $("autoBtn").disabled = false; $("buildBtn").disabled = clips.length < 2;
+  }
+  updateAlign();
+});
+
+// Frames come from a video decoder that runs inside the page, so the browser's video player is only used for previews.
+let ff = null, ffLoading = null, nextClipId = 0;
+async function loadDecoder(){
+  if (ff) return ff;
+  if (!ffLoading) ffLoading = (async () => {
+    setStatus("Loading video decoder (about 32 MB, first time only)...");
+    const f = new FFmpegWASM.FFmpeg();
+    const root = location.origin + "/ff/";
+    await f.load({ coreURL: root + "ffmpeg-core.js", wasmURL: root + "ffmpeg-core.wasm" });
+    // A throwaway first run settles the decoder; without it the first real run can crash.
+    try { await f.exec(["-hide_banner", "-i", "not-found"]); } catch (e) {}
+    ff = f;
+    return f;
+  })();
+  try { return await ffLoading; } catch (e){ ffLoading = null; throw e; }
+}
+async function clipPath(c){
+  await loadDecoder();
+  if (!c.mounted){
+    const dir = "/in" + c.id;
+    try { await ff.createDir(dir); } catch (e) {}
+    await ff.mount("WORKERFS", { files: [c.file] }, dir);
+    c.mounted = dir + "/" + c.file.name;
+  }
+  return c.mounted;
+}
+// The decoder gets unstable after many runs, so it is restarted every so often and after any crash.
+let ffRuns = 0;
+async function resetDecoder(){
+  try { if (ff) ff.terminate(); } catch (e) {}
+  ff = null; ffLoading = null; ffRuns = 0;
+  for (const c of clips) c.mounted = null;
+  await loadDecoder();
+}
+let ffQueue = Promise.resolve();
+function ffRun(job){
+  const safe = async () => {
+    let lastErr = null;
+    for (let attempt = 0; attempt < 3; attempt++){
+      try {
+        if (ffRuns >= 12) await resetDecoder();
+        ffRuns++;
+        return await job();
+      } catch (e){
+        lastErr = e;
+        await resetDecoder();
+      }
+    }
+    throw new Error("Decoder: " + (lastErr && lastErr.message ? lastErr.message : lastErr));
+  };
+  const p = ffQueue.then(safe);
+  ffQueue = p.catch(() => {});
+  return p;
+}
+
+function evenSize(w, c){
+  let h = Math.round(w * c.video.videoHeight / c.video.videoWidth) || Math.round(w * 9 / 16);
+  return h - (h % 2);
+}
+
+// One frame from a clip at time t, as an ImageBitmap of size w by h.
+function grabFrame(c, t, w, h){
+  return ffRun(async () => {
+    const path = await clipPath(c);
+    const out = "/grab.jpg";
+    await ff.exec(["-ss", Math.max(0, t).toFixed(3), "-i", path, "-frames:v", "1", "-vf", "scale=" + w + ":" + h, "-q:v", "3", "-y", out]);
+    const data = await ff.readFile(out);
+    try { await ff.deleteFile(out); } catch (e) {}
+    return createImageBitmap(new Blob([data], { type: "image/jpeg" }));
+  });
+}
+
+// A run of frames from a clip, as JPEG blobs.
+function grabRange(c, t, dur, fps, w, h){
+  return ffRun(async () => {
+    const path = await clipPath(c);
+    const dir = "/run" + c.id;
+    try { await ff.createDir(dir); } catch (e) {}
+    for (const e of await ff.listDir(dir)) if (!e.isDir) { try { await ff.deleteFile(dir + "/" + e.name); } catch (x) {} }
+    await ff.exec(["-ss", Math.max(0, t).toFixed(3), "-i", path, "-t", dur.toFixed(3), "-vf", "fps=" + fps + ",scale=" + w + ":" + h, "-q:v", "3", "-y", dir + "/f%05d.jpg"]);
+    const names = (await ff.listDir(dir)).filter(e => !e.isDir).map(e => e.name).sort();
+    const out = [];
+    for (const n of names){
+      const d = await ff.readFile(dir + "/" + n);
+      out.push(new Blob([d], { type: "image/jpeg" }));
+      try { await ff.deleteFile(dir + "/" + n); } catch (e) {}
+    }
+    return out;
+  });
+}
+
+function setStatus(t){ $("status").textContent = t; }
+function setBar(f){ $("barFill").style.width = (Math.max(0, Math.min(1, f)) * 100).toFixed(1) + "%"; }
+
+async function loadModel(){
+  if (session) return;
+  setStatus("Loading car model (about 14 MB)...");
+  session = await ort.InferenceSession.create("vehicles-seg.onnx", { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
+}
+
+function iou(a, b){
+  const x1 = Math.max(a.x1, b.x1), y1 = Math.max(a.y1, b.y1);
+  const x2 = Math.min(a.x2, b.x2), y2 = Math.min(a.y2, b.y2);
+  const inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+  const u = (a.x2 - a.x1) * (a.y2 - a.y1) + (b.x2 - b.x1) * (b.y2 - b.y1) - inter;
+  return u > 0 ? inter / u : 0;
+}
+
+// Runs the model on the frame currently drawn in "work" (W x H) and returns masked car cutouts.
+async function detectCars(W, H, conf){
+  const S = MODEL_SIZE;
+  const s = S / Math.max(W, H);
+  const nw = Math.round(W * s), nh = Math.round(H * s);
+  lbCtx.fillStyle = "#000"; lbCtx.fillRect(0, 0, S, S);
+  lbCtx.drawImage(work, 0, 0, W, H, 0, 0, nw, nh);
+  const px = lbCtx.getImageData(0, 0, S, S).data;
+  const area = S * S;
+  const input = new Float32Array(3 * area);
+  for (let p = 0, q = 0; p < area; p++, q += 4){
+    input[p] = px[q] / 255; input[p + area] = px[q + 1] / 255; input[p + 2 * area] = px[q + 2] / 255;
+  }
+  const feeds = {}; feeds[session.inputNames[0]] = new ort.Tensor("float32", input, [1, 3, S, S]);
+  let out;
+  try { out = await session.run(feeds); }
+  catch (e){ throw new Error("Car model: " + (e && e.message ? e.message : e)); }
+  let det = null, proto = null;
+  for (const k of session.outputNames){ const t = out[k]; if (t.dims.length === 3) det = t; else if (t.dims.length === 4) proto = t; }
+  const dd = det.data, pd = proto.data;
+  let C, N, chMajor;
+  if (det.dims[1] < det.dims[2]){ C = det.dims[1]; N = det.dims[2]; chMajor = true; } else { N = det.dims[1]; C = det.dims[2]; chMajor = false; }
+  const get = chMajor ? (c, i) => dd[c * N + i] : (c, i) => dd[i * C + c];
+  const nm = proto.dims[1], mh = proto.dims[2], mw = proto.dims[3];
+  const nc = C - 4 - nm;
+
+  const cands = [];
+  for (let i = 0; i < N; i++){
+    let best = 0, cls = -1;
+    for (const k of VEHICLE_CLASSES){ if (k >= nc) continue; const sc = get(4 + k, i); if (sc > best){ best = sc; cls = k; } }
+    if (best < conf) continue;
+    const cx = get(0, i), cy = get(1, i), w = get(2, i), h = get(3, i);
+    cands.push({ i, score: best, cls,
+      x1: Math.max(0, cx - w / 2), y1: Math.max(0, cy - h / 2),
+      x2: Math.min(nw, cx + w / 2), y2: Math.min(nh, cy + h / 2) });
+  }
+  cands.sort((a, b) => b.score - a.score);
+  const kept = [];
+  for (const c of cands){
+    if (kept.length >= 40) break;
+    if (kept.every(k => iou(k, c) < 0.5)) kept.push(c);
+  }
+
+  const cuts = [];
+  const plane = mh * mw;
+  for (const k of kept){
+    const coeffs = new Float32Array(nm);
+    for (let j = 0; j < nm; j++) coeffs[j] = get(4 + nc + j, k.i);
+    // mask in proto space, only inside the box (plus one cell of margin)
+    const mx1 = Math.max(0, Math.floor(k.x1 * mw / S) - 1), my1 = Math.max(0, Math.floor(k.y1 * mh / S) - 1);
+    const mx2 = Math.min(mw - 1, Math.ceil(k.x2 * mw / S) + 1), my2 = Math.min(mh - 1, Math.ceil(k.y2 * mh / S) + 1);
+    const bx1 = k.x1 * mw / S, by1 = k.y1 * mh / S, bx2 = k.x2 * mw / S, by2 = k.y2 * mh / S;
+    const mask = new Float32Array(plane);
+    for (let y = my1; y <= my2; y++){
+      for (let x = mx1; x <= mx2; x++){
+        if (x + 0.5 < bx1 - 0.5 || x + 0.5 > bx2 + 0.5 || y + 0.5 < by1 - 0.5 || y + 0.5 > by2 + 0.5) continue;
+        const o = y * mw + x;
+        let sum = 0;
+        for (let j = 0; j < nm; j++) sum += coeffs[j] * pd[j * plane + o];
+        mask[o] = 1 / (1 + Math.exp(-sum));
+      }
+    }
+    // cutout at output resolution
+    const ox1 = Math.max(0, Math.floor(k.x1 / s)), oy1 = Math.max(0, Math.floor(k.y1 / s));
+    const ox2 = Math.min(W, Math.ceil(k.x2 / s)), oy2 = Math.min(H, Math.ceil(k.y2 / s));
+    const bw = ox2 - ox1, bh = oy2 - oy1;
+    if (bw < 4 || bh < 4) continue;
+    const img = workCtx.getImageData(ox1, oy1, bw, bh);
+    const a = img.data;
+    const scale = s * mw / S;
+    let solid = 0;
+    for (let yy = 0; yy < bh; yy++){
+      const fy = (oy1 + yy + 0.5) * scale - 0.5;
+      const y0 = Math.max(0, Math.min(mh - 1, Math.floor(fy))), y1 = Math.min(mh - 1, y0 + 1), ty = Math.max(0, Math.min(1, fy - y0));
+      for (let xx = 0; xx < bw; xx++){
+        const fx = (ox1 + xx + 0.5) * scale - 0.5;
+        const x0 = Math.max(0, Math.min(mw - 1, Math.floor(fx))), x1 = Math.min(mw - 1, x0 + 1), tx = Math.max(0, Math.min(1, fx - x0));
+        const m = (mask[y0 * mw + x0] * (1 - tx) + mask[y0 * mw + x1] * tx) * (1 - ty) +
+                  (mask[y1 * mw + x0] * (1 - tx) + mask[y1 * mw + x1] * tx) * ty;
+        let al = (m - 0.4) / 0.2; al = al < 0 ? 0 : al > 1 ? 1 : al;
+        a[(yy * bw + xx) * 4 + 3] = Math.round(al * 255);
+        if (al > 0.5) solid++;
+      }
+    }
+    if (solid < 12) continue;
+    const bmp = await createImageBitmap(img);
+    cuts.push({ x: ox1, y: oy1, w: bw, h: bh, bottom: oy2, cls: k.cls, score: k.score, bmp });
+  }
+  return cuts;
+}
+
+function canvasToBlob(c){ return new Promise(r => c.toBlob(r, "image/jpeg", 0.9)); }
+
+function freeFrames(){
+  for (const f of frames) for (const c of f.cuts) { try { c.bmp.close(); } catch (e) {} }
+  frames = [];
+}
+
+$("buildBtn").addEventListener("click", async () => {
+  if (busy || clips.length < 2) return;
+  busy = true; stopPlay();
+  $("buildBtn").disabled = true; $("files").disabled = true;
+  try {
+    await loadModel();
+    freeFrames();
+    const fps = Math.max(2, Math.min(15, parseInt($("fps").value) || 8));
+    const W = parseInt($("width").value) || 640;
+    const conf = parseFloat($("conf").value) || 0.35;
+    const layerBase = $("layerBase").checked;
+    const base = clips[baseIdx];
+    const H = evenSize(W, base);
+    let dur = parseFloat($("dur").value) || 6;
+    for (const c of clips) dur = Math.min(dur, (c.video.duration || 0) - c.offset - 0.1);
+    const n = Math.floor(dur * fps);
+    if (n < 2){ setStatus("Clips are too short after their start points."); return; }
+    work.width = W; work.height = H;
+    outW = W; outH = H; outFps = fps;
+    const counts = clips.map(() => 0);
+    const t0 = performance.now();
+    await loadDecoder();
+    const runs = [];
+    for (let k = 0; k < clips.length; k++){
+      setStatus("Pulling frames from clip " + (k + 1) + " of " + clips.length + "...");
+      setBar(0.15 * k / clips.length);
+      runs[k] = await grabRange(clips[k], clips[k].offset, n / fps, fps, W, H);
+    }
+    const m = Math.min(n, ...runs.map(r => r.length));
+    if (m < 2){ setStatus("The decoder returned no frames from these clips."); return; }
+    const steps = m * clips.length;
+    let step = 0;
+    const tDetect = performance.now();
+    for (let i = 0; i < m; i++){
+      const frame = { blob: runs[baseIdx][i], cuts: [] };
+      for (let k = 0; k < clips.length; k++){
+        if (k !== baseIdx || layerBase){
+          const bmp = await createImageBitmap(runs[k][i]);
+          workCtx.drawImage(bmp, 0, 0, W, H); bmp.close();
+          const cuts = await detectCars(W, H, conf);
+          for (const cut of cuts){ cut.clip = k; frame.cuts.push(cut); }
+          counts[k] += cuts.length;
+        }
+        step++;
+        setBar(0.15 + 0.85 * step / steps);
+        const per = (performance.now() - tDetect) / step;
+        const left = Math.round(per * (steps - step) / 1000);
+        setStatus("Masking frame " + (i + 1) + " of " + m + ", clip " + (k + 1) + ". About " + left + "s left.");
+      }
+      frame.cuts.sort((a, b) => a.bottom - b.bottom); // farther cars first, closer cars drawn on top
+      frames.push(frame);
+    }
+    const secs = ((performance.now() - t0) / 1000).toFixed(0);
+    setStatus("Done in " + secs + "s. Cars masked per clip: " + counts.map((c, k) => "clip " + (k + 1) + " " + c).join(", ") + ".");
+    showResult();
+  } catch (err){
+    setStatus("Build stopped: " + (err && err.message ? err.message : err));
+  } finally {
+    busy = false;
+    $("buildBtn").disabled = clips.length < 2; $("files").disabled = false;
+  }
+});
+
+function showResult(){
+  const cv = $("out");
+  cv.width = outW; cv.height = outH;
+  $("outCard").hidden = false;
+  $("scrub").max = frames.length - 1; $("scrub").value = 0;
+  const tg = $("layerToggles");
+  tg.innerHTML = "";
+  clips.forEach((c, k) => {
+    const l = document.createElement("label");
+    l.innerHTML = '<input type="checkbox"' + (c.enabled ? " checked" : "") + '><span class="sw" style="background:' + COLORS[k % COLORS.length] + '"></span><span></span>';
+    l.lastChild.textContent = "Clip " + (k + 1) + (k === baseIdx ? " (base)" : "") + " cars";
+    l.firstChild.addEventListener("change", e => { c.enabled = e.target.checked; if (!playing) drawFrame(cur); });
+    tg.appendChild(l);
+  });
+  cur = 0; drawFrame(0);
+}
+
+let cur = 0, playing = false, recorder = null, recChunks = [];
+
+async function drawFrame(i){
+  const f = frames[i]; if (!f) return;
+  const ctx = $("out").getContext("2d");
+  const bg = await createImageBitmap(f.blob);
+  ctx.drawImage(bg, 0, 0, outW, outH); bg.close();
+  const tint = $("tint").checked;
+  let shown = 0;
+  for (const c of f.cuts){
+    if (!clips[c.clip] || !clips[c.clip].enabled) continue;
+    shown++;
+    if (tint){
+      tintCanvas.width = c.w; tintCanvas.height = c.h;
+      tintCtx.globalCompositeOperation = "source-over";
+      tintCtx.clearRect(0, 0, c.w, c.h);
+      tintCtx.drawImage(c.bmp, 0, 0);
+      tintCtx.globalCompositeOperation = "source-atop";
+      tintCtx.globalAlpha = 0.45;
+      tintCtx.fillStyle = COLORS[c.clip % COLORS.length];
+      tintCtx.fillRect(0, 0, c.w, c.h);
+      tintCtx.globalAlpha = 1;
+      ctx.drawImage(tintCanvas, c.x, c.y);
+    } else {
+      ctx.drawImage(c.bmp, c.x, c.y);
+    }
+  }
+  $("scrub").value = i;
+  $("frameNum").textContent = (i + 1) + "/" + frames.length;
+  $("outStatus").textContent = shown + " cars on this frame";
+}
+
+$("scrub").addEventListener("input", e => { stopPlay(); cur = parseInt(e.target.value); drawFrame(cur); });
+$("tint").addEventListener("change", () => { if (!playing) drawFrame(cur); });
+
+function stopPlay(){ playing = false; $("playBtn").textContent = "Play"; }
+
+async function playLoop(){
+  while (playing && frames.length){
+    const t0 = performance.now();
+    await drawFrame(cur);
+    cur++;
+    if (cur >= frames.length){
+      cur = 0;
+      if (recorder){ finishRecording(); }
+    }
+    await sleep(Math.max(0, 1000 / outFps - (performance.now() - t0)));
+  }
+}
+
+$("playBtn").addEventListener("click", () => {
+  if (!frames.length) return;
+  if (playing){ stopPlay(); return; }
+  playing = true; $("playBtn").textContent = "Pause"; playLoop();
+});
+
+$("recBtn").addEventListener("click", () => {
+  if (!frames.length || recorder) return;
+  const types = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"];
+  const type = types.find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t));
+  if (!type){ $("outStatus").textContent = "This browser cannot record the canvas."; return; }
+  const stream = $("out").captureStream(outFps);
+  recChunks = [];
+  recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 6000000 });
+  recorder.ondataavailable = e => { if (e.data && e.data.size) recChunks.push(e.data); };
+  recorder.onstop = () => {
+    const blob = new Blob(recChunks, { type: type.split(";")[0] });
+    const ext = type.indexOf("mp4") >= 0 ? "mp4" : "webm";
+    const a = document.createElement("a");
+    a.className = "save"; a.href = URL.createObjectURL(blob);
+    a.download = "road-layers-" + Date.now() + "." + ext;
+    a.textContent = "Save recorded video (" + (blob.size / 1048576).toFixed(1) + " MB)";
+    $("saveWrap").innerHTML = ""; $("saveWrap").appendChild(a);
+    recorder = null; $("recBtn").disabled = false;
+  };
+  $("recBtn").disabled = true;
+  $("saveWrap").innerHTML = "";
+  stopPlay(); cur = 0;
+  recorder.start();
+  playing = true; $("playBtn").textContent = "Pause"; playLoop();
+});
+
+function finishRecording(){
+  stopPlay();
+  if (recorder && recorder.state !== "inactive") recorder.stop();
+}
+</script>
+</body>
+</html>
