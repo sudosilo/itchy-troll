@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#d6eef9">
+<title>Rainbow Run Big Screen</title>
+<!-- BLUE PHONE: Rainbow Run stadium big screen. Open it on a projector, a TV or any extra display with the room in
+     its address. It shows the crowd's hype meter filling as the seat phones shake, so the whole venue can watch
+     its own energy load up. It only listens; it never changes the show. -->
+<style>
+:root{--ink:#1f2433;--soft:#5b6478;--blue:#2f6fd6;--bg:#d6eef9}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);
+  font-family:ui-rounded,"SF Pro Rounded","Nunito","Trebuchet MS",system-ui,sans-serif}
+#wrap{position:fixed;inset:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;padding:4vh 5vw}
+header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:16px}
+h1{margin:0;font-size:clamp(28px,6vw,84px);color:var(--blue);letter-spacing:.02em}
+#room{font-weight:800;font-size:clamp(14px,2.2vw,30px);color:var(--soft);white-space:nowrap}
+main{display:grid;align-content:center;gap:3vh}
+#big{font-weight:900;text-align:center;font-size:clamp(40px,12vw,200px);line-height:1;letter-spacing:.03em}
+#bar{height:clamp(40px,12vh,140px);border:6px solid var(--ink);border-radius:28px;background:#fff;overflow:hidden;box-shadow:8px 8px 0 var(--ink)}
+#fill{height:100%;width:0;background:linear-gradient(90deg,#22b45a,#f2c230 55%,#ff2a2a);transition:width .5s linear}
+#stats{text-align:center;font-weight:800;font-size:clamp(16px,3vw,44px);color:var(--soft)}
+footer{text-align:center;color:var(--soft);font-size:clamp(12px,1.6vw,22px)}
+.done #big{animation:pulse .36s steps(2) infinite;color:#ff2a2a}
+@keyframes pulse{50%{color:var(--blue)}}
+</style>
+<link rel="manifest" href="rainbow-run-v1.webmanifest">
+<link rel="icon" href="rainbow-run-v1-icon-192.png">
+</head>
+<body>
+<div id="wrap">
+  <header><h1>Rainbow Run</h1><span id="room"></span></header>
+  <main>
+    <div id="big">WAITING</div>
+    <div id="bar"><div id="fill"></div></div>
+    <div id="stats">The host starts the hype meter</div>
+  </main>
+  <footer id="foot">not connected</footer>
+</div>
+<script src="stompbox-lab-v3-config.js"></script>
+<script>
+(function(){
+"use strict";
+const APP="rainbow-run",SYNC_URL=(window.STOMPBOX_LAB_CONFIG&&window.STOMPBOX_LAB_CONFIG.syncUrl)||"";
+const $=id=>document.getElementById(id);
+const room=String(new URLSearchParams(location.search).get("stadium")||"").toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,24);
+let device="";try{device=localStorage.getItem(APP+"-screen-device")||"";if(!device){device=Date.now().toString(16)+Math.random().toString(16).slice(2);localStorage.setItem(APP+"-screen-device",device)}}catch(e){device=Date.now().toString(16)}
+let cue=null,hype=null,hypeAt=0,retry=0,sock=null;
+$("room").textContent=room?"room "+room:"no room in the address";
+function render(){
+  /* the meter arrives twice a second while a hype cue runs, so a fresh meter means it is on */
+  const fresh=hype&&Date.now()-hypeAt<2500,on=!!(fresh||(cue&&cue.type==="hype")),h=fresh&&(!cue||cue.type!=="hype"||hype.at===cue.at)?hype:null;
+  document.body.classList.toggle("done",!!(h&&h.done));
+  $("fill").style.width=(h?Math.round(h.fill*100):0)+"%";
+  $("big").textContent=!on?"WAITING":h&&h.done?"MAXED OUT":"SHAKE IT";
+  $("stats").textContent=!on?"The host starts the hype meter":!h?"Get ready":Math.round(h.fill*100)+"% full, "+h.active+" of "+h.phones+" phones shaking";
+}
+function connect(){
+  if(!SYNC_URL||!room)return;
+  const s=sock=new WebSocket(SYNC_URL+"?app="+APP+"&room="+encodeURIComponent(room)+"&device="+encodeURIComponent(device)+"&mode=stadium-host");
+  s.onopen=()=>{retry=0;$("foot").textContent="connected, listening to the crowd"};
+  s.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(_){return}if(!m||m.app!==APP)return;
+    if(m.type==="stadium-cue"){cue=m.cue;render()}
+    else if(m.type==="stadium-hype"){hype=m;hypeAt=Date.now();render()}};
+  s.onclose=()=>{$("foot").textContent="reconnecting";setTimeout(connect,Math.min(15000,500*Math.pow(2,retry++)))};
+  s.onerror=()=>s.close();
+}
+/* stay counted as present in the room, and drop the meter when the hype cue ends */
+setInterval(()=>{if(sock&&sock.readyState===1)sock.send(JSON.stringify({app:APP,type:"beat"}))},10000);
+setInterval(render,1000);
+render();connect();
+})();
+</script>
+</body>
+</html>

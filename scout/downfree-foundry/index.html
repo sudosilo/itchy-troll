@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Road Layers</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
 :root{
   --bg:#f6f4ef;--card:#ffffff;--ink:#1e2328;--muted:#5d6670;--line:#ddd8cc;
@@ -41,17 +42,109 @@ canvas{width:100%;height:auto;display:block;border-radius:8px;background:#e9e5dc
 .layers label{display:flex;align-items:center;gap:6px}
 .hint{font-size:13px;color:var(--muted);margin:6px 0 0}
 a.save{display:inline-block;margin-top:10px;color:var(--accent);font-weight:600}
+.tabs{display:flex;gap:8px;margin:0 0 14px}
+.tabs button{flex:1;background:#fff;color:var(--accent)}
+.tabs button.on{background:var(--accent);color:var(--accent-ink)}
+#recPreview{width:100%;display:block;border-radius:8px;background:#e9e5dc;max-height:55vh;object-fit:contain}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.stat{border:1px solid var(--line);border-radius:10px;padding:8px;text-align:center}
+.stat b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.stat span{font-size:12px;color:var(--muted)}
+.lib{border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:10px}
+.lib-top{display:flex;gap:8px;align-items:center}
+.lib-top b{flex:1;word-break:break-all}
+.lib-sub{font-size:13px;color:var(--muted);margin:4px 0 0 30px}
+.lib .btns{margin:8px 0 0 30px}
+.lib .btns button{padding:6px 10px;font-size:14px}
+.lib input[type=checkbox]{width:20px;height:20px}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:20px;margin-right:6px;vertical-align:middle}
+.tag.v{background:#e3eef3;color:#1f6f8b}
+.tag.s{background:var(--soft);color:#a8480f}
+#recBig{width:100%;font-size:20px;padding:16px}
+#recBig.live{background:#b3261e;border-color:#b3261e}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#b3261e;margin-right:6px;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.2}}
+#segList a{display:block}
+#map{height:62vh;border-radius:8px;border:1px solid var(--line);background:#e9e5dc}
+.legend{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:90px;height:8px;border-radius:4px;background:linear-gradient(90deg,rgba(210,96,26,.25),rgba(210,96,26,1))}
+.hitrow{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px;margin-top:8px}
+.hitrow b{flex:1;font-size:14px;word-break:break-all}
+.proj{border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:10px}
+.proj .btns button{padding:6px 10px;font-size:14px}
+.inrow{display:flex;gap:8px;margin-top:10px}
+.inrow input,.inrow select{flex:1;font-size:15px;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);min-width:0}
 </style>
 </head>
 <body>
 <main>
 <h1>Road Layers</h1>
-<p class="sub">Masking test. Cars from several drives stacked onto one road.</p>
+<p class="sub">Record drives with timing, then stack their cars onto one road.</p>
+<div class="tabs"><button id="tabRec">Record</button><button id="tabComp" class="on">Composite</button><button id="tabMap">Map</button><button id="tabRoad">Road</button></div>
 
+<div id="mapView" hidden>
+<section class="card">
+<h2>Where you've filmed</h2>
+<div id="map"></div>
+<div class="legend">Filmed once <i></i> many times</div>
+<p class="hint">Every recording is drawn along its route. Stretches filmed more often show darker. Tap the map to list the recordings that pass through that spot.</p>
+<div class="status" id="mapStatus"></div>
+<div id="hits"></div>
+<div id="hitActions" hidden>
+<div class="btns"><button id="hitUse">Use checked in Composite</button></div>
+<div class="inrow"><select id="hitProj"></select><button id="hitAdd" class="ghost">Add to project</button></div>
+</div>
+</section>
+
+<section class="card">
+<h2>Projects</h2>
+<p class="hint" style="margin-top:0">A project is a saved group of recordings for one stretch of road.</p>
+<div class="inrow"><input id="projName" placeholder="New project name" maxlength="60"><button id="projNew">Create</button></div>
+<div id="projList"></div>
+</section>
+</div>
+
+<div id="recView" hidden>
+<section class="card">
+<h2>Record a drive</h2>
+<video id="recPreview" muted playsinline autoplay></video>
+<div class="stats">
+<div class="stat"><b id="stSpeed">0</b><span>mph</span></div>
+<div class="stat"><b id="stTime">0:00</b><span>recording</span></div>
+<div class="stat"><b id="stGps">none</b><span>GPS accuracy</span></div>
+<div class="stat"><b id="stPts">0</b><span>GPS points</span></div>
+<div class="stat"><b id="stStills">0</b><span>stop motion frames</span></div>
+<div class="stat"><b id="stSize">0</b><span>MB this part</span></div>
+<div class="stat"><b id="stBatt">?</b><span>battery</span></div>
+</div>
+<div class="grid" style="margin-top:10px">
+<label>Quality<select id="recRes"><option value="1280x720">720p</option><option value="1920x1080" selected>1080p</option></select></label>
+<label>Capture style<select id="capMode"><option value="video" selected>Full video</option><option value="stills">Stop motion</option><option value="both">Both at once</option></select></label>
+<label>Stop motion frame every<select id="stillEvery"><option value="d10">10 feet</option><option value="d25" selected>25 feet</option><option value="d50">50 feet</option><option value="d100">100 feet</option><option value="d250">250 feet</option><option value="t0.5">half second</option><option value="t1">1 second</option><option value="t2">2 seconds</option><option value="t5">5 seconds</option></select></label>
+<label>Split into parts every<select id="recSplit"><option value="5">5 minutes</option><option value="10" selected>10 minutes</option><option value="20">20 minutes</option></select></label>
+<label>Stop when battery reaches<select id="battStop"><option value="5" selected>5%</option><option value="10">10%</option><option value="15">15%</option></select></label>
+</div>
+<div class="btns"><button id="camBtn" class="ghost">Start camera</button></div>
+<div class="btns"><button id="recBig" disabled>Record</button></div>
+<div class="status" id="recStatus">Mount the phone sideways in the same spot every drive, then tap Start camera.</div>
+<p class="hint">Recordings save inside the app every few seconds, so a crash or reload keeps everything up to that moment. Each part keeps its GPS, speed and heading tied to the video's clock.</p>
+</section>
+</div>
+
+<section class="card">
+<h2>Library</h2>
+<div class="status" id="libStorage" style="margin-top:0"></div>
+<div id="libList"></div>
+<div class="grid" style="margin-top:10px"><label>Stop motion plays at<select id="stillFps"><option value="4">4 frames per second</option><option value="8" selected>8 frames per second</option><option value="12">12 frames per second</option><option value="24">24 frames per second</option></select></label></div>
+<div class="btns"><button id="libUse">Use checked items in Composite</button></div>
+<p class="hint">Full video parts and stop motion sets are marked. In Composite, pick a full video as Base so it supplies the road, and stop motion sets layer on top. Save to phone copies an item out to Downloads. The app keeps its own copy either way.</p>
+</section>
+
+<div id="compView">
 <section class="card">
 <h2>1. Clips</h2>
 <input id="files" type="file" accept="video/*" multiple>
-<p class="hint">Pick two or more clips of the same stretch of road. The clip marked Base supplies the road.</p>
+<p class="hint">Add parts from the Library above, or pick video files from the phone. The clip marked Base supplies the road.</p>
 <div id="clipList"></div>
 </section>
 
@@ -91,13 +184,41 @@ a.save{display:inline-block;margin-top:10px;color:var(--accent);font-weight:600}
 <div id="saveWrap"></div>
 <div class="status" id="outStatus"></div>
 </section>
+</div>
+
+<div id="roadView" hidden>
+<section class="card">
+<h2>Road tracking</h2>
+<p class="hint" style="margin-top:0">Finds the lane lines, vanishing point and lane width in every frame of a recording. Cars placed later ride along this track. Runs after the drive, not while recording.</p>
+<div class="inrow"><select id="roadPick"></select></div>
+<input id="roadFile" type="file" accept="video/*" style="margin-top:10px">
+<div class="grid" style="margin-top:10px">
+<label>Frames per second to track<select id="roadFps"><option value="2">2</option><option value="4" selected>4</option><option value="8">8</option></select></label>
+<label>Lane width<select id="laneFt"><option value="12" selected>12 feet (highway)</option><option value="11">11 feet</option><option value="10">10 feet (city)</option></select></label>
+</div>
+<div class="btns"><button id="roadGo">Track road</button></div>
+<div class="bar"><i id="roadBar"></i></div>
+<div class="status" id="roadStatus"></div>
+<canvas id="roadCanvas" style="margin-top:10px"></canvas>
+<div class="row"><input id="roadScrub" type="range" min="0" max="0" value="0"><span class="num" id="roadNum">0</span></div>
+<div class="stats">
+<div class="stat"><b id="rsConf">0</b><span>confidence</span></div>
+<div class="stat"><b id="rsLane">0</b><span>lane width px</span></div>
+<div class="stat"><b id="rsBend">0</b><span>bend</span></div>
+</div>
+<div class="legend" style="flex-wrap:wrap"><span style="color:#2e7d32">left line</span><span style="color:#1f6f8b">right line</span><span style="color:#d2601a">lane center</span><span style="color:#8a3fa0">vanishing point and horizon</span></div>
+</section>
+</div>
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="ff/ffmpeg.js"></script>
 <script>
-ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
-ort.env.wasm.numThreads = 1;
+if (window.ort){
+  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
+  ort.env.wasm.numThreads = 1;
+}
 
 const COLORS = ["#d2601a","#1f6f8b","#3f8f3a","#8a3fa0","#b8901a","#c23b4a","#2d6e5e","#6b4f2a"];
 const VEHICLE_CLASSES = [2,3,5,7]; // car, motorcycle, bus, truck
@@ -181,6 +302,10 @@ function loadClip(file){
     $("clipList").appendChild(v);
     v.src = URL.createObjectURL(file);
     v.addEventListener("loadeddata", async () => {
+      if (!isFinite(v.duration)){
+        await new Promise(r => { v.addEventListener("durationchange", function h(){ if (isFinite(v.duration)){ v.removeEventListener("durationchange", h); r(); } }); v.currentTime = 1e9; setTimeout(r, 4000); });
+        v.currentTime = 0;
+      }
       try { await v.play(); } catch (e) {}
       await waitFrame(v, 400);
       v.pause();
@@ -193,6 +318,11 @@ function loadClip(file){
 
 $("files").addEventListener("change", async e => {
   const list = [...e.target.files];
+  e.target.value = "";
+  await addClipFiles(list);
+});
+
+async function addClipFiles(list){
   if (!list.length) return;
   setStatus("Opening clips...");
   for (const f of list){
@@ -201,14 +331,13 @@ $("files").addEventListener("change", async e => {
       clips.push({ id: nextClipId++, file: f, mounted: null, name: f.name, video: v, offset: 0, enabled: true, thumb: null, range: null, num: null });
     } catch (err){ setStatus(err.message); }
   }
-  e.target.value = "";
   if (selectedIdx < 0 && clips.length > 1) selectedIdx = baseIdx === 0 ? 1 : 0;
   renderClips();
   for (const c of clips) await drawThumb(c);
   updateAlign();
   $("buildBtn").disabled = clips.length < 2;
   setStatus(clips.length < 2 ? "Add at least one more clip." : clips.length + " clips ready.");
-});
+}
 
 async function drawThumb(c){
   await seekTo(c.video, c.offset);
@@ -750,6 +879,916 @@ function finishRecording(){
   stopPlay();
   if (recorder && recorder.state !== "inactive") recorder.stop();
 }
+
+</script>
+<script>
+// ---------------- Record tab ----------------
+function showTab(name){
+  for (const [t, v] of [["tabRec", "recView"], ["tabComp", "compView"], ["tabMap", "mapView"], ["tabRoad", "roadView"]]){
+    $(v).hidden = t !== name;
+    $(t).classList.toggle("on", t === name);
+  }
+  // the Library card sits outside the views; hide it on the map tab
+  const lib = $("libList").closest("section");
+  if (lib) lib.hidden = name === "tabMap" || name === "tabRoad";
+  if (name === "tabMap") openMap();
+  if (name === "tabRoad") openRoad();
+}
+$("tabRec").addEventListener("click", () => showTab("tabRec"));
+$("tabComp").addEventListener("click", () => showTab("tabComp"));
+$("tabMap").addEventListener("click", () => showTab("tabMap"));
+$("tabRoad").addEventListener("click", () => showTab("tabRoad"));
+
+// Storage layout inside the app (origin private file system):
+//   drives/<drive>/part01/c000001.bin ...   chunks while recording
+//   drives/<drive>/part01.webm              finished video
+//   drives/<drive>/part01_timing.json       GPS log tied to the video clock
+const CHUNK_MS = 4000;
+let camStream = null, recorder2 = null, recording = false, stopping = false;
+let geoWatch = null, wakeLock = null, lastFix = null;
+let driveId = "", segIndex = 0, segStartPerf = 0, segTimer = null, tickTimer = null;
+let segLog = null, segDir = null, chunkNo = 0, recBytes = 0, writeChain = Promise.resolve();
+let battery = null;
+const recMime = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm", "video/mp4"].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || "";
+const recExt = recMime.indexOf("mp4") >= 0 ? "mp4" : "webm";
+
+function recSay(t){ $("recStatus").textContent = t; }
+function pad(n, w){ return String(n).padStart(w || 2, "0"); }
+function stamp(d){ return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "_" + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()); }
+function mb(n){ return (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + " MB"; }
+
+async function root(){ return navigator.storage.getDirectory(); }
+async function drivesDir(){ return (await root()).getDirectoryHandle("drives", { create: true }); }
+async function writeFile(dir, name, data){
+  const fh = await dir.getFileHandle(name, { create: true });
+  const w = await fh.createWritable();
+  await w.write(data); await w.close();
+}
+async function listEntries(dir){ const out = []; for await (const [n, h] of dir.entries()) out.push([n, h]); return out; }
+
+// Joins a part's chunk files into one video file, then removes the chunks.
+async function assemblePart(driveDir, partName){
+  let chunkDir;
+  try { chunkDir = await driveDir.getDirectoryHandle(partName); } catch (e){ return; }
+  const names = (await listEntries(chunkDir)).filter(([n, h]) => h.kind === "file" && n.startsWith("c")).map(([n]) => n).sort();
+  if (names.length){
+    let ext = recExt;
+    try { const m = JSON.parse(await (await (await chunkDir.getFileHandle("meta.json")).getFile()).text()); if (m.mime && m.mime.indexOf("mp4") >= 0) ext = "mp4"; } catch (e) {}
+    const fh = await driveDir.getFileHandle(partName + "." + ext, { create: true });
+    const w = await fh.createWritable();
+    for (const n of names) await w.write(await (await chunkDir.getFileHandle(n)).getFile());
+    await w.close();
+    try { const t = await (await chunkDir.getFileHandle("timing.json")).getFile(); await writeFile(driveDir, partName + "_timing.json", t); } catch (e) {}
+  }
+  await driveDir.removeEntry(partName, { recursive: true });
+}
+
+// After a crash or reload, finish any part that was still recording.
+async function recoverParts(){
+  try {
+    const dd = await drivesDir();
+    for (const [dn, dh] of await listEntries(dd)){
+      if (dh.kind !== "directory") continue;
+      for (const [pn, ph] of await listEntries(dh)) if (ph.kind === "directory" && /^part\d+$/.test(pn)) await assemblePart(dh, pn);
+    }
+  } catch (e) {}
+}
+
+async function grabWakeLock(){ try { if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {} }
+document.addEventListener("visibilitychange", () => { if (recording && document.visibilityState === "visible") grabWakeLock(); });
+
+// ---- battery rule ----
+async function setupBattery(){
+  if (!navigator.getBattery){ $("stBatt").textContent = "n/a"; return; }
+  try {
+    battery = await navigator.getBattery();
+    const show = () => {
+      $("stBatt").textContent = Math.round(battery.level * 100) + "%" + (battery.charging ? "+" : "");
+      checkBattery();
+    };
+    battery.addEventListener("levelchange", show);
+    battery.addEventListener("chargingchange", show);
+    show();
+  } catch (e){ $("stBatt").textContent = "n/a"; }
+}
+function checkBattery(){
+  if (!battery || !recording || battery.charging) return;
+  const limit = parseInt($("battStop").value) || 5;
+  if (battery.level * 100 <= limit) stopRecording("Battery reached " + limit + "%. Recording stopped and saved.");
+}
+
+// ---- storage rule: stop before the phone runs out of room for the app ----
+async function storageLeft(){
+  try { const e = await navigator.storage.estimate(); return { used: e.usage || 0, quota: e.quota || 0, left: (e.quota || 0) - (e.usage || 0) }; }
+  catch (e){ return null; }
+}
+
+$("camBtn").addEventListener("click", async () => {
+  if (camStream){ for (const t of camStream.getTracks()) t.stop(); camStream = null; }
+  const [w, h] = $("recRes").value.split("x").map(Number);
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: "environment" }, width: { ideal: w }, height: { ideal: h }, frameRate: { ideal: 30 } }
+    });
+  } catch (e){ recSay("Camera blocked: " + (e && e.message ? e.message : e)); return; }
+  $("recPreview").srcObject = camStream;
+  const st = camStream.getVideoTracks()[0].getSettings();
+  recSay("Camera on at " + (st.width || "?") + "x" + (st.height || "?") + ", " + Math.round(st.frameRate || 0) + " fps. Starting GPS...");
+  startGeo();
+  $("recBig").disabled = false;
+  $("camBtn").textContent = "Restart camera";
+});
+
+function startGeo(){
+  if (geoWatch !== null || !navigator.geolocation) return;
+  geoWatch = navigator.geolocation.watchPosition(p => {
+    const c = p.coords;
+    if (lastFix && c.speed == null && recording){
+      // no speed from the phone: estimate it from the move since the last fix
+      const dt = (p.timestamp - lastFixTime) / 1000;
+      if (dt > 0) estSpeed = haversine(lastFix.latitude, lastFix.longitude, c.latitude, c.longitude) / dt;
+    } else if (c.speed != null) estSpeed = c.speed;
+    lastFix = c; lastFixTime = p.timestamp;
+    $("stSpeed").textContent = c.speed != null ? Math.round(c.speed * 2.23694) : "?";
+    $("stGps").textContent = Math.round(c.accuracy) + " m";
+    if (recording && segLog){
+      segLog.gps.push({
+        t: +((performance.now() - segStartPerf) / 1000).toFixed(3), // seconds into this video part
+        fixTime: p.timestamp,
+        lat: c.latitude, lon: c.longitude, alt: c.altitude,
+        acc: c.accuracy, speed: c.speed, heading: c.heading
+      });
+      $("stPts").textContent = segLog.gps.length;
+    }
+    if (!recording) recSay("Camera and GPS ready. Tap Record.");
+  }, e => {
+    $("stGps").textContent = "off";
+    if (!recording) recSay("GPS problem: " + e.message + ". Video still records without location.");
+  }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+}
+
+async function startSegment(){
+  const dd = await drivesDir();
+  const driveDir = await dd.getDirectoryHandle(driveId, { create: true });
+  const partName = "part" + pad(segIndex + 1);
+  segDir = await driveDir.getDirectoryHandle(partName, { create: true });
+  chunkNo = 0; recBytes = 0;
+  const [w] = $("recRes").value.split("x").map(Number);
+  const st = camStream.getVideoTracks()[0].getSettings();
+  segLog = { drive: driveId, part: segIndex + 1, mime: recMime, width: st.width, height: st.height, fps: st.frameRate, startWall: null, gps: [] };
+  await writeFile(segDir, "meta.json", JSON.stringify({ mime: recMime }));
+  const thisDir = segDir, thisLog = segLog;
+  const rec = new MediaRecorder(camStream, { mimeType: recMime, videoBitsPerSecond: w >= 1920 ? 8000000 : 5000000 });
+  rec.ondataavailable = e => {
+    if (!e.data || !e.data.size) return;
+    const n = ++chunkNo;
+    recBytes += e.data.size;
+    $("stSize").textContent = (recBytes / 1048576).toFixed(0);
+    const data = e.data;
+    writeChain = writeChain.then(async () => {
+      await writeFile(thisDir, "c" + pad(n, 6) + ".bin", data);
+      await writeFile(thisDir, "timing.json", JSON.stringify(thisLog));
+      if (n % 5 === 0){
+        const s = await storageLeft();
+        if (s && s.quota && s.left < 300 * 1048576) stopRecording("App storage almost full. Recording stopped and saved.");
+      }
+    }).catch(err => { recSay("Save error: " + (err && err.message ? err.message : err)); });
+  };
+  const done = new Promise(r => { rec.onstop = r; });
+  rec.onstart = () => {
+    segStartPerf = performance.now();
+    thisLog.startWall = new Date().toISOString();
+    if (lastFix) thisLog.gps.push({ t: 0, fixTime: Date.now(), lat: lastFix.latitude, lon: lastFix.longitude, alt: lastFix.altitude, acc: lastFix.accuracy, speed: lastFix.speed, heading: lastFix.heading, carried: true });
+  };
+  rec.start(CHUNK_MS);
+  recorder2 = rec;
+  // finish this part: wait for the last chunk, write timing, join chunks into one file
+  rec.finish = async () => {
+    if (rec.state !== "inactive") rec.stop();
+    await done;
+    await writeChain;
+    await writeFile(thisDir, "timing.json", JSON.stringify(thisLog));
+    await assemblePart(driveDir, partName);
+    refreshLibrary();
+  };
+  const mins = parseInt($("recSplit").value) || 10;
+  clearTimeout(segTimer);
+  segTimer = setTimeout(async () => {
+    if (!recording) return;
+    const old = recorder2;
+    segIndex++;
+    await startSegment();          // new part starts first so there is no gap
+    old.finish();
+  }, mins * 60000);
+}
+
+async function stopRecording(msg){
+  if (!recording || stopping) return;
+  stopping = true;
+  recording = false;
+  clearTimeout(segTimer); clearInterval(tickTimer);
+  recSay("Saving...");
+  try { if (recorder2) await recorder2.finish(); }
+  catch (e){ msg = "Save error: " + (e && e.message ? e.message : e); }
+  recorder2 = null;
+  try { await stopStills(); }
+  catch (e){ msg = "Save error: " + (e && e.message ? e.message : e); }
+  refreshLibrary();
+  try { if (wakeLock) await wakeLock.release(); } catch (e) {}
+  wakeLock = null;
+  $("recBig").classList.remove("live");
+  $("recBig").textContent = "Record";
+  $("camBtn").disabled = false; $("recRes").disabled = false; $("capMode").disabled = false; $("stillEvery").disabled = false;
+  stopping = false;
+  recSay(msg || "Stopped and saved in the Library below.");
+}
+
+$("recBig").addEventListener("click", async () => {
+  if (!camStream || stopping) return;
+  if (recording){ stopRecording(); return; }
+  const mode = captureMode();
+  if (mode !== "stills" && !recMime){ recSay("This browser cannot record video."); return; }
+  if (!navigator.storage || !navigator.storage.getDirectory){ recSay("This browser has no app storage for recordings."); return; }
+  if (battery && !battery.charging && battery.level * 100 <= (parseInt($("battStop").value) || 5)){ recSay("Battery is too low to start."); return; }
+  try { if (navigator.storage.persist) await navigator.storage.persist(); } catch (e) {}
+  recording = true;
+  driveId = stamp(new Date()); segIndex = 0;
+  await grabWakeLock();
+  try {
+    const t0 = performance.now();
+    if (mode !== "stills") await startSegment();
+    if (mode !== "video") await startStills(mode === "both" ? segStartPerf || t0 : t0);
+  }
+  catch (e){ recording = false; recSay("Could not start: " + (e && e.message ? e.message : e)); return; }
+  $("recBig").classList.add("live");
+  $("recBig").textContent = "Stop";
+  $("camBtn").disabled = true; $("recRes").disabled = true; $("capMode").disabled = true; $("stillEvery").disabled = true;
+  const t0 = performance.now();
+  tickTimer = setInterval(() => {
+    const s = Math.floor((performance.now() - t0) / 1000);
+    $("stTime").textContent = Math.floor(s / 60) + ":" + pad(s % 60);
+    checkBattery();
+    if (s % 15 === 0) storageLeft().then(x => { if (x && x.quota && x.left < 300 * 1048576) stopRecording("App storage almost full. Recording stopped and saved."); });
+  }, 1000);
+  $("recStatus").innerHTML = '<span class="dot"></span>' + (mode === "stills" ? "Capturing stop motion." : mode === "both" ? "Recording video and stop motion." : "Recording.") + " Saving into the app as it goes. Keep this screen open.";
+});
+
+
+// ---------------- Stop motion ----------------
+// Frames are grabbed from the live camera at fixed distances (using GPS speed between fixes) or fixed times.
+let lastFixTime = 0, estSpeed = null;
+let stillsDir = null, stillsLog = null, stillTimer = null, stillN = 0, stillDist = 0, stillLastTick = 0, stillLastAt = 0, stillBusy = false;
+let stillChain = Promise.resolve();
+const stillCanvas = document.createElement("canvas");
+const stillCtx = stillCanvas.getContext("2d");
+
+function haversine(a1, o1, a2, o2){
+  const R = 6371000, r = Math.PI / 180;
+  const da = (a2 - a1) * r, dob = (o2 - o1) * r;
+  const h = Math.sin(da / 2) ** 2 + Math.cos(a1 * r) * Math.cos(a2 * r) * Math.sin(dob / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function captureMode(){ return $("capMode").value; }
+
+async function startStills(t0){
+  const dd = await drivesDir();
+  const driveDir = await dd.getDirectoryHandle(driveId, { create: true });
+  stillsDir = await driveDir.getDirectoryHandle("stills", { create: true });
+  const every = $("stillEvery").value;
+  const byDist = every[0] === "d";
+  const step = parseFloat(every.slice(1)) * (byDist ? 0.3048 : 1); // meters or seconds
+  stillsLog = { drive: driveId, mode: byDist ? "distance" : "time", every: every, stepMeters: byDist ? step : null, stepSeconds: byDist ? null : step, startWall: new Date().toISOString(), frames: [] };
+  stillN = 0; stillDist = 0; stillLastTick = performance.now(); stillLastAt = performance.now() - 1e9;
+  $("stStills").textContent = "0";
+  const thisDir = stillsDir, thisLog = stillsLog;
+  clearInterval(stillTimer);
+  stillTimer = setInterval(() => {
+    const now = performance.now();
+    const dt = (now - stillLastTick) / 1000;
+    stillLastTick = now;
+    if (byDist){
+      stillDist += (estSpeed || 0) * dt;
+      if (stillDist >= step){ stillDist -= step; if (stillDist > step) stillDist = 0; grabStill(thisDir, thisLog, t0); }
+    } else if ((now - stillLastAt) / 1000 >= step){
+      stillLastAt = now; grabStill(thisDir, thisLog, t0);
+    }
+  }, 50);
+}
+
+function grabStill(dir, log, t0){
+  if (stillBusy) return;            // camera can't keep up: skip rather than pile up
+  const v = $("recPreview");
+  if (!v.videoWidth) return;
+  stillBusy = true;
+  stillCanvas.width = v.videoWidth; stillCanvas.height = v.videoHeight;
+  stillCtx.drawImage(v, 0, 0);
+  const n = ++stillN;
+  const entry = {
+    n, file: "f" + pad(n, 6) + ".jpg",
+    t: +((performance.now() - t0) / 1000).toFixed(3),
+    wall: Date.now(),
+    lat: lastFix ? lastFix.latitude : null, lon: lastFix ? lastFix.longitude : null,
+    speed: estSpeed, heading: lastFix ? lastFix.heading : null
+  };
+  stillCanvas.toBlob(blob => {
+    stillBusy = false;
+    if (!blob) return;
+    log.frames.push(entry);
+    $("stStills").textContent = log.frames.length;
+    stillChain = stillChain.then(async () => {
+      await writeFile(dir, entry.file, blob);
+      if (n % 10 === 0) await writeFile(dir, "stills.json", JSON.stringify(log));
+    }).catch(err => recSay("Save error: " + (err && err.message ? err.message : err)));
+  }, "image/jpeg", 0.9);
+}
+
+async function stopStills(){
+  clearInterval(stillTimer); stillTimer = null;
+  if (!stillsDir) return;
+  for (let k = 0; k < 20 && stillBusy; k++) await sleep(50);
+  await stillChain;
+  await writeFile(stillsDir, "stills.json", JSON.stringify(stillsLog));
+  stillsDir = null;
+}
+
+// Turns a stop motion set into a video so Composite can use it like any clip.
+async function stillsToVideo(item, fps){
+  const files = [];
+  for (const [n, h] of await listEntries(item.dir)) if (h.kind === "file" && /^f\d+\.jpg$/.test(n)) files.push(await h.getFile());
+  files.sort((a, b) => a.name.localeCompare(b.name));
+  if (files.length < 2) throw new Error("Stop motion set has fewer than 2 frames.");
+  // renumber so the sequence has no gaps
+  const seq = files.map((f, i) => new File([f], "s" + pad(i + 1, 6) + ".jpg", { type: "image/jpeg" }));
+  return ffRun(async () => {
+    const dir = "/st" + Date.now();
+    await ff.createDir(dir);
+    await ff.mount("WORKERFS", { files: seq }, dir);
+    const out = "/stills_out.mp4";
+    await ff.exec(["-framerate", String(fps), "-i", dir + "/s%06d.jpg", "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20", "-pix_fmt", "yuv420p", "-y", out]);
+    const data = await ff.readFile(out);
+    try { await ff.deleteFile(out); } catch (e) {}
+    try { await ff.unmount(dir); } catch (e) {}
+    if (!data || !data.length) throw new Error("Could not build video from stop motion frames.");
+    return new File([data], "drive_" + item.drive + "_stopmotion.mp4", { type: "video/mp4" });
+  });
+}
+
+async function scanLibrary(){
+  const parts = [];
+  {
+    const dd = await drivesDir();
+    for (const [dn, dh] of await listEntries(dd)){
+      if (dh.kind !== "directory") continue;
+      const entries = await listEntries(dh);
+      const names = entries.map(([n]) => n);
+      for (const [n, h] of entries){
+        if (h.kind !== "file" || !/^part\d+\.(webm|mp4)$/.test(n)) continue;
+        const f = await h.getFile();
+        const tname = n.replace(/\.(webm|mp4)$/, "_timing.json");
+        let gpsN = 0, speed = null, track = [];
+        if (names.includes(tname)){
+          try {
+            const t = JSON.parse(await (await (await dh.getFileHandle(tname)).getFile()).text());
+            gpsN = t.gps.length;
+            track = t.gps.filter(g => g.lat != null && !g.carried).map(g => [g.lat, g.lon]);
+            if (!track.length) track = t.gps.filter(g => g.lat != null).map(g => [g.lat, g.lon]);
+            const sp = t.gps.map(g => g.speed).filter(x => x != null);
+            if (sp.length) speed = Math.round(sp.reduce((a, b) => a + b, 0) / sp.length * 2.23694);
+          } catch (e) {}
+        }
+        parts.push({ kind: "video", drive: dn, name: n, tname: names.includes(tname) ? tname : null, dir: dh, handle: h, size: f.size, gpsN, speed, track, id: dn + "/" + n });
+      }
+      const st = entries.find(([n, h]) => n === "stills" && h.kind === "directory");
+      if (st){
+        let count = 0, size = 0, info = null;
+        for (const [n, h] of await listEntries(st[1])){
+          if (h.kind !== "file") continue;
+          if (/^f\d+\.jpg$/.test(n)){ count++; size += (await h.getFile()).size; }
+        }
+        try { info = JSON.parse(await (await (await st[1].getFileHandle("stills.json")).getFile()).text()); } catch (e) {}
+        const track = info && info.frames ? info.frames.filter(f => f.lat != null).map(f => [f.lat, f.lon]) : [];
+        if (count) parts.push({ kind: "stills", drive: dn, name: "stills", dir: st[1], parentDir: dh, size, count, info, track, id: dn + "/stills" });
+      }
+      if (!entries.length) { try { await dd.removeEntry(dn); } catch (e) {} }
+    }
+  }
+  return parts;
+}
+
+// ---------------- Library ----------------
+async function refreshLibrary(){
+  const list = $("libList");
+  if (!navigator.storage || !navigator.storage.getDirectory){ list.textContent = "This browser has no app storage."; return; }
+  let parts;
+  try { parts = await scanLibrary(); }
+  catch (e){ list.textContent = "Could not read the library: " + e.message; return; }
+  parts.sort((a, b) => (b.drive + b.name).localeCompare(a.drive + a.name));
+  list.innerHTML = "";
+  if (!parts.length) list.innerHTML = '<p class="hint">No recordings yet.</p>';
+  for (const p of parts){
+    const d = document.createElement("div");
+    d.className = "lib";
+    d.innerHTML = '<div class="lib-top"><input type="checkbox"><b></b></div><div class="lib-sub"></div>' +
+      '<div class="btns"><button class="ghost" data-a="save">Save to phone</button><button class="ghost" data-a="del">Delete</button></div>';
+    const tag = document.createElement("span");
+    tag.className = "tag " + (p.kind === "stills" ? "s" : "v");
+    tag.textContent = p.kind === "stills" ? "Stop motion" : "Full video";
+    const title = d.querySelector("b");
+    title.textContent = "Drive " + p.drive.replace("_", " ") + (p.kind === "stills" ? "" : ", " + p.name.replace(/\.(webm|mp4)$/, "").replace("part", "part "));
+    title.prepend(tag);
+    if (p.kind === "stills"){
+      const every = p.info && p.info.every ? (p.info.every[0] === "d" ? "every " + p.info.every.slice(1) + " ft" : "every " + p.info.every.slice(1) + " s") : "";
+      d.querySelector(".lib-sub").textContent = p.count + " frames" + (every ? ", " + every : "") + ", " + mb(p.size);
+      d.querySelector('[data-a="save"]').textContent = "Save as video to phone";
+    } else {
+      d.querySelector(".lib-sub").textContent = mb(p.size) + (p.gpsN ? ", " + p.gpsN + " GPS points" : ", no GPS") + (p.speed != null ? ", avg " + p.speed + " mph" : "");
+    }
+    d.querySelector("input").libPart = p;
+    d.querySelector('[data-a="save"]').addEventListener("click", async e => {
+      const go = (blob, name) => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); };
+      if (p.kind === "stills"){
+        const btn = e.target; btn.disabled = true; btn.textContent = "Building video...";
+        try {
+          go(await stillsToVideo(p, parseInt($("stillFps").value) || 8), "drive_" + p.drive + "_stopmotion.mp4");
+          try { go(await (await p.dir.getFileHandle("stills.json")).getFile(), "drive_" + p.drive + "_stopmotion_timing.json"); } catch (x) {}
+        } catch (x){ $("libStorage").textContent = x.message; }
+        btn.disabled = false; btn.textContent = "Save as video to phone";
+        return;
+      }
+      const f = await p.handle.getFile();
+      go(f, "drive_" + p.drive + "_" + p.name);
+      if (p.tname) go(await (await p.dir.getFileHandle(p.tname)).getFile(), "drive_" + p.drive + "_" + p.tname);
+    });
+    const del = d.querySelector('[data-a="del"]');
+    del.addEventListener("click", async () => {
+      if (del.dataset.armed !== "1"){ del.dataset.armed = "1"; del.textContent = "Tap again to delete"; setTimeout(() => { del.dataset.armed = ""; del.textContent = "Delete"; }, 3000); return; }
+      if (p.kind === "stills") await p.parentDir.removeEntry("stills", { recursive: true });
+      else {
+        await p.dir.removeEntry(p.name);
+        if (p.tname) { try { await p.dir.removeEntry(p.tname); } catch (e) {} }
+        try { await p.dir.removeEntry(p.name.replace(/\.(webm|mp4)$/, "_road.json")); } catch (e) {}
+      }
+      refreshLibrary();
+    });
+    list.appendChild(d);
+  }
+  const s = await storageLeft();
+  $("libStorage").textContent = s && s.quota ? "App storage: " + mb(s.used) + " used, " + mb(Math.max(0, s.left)) + " free." : "";
+}
+
+$("libUse").addEventListener("click", async () => {
+  const picked = [...document.querySelectorAll("#libList input[type=checkbox]:checked")].map(x => x.libPart);
+  if (!picked.length){ $("libStorage").textContent = "Check one or more parts first."; return; }
+  await useInComposite(picked, $("libUse"), t => $("libStorage").textContent = t);
+});
+
+async function useInComposite(picked, btn, say){
+  picked = picked.slice().sort((a, b) => (a.kind === "video" ? 0 : 1) - (b.kind === "video" ? 0 : 1)); // full video first so it becomes Base
+  const files = [];
+  btn.disabled = true;
+  try {
+    for (const p of picked){
+      if (p.kind === "stills"){
+        say("Building stop motion video for drive " + p.drive + "...");
+        files.push(await stillsToVideo(p, parseInt($("stillFps").value) || 8));
+      } else {
+        const f = await p.handle.getFile();
+        files.push(new File([f], "drive_" + p.drive + "_" + p.name, { type: f.type }));
+      }
+    }
+  } catch (e){ say("Could not load: " + e.message); btn.disabled = false; return; }
+  btn.disabled = false;
+  say("");
+  refreshLibrary();
+  showTab("tabComp");
+  for (const x of document.querySelectorAll("#libList input[type=checkbox]")) x.checked = false;
+  await addClipFiles(files);
+}
+
+
+// ---------------- Map and projects ----------------
+let map = null, mapItems = [], routeLayer = null, hitMarker = null, highlightLayer = null;
+const HIT_METERS = 80;
+
+async function loadProjects(){
+  try { return JSON.parse(await (await (await (await root()).getFileHandle("projects.json")).getFile()).text()); }
+  catch (e){ return []; }
+}
+async function saveProjects(list){ await writeFile(await root(), "projects.json", JSON.stringify(list)); }
+
+function itemLabel(p){
+  return (p.kind === "stills" ? "Stop motion, " : "Full video, ") + "drive " + p.drive.replace("_", " ") + (p.kind === "stills" ? "" : ", " + p.name.replace(/\.(webm|mp4)$/, "").replace("part", "part "));
+}
+
+async function openMap(){
+  if (!window.L){ $("mapStatus").textContent = "The map library did not load. Check the connection and reload."; return; }
+  if (!map){
+    map = L.map("map", { zoomControl: true }).setView([35.65, -114.85], 8); // Las Vegas to Laughlin
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "&copy; OpenStreetMap contributors" }).addTo(map);
+    routeLayer = L.layerGroup().addTo(map);
+    highlightLayer = L.layerGroup().addTo(map);
+    map.on("click", e => findHits(e.latlng.lat, e.latlng.lng));
+  }
+  setTimeout(() => map.invalidateSize(), 50);
+  await drawRoutes();
+  await renderProjects();
+}
+
+async function drawRoutes(){
+  mapItems = await scanLibrary();
+  routeLayer.clearLayers();
+  const withGps = mapItems.filter(p => p.track && p.track.length);
+  // each route is semi transparent, so places filmed more often stack up darker
+  for (const p of withGps){
+    if (p.track.length === 1) L.circleMarker(p.track[0], { radius: 5, color: "#d2601a", weight: 0, fillOpacity: 0.35 }).addTo(routeLayer);
+    else L.polyline(p.track, { color: "#d2601a", weight: 7, opacity: 0.3, lineCap: "round", lineJoin: "round" }).addTo(routeLayer);
+  }
+  $("mapStatus").textContent = withGps.length + " of " + mapItems.length + " recordings have GPS." + (mapItems.length > withGps.length ? " Ones without GPS can't be placed on the map." : "");
+  if (withGps.length && !map._fitOnce){
+    map._fitOnce = true;
+    map.fitBounds(L.latLngBounds(withGps.flatMap(p => p.track)), { padding: [20, 20], maxZoom: 15 });
+  }
+}
+
+function distToTrack(lat, lon, track){
+  let best = Infinity;
+  for (let i = 0; i < track.length; i++){
+    best = Math.min(best, haversine(lat, lon, track[i][0], track[i][1]));
+    if (i > 0){
+      // also check the midpoint so sparse GPS points still count
+      const m = [(track[i][0] + track[i - 1][0]) / 2, (track[i][1] + track[i - 1][1]) / 2];
+      best = Math.min(best, haversine(lat, lon, m[0], m[1]));
+    }
+  }
+  return best;
+}
+
+async function findHits(lat, lon){
+  if (hitMarker) hitMarker.remove();
+  hitMarker = L.circle([lat, lon], { radius: HIT_METERS, color: "#1f6f8b", weight: 2, fillOpacity: 0.1 }).addTo(map);
+  const hits = mapItems.filter(p => p.track && p.track.length && distToTrack(lat, lon, p.track) <= HIT_METERS);
+  showHitList(hits, hits.length + (hits.length === 1 ? " recording passes" : " recordings pass") + " through this spot.");
+}
+
+function showHitList(hits, msg){
+  const box = $("hits");
+  box.innerHTML = "";
+  $("mapStatus").textContent = msg;
+  highlightLayer.clearLayers();
+  for (const p of hits){
+    if (p.track.length > 1) L.polyline(p.track, { color: "#1f6f8b", weight: 4, opacity: 0.9 }).addTo(highlightLayer);
+    const r = document.createElement("label");
+    r.className = "hitrow";
+    r.innerHTML = '<input type="checkbox" checked><b></b>';
+    r.querySelector("b").textContent = itemLabel(p);
+    r.querySelector("input").libPart = p;
+    box.appendChild(r);
+  }
+  $("hitActions").hidden = !hits.length;
+  refreshProjectPicker();
+}
+
+function checkedHits(){ return [...document.querySelectorAll("#hits input:checked")].map(x => x.libPart); }
+
+$("hitUse").addEventListener("click", async () => {
+  const picked = checkedHits();
+  if (!picked.length){ $("mapStatus").textContent = "Check one or more recordings first."; return; }
+  await useInComposite(picked, $("hitUse"), t => $("mapStatus").textContent = t);
+});
+
+async function refreshProjectPicker(){
+  const projects = await loadProjects();
+  const sel = $("hitProj");
+  sel.innerHTML = "";
+  if (!projects.length){ const o = document.createElement("option"); o.value = ""; o.textContent = "Create a project below first"; sel.appendChild(o); return; }
+  for (const pr of projects){ const o = document.createElement("option"); o.value = pr.id; o.textContent = pr.name; sel.appendChild(o); }
+}
+
+$("hitAdd").addEventListener("click", async () => {
+  const id = $("hitProj").value;
+  const picked = checkedHits();
+  if (!id || !picked.length) return;
+  const projects = await loadProjects();
+  const pr = projects.find(x => x.id === id);
+  if (!pr) return;
+  let added = 0;
+  for (const p of picked) if (!pr.items.includes(p.id)){ pr.items.push(p.id); added++; }
+  await saveProjects(projects);
+  $("mapStatus").textContent = "Added " + added + " to " + pr.name + ".";
+  renderProjects();
+});
+
+$("projNew").addEventListener("click", async () => {
+  const name = $("projName").value.trim();
+  if (!name) return;
+  const projects = await loadProjects();
+  projects.push({ id: "p" + Date.now(), name, items: [], created: new Date().toISOString() });
+  await saveProjects(projects);
+  $("projName").value = "";
+  renderProjects(); refreshProjectPicker();
+});
+
+async function renderProjects(){
+  const projects = await loadProjects();
+  const box = $("projList");
+  box.innerHTML = "";
+  if (!projects.length){ box.innerHTML = '<p class="hint">No projects yet.</p>'; return; }
+  const byId = new Map(mapItems.map(p => [p.id, p]));
+  for (const pr of projects){
+    const items = pr.items.map(id => byId.get(id)).filter(Boolean);
+    const gone = pr.items.length - items.length;
+    const d = document.createElement("div");
+    d.className = "proj";
+    d.innerHTML = '<b></b><div class="lib-sub" style="margin-left:0"></div><div class="btns"><button class="ghost" data-a="show">Show on map</button><button class="ghost" data-a="use">Use in Composite</button><button class="ghost" data-a="del">Delete project</button></div>';
+    d.querySelector("b").textContent = pr.name;
+    d.querySelector(".lib-sub").textContent = items.length + " recordings" + (gone ? ", " + gone + " deleted from the library" : "");
+    d.querySelector('[data-a="show"]').addEventListener("click", () => {
+      showHitList(items, pr.name + ": " + items.length + " recordings.");
+      const pts = items.flatMap(p => p.track || []);
+      if (pts.length) map.fitBounds(L.latLngBounds(pts), { padding: [20, 20], maxZoom: 16 });
+      $("map").scrollIntoView({ behavior: "smooth" });
+    });
+    const useBtn = d.querySelector('[data-a="use"]');
+    useBtn.addEventListener("click", () => { if (items.length) useInComposite(items, useBtn, t => $("mapStatus").textContent = t); });
+    const del = d.querySelector('[data-a="del"]');
+    del.addEventListener("click", async () => {
+      if (del.dataset.armed !== "1"){ del.dataset.armed = "1"; del.textContent = "Tap again to delete"; setTimeout(() => { del.dataset.armed = ""; del.textContent = "Delete project"; }, 3000); return; }
+      await saveProjects((await loadProjects()).filter(x => x.id !== pr.id));
+      renderProjects(); refreshProjectPicker();
+    });
+    box.appendChild(d);
+  }
+}
+
+
+// ---------------- Road tracking ----------------
+// Classic lane finding: edges plus white and yellow paint, a vote for the strongest left and right
+// lines, then a curve fit along each so bends are followed. Coordinates are saved as fractions of the frame.
+let roadItems = [], roadTrack = null, roadFrames = [], roadSrc = null;
+const RW = 480;
+const roadWork = document.createElement("canvas");
+const roadCtx = roadWork.getContext("2d", { willReadFrequently: true });
+
+async function openRoad(){
+  roadItems = (await scanLibrary()).filter(p => p.kind === "video");
+  const sel = $("roadPick");
+  sel.innerHTML = "";
+  const o0 = document.createElement("option"); o0.value = ""; o0.textContent = roadItems.length ? "Pick a recording from the Library" : "No recordings in the Library yet"; sel.appendChild(o0);
+  roadItems.forEach((p, i) => { const o = document.createElement("option"); o.value = String(i); o.textContent = itemLabel(p); sel.appendChild(o); });
+}
+$("roadPick").addEventListener("change", () => { if ($("roadPick").value !== "") $("roadFile").value = ""; });
+$("roadFile").addEventListener("change", () => { if ($("roadFile").files.length) $("roadPick").value = ""; });
+
+function videoMeta(file){
+  return new Promise((resolve, reject) => {
+    const v = document.createElement("video");
+    v.muted = true; v.preload = "metadata";
+    v.src = URL.createObjectURL(file);
+    v.onloadedmetadata = async () => {
+      if (!isFinite(v.duration)){
+        await new Promise(r => { v.ondurationchange = () => { if (isFinite(v.duration)) r(); }; v.currentTime = 1e9; setTimeout(r, 5000); });
+      }
+      resolve({ w: v.videoWidth, h: v.videoHeight, dur: v.duration });
+      URL.revokeObjectURL(v.src);
+    };
+    v.onerror = () => reject(new Error("Could not open the video."));
+  });
+}
+
+// least squares fit of x = a*y^2 + b*y + c
+function fitQuad(pts){
+  let n = 0, sy = 0, sy2 = 0, sy3 = 0, sy4 = 0, sx = 0, sxy = 0, sxy2 = 0;
+  for (const [x, y, w] of pts){
+    n += w; sy += w * y; sy2 += w * y * y; sy3 += w * y * y * y; sy4 += w * y * y * y * y;
+    sx += w * x; sxy += w * x * y; sxy2 += w * x * y * y;
+  }
+  const M = [[sy4, sy3, sy2], [sy3, sy2, sy], [sy2, sy, n]], V = [sxy2, sxy, sx];
+  const det = m => m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+  const D = det(M);
+  if (Math.abs(D) < 1e-9) return null;
+  const col = (k) => M.map((r, i) => r.map((v, j) => j === k ? V[i] : v));
+  return [det(col(0)) / D, det(col(1)) / D, det(col(2)) / D];
+}
+
+function trackFrame(img, W, H, prev){
+  const d = img.data;
+  const top = Math.round(H * (prev ? Math.max(0.3, prev.vp[1] / H) : 0.42)), bot = Math.round(H * 0.94);
+  // edge and paint score per pixel in the road zone
+  const gray = new Float32Array(W * H);
+  for (let i = 0, p = 0; i < W * H; i++, p += 4) gray[i] = 0.3 * d[p] + 0.59 * d[p + 1] + 0.11 * d[p + 2];
+  const pts = [];
+  for (let y = top + 1; y < bot - 1; y++){
+    for (let x = 1; x < W - 1; x++){
+      const i = y * W + x, p = i * 4;
+      const gx = gray[i + 1] - gray[i - 1];
+      const r = d[p], g = d[p + 1], b = d[p + 2];
+      const white = Math.min(r, g, b) > 170 && Math.max(r, g, b) - Math.min(r, g, b) < 40;
+      const yellow = r > 140 && g > 110 && b < 0.7 * g && r - b > 60;
+      if (Math.abs(gx) > 38 || white || yellow) pts.push([x, y, (white || yellow) ? 2 : 1]);
+    }
+  }
+  // vote: line x = xb + m*(bot - y), xb is where it meets the bottom of the zone
+  const span = bot - top;
+  const best = { L: null, R: null }, lines = { L: [], R: [] };
+  for (const side of ["L", "R"]){
+    const mLo = side === "L" ? 0.25 : -3.2, mHi = side === "L" ? 3.2 : -0.25;
+    const MB = 48, XB = Math.ceil(W * 3 / 4);
+    const acc = new Float32Array(MB * XB);
+    const nearTop = bot - span * 0.5;      // vote only with the near half, where lines are close to straight
+    for (const [x, y, w] of pts){
+      if (y < nearTop) continue;
+      const t = bot - y;
+      for (let mi = 0; mi < MB; mi++){
+        const m = mLo + (mHi - mLo) * mi / (MB - 1);
+        const xb = x - m * t;               // bottom crossing
+        const bi = Math.round((xb + W) / 4);
+        if (bi >= 0 && bi < XB) acc[mi * XB + bi] += w;
+      }
+    }
+    // collect every line peak, then pick the one nearest the middle: that is your own lane's line
+    const score = new Float32Array(MB * XB);
+    for (let mi = 0; mi < MB; mi++) for (let bi = 0; bi < XB; bi++){
+      let v = acc[mi * XB + bi];
+      const m = mLo + (mHi - mLo) * mi / (MB - 1), xb = bi * 4 - W;
+      // left line should sit left of center at the bottom, right line right of center
+      if (side === "L" ? xb > W * 0.55 : xb < W * 0.45) continue;
+      if (prev && prev[side]){ const dx = Math.abs(xb - prev[side].xb), dm = Math.abs(m - prev[side].m); v *= 1 / (1 + dx / 120 + dm / 1.5); }
+      score[mi * XB + bi] = v;
+    }
+    const peaks = [];
+    let top1 = 0;
+    for (let mi = 0; mi < MB; mi++) for (let bi = 0; bi < XB; bi++){
+      const v = score[mi * XB + bi];
+      if (v <= span * 0.12) continue;
+      let isMax = true;
+      for (let a = -3; a <= 3 && isMax; a++) for (let c = -8; c <= 8; c++){
+        const ma = mi + a, bc = bi + c;
+        if ((a || c) && ma >= 0 && ma < MB && bc >= 0 && bc < XB && score[ma * XB + bc] > v){ isMax = false; break; }
+      }
+      if (!isMax) continue;
+      const m = mLo + (mHi - mLo) * mi / (MB - 1), xb = bi * 4 - W;
+      // the same painted line seen twice: keep the stronger one
+      const dup = peaks.find(p => Math.abs(p.xb - xb) < 30);
+      if (dup){ if (v > dup.votes){ dup.votes = v; dup.m = m; dup.xb = xb; } continue; }
+      peaks.push({ m, xb, votes: v });
+      top1 = Math.max(top1, v);
+    }
+    const strong = peaks.filter(p => p.votes >= top1 * 0.15);
+    lines[side] = strong.map(p => ({ m: p.m, xb: p.xb }));
+    if (strong.length){
+      strong.sort((p, q) => side === "L" ? q.xb - p.xb : p.xb - q.xb);   // nearest the middle first
+      best[side] = strong[0];
+    }
+    // don't jump to a different painted line just because this frame lost the dashes: hold the last one a while
+    const old = prev && prev[side];
+    const outward = old && best[side] && (side === "L" ? best[side].xb < old.xb : best[side].xb > old.xb);
+    if (old && (prev.heldN || 0) < 10 && (!best[side] || (outward && Math.abs(best[side].xb - old.xb) > W * 0.2))){
+      best[side] = { m: old.m, xb: old.xb, votes: span * 0.2, held: true };
+    }
+  }
+  if (!best.L || !best.R){
+    return prev ? Object.assign({}, prev, { conf: prev.conf * 0.6, held: true }) : null;
+  }
+  // trace each line upward step by step so it follows bends, then fit a curve to the traced points
+  const rows = new Map();
+  for (const pt of pts){ const k = pt[1] >> 2; if (!rows.has(k)) rows.set(k, []); rows.get(k).push(pt); }
+  const curve = {};
+  for (const side of ["L", "R"]){
+    const ln = best[side];
+    const traced = [];
+    let x = ln.xb, slope = ln.m, misses = 0;   // slope: pixels of x per pixel going up
+    for (let y = bot - 2; y > top; y -= 4){
+      x += slope * 4;
+      if (x < -W * 0.5 || x > W * 1.5) break;
+      const ww = 4 + 10 * (y - top) / span;
+      const cand = (rows.get(y >> 2) || []).filter(([px]) => Math.abs(px - x) <= ww);
+      if (cand.length){
+        let sw = 0, sx = 0;
+        for (const [px, , w] of cand){ sw += w; sx += w * px; }
+        const nx = sx / sw;
+        traced.push([nx, y, 1]);
+        x = nx; misses = 0;
+        if (traced.length >= 4){
+          const a = traced[traced.length - 4], b2 = traced[traced.length - 1];
+          const ns = (b2[0] - a[0]) / Math.max(1, a[1] - b2[1]);
+          slope = slope * 0.5 + ns * 0.5;
+        }
+      } else if (++misses > 35) break;   // keeps going through the gaps in dashed lane lines
+    }
+    const q = traced.length >= 10 ? fitQuad(traced) : null;
+    curve[side] = q || [0, -ln.m, ln.xb + ln.m * bot];
+  }
+  // vanishing point from the straight parts
+  const yv = bot - (best.R.xb - best.L.xb) / (best.L.m - best.R.m);
+  const xv = best.L.xb + best.L.m * (bot - yv);
+  const at = (c, y) => c[0] * y * y + c[1] * y + c[2];
+  const lane = at(curve.R, bot) - at(curve.L, bot);
+  const conf = Math.min(1, (best.L.votes + best.R.votes) / (span * 3));
+  // bend: how far the lane center at the far end drifts from the straight line to the vanishing point
+  const yf = top + span * 0.1;
+  const cFar = (at(curve.L, yf) + at(curve.R, yf)) / 2;
+  const sFar = (best.L.xb + best.L.m * (bot - yf) + best.R.xb + best.R.m * (bot - yf)) / 2;
+  const sideHeld = best.L.held || best.R.held;
+  const out = { heldN: sideHeld ? (prev && prev.heldN || 0) + 1 : 0, L: { m: best.L.m, xb: best.L.xb }, R: { m: best.R.m, xb: best.R.xb }, curveL: curve.L, curveR: curve.R, vp: [xv, yv], lane, bend: (cFar - sFar) / W * 10, top, bot, conf, lines };
+  if (prev && !prev.held){
+    // light smoothing so the overlay doesn't jitter
+    const k = 0.35;
+    out.vp = [prev.vp[0] * k + out.vp[0] * (1 - k), prev.vp[1] * k + out.vp[1] * (1 - k)];
+    out.curveL = out.curveL.map((v, i) => prev.curveL[i] * k + v * (1 - k));
+    out.curveR = out.curveR.map((v, i) => prev.curveR[i] * k + v * (1 - k));
+    out.lane = prev.lane * k + out.lane * (1 - k);
+  }
+  return out;
+}
+
+function drawRoad(i){
+  const f = roadFrames[i], tr = roadTrack && roadTrack.frames[i];
+  if (!f) return;
+  const cv = $("roadCanvas");
+  cv.width = roadTrack.W; cv.height = roadTrack.H;
+  const ctx = cv.getContext("2d");
+  createImageBitmap(f).then(bmp => {
+    ctx.drawImage(bmp, 0, 0); bmp.close();
+    $("roadNum").textContent = (i + 1) + "/" + roadFrames.length;
+    if (!tr){ $("rsConf").textContent = "0"; return; }
+    const at = (c, y) => c[0] * y * y + c[1] * y + c[2];
+    const line = (fn, color, w) => { ctx.strokeStyle = color; ctx.lineWidth = w; ctx.beginPath(); for (let y = tr.top; y <= tr.bot; y += 3){ const x = fn(y); y === tr.top ? ctx.moveTo(x, y) : ctx.lineTo(x, y); } ctx.stroke(); };
+    ctx.globalAlpha = 0.18; ctx.fillStyle = "#d2601a";
+    ctx.beginPath();
+    for (let y = tr.top; y <= tr.bot; y += 3) ctx.lineTo(at(tr.curveL, y), y);
+    for (let y = tr.bot; y >= tr.top; y -= 3) ctx.lineTo(at(tr.curveR, y), y);
+    ctx.fill(); ctx.globalAlpha = 1;
+    if (tr.lines) for (const l of [...tr.lines.L, ...tr.lines.R]) line(y => l.xb + l.m * (tr.bot - y), "rgba(90,90,90,0.55)", 2);
+    line(y => at(tr.curveL, y), "#2e7d32", 4);
+    line(y => at(tr.curveR, y), "#1f6f8b", 4);
+    line(y => (at(tr.curveL, y) + at(tr.curveR, y)) / 2, "#d2601a", 2);
+    ctx.strokeStyle = "#8a3fa0"; ctx.lineWidth = 1.5; ctx.setLineDash([6, 6]);
+    ctx.beginPath(); ctx.moveTo(0, tr.vp[1]); ctx.lineTo(roadTrack.W, tr.vp[1]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = "#8a3fa0"; ctx.beginPath(); ctx.arc(tr.vp[0], tr.vp[1], 6, 0, 7); ctx.fill();
+    $("rsConf").textContent = Math.round(tr.conf * 100) + "%" + (tr.held ? " held" : "");
+    $("rsLane").textContent = Math.round(tr.lane);
+    $("rsBend").textContent = Math.abs(tr.bend) < 0.3 ? "straight" : (tr.bend < 0 ? "left " : "right ") + Math.abs(tr.bend).toFixed(1);
+  });
+}
+$("roadScrub").addEventListener("input", e => drawRoad(parseInt(e.target.value)));
+
+$("roadGo").addEventListener("click", async () => {
+  const idx = $("roadPick").value;
+  let file = null, item = null;
+  if (idx !== ""){ item = roadItems[parseInt(idx)]; file = await item.handle.getFile(); }
+  else if ($("roadFile").files.length) file = $("roadFile").files[0];
+  if (!file){ $("roadStatus").textContent = "Pick a recording or a video file first."; return; }
+  const btn = $("roadGo"); btn.disabled = true;
+  try {
+    const meta = await videoMeta(file);
+    const fps = parseInt($("roadFps").value) || 4;
+    const H = Math.round(RW * meta.h / meta.w / 2) * 2;
+    const clip = { id: nextClipId++, file, mounted: null, video: { videoWidth: meta.w, videoHeight: meta.h } };
+    $("roadStatus").textContent = "Pulling frames...";
+    $("roadBar").style.width = "5%";
+    // pull in chunks of 20 seconds so memory stays low on long recordings
+    roadFrames = [];
+    for (let t = 0; t < meta.dur; t += 20){
+      const chunk = await grabRange(clip, t, Math.min(20, meta.dur - t), fps, RW, H);
+      roadFrames.push(...chunk);
+      $("roadBar").style.width = (5 + 45 * Math.min(1, (t + 20) / meta.dur)) + "%";
+      $("roadStatus").textContent = "Pulling frames... " + roadFrames.length;
+    }
+    roadWork.width = RW; roadWork.height = H;
+    roadTrack = { W: RW, H, fps, laneFeet: parseInt($("laneFt").value) || 12, source: item ? item.id : file.name, frames: [] };
+    let prev = null, good = 0;
+    for (let i = 0; i < roadFrames.length; i++){
+      const bmp = await createImageBitmap(roadFrames[i]);
+      roadCtx.drawImage(bmp, 0, 0); bmp.close();
+      const tr = trackFrame(roadCtx.getImageData(0, 0, RW, H), RW, H, prev);
+      roadTrack.frames.push(tr);
+      if (tr) prev = tr;
+      if (tr && !tr.held) good++;
+      if (i % 4 === 0){ $("roadBar").style.width = (50 + 50 * i / roadFrames.length) + "%"; $("roadStatus").textContent = "Tracking frame " + (i + 1) + " of " + roadFrames.length; await sleep(0); }
+    }
+    $("roadBar").style.width = "100%";
+    $("roadScrub").max = roadFrames.length - 1; $("roadScrub").value = 0;
+    drawRoad(0);
+    let msg = "Road found in " + good + " of " + roadFrames.length + " frames.";
+    if (item){
+      // save as fractions of the frame so it works at any size
+      const norm = { version: 1, fps, laneFeet: roadTrack.laneFeet, aspect: H / RW, frames: roadTrack.frames.map((f, i) => f ? {
+        t: +(i / fps).toFixed(3), conf: +f.conf.toFixed(3), held: !!f.held,
+        vp: [f.vp[0] / RW, f.vp[1] / RW], top: f.top / RW, bot: f.bot / RW, lane: f.lane / RW, bend: +f.bend.toFixed(3),
+        left: [f.curveL[0] * RW, f.curveL[1], f.curveL[2] / RW], right: [f.curveR[0] * RW, f.curveR[1], f.curveR[2] / RW],
+        others: f.lines ? [...f.lines.L, ...f.lines.R].map(l => [l.m, l.xb / RW]) : []
+      } : null) };
+      await writeFile(item.dir, item.name.replace(/\.(webm|mp4)$/, "_road.json"), JSON.stringify(norm));
+      msg += " Saved with the recording.";
+    }
+    $("roadStatus").textContent = msg;
+  } catch (e){ $("roadStatus").textContent = "Road tracking stopped: " + (e && e.message ? e.message : e); }
+  btn.disabled = false;
+});
+
+(async () => { await setupBattery(); await recoverParts(); await refreshLibrary(); })();
 </script>
 </body>
 </html>

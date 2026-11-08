@@ -1,0 +1,1108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#d6eef9">
+<title>Rainbow Run Stadium Host</title>
+<!-- BLUE PHONE: Rainbow Run stadium mode, the host screen.
+     Unlocked by a Supabase sign in from an email on the band server's host list (the host code only while
+     Supabase is not set up on the server). It sets the seat layout and moves its sections live,
+     runs the light show, launches sound flybys, and prints the seat codes. The preview draws every seat with
+     the same core file the seat phones use, so what it shows is what the stands show.
+     BLUE PHONE: seating planner. The Plan tab sets how many guests are expected and the fill pattern, simulates
+     the show with any number of guests seated, and hands out the next seat at the door with a code to scan.
+     The seat grid editor sets each row's seat count and switches single seats off.
+     BLUE PHONE: Every screen picture sends one picture to every seat phone at once, and Video plays one video link
+     on every seat phone in step with the server clock.
+     BLUE PHONE: Demo runs any Rainbow Run animation across the whole crowd, one phone per pixel, and Video stunt
+     does the same with a video. The preview runs the same frames and colors every seat with what it will show.
+     BLUE PHONE: Timing beacon plays a short chirp through the venue speakers every four seconds, so seat phones
+     can line their clocks up on the room's own sound. -->
+<style>
+/* BLUE PHONE: v1 host screen layout, built for a phone first. Every control sits in a fixed place, so nothing
+   that changes text or opens a message moves a button under a finger. Wide screens put the preview beside it. */
+:root{--ink:#1f2433;--soft:#5b6478;--line:#c9d3e0;--blue:#2f6fd6;--blue2:#e3edfb;--bg:#d6eef9;--card:#ffffff;--dark:#17202d}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);
+  font-family:ui-rounded,"SF Pro Rounded","Nunito","Trebuchet MS",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+#app{position:fixed;inset:0;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto clamp(150px,30vh,320px) auto auto minmax(0,1fr);
+  grid-template-areas:"head" "pv" "msg" "tabs" "pane";overflow:hidden;padding:env(safe-area-inset-top,0px) 0 0}
+header{grid-area:head;display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);align-items:center;gap:6px;padding:8px 12px 6px;min-width:0}
+header h1{margin:0;font-size:1.05rem;color:var(--blue);white-space:nowrap}
+.pill{font-size:.72rem;font-weight:700;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:4px 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;text-align:center}
+#conn.ok{border-color:var(--blue);color:var(--blue)}
+#pvWrap{grid-area:pv;position:relative;background:var(--dark);margin:0 12px;border-radius:14px;overflow:hidden;border:2px solid var(--blue)}
+#ytPv{position:absolute;right:2%;top:50%;transform:translateY(-50%);width:42%;aspect-ratio:16/9;background:#000;border:2px solid var(--blue);border-radius:8px;overflow:hidden;display:none;pointer-events:none}
+#pv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:manipulation}
+#msg{grid-area:msg;height:1.9em;line-height:1.9em;padding:0 16px;font-size:.78rem;color:var(--soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tabs{grid-area:tabs;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;padding:0 12px 6px}
+#tabs button{padding:9px 2px;font-size:.78rem;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pane{grid-area:pane;overflow-y:auto;overscroll-behavior:contain;padding:2px 12px calc(28px + env(safe-area-inset-bottom,0px));-webkit-overflow-scrolling:touch}
+.pane[hidden]{display:none}
+.grp{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px 4px;margin:0 0 10px}
+.grp>h3{margin:0 0 8px;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--blue)}
+.grp>p,.note{margin:0 0 10px;font-size:.82rem;line-height:1.4;color:var(--soft)}
+.f{display:grid;grid-template-columns:5.4em minmax(0,1fr);gap:8px;align-items:center;margin:0 0 8px}
+.lab{font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--soft);line-height:1.15}
+.seg{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:5px;min-width:0}
+.f.stack{grid-template-columns:minmax(0,1fr);gap:5px}
+.seg.roomy{grid-template-columns:repeat(auto-fill,minmax(98px,1fr))}
+#kindBox{min-height:144px}
+#uTabs button{white-space:normal;line-height:1.15;padding:6px 4px}
+#uBtns{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px}
+#uBtns button{margin:0 0 8px}
+.seg.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.seg.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.seg.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+.step{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:5px;align-items:center;max-width:260px}
+.step.wide{grid-template-columns:52px 44px minmax(0,1fr) 44px 52px;max-width:none}
+.line{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center;min-width:0}
+button{font:inherit;font-weight:700;font-size:.82rem;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 8px;min-height:40px;cursor:pointer;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;touch-action:manipulation}
+button.on,button.go{background:var(--blue);color:#fff;border-color:var(--blue)}
+button.big{width:100%;min-height:48px;font-size:.95rem}
+button:disabled{opacity:.4}
+.val{text-align:center;font-weight:800;font-variant-numeric:tabular-nums;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.val.left{text-align:left;font-weight:700;font-size:.82rem;white-space:normal}
+input[type=text],input[type=password],input[type=email],input[type=url],select{font:inherit;font-size:1rem;padding:9px 11px;border:1px solid var(--line);border-radius:10px;width:100%;min-width:0;background:#fff;color:var(--ink);min-height:42px}
+input[type=color]{width:100%;height:40px;border:1px solid var(--line);border-radius:10px;padding:2px;background:#fff}
+input[type=range]{width:100%;accent-color:var(--blue)}
+#secList{display:flex;gap:5px;overflow-x:auto;padding:1px 0}
+#secList button{flex:none;min-width:44px}
+.hidden-keep{visibility:hidden}
+.over{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) 12px 16px;background:#d6eef9f2;z-index:5;overflow-y:auto}
+.over[hidden]{display:none}
+.card{width:100%;max-width:420px;background:#fff;border:2px solid var(--blue);border-radius:18px;padding:16px;margin-top:4vh}
+.card h2{margin:0 0 10px;color:var(--blue);font-size:1.25rem}
+.card p{margin:0 0 10px;color:var(--soft);line-height:1.4;font-size:.86rem}
+.card input{margin:0 0 8px}
+.card button{width:100%;margin:0 0 8px}
+.card .seg button{margin:0}
+#uTabs{margin:0 0 10px}
+#unlockMsg{min-height:2.8em;color:var(--blue);font-weight:700}
+.grow{display:grid;grid-template-columns:9.5em minmax(0,1fr);gap:6px;align-items:center;margin:0 0 8px}
+.grow .ctl{display:grid;grid-template-columns:36px minmax(0,1fr) 36px;gap:3px;align-items:center}
+.grow .ctl b{font-size:.78rem;text-align:center;white-space:nowrap}
+.grow .ctl button{padding:4px;min-height:34px}
+.cells{display:flex;gap:3px;overflow-x:auto;padding:2px 0}
+.cell{flex:none;width:24px;height:24px;min-height:0;border-radius:5px;border:1px solid var(--blue);background:var(--blue);padding:0}
+.cell.off{background:#fff;border-style:dashed;border-color:#9aa6b8}
+.hrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center;padding:6px 0;border-top:1px solid #eef2f7}
+.hrow span{font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:6px 0;border-top:1px solid #eef2f7}
+.srow:first-child{border-top:0}
+#print{position:fixed;inset:0;background:#fff;z-index:6;overflow-y:auto;padding:12px}
+#print[hidden]{display:none}
+#printBar{position:sticky;top:0;background:#fff;display:grid;grid-template-columns:100px 100px minmax(0,1fr);gap:8px;padding:0 0 10px;align-items:center}
+#sheet{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.tag{border:1px dashed #9aa6b8;border-radius:8px;padding:8px;text-align:center;break-inside:avoid}
+.tag svg{width:100%;height:auto}
+.tag b{display:block;font-size:1.1rem;margin-top:4px}
+.tag small{color:var(--soft)}
+/* a wide screen puts the preview on the left and the controls on the right */
+@media (min-width:860px){
+  #app{grid-template-columns:minmax(0,1fr) minmax(380px,460px);grid-template-rows:auto auto auto minmax(0,1fr);
+    grid-template-areas:"head head" "pv msg" "pv tabs" "pv pane";max-width:1400px;margin:0 auto}
+  #pvWrap{margin:0 0 16px 16px}
+  header{grid-template-columns:auto minmax(0,14em) minmax(0,14em);justify-content:start}
+}
+@media print{#printBar{display:none}#print{position:static;padding:0}#app,.over{display:none!important}.tag{page-break-inside:avoid}}
+</style>
+<link rel="manifest" href="rainbow-run-v1.webmanifest">
+<link rel="icon" href="rainbow-run-v1-icon-192.png">
+<script>/* BLUE PHONE: preload every show file onto the phone */try{if("serviceWorker" in navigator)navigator.serviceWorker.register("rainbow-run-v1-sw.js").catch(function(){})}catch(e){}</script>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Stadium Host</h1>
+    <span class="pill" id="conn">not connected</span>
+    <span class="pill" id="count">no seats in</span>
+  </header>
+  <div id="pvWrap"><canvas id="pv" aria-label="Every seat in the layout, colored the way the stands show it"></canvas><div id="ytPv"></div></div>
+  <div id="msg"></div>
+  <div id="tabs">
+    <button data-tab="show" class="on">Show</button>
+    <button data-tab="layout">Layout</button>
+    <button data-tab="sound">Sound</button>
+    <button data-tab="plan">Plan</button>
+    <button data-tab="seats">Seats</button>
+    <button data-tab="access">Access</button>
+  </div>
+
+  <div class="pane" id="pane-show">
+    <section class="grp"><h3>Light show</h3>
+      <div class="seg">
+        <button data-scene="hold">Hold</button><button data-scene="rainbow">Rainbow</button><button data-scene="wave">Wave</button>
+        <button data-scene="ripple">Ripple</button><button data-scene="beat">Beat</button><button data-scene="check">Line up</button><button data-scene="dark">Dark</button></div>
+      <div style="height:8px"></div>
+      <div class="f"><span class="lab">Colors</span><div class="seg two"><input type="color" id="colA" value="#2f6fd6" aria-label="First color"><input type="color" id="colB" value="#ffffff" aria-label="Second color"></div></div>
+      <div class="f"><span class="lab">Speed</span><div class="step"><button data-p="speed" data-d="-0.25" aria-label="Slower">&#8722;</button><span class="val" id="speedOut"></span><button data-p="speed" data-d="0.25" aria-label="Faster">+</button></div></div>
+      <div class="f"><span class="lab">Detail</span><div class="step"><button data-p="detail" data-d="-1" aria-label="Less detail">&#8722;</button><span class="val" id="detailOut"></span><button data-p="detail" data-d="1" aria-label="More detail">+</button></div></div>
+      <div class="f"><span class="lab">Direction</span><div class="seg two"><button id="axisAround" class="on">Around</button><button id="axisAcross">Across</button></div></div>
+      <div class="f"><span class="lab">Beat split</span><div class="seg two"><button id="splitSec" class="on">Sections</button><button id="splitRows">Rows</button></div></div>
+    </section>
+    <section class="grp"><h3>Demo across the crowd</h3>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><select id="demoSel" aria-label="Rainbow Run animation to run across the crowd"></select></div>
+    </section>
+    <section class="grp"><h3>Card stunt</h3>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><div class="line"><input type="text" id="stuntText" maxlength="24" placeholder="text for the stands" aria-label="Text for the stands"><button id="stuntGo" class="go">Show text</button></div></div>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><button id="picPick">Card stunt from a picture</button><input type="file" id="picFile" accept="image/*" hidden></div>
+    </section>
+    <section class="grp"><h3>Every screen</h3>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><button id="screenPick">Send a picture to every screen</button><input type="file" id="screenFile" accept="image/*" hidden></div>
+      <div class="f"><span class="lab">Fit</span><div class="seg two"><button id="fitWhole" class="on">Whole picture</button><button id="fitFill">Fill screen</button></div></div>
+    </section>
+    <section class="grp"><h3>Video</h3>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><select id="vidSel" aria-label="Video saved with the show"><option value="">Pick a saved video, or use a link</option></select></div>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><input type="url" id="vidUrl" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="YouTube link, or an https link to an mp4" aria-label="Video link"></div>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><div class="seg two"><button id="vidLoop">Loop off</button><button id="vidSound">Sound on</button></div></div>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><div class="seg two"><button class="go big" id="vidGo">Every screen</button><button class="go big" id="vidStunt">Pixels on seats</button></div></div>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><button id="localPick">Pixels on seats from a video on this phone</button><input type="file" id="localFile" accept="video/*" hidden></div>
+      <p class="note">Every screen plays the whole video on each phone. Pixels on seats turns the crowd into one big screen, each seat one pixel.</p>
+    </section>
+    <section class="grp"><h3>Hype meter</h3>
+      <p>Every seat phone glows green, then red as its owner shakes it. The whole crowd's shaking fills one big meter.</p>
+      <div class="f"><span class="lab">To fill</span><div class="step"><button data-hs="-5" aria-label="Shorter">&#8722;</button><span class="val" id="hypeSecsOut"></span><button data-hs="5" aria-label="Longer">+</button></div></div>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><div class="seg two"><button class="go big" id="hypeGo">Start hype</button><button class="big" id="hypeScreen">Open big screen</button></div></div>
+      <div class="f"><span class="lab">Meter</span><span class="val left" id="hypeOut" style="min-height:2.6em">not running</span></div>
+    </section>
+    <section class="grp"><h3>Band loop</h3>
+      <div class="f"><span class="lab">Loop</span><div class="line"><span class="val left" id="bandOut">stopped</span><button id="bandGo" style="width:90px">Start</button></div></div>
+    </section>
+  </div>
+
+  <div class="pane" id="pane-layout" hidden>
+    <section class="grp"><h3>Venue</h3>
+      <div class="seg four"><button data-preset="arena">Arena</button><button data-preset="theater">Theater</button><button data-preset="bowl">Bowl</button><button data-preset="field">Field</button></div>
+      <div style="height:8px"></div>
+    </section>
+    <section class="grp"><h3>Sections</h3>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><div id="secList"></div></div>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><div class="seg three"><button id="addBlock">Add straight</button><button id="addArc">Add curved</button><button id="delSec">Remove</button></div></div>
+    </section>
+    <section class="grp"><h3>Selected section</h3>
+      <div class="f"><span class="lab">Move</span><div><div class="seg four"><button data-k="x" data-d="-0.5" aria-label="Move left">&#9664;</button><button data-k="x" data-d="0.5" aria-label="Move right">&#9654;</button><button data-k="y" data-d="-0.5" aria-label="Move up">&#9650;</button><button data-k="y" data-d="0.5" aria-label="Move down">&#9660;</button></div><div class="val" id="posOut" style="margin-top:4px"></div></div></div>
+<div id="kindBox">
+      <div class="f" data-for="block"><span class="lab">Turn</span><div class="step"><button data-k="rot" data-d="-2">&#8722;</button><span class="val" id="rotOut"></span><button data-k="rot" data-d="2">+</button></div></div>
+      <div class="f" data-for="block"><span class="lab">Seat gap</span><div class="step"><button data-k="seatGap" data-d="-0.05">&#8722;</button><span class="val" id="seatGapOut"></span><button data-k="seatGap" data-d="0.05">+</button></div></div>
+      <div class="f" data-for="arc"><span class="lab">Radius</span><div class="step"><button data-k="r" data-d="-0.5">&#8722;</button><span class="val" id="rOut"></span><button data-k="r" data-d="0.5">+</button></div></div>
+      <div class="f" data-for="arc"><span class="lab">Start angle</span><div class="step"><button data-k="a0" data-d="-1">&#8722;</button><span class="val" id="a0Out"></span><button data-k="a0" data-d="1">+</button></div></div>
+      <div class="f" data-for="arc"><span class="lab">Reach</span><div class="step"><button data-k="span" data-d="-1">&#8722;</button><span class="val" id="spanOut"></span><button data-k="span" data-d="1">+</button></div></div>
+      </div>
+      <div class="f"><span class="lab">Rows</span><div class="step"><button data-k="rows" data-d="-1">&#8722;</button><span class="val" id="rowsOut"></span><button data-k="rows" data-d="1">+</button></div></div>
+      <div class="f"><span class="lab">Front row</span><div class="step"><button data-k="seats" data-d="-1">&#8722;</button><span class="val" id="seatsOut"></span><button data-k="seats" data-d="1">+</button></div></div>
+      <div class="f"><span class="lab">Row adds</span><div class="step"><button data-k="grow" data-d="-1">&#8722;</button><span class="val" id="growOut"></span><button data-k="grow" data-d="1">+</button></div></div>
+      <div class="f"><span class="lab">Row gap</span><div class="step"><button data-k="rowGap" data-d="-0.05">&#8722;</button><span class="val" id="rowGapOut"></span><button data-k="rowGap" data-d="0.05">+</button></div></div>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><button id="gridOpen" class="big">Edit rows and seats</button></div>
+    </section>
+  </div>
+
+  <div class="pane" id="pane-sound" hidden>
+    <section class="grp"><h3>Flyby</h3>
+      <div class="f stack"><span class="lab">Path</span><div class="seg four" style="grid-template-columns:repeat(2,minmax(0,1fr))"><button data-path="across" class="on">Across</button><button data-path="front">Front to back</button><button data-path="diagonal">Diagonal</button><button data-path="around">Around</button></div></div>
+      <div class="f"><span class="lab">Sound</span><div class="seg three"><button data-tone="siren" class="on">Siren</button><button data-tone="engine">Engine</button><button data-tone="tone">Tone</button></div></div>
+      <div class="f"><span class="lab">Speed</span><div class="step"><button data-s="speed" data-d="-5">&#8722;</button><span class="val" id="sSpeedOut"></span><button data-s="speed" data-d="5">+</button></div></div>
+      <div class="f"><span class="lab">Pitch</span><div class="step"><button data-s="f0" data-d="-20">&#8722;</button><span class="val" id="sF0Out"></span><button data-s="f0" data-d="20">+</button></div></div>
+      <div class="f"><span class="lab">Level</span><div class="step"><button data-s="level" data-d="-0.1">&#8722;</button><span class="val" id="sLevelOut"></span><button data-s="level" data-d="0.1">+</button></div></div>
+      <div class="f"><span class="lab">This screen</span><button id="hearHost">Listen here off</button></div>
+      <div class="f"><span class="lab">Length</span><span class="val left" id="durOut"></span></div>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><button class="go big" id="launch">Launch flyby</button></div>
+    </section>
+    <section class="grp"><h3>Timing beacon</h3>
+      <p>Plug this phone into the venue speakers. Seat phones hear the chirp and line their clocks up on it.</p>
+      <div class="f"><span class="lab">Beacon</span><button id="beaconGo">Beacon off</button></div>
+      <div class="f"><span class="lab">Speakers</span><div class="seg two"><button id="spkStage" class="on">At the stage</button><button id="spkMid">In the middle</button></div></div>
+      <div class="f"><span class="lab">Room timing</span><span class="val left" id="beaconOut" style="min-height:2.6em">beacon off</span></div>
+    </section>
+  </div>
+
+  <div class="pane" id="pane-plan" hidden>
+    <section class="grp"><h3>Guests</h3>
+      <div class="f stack"><span class="lab">Expected</span><div class="step wide"><button data-g="-10">&#8722;10</button><button data-g="-1">&#8722;</button><span class="val" id="guestsOut"></span><button data-g="1">+</button><button data-g="10">+10</button></div></div>
+      <div class="f stack"><span class="lab">Fill</span><div class="seg roomy"><button data-fill="pack">Pack front</button><button data-fill="center">Pack middle</button><button data-fill="scatter">Scatter</button><button data-fill="checker">Checker</button><button data-fill="shape">Shape</button></div></div>
+      <div class="f stack"><span class="lab">Shape</span><div class="seg roomy"><button data-shape="heart">Heart</button><button data-shape="star">Star</button><button data-shape="circle">Circle</button><button data-shape="ring">Ring</button><button data-shape="diamond">Diamond</button><button data-shape="cross">Cross</button><button data-shape="text">Text</button></div></div>
+      <div class="f"><span class="lab">Shape text</span><input type="text" id="shapeText" maxlength="12" placeholder="letters to seat" aria-label="Letters to seat guests in"></div>
+      <div class="f"><span class="lab">Show fits</span><div class="seg two"><button id="fitVenue">Whole venue</button><button id="fitGuests">Guests only</button></div></div>
+    </section>
+    <section class="grp"><h3>Simulate</h3>
+      <div class="f"><span class="lab">Guests in</span><div class="line"><input type="range" id="simIn" min="0" max="0" value="0" aria-label="Guests to simulate"><span class="val" id="simOut" style="width:6.5em"></span></div></div>
+    </section>
+    <section class="grp"><h3>Door</h3>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><button class="go big" id="nextGuest">Next guest</button></div>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><div class="seg two"><button id="undoGuest">Undo last</button><button id="clearGuests">Clear seating</button></div></div>
+      <div class="f"><span class="lab">Seated</span><span class="val left" id="seatedOut"></span></div>
+    </section>
+    <section class="grp"><h3>Floor virus</h3>
+      <p>Phones find where they stand by sound. Each plays a short tick and a soft owo in its own turn, and listens for its neighbors. Seeds placed on the map start strains that spread to phones close by, and infected phones join their strain's groove.</p>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><div class="seg two"><button class="go big" id="vxGo">Start virus</button><button class="big" id="vxFloor">Floor join code</button></div></div>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><button id="vxAdd">Add a seed, then tap its spot on the map</button></div>
+      <div id="vxSeedList"></div>
+      <div class="f"><span class="lab">Game</span><span class="val left" id="vxOut" style="min-height:2.6em">not running</span></div>
+    </section>
+    <section class="grp"><h3>Entry kiosks</h3>
+      <p>Each kiosk is a link you open on a phone, tablet or screen at a door. It shows a code for the next guest; the guest scans it and gets a seat. Every door follows the same fill order, each code works once, and every seat records which door gave it.</p>
+      <div class="line" style="margin:0 0 8px"><input type="text" id="kioskName" maxlength="32" placeholder="door name, like North gate" aria-label="Kiosk name"><button class="go" id="kioskAdd">Add kiosk</button></div>
+      <div id="kioskList"></div>
+      <div class="f"><span class="lab">Printed codes</span><div class="seg two"><button id="onlyOff" class="on">Also work</button><button id="onlyOn">Kiosks only</button></div></div>
+      <div class="f"><span class="lab">Handed out</span><span class="val left" id="entryOut">none yet</span></div>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><button id="entryCsv">Download the seat list</button></div>
+    </section>
+  </div>
+
+  <div class="pane" id="pane-seats" hidden>
+    <section class="grp"><h3>Seat codes by section</h3>
+      <div id="seatRows"></div>
+    </section>
+  </div>
+
+  <div class="pane" id="pane-access" hidden>
+    <section class="grp"><h3>Signed in</h3>
+      <div class="f"><span class="lab">Account</span><span class="val left" id="whoOut"></span></div>
+      <div class="f"><span class="lab">Room</span><span class="val left" id="roomOut"></span></div>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><div class="seg two"><button id="switchRoom">Change room</button><button id="signOut">Sign out</button></div></div>
+    </section>
+    <section class="grp" id="hostBox" hidden><h3>Hosts</h3>
+      <p id="hostScope"></p>
+      <div id="hostList"></div>
+      <div class="line" style="margin:8px 0"><input type="email" id="hostIn" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="their email" aria-label="Host email"><button id="hostAdd" class="go">Add host</button></div>
+      <div class="f" id="releaseRow" style="grid-template-columns:minmax(0,1fr)" hidden><button id="releaseGo">Free this room from its own Supabase</button></div>
+    </section>
+    <section class="grp"><h3>Your own Supabase</h3>
+      <p>A host without an account on this show's Supabase can bring their own. Make a free project at supabase.com, open the project's settings, and copy the Project URL and the anon public key. Sign in with them on the Own Supabase tab. The first sign in claims the room for that Supabase, and from then on only its accounts host that room. Add other hosts here by email after they make an account on it.</p>
+      <div class="f" style="grid-template-columns:minmax(0,1fr)"><button id="ownOpen" class="go big">Sign in with my own Supabase</button></div>
+    </section>
+  </div>
+</div>
+
+<div class="over" id="unlock">
+  <div class="card">
+    <h2>Stadium Host</h2>
+    <input type="text" id="roomIn" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="room code" aria-label="Room code">
+    <div class="seg three" id="uTabs">
+      <button data-u="in" class="on">Sign in</button><button data-u="new">New account</button><button data-u="own">Own Supabase</button>
+    </div>
+    <p id="unlockHelp"></p>
+    <div id="ownBox" hidden>
+      <input type="url" id="ownUrl" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="https://xxxxxxxx.supabase.co" aria-label="Supabase project URL">
+      <input type="text" id="ownKey" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="anon public key" aria-label="Supabase anon public key">
+    </div>
+    <div id="loginBox">
+      <input type="email" id="emailIn" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="email" aria-label="Email">
+      <input type="password" id="passIn" autocomplete="current-password" placeholder="password" aria-label="Password">
+    </div>
+    <input type="password" id="codeIn" autocomplete="off" placeholder="host code" aria-label="Host code" hidden>
+    <div class="seg two" id="uBtns"><button class="go" id="unlockGo">Sign in</button><button id="signUp">Create account</button></div>
+    <p id="unlockMsg"></p>
+  </div>
+</div>
+
+<div class="over" id="qrOver" hidden>
+  <div class="card" style="text-align:center">
+    <h2 id="qrTitle"></h2>
+    <p id="qrNote"></p>
+    <div id="qrImg" style="width:100%;max-width:280px;margin:0 auto 12px;aspect-ratio:1"></div>
+    <button id="qrDone" class="go">Done</button>
+  </div>
+</div>
+
+<div class="over" id="door" hidden>
+  <div class="card" style="text-align:center">
+    <h2>Next guest</h2>
+    <div id="doorSeat" style="font-size:2.2rem;font-weight:800">&nbsp;</div>
+    <p id="doorWhere">&nbsp;</p>
+    <div id="doorQr" style="width:100%;max-width:260px;margin:0 auto 12px;aspect-ratio:1"></div>
+    <div class="seg two"><button class="go" id="doorNext">Next guest</button><button id="doorDone">Done</button></div>
+  </div>
+</div>
+
+<div id="gridEd" class="over" hidden style="align-items:stretch;padding:0;background:#fff">
+  <div style="display:grid;grid-template-rows:auto auto minmax(0,1fr);width:100%;height:100%;max-width:900px;margin:0 auto">
+    <div class="line" style="padding:12px 16px 0;grid-template-columns:100px minmax(0,1fr)"><button class="go" id="gridClose">Done</button><b id="gridTitle" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></b></div>
+    <p style="margin:6px 16px 8px;color:var(--soft);font-size:.8rem">Minus and plus set how many seats a row has. Tap a seat to switch it off for a broken seat or an aisle, tap again to bring it back.</p>
+    <div id="gridRows" style="overflow:auto;padding:0 16px 24px"></div>
+  </div>
+</div>
+
+<div id="print" hidden>
+  <div id="printBar"><button class="go" id="printGo">Print</button><button id="printClose">Close</button><span id="printTitle"></span></div>
+  <div id="sheet"></div>
+</div>
+
+<script src="stompbox-lab-v3-config.js"></script>
+<script src="stompbox-lab-v2-clock.js"></script>
+<script src="stompbox-lab-v3-auth.js"></script>
+<script src="rainbow-run-stadium-v1-core.js"></script>
+<script src="rainbow-run-stadium-v1-qr.js"></script>
+<script src="rainbow-run-stadium-v1-mosaic.js"></script>
+<script src="rainbow-run-stadium-v1-beacon.js"></script>
+<script src="rainbow-run-stadium-v1-youtube.js"></script>
+<script src="rainbow-run-stadium-v1-virus-core.js"></script>
+<script src="rainbow-run-stadium-v1-virus.js"></script>
+<script>
+(function(){
+"use strict";
+const APP="rainbow-run";
+const SYNC_URL=(window.STOMPBOX_LAB_CONFIG&&window.STOMPBOX_LAB_CONFIG.syncUrl)||"";
+const $=id=>document.getElementById(id);
+function keep(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){}return null}
+const cleanRoom=r=>String(r||"").trim().toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,24);
+let device=keep(APP+"-host-device-id");
+if(!device){device=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():Date.now().toString(16)+Math.random().toString(16).slice(2);keep(APP+"-host-device-id",device)}
+
+let room=cleanRoom(keep(APP+"-host-room")),code="",sock=null,live=false,host=false,retry=0,retryTimer=null;
+let layout=null,cue=null,loop=null,filled=new Set(),phones=0,all=[],sel=0;
+function say(t){$("msg").textContent=t||""}
+const clock=createServerClock({send:m=>send(m),onChange:()=>{}});
+function send(m){if(sock&&sock.readyState===1){sock.send(JSON.stringify(Object.assign({app:APP},m)));return true}return false}
+const now=()=>clock.synced?clock.now():Date.now();
+
+/* ---------- connection ---------- */
+function connect(){
+  clearTimeout(retryTimer);
+  if(sock){const o=sock;sock=null;o.close()}
+  live=false;host=false;renderConn();
+  if(!SYNC_URL||!room)return;
+  const s=new WebSocket(SYNC_URL+"?app="+APP+"&room="+encodeURIComponent(room)+"&device="+encodeURIComponent(device)+"&mode=stadium-host");
+  sock=s;
+  s.onopen=()=>{if(sock!==s)return;retry=0;live=true;clock.start();sendLogin();renderConn()};
+  s.onmessage=e=>{if(sock!==s)return;let m;try{m=JSON.parse(e.data)}catch(_){return}if(!m||m.app!==APP)return;onMsg(m)};
+  s.onerror=()=>s.close();
+  s.onclose=e=>{if(sock!==s)return;sock=null;live=false;host=false;clock.stop();renderConn();
+    if(e.reason==="too many host code tries"){setUTab("in");$("unlock").hidden=false;$("unlockMsg").textContent="Too many wrong host codes. Check the code and unlock again.";return}
+    retryTimer=setTimeout(connect,Math.min(15000,500*Math.pow(2,retry++)))};
+}
+function onMsg(m){
+  if(m.type==="pong"){clock.pong(m);return}
+  if(m.type==="loop"){loop=m.state||null;renderBand();return}
+  if(m.type==="stadium-host"){
+    if(m.ok){host=true;owner=!!m.owner;via=m.via||via;$("unlock").hidden=true;$("unlockMsg").textContent="";keep(APP+"-host-room",room);if(mode==="code")keep(APP+"-host-code",code);if(m.reason)say(m.reason);beat()}
+    else{host=false;$("unlock").hidden=false;$("unlockMsg").textContent=m.reason||"Not unlocked."}
+    renderWho();renderConn();return}
+  if(m.type==="stadium-hosts"){owners=m.owners||[];hosts=m.hosts||[];scope=m.scope||"server";claim=m.claim||null;renderHosts();return}
+  if(m.type==="stadium-layout"){if(m.layout&&!pendingLayout){layout=m.layout;rebuild()}else if(!m.layout&&!layout)say("No seat layout yet. Pick one in the Layout tab.");return}
+  if(m.type==="stadium-cue"){cue=m.cue;renderShow();renderHype();renderVx();return}
+  if(m.type==="stadium-plan"){if(m.plan){plan=Object.assign(plan,m.plan)}planDirty=true;renderPlan();return}
+  if(m.type==="stadium-assigned"){onAssigned(m);return}
+  if(m.type==="stadium-delay"){$("beaconOut").textContent=m.heard+(m.heard===1?" phone hears":" phones hear")+" the beacon, speaker delay "+Math.round(m.delay)+" ms";return}
+  if(m.type==="stadium-beacon"){beaconOn=!!(m.beacon&&m.beacon.on);renderBeacon();return}
+  if(m.type==="stadium-hype"){hype=m;renderHype();return}
+  if(m.type==="stadium-entry"){entry=m;renderEntry();return}
+  if(m.type==="stadium-vx-seeds"){vxSeeds=m.seeds||[];renderVx();return}
+  if(m.type==="stadium-vx-map"){vxMap=m;renderVx();return}
+  if(m.type==="stadium-entry-list"){downloadEntry(m.rows||[]);return}
+  if(m.type==="stadium-hype-seats"){hypeSeats=m.seats||{};return}
+  if(m.type==="stadium-count"){phones=m.phones|0;filled=new Set(m.seats||[]);renderCount();renderSeats();return}
+}
+function renderConn(){$("conn").textContent=!live?"not connected":host?"room "+room:"unlocking";$("conn").classList.toggle("ok",live&&host)}
+function renderCount(){let n=0;all.forEach(s=>{if(filled.has(s.id))n++});$("count").textContent=phones?phones+(phones===1?" phone, ":" phones, ")+n+" seats filled":"no seats in"}
+function beat(){if(host&&document.visibilityState==="visible")send({type:"beat"})}
+setInterval(beat,10000);
+
+/* ---------- sign in ----------
+   BLUE PHONE: three ways in. Sign in and New account use the show's own Supabase, which the band server hands
+   out. Own Supabase is for a host who brings their own: they paste its address and public key, and their first
+   sign in claims the room for it. While the server has no Supabase it may still take the old host code. */
+let mode="server",cfg={server:null,code:false,room:null},serverAuth=null,ownAuth=null,owner=false,owners=[],hosts=[],scope="server",claim=null,via="",sentToken="",uTab="in";
+const LOGIN_URL=SYNC_URL.replace(/^ws/,"http")+"/stadium-login";
+const OWN_URL_RE=/^https:\/\/[a-z0-9]{6,40}\.supabase\.co$/,OWN_KEY_RE=/^[A-Za-z0-9._-]{20,1200}$/;
+function ownCfg(){try{return JSON.parse(keep(APP+"-host-own")||"null")}catch(e){return null}}
+function onAuthChange(a){
+  /* a refreshed token goes to the server so the host keeps control past the hour */
+  if(a!==activeAuth())return;
+  const t=a.token;if(t&&t!==sentToken&&live)sendLogin();
+  if(!t&&host){host=false;$("unlock").hidden=false;renderConn()}
+  renderWho();
+}
+function makeServerAuth(){
+  if(!cfg.server){serverAuth=null;return}
+  if(serverAuth&&serverAuth.url===cfg.server.url)return;
+  const a=createAuth({app:APP+"-host",url:cfg.server.url,key:cfg.server.key,onChange:()=>onAuthChange(a)});a.url=cfg.server.url;serverAuth=a;
+}
+function makeOwnAuth(c){
+  if(!c||!OWN_URL_RE.test(c.url)||!OWN_KEY_RE.test(c.key)){ownAuth=null;return null}
+  if(ownAuth&&ownAuth.url===c.url&&ownAuth.key===c.key)return ownAuth;
+  /* each Supabase keeps its own sign in on the phone */
+  const a=createAuth({app:APP+"-host-own-"+c.url.replace(/[^a-z0-9]/g,"").slice(8,40),url:c.url,key:c.key,onChange:()=>onAuthChange(a)});a.url=c.url;a.key=c.key;ownAuth=a;return a;
+}
+function activeAuth(){return mode==="own"?ownAuth:mode==="server"?serverAuth:null}
+function sendLogin(){
+  if(mode==="code"){send({type:"stadium-host",code:code});return}
+  const a=activeAuth(),t=a&&a.token;
+  if(!t){$("unlock").hidden=false;$("unlockMsg").textContent="Sign in to host.";return}
+  sentToken=t;
+  send(mode==="own"?{type:"stadium-host",token:t,own:{url:a.url,key:a.key}}:{type:"stadium-host",token:t});
+}
+async function loadCfg(r){
+  let c=null;try{c=JSON.parse(keep(APP+"-host-login:"+r)||keep(APP+"-host-login")||"null")}catch(e){}
+  try{const x=await fetch(LOGIN_URL+"?room="+encodeURIComponent(r||""),{cache:"no-store"});if(x.ok){c=await x.json();keep(APP+"-host-login:"+r,JSON.stringify(c))}}catch(e){}
+  cfg=Object.assign({server:null,code:false,room:null},c&&typeof c==="object"&&!c.url?c:{server:c&&c.url?{url:c.url,key:c.key}:null});
+  makeServerAuth();
+}
+/* the unlock card: one tab per way in, and the card stays put while tabs change */
+function setUTab(t){
+  uTab=t;document.querySelectorAll("[data-u]").forEach(b=>b.classList.toggle("on",b.dataset.u===t));
+  const own=t==="own",useCode=t==="in"&&!cfg.server&&cfg.code;
+  $("ownBox").hidden=!own;$("loginBox").hidden=useCode;$("codeIn").hidden=!useCode;
+  $("unlockGo").textContent=useCode?"Unlock":t==="new"?"Create account":"Sign in";
+  $("signUp").textContent=own?"Create account":"Sign in instead";
+  $("signUp").hidden=!own;
+  $("passIn").autocomplete=t==="new"?"new-password":"current-password";
+  if(own){const c=cfg.room||ownCfg();if(c){if(!$("ownUrl").value)$("ownUrl").value=c.url;if(!$("ownKey").value&&c.key)$("ownKey").value=c.key}}
+  $("unlockHelp").textContent=own?(cfg.room?"This room signs in with its own Supabase. Sign in with an account on it.":"Paste your Supabase Project URL and anon public key. Your first sign in claims this room for your Supabase.")
+    :t==="new"?(cfg.server?"Makes an account on this show's Supabase. Open the confirm link it emails you, then ask the show's owner to add your email in the Access tab.":"This show has no Supabase of its own. Use the Own Supabase tab.")
+    :useCode?"Type the host code from the band server.":cfg.server?"Sign in with an email on this show's host list.":"This show has no Supabase of its own. Use the Own Supabase tab.";
+  const a=own?null:serverAuth;if(a&&a.email&&!$("emailIn").value)$("emailIn").value=a.email;
+}
+document.querySelectorAll("[data-u]").forEach(b=>b.addEventListener("click",()=>{setUTab(b.dataset.u);$("unlockMsg").textContent=""}));
+async function unlock(second){
+  const r=cleanRoom($("roomIn").value);if(!r){$("roomIn").focus();return}
+  if(r!==room||!cfg.loadedFor||cfg.loadedFor!==r){room=r;keep(APP+"-host-room",room);await loadCfg(room);cfg.loadedFor=r}
+  const t=uTab;
+  if(t==="in"&&!cfg.server&&cfg.code){const c=$("codeIn").value.trim();if(!c){$("codeIn").focus();return}code=c;mode="code";keep(APP+"-host-mode",mode);$("unlockMsg").textContent="Unlocking";connect();return}
+  let a;
+  if(t==="own"){
+    const url=$("ownUrl").value.trim().toLowerCase().replace(/\/+$/,""),key=$("ownKey").value.trim();
+    if(!OWN_URL_RE.test(url)){$("ownUrl").focus();$("unlockMsg").textContent="The Project URL looks like https, then the project id, then .supabase.co";return}
+    if(!OWN_KEY_RE.test(key)){$("ownKey").focus();$("unlockMsg").textContent="Paste the anon public key from the project's settings.";return}
+    keep(APP+"-host-own",JSON.stringify({url:url,key:key}));a=makeOwnAuth({url:url,key:key});mode="own";
+  }else{
+    if(!serverAuth){setUTab("own");$("unlockMsg").textContent="This show has no Supabase of its own. Use your own.";return}
+    a=serverAuth;mode="server";
+  }
+  keep(APP+"-host-mode",mode);
+  const e=$("emailIn").value.trim(),p=$("passIn").value,create=t==="new"||(t==="own"&&second);
+  if(!e){$("emailIn").focus();return}
+  /* already signed in as that email: just ask the server again, for when the owner has just added it */
+  if(!create&&!p&&a.token&&a.email.toLowerCase()===e.toLowerCase()){$("unlockMsg").textContent="Unlocking";if(live)sendLogin();else connect();return}
+  if(!p){$("passIn").focus();return}
+  $("unlockMsg").textContent=create?"Creating account":"Signing in";
+  try{
+    if(create){if(await a.signUp(e,p)==="confirm"){$("unlockMsg").textContent="Check your email and open the confirm link, then sign in here.";setUTab(t==="new"?"in":t);return}}
+    else await a.signIn(e,p);
+  }catch(err){$("unlockMsg").textContent=err.message||"Sign in failed.";return}
+  $("passIn").value="";$("unlockMsg").textContent="Unlocking";
+  if(live)sendLogin();else connect();
+}
+$("unlockGo").addEventListener("click",()=>unlock(false));
+$("signUp").addEventListener("click",()=>{if(uTab==="own")unlock(true)});
+$("roomIn").value=room;
+
+/* ---------- access tab ---------- */
+function renderWho(){
+  const a=activeAuth();
+  $("whoOut").textContent=mode==="code"?"host code":(a&&a.email?a.email:"not signed in")+(host?(owner?", owner":", host"):"");
+  $("roomOut").textContent=(room||"none")+(mode==="own"&&ownAuth?", own Supabase "+ownAuth.url.replace(/^https:\/\//,""):mode==="server"?", this show's Supabase":"");
+  $("signOut").disabled=mode==="code"&&!host;renderHosts();
+}
+function renderHosts(){
+  $("hostBox").hidden=!(host&&owner);
+  $("hostScope").textContent=scope==="room"?"These emails can host room "+room+" through your own Supabase. Each one makes an account on it first.":"These emails can host any room through this show's Supabase. Each one makes an account on the New account tab first.";
+  const box=$("hostList");box.textContent="";
+  const add=(e,isOwner)=>{const r=document.createElement("div");r.className="hrow";const l=document.createElement("span");l.textContent=e+(isOwner?", owner":"");r.appendChild(l);
+    if(!isOwner){const b=document.createElement("button");b.textContent="Remove";b.addEventListener("click",()=>send({type:"stadium-hosts",action:"remove",email:e}));r.appendChild(b)}else r.appendChild(document.createElement("span"));box.appendChild(r)};
+  owners.forEach(e=>add(e,true));hosts.forEach(e=>add(e,false));
+  $("releaseRow").hidden=!claim;
+}
+$("hostAdd").addEventListener("click",()=>{const e=$("hostIn").value.trim().toLowerCase();if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)){$("hostIn").focus();return}send({type:"stadium-hosts",action:"add",email:e});$("hostIn").value=""});
+let releaseArmed=0;
+$("releaseGo").addEventListener("click",()=>{if(Date.now()-releaseArmed>3000){releaseArmed=Date.now();say("Tap again to free this room. Its own Supabase hosts lose control.");return}releaseArmed=0;send({type:"stadium-hosts",action:"release"});say("Room freed.")});
+function leave(t){host=false;owner=false;if(sock){const o=sock;sock=null;o.close()}clearTimeout(retryTimer);live=false;$("unlock").hidden=false;$("unlockMsg").textContent=t||"";renderConn();renderWho()}
+$("signOut").addEventListener("click",()=>{const a=activeAuth();if(a)a.signOut();if(mode==="code")keep(APP+"-host-code","");leave("Signed out.")});
+$("switchRoom").addEventListener("click",()=>{leave("Type another room code.");$("roomIn").focus()});
+$("ownOpen").addEventListener("click",()=>{leave("");setUTab("own")});
+
+/* ---------- tabs ---------- */
+document.querySelectorAll("#tabs button").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x===b));
+  ["show","layout","sound","plan","seats","access"].forEach(t=>$("pane-"+t).hidden=t!==b.dataset.tab);
+  planView=b.dataset.tab==="plan";
+}));
+
+/* ---------- layout ---------- */
+let pendingLayout=false,layoutTimer=null;
+function sendLayoutSoon(){pendingLayout=true;clearTimeout(layoutTimer);layoutTimer=setTimeout(()=>{pendingLayout=false;send({type:"stadium-layout",layout:layout})},150)}
+function rebuild(){
+  all=layout?STADIUM.placeAll(layout):[];
+  if(layout&&sel>=layout.sections.length)sel=Math.max(0,layout.sections.length-1);
+  renderLayout();renderSeats();renderCount();renderSound();planDirty=true;renderPlan();if(!$("gridEd").hidden)renderGrid();
+}
+const FIELDS={x:[-2000,2000,1],y:[-2000,2000,1],rot:[-360,360,0],r:[1,2000,1],a0:[-720,720,0],span:[1,360,0],rows:[1,200,0],seats:[1,400,0],grow:[-20,40,0],seatGap:[0.3,5,2],rowGap:[0.3,5,2]};
+function fmt(k,v){const d=FIELDS[k][2];return (+v).toFixed(d)+(k==="x"||k==="y"||k==="r"||k==="seatGap"||k==="rowGap"?" m":k==="rot"||k==="a0"||k==="span"?"°":"")}
+function renderLayout(){
+  const box=$("secList");box.textContent="";
+  if(!layout){["x","y","rot","r","a0","span","rows","seats","grow","seatGap","rowGap"].forEach(k=>{const o=$(k+"Out");if(o)o.textContent="none"});$("posOut").textContent="none";return}
+  layout.sections.forEach((s,i)=>{const b=document.createElement("button");b.textContent=s.id;b.classList.toggle("on",i===sel);b.addEventListener("click",()=>{sel=i;renderLayout()});box.appendChild(b)});
+  const s=layout.sections[sel];if(!s)return;
+  document.querySelectorAll("[data-for]").forEach(r=>r.hidden=r.dataset.for!==s.kind);
+  ["rot","r","a0","span","rows","seats","grow","seatGap","rowGap"].forEach(k=>$(k+"Out").textContent=fmt(k,s[k]));
+  $("posOut").textContent=fmt("x",s.x)+", "+fmt("y",s.y);
+  say((layout.name||"Layout")+", "+STADIUM.count(layout)+" seats of "+STADIUM.MAX+" in "+layout.sections.length+" sections");
+}
+function setLayout(L){layout=L;sel=0;rebuild();sendLayoutSoon()}
+document.querySelectorAll("[data-preset]").forEach(b=>b.addEventListener("click",()=>setLayout(STADIUM.PRESETS[b.dataset.preset]())));
+document.querySelectorAll("[data-k]").forEach(b=>b.addEventListener("click",()=>{
+  if(!layout)return;const s=layout.sections[sel];if(!s)return;
+  const k=b.dataset.k,f=FIELDS[k],old=s[k];
+  s[k]=Math.min(f[1],Math.max(f[0],+(old+ +b.dataset.d).toFixed(2)));
+  if(STADIUM.count(layout)>STADIUM.MAX){s[k]=old;say("That would go over "+STADIUM.MAX+" seats.");return}
+  rebuild();sendLayoutSoon();
+}));
+function nextId(){const used=new Set(layout.sections.map(s=>s.id));for(const c of "ABCDEFGHIJKLMNOPQRSTUVWXYZ")if(!used.has(c))return c;for(let i=1;i<999;i++)if(!used.has("S"+i))return "S"+i}
+function addSection(kind){
+  if(!layout)layout={name:"Custom",sections:[]};
+  const b=all.length?STADIUM.bounds(all):{cx:0,y1:0};
+  const s=kind==="arc"?{id:nextId(),kind:"arc",x:b.cx,y:b.y1+12,r:10,a0:200,span:140,rows:4,seats:20,grow:1,rowGap:0.9,seatGap:0.6,rot:0}
+    :{id:nextId(),kind:"block",x:b.cx,y:b.y1+4,rot:0,rows:4,seats:20,grow:0,seatGap:0.6,rowGap:0.9,r:30,a0:0,span:40};
+  layout.sections.push(s);
+  if(STADIUM.count(layout)>STADIUM.MAX){layout.sections.pop();say("No room for another section under "+STADIUM.MAX+" seats.");return}
+  sel=layout.sections.length-1;layout.name="Custom";rebuild();sendLayoutSoon();
+}
+$("addBlock").addEventListener("click",()=>addSection("block"));
+$("addArc").addEventListener("click",()=>addSection("arc"));
+$("delSec").addEventListener("click",()=>{if(!layout||layout.sections.length<2){say("A layout keeps at least one section.");return}layout.sections.splice(sel,1);sel=Math.max(0,sel-1);rebuild();sendLayoutSoon()});
+
+/* ---------- show ---------- */
+const show={type:"rainbow",speed:1,detail:4,axis:"around",split:"sections"};
+function sendCue(extra){
+  const c=Object.assign({type:show.type,a:$("colA").value,b:$("colB").value,speed:show.speed,spread:show.detail/4,width:0.015*show.detail,rings:show.detail,axis:show.axis,split:show.split,bpm:120,at:now()+600},extra||{});
+  if(plan.fit==="guests"){const bx=guestBox(plan.assigned);if(bx)c.box=bx}
+  cue=c;send({type:"stadium-cue",cue:c});renderShow();
+}
+function renderShow(){
+  document.querySelectorAll("[data-scene]").forEach(b=>b.classList.toggle("on",!!cue&&cue.type===b.dataset.scene));
+  $("speedOut").textContent=show.speed.toFixed(2)+"x";$("detailOut").textContent=String(show.detail);
+  $("axisAround").classList.toggle("on",show.axis==="around");$("axisAcross").classList.toggle("on",show.axis==="across");
+  $("splitSec").classList.toggle("on",show.split==="sections");$("splitRows").classList.toggle("on",show.split==="rows");
+}
+document.querySelectorAll("[data-scene]").forEach(b=>b.addEventListener("click",()=>{show.type=b.dataset.scene;sendCue()}));
+document.querySelectorAll("[data-p]").forEach(b=>b.addEventListener("click",()=>{
+  const p=b.dataset.p,d=+b.dataset.d;
+  if(p==="speed")show.speed=Math.min(8,Math.max(0.25,show.speed+d));else show.detail=Math.min(16,Math.max(1,show.detail+d));
+  if(cue&&cue.type!=="picture")sendCue();else renderShow();
+}));
+["colA","colB"].forEach(id=>$(id).addEventListener("change",()=>{if(cue&&cue.type!=="picture")sendCue()}));
+$("axisAround").addEventListener("click",()=>{show.axis="around";if(cue)sendCue()});
+$("axisAcross").addEventListener("click",()=>{show.axis="across";if(cue)sendCue()});
+$("splitSec").addEventListener("click",()=>{show.split="sections";if(cue)sendCue()});
+$("splitRows").addEventListener("click",()=>{show.split="rows";if(cue)sendCue()});
+
+/* A card stunt: the picture is shrunk to a small grid the shape of the stands, and each seat shows its cell. */
+function pictureGrid(draw){
+  if(!all.length){say("Set a layout first.");return null}
+  const b=STADIUM.bounds(all),ar=b.w/b.h,cells=3600,w=Math.max(4,Math.min(160,Math.round(Math.sqrt(cells*ar)))),h=Math.max(4,Math.min(160,Math.round(cells/w)));
+  const c=document.createElement("canvas");c.width=w;c.height=h;const g=c.getContext("2d");draw(g,w,h);
+  const px=g.getImageData(0,0,w,h).data,rgb=new Uint8Array(w*h*3);
+  for(let i=0,j=0;i<px.length;i+=4,j+=3){rgb[j]=px[i];rgb[j+1]=px[i+1];rgb[j+2]=px[i+2]}
+  let bin="";for(let i=0;i<rgb.length;i++)bin+=String.fromCharCode(rgb[i]);
+  return {w:w,h:h,data:btoa(bin)};
+}
+$("stuntGo").addEventListener("click",()=>{
+  const text=$("stuntText").value.trim();if(!text){$("stuntText").focus();return}
+  const img=pictureGrid((g,w,h)=>{g.fillStyle=$("colB").value;g.fillRect(0,0,w,h);g.fillStyle=$("colA").value;
+    let size=h;g.font="900 "+size+"px sans-serif";while(size>4&&g.measureText(text).width>w*0.94){size--;g.font="900 "+size+"px sans-serif"}
+    g.textAlign="center";g.textBaseline="middle";g.fillText(text,w/2,h/2+size*0.05)});
+  if(img){show.type="picture";sendCue({type:"picture",img:img})}
+});
+$("picPick").addEventListener("click",()=>$("picFile").click());
+$("picFile").addEventListener("change",()=>{
+  const f=$("picFile").files[0];if(!f)return;
+  const im=new Image();im.onload=()=>{
+    const img=pictureGrid((g,w,h)=>{const s=Math.max(w/im.width,h/im.height),dw=im.width*s,dh=im.height*s;g.drawImage(im,(w-dw)/2,(h-dh)/2,dw,dh)});
+    URL.revokeObjectURL(im.src);if(img){show.type="picture";sendCue({type:"picture",img:img})}
+  };im.src=URL.createObjectURL(f);$("picFile").value="";
+});
+/* One picture for every screen: shrunk and squeezed until it fits in one message, then sent to every seat at once. */
+let screenFit="contain";
+function renderFit(){$("fitWhole").classList.toggle("on",screenFit==="contain");$("fitFill").classList.toggle("on",screenFit==="cover");
+  $("vidLoop").textContent=vidLoop?"Loop on":"Loop off";$("vidLoop").classList.toggle("on",vidLoop);$("vidSound").textContent=vidMuted?"Sound off":"Sound on";$("vidSound").classList.toggle("on",!vidMuted)}
+$("fitWhole").addEventListener("click",()=>{screenFit="contain";renderFit();if(cue&&(cue.type==="image"||cue.type==="video"))sendCue(Object.assign({},cue,{fit:screenFit,at:cue.at}))});
+$("fitFill").addEventListener("click",()=>{screenFit="cover";renderFit();if(cue&&(cue.type==="image"||cue.type==="video"))sendCue(Object.assign({},cue,{fit:screenFit,at:cue.at}))});
+$("screenPick").addEventListener("click",()=>$("screenFile").click());
+$("screenFile").addEventListener("change",()=>{
+  const f=$("screenFile").files[0];if(!f)return;$("screenFile").value="";
+  const im=new Image();im.onload=()=>{
+    let side=900,src="";
+    for(let tries=0;tries<12;tries++){
+      const s=Math.min(1,side/Math.max(im.width,im.height)),c=document.createElement("canvas");c.width=Math.max(1,Math.round(im.width*s));c.height=Math.max(1,Math.round(im.height*s));
+      const x=c.getContext("2d");x.fillStyle="#000";x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);
+      src=c.toDataURL("image/jpeg",Math.max(0.45,0.82-tries*0.04));if(src.length<=42000)break;side=Math.round(side*0.85);
+    }
+    URL.revokeObjectURL(im.src);
+    if(src.length>42000){say("That picture would not shrink small enough to send.");return}
+    sendCue({type:"image",src:src,fit:screenFit});say("Picture sent to every screen.");
+  };
+  im.onerror=()=>say("That file did not open as a picture.");
+  im.src=URL.createObjectURL(f);
+});
+let vidLoop=false,vidMuted=false,vidStunt=false;
+/* BLUE PHONE: videos saved with the show play from each phone's own copy, so nothing but the cue crosses the network. */
+fetch("rainbow-run-v1-assets.json").then(r=>r.json()).then(j=>{(j.videos||[]).forEach(v=>{const o=document.createElement("option");o.value=v.file;o.textContent=v.name;$("vidSel").appendChild(o)})}).catch(()=>{});
+$("vidSel").addEventListener("change",()=>{if($("vidSel").value)$("vidUrl").value=""});
+/* BLUE PHONE: two play buttons instead of a stunt switch, so it is plain which way the video plays */
+$("vidStunt").addEventListener("click",()=>{vidStunt=true;playVid()});
+/* Demo: every Rainbow Run animation, in the groups its own menu shows. */
+(function(){
+  const sel=$("demoSel"),o0=document.createElement("option");o0.value="";o0.textContent="Pick an animation";sel.appendChild(o0);
+  STADIUM_MOSAIC.GROUPS.forEach(gp=>{const og=document.createElement("optgroup");og.label=gp[0];gp[1].forEach(it=>{const o=document.createElement("option");o.value=it[0];o.textContent=it[1];og.appendChild(o)});sel.appendChild(og)});
+  sel.addEventListener("change",()=>{if(!sel.value)return;show.type="demo";sendCue({type:"demo",scene:sel.value});say("Demo "+sel.options[sel.selectedIndex].text+" across the crowd.")});
+})();
+window.__stadiumNow=()=>now();window.__stadiumLoop=()=>loop;
+$("vidLoop").addEventListener("click",()=>{vidLoop=!vidLoop;renderFit()});
+$("vidSound").addEventListener("click",()=>{vidMuted=!vidMuted;renderFit()});
+$("vidGo").addEventListener("click",()=>{vidStunt=false;playVid()});
+function playVid(){
+  let u=$("vidSel").value||$("vidUrl").value.trim();if(!u){$("vidUrl").focus();return}
+  /* BLUE PHONE: a YouTube link plays in YouTube's own player on every screen */
+  const yt=$("vidSel").value?null:STADIUM_YT.parse(u);
+  if(yt){STADIUM_YT.error="";if(vidStunt){startShare(yt);return}
+    stopShare();sendCue({type:"youtube",id:yt.id,start:yt.start,fit:screenFit,loop:vidLoop,muted:vidMuted,at:now()+3000});
+    say("YouTube video starts on every screen in a moment.");return}
+  stopShare();
+  if(u.indexOf("rainbow-run-videos/")!==0){if(!/^https?:\/\//i.test(u))u="https://"+u;u=u.replace(/^http:/i,"https:")}
+  sendCue({type:"video",url:u,fit:screenFit,loop:vidLoop,muted:vidMuted,stunt:vidStunt,at:now()+2500});say(vidStunt?"Video stunt starts across the crowd in a moment.":"Video starts on every screen in a moment.");
+}
+renderFit();
+
+/* ---------- screen share stunt ----------
+   BLUE PHONE: YouTube will not let a page read its player's picture, but the browser can share its own tab.
+   The host shares this tab, cuts the YouTube player out of it, shrinks it to a small grid the shape of the
+   stands several times a second, and sends that to the server, which hands each seat just its own color. */
+let shareStream=null,shareVid=null,shareTimer=null,shareFrame=null,shareLocal=false;
+const shareCv=document.createElement("canvas"),shareG=shareCv.getContext("2d",{willReadFrequently:true});
+function stopShare(){clearInterval(shareTimer);shareTimer=null;shareFrame=null;if(shareStream){try{shareStream.getTracks().forEach(k=>k.stop())}catch(e){}}shareStream=null;
+  if(shareVid){shareVid.pause();shareVid.srcObject=null;if(shareLocal){URL.revokeObjectURL(shareVid.src);shareVid.removeAttribute("src")}shareVid=null}shareLocal=false}
+/* BLUE PHONE: a video file on the host phone. The host reads its own video's pixels, which needs no screen
+   sharing, and the seats get their colors the same way as the shared tab stunt. */
+$("localPick").addEventListener("click",()=>$("localFile").click());
+$("localFile").addEventListener("change",()=>{
+  const f=$("localFile").files[0];$("localFile").value="";if(!f)return;
+  if(!all.length){say("Set a layout first.");return}
+  stopShare();STADIUM_YT.clear();
+  const v=document.createElement("video");v.playsInline=true;v.muted=vidMuted||!hear;v.loop=vidLoop;v.src=URL.createObjectURL(f);
+  shareVid=v;shareLocal=true;
+  v.addEventListener("ended",()=>{if(shareVid===v&&!vidLoop)say("The video ended.")});
+  v.play().catch(()=>{v.muted=true;v.play().catch(()=>{})});
+  sendCue({type:"share",loop:vidLoop,muted:vidMuted,at:now()+300});
+  say(f.name+" across the crowd, each seat one pixel.");
+  shareTimer=setInterval(shareTick,110);
+});
+async function startShare(yt){
+  const plain=why=>{stopShare();sendCue({type:"youtube",id:yt.id,start:yt.start,fit:screenFit,loop:vidLoop,muted:vidMuted,at:now()+3000});say(why)};
+  if(!all.length){say("Set a layout first.");return}
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia)){plain("This browser cannot share its screen, so the video plays whole on every screen. Chrome on a computer can run the YouTube stunt.");return}
+  stopShare();
+  try{shareStream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:15},audio:false,preferCurrentTab:true,selfBrowserSurface:"include",surfaceSwitching:"exclude"})}
+  catch(e){plain("Screen sharing was not allowed, so the video plays whole on every screen.");return}
+  shareVid=document.createElement("video");shareVid.muted=true;shareVid.playsInline=true;shareVid.srcObject=shareStream;shareVid.play().catch(()=>{});
+  shareStream.getVideoTracks()[0].addEventListener("ended",()=>{stopShare();say("Screen sharing stopped.")});
+  sendCue({type:"share",id:yt.id,start:yt.start,loop:vidLoop,muted:vidMuted,at:now()+3000});
+  say("YouTube stunt across the crowd. Keep this tab open and on screen.");
+  shareTimer=setInterval(shareTick,110);
+}
+function shareTick(){
+  if(!cue||cue.type!=="share"){stopShare();return}
+  const v=shareVid;if(!v||v.readyState<2||!v.videoWidth)return;
+  let sx=0,sy=0,sw=v.videoWidth,sh=v.videoHeight;
+  if(!shareLocal){
+    const f=$("ytPv").querySelector("iframe")||$("ytPv");const r=f.getBoundingClientRect(),o=$("ytPv").getBoundingClientRect();
+    const x0=Math.max(r.left,o.left),y0=Math.max(r.top,o.top),x1=Math.min(r.right,o.right),y1=Math.min(r.bottom,o.bottom);if(x1-x0<4||y1-y0<4)return;
+    /* the shared tab is this page, so page spots scale straight onto the captured picture */
+    const k=v.videoWidth/innerWidth;sx=x0*k;sy=y0*k;sw=(x1-x0)*k;sh=(y1-y0)*k;
+  }
+  const bx=cue.box?boxOf(cue.box):STADIUM.bounds(all),ar=bx.w/bx.h,w=ar>=1?64:Math.max(2,Math.round(64*ar)),h=ar>=1?Math.max(2,Math.round(64/ar)):64;
+  shareCv.width=w;shareCv.height=h;
+  const s=Math.max(w/sw,h/sh),dw=sw*s,dh=sh*s;shareG.fillStyle="#000";shareG.fillRect(0,0,w,h);
+  shareG.drawImage(v,sx,sy,sw,sh,(w-dw)/2,(h-dh)/2,dw,dh);
+  const px=shareG.getImageData(0,0,w,h).data,rgb=new Uint8Array(w*h*3);
+  for(let i=0,j=0;i<px.length;i+=4,j+=3){rgb[j]=px[i];rgb[j+1]=px[i+1];rgb[j+2]=px[i+2]}
+  let bin="";for(let i=0;i<rgb.length;i++)bin+=String.fromCharCode(rgb[i]);
+  send({type:"stadium-frame",w:w,h:h,data:btoa(bin),box:{x0:bx.x0,y0:bx.y0,x1:bx.x0+bx.w,y1:bx.y0+bx.h}});
+  shareFrame={w:w,h:h,data:px};
+}
+
+/* ---------- hype meter ---------- */
+let hype=null,hypeSeats={},hypeSecs=20;
+function renderHype(){
+  $("hypeSecsOut").textContent=hypeSecs+" s";
+  const on=!!(cue&&cue.type==="hype");
+  $("hypeGo").textContent=on?"Stop hype":"Start hype";
+  if(!on){$("hypeOut").textContent="not running";return}
+  if(!hype||hype.at!==cue.at){$("hypeOut").textContent="starting";return}
+  $("hypeOut").textContent=hype.done?"Maxed out! The crowd filled it.":Math.round(hype.fill*100)+"% full, "+hype.active+" of "+hype.phones+" phones shaking";
+}
+document.querySelectorAll("[data-hs]").forEach(b=>b.addEventListener("click",()=>{hypeSecs=Math.min(120,Math.max(5,hypeSecs+ +b.dataset.hs));renderHype()}));
+$("hypeGo").addEventListener("click",()=>{if(cue&&cue.type==="hype"){show.type="hold";sendCue({type:"hold"});renderHype();return}hype=null;hypeSeats={};sendCue({type:"hype",secs:hypeSecs,at:now()+1500});renderHype();say("Hype meter running. Tell everyone to shake their phones.")});
+$("hypeScreen").addEventListener("click",()=>{if(!room){say("Pick a room first.");return}window.open("rainbow-run-stadium-screen-v1.html?stadium="+encodeURIComponent(room),"_blank")});
+renderHype();
+
+function bandPlaying(){return !!(loop&&loop.playing)}
+function renderBand(){$("bandGo").textContent=bandPlaying()?"Stop":"Start";$("bandOut").textContent=bandPlaying()?(loop.pending||loop).tempo+" bpm":"stopped"}
+$("bandGo").addEventListener("click",()=>{beat();send({type:"transport",action:bandPlaying()?"stop":"start"})});
+
+/* ---------- sound ---------- */
+const snd={path:"across",tone:"siren",speed:60,f0:440,level:0.7};
+let hear=false,actx=null,flight=null;
+function pathLength(b){
+  const pad=Math.max(b.w,b.h)*0.25;
+  if(snd.path==="around")return 2*Math.PI*Math.hypot(b.w,b.h)/2*0.7;
+  if(snd.path==="diagonal")return Math.hypot(b.w+2*pad,b.h+2*pad);
+  if(snd.path==="front")return b.h+2*pad;
+  return b.w+2*pad;
+}
+function duration(){return all.length?Math.min(60,Math.max(1,pathLength(STADIUM.bounds(all))/snd.speed)):0}
+function renderSound(){
+  document.querySelectorAll("[data-path]").forEach(b=>b.classList.toggle("on",b.dataset.path===snd.path));
+  document.querySelectorAll("[data-tone]").forEach(b=>b.classList.toggle("on",b.dataset.tone===snd.tone));
+  $("sSpeedOut").textContent=snd.speed+" m/s";$("sF0Out").textContent=snd.f0+" Hz";$("sLevelOut").textContent=Math.round(snd.level*100)+"%";
+  $("durOut").textContent=all.length?duration().toFixed(1)+" s":"no layout";$("hearHost").textContent=hear?"Listen here on":"Listen here off";$("hearHost").classList.toggle("on",hear);
+}
+document.querySelectorAll("[data-path]").forEach(b=>b.addEventListener("click",()=>{snd.path=b.dataset.path;renderSound()}));
+document.querySelectorAll("[data-tone]").forEach(b=>b.addEventListener("click",()=>{snd.tone=b.dataset.tone;renderSound()}));
+document.querySelectorAll("[data-s]").forEach(b=>b.addEventListener("click",()=>{
+  const k=b.dataset.s,d=+b.dataset.d;
+  if(k==="speed")snd.speed=Math.min(340,Math.max(5,snd.speed+d));
+  if(k==="f0")snd.f0=Math.min(2000,Math.max(60,snd.f0+d));
+  if(k==="level")snd.level=Math.round(Math.min(1,Math.max(0.1,snd.level+d))*10)/10;
+  renderSound();
+}));
+$("hearHost").addEventListener("click",async()=>{hear=!hear;if(hear){try{if(!actx)actx=new (window.AudioContext||window.webkitAudioContext)();await actx.resume()}catch(e){}}renderSound()});
+$("launch").addEventListener("click",()=>{
+  if(!all.length){say("Set a layout first.");return}
+  const s=Object.assign({},snd,{dur:duration(),at:now()+800});
+  send({type:"stadium-sound",sound:s});flight=s;
+  if(hear&&actx){const b=STADIUM.bounds(all);playLocal(s,{x:b.cx,y:b.cy,b:b})}
+  say("Flyby launched, "+s.dur.toFixed(1)+" seconds "+s.path);
+});
+/* ---------- timing beacon ---------- */
+let beaconOn=false,beaconSpk="stage",beaconPlayer=null;
+function speakerSpot(){const b=STADIUM.bounds(all);return beaconSpk==="middle"?{x:b.cx,y:b.cy}:{x:b.cx,y:b.y0-3}}
+function renderBeacon(){
+  $("beaconGo").textContent=beaconOn?"Beacon on":"Beacon off";$("beaconGo").classList.toggle("on",beaconOn);
+  $("spkStage").classList.toggle("on",beaconSpk==="stage");$("spkMid").classList.toggle("on",beaconSpk==="middle");
+  if(!beaconOn)$("beaconOut").textContent="beacon off";
+  if(beaconPlayer)beaconPlayer.set(beaconOn);
+}
+function sendBeacon(){if(!all.length){say("Set a layout first.");return}const p=speakerSpot();send({type:"stadium-beacon",beacon:{on:beaconOn,x:p.x,y:p.y}})}
+$("beaconGo").addEventListener("click",async()=>{
+  if(!all.length){say("Set a layout first.");return}
+  try{if(!actx)actx=new (window.AudioContext||window.webkitAudioContext)();await actx.resume()}catch(e){}
+  if(!beaconPlayer&&actx)beaconPlayer=STADIUM_BEACON.player(actx,()=>now());
+  beaconOn=!beaconOn;renderBeacon();sendBeacon();
+  if(beaconOn){$("beaconOut").textContent="Plug this phone into the venue speakers. Waiting for seats to hear it.";say("Beacon chirps every four seconds through this phone's sound out.")}
+});
+$("spkStage").addEventListener("click",()=>{beaconSpk="stage";renderBeacon();if(beaconOn)sendBeacon()});
+$("spkMid").addEventListener("click",()=>{beaconSpk="middle";renderBeacon();if(beaconOn)sendBeacon()});
+
+/* The host hears the flyby from the middle of the seats. */
+function playLocal(s,ear){
+  const fb=STADIUM.flyby(s,ear,0.02),start=actx.currentTime+(s.at-now())/1000;
+  const o=actx.createOscillator(),a=actx.createGain();o.type=s.tone==="engine"?"sawtooth":s.tone==="siren"?"square":"sine";
+  a.gain.value=0;o.connect(a);a.connect(actx.destination);
+  const len=(fb.freq.length-1)*fb.step;
+  try{o.frequency.setValueCurveAtTime(fb.freq,start,len);a.gain.setValueCurveAtTime(fb.gain.map(g=>g*0.3),start,len)}catch(e){return}
+  o.start(start);o.stop(start+len+0.05);
+}
+
+/* ---------- seat codes ---------- */
+function renderSeats(){
+  const box=$("seatRows");box.textContent="";
+  if(!layout){box.innerHTML='<p class="note">No layout yet. Pick a venue in the Layout tab.</p>';return}
+  layout.sections.forEach(s=>{
+    const list=all.filter(x=>x.sec===s.id),inn=list.filter(x=>filled.has(x.id)).length;
+    const r=document.createElement("div");r.className="srow";
+    const l=document.createElement("span");l.className="val left";l.textContent="Section "+s.id;
+    const v=document.createElement("span");v.className="val";v.textContent=inn+" of "+list.length+" in";
+    const b=document.createElement("button");b.textContent="Seat codes";b.addEventListener("click",()=>printSection(s.id));
+    r.append(l,v,b);box.appendChild(r);
+  });
+}
+function seatUrl(id,t){return location.origin+"/?stadium="+encodeURIComponent(room)+"&seat="+encodeURIComponent(id)+(t?"&t="+encodeURIComponent(t):"")}
+/* ---------- floor virus ---------- */
+let vxSeeds=[],vxMap=null,vxPlacing=false;
+function qrShow(title,note,url){const c=qrcode(0,"M");c.addData(url);c.make();$("qrImg").innerHTML=c.createSvgTag({cellSize:4,margin:2,scalable:true});$("qrTitle").textContent=title;$("qrNote").textContent=note;$("qrOver").hidden=false}
+$("qrDone").addEventListener("click",()=>{$("qrOver").hidden=true});
+function floorUrl(){return location.origin+"/?stadium="+encodeURIComponent(room)+"&floor=1"}
+function seedUrl(v){return location.origin+"/?stadium="+encodeURIComponent(room)+"&vseed="+encodeURIComponent(v.id)+"&vt="+encodeURIComponent(v.token)}
+function renderVx(){
+  const on=!!(cue&&cue.type==="virus");$("vxGo").textContent=on?"Stop virus":"Start virus";
+  const box=$("vxSeedList");box.textContent="";
+  vxSeeds.forEach((v,i)=>{
+    const r=document.createElement("div");r.style.cssText="padding:8px 0;border-top:1px solid #eef2f7";
+    const l=document.createElement("div");const c=STADIUM_VIRUS.COLORS[i%STADIUM_VIRUS.COLORS.length];
+    l.style.cssText="font-weight:700;font-size:.88rem;margin:0 0 6px;border-left:8px solid rgb("+c.join(",")+");padding-left:8px";l.textContent=v.name+" at "+v.x+", "+v.y+" m";r.appendChild(l);
+    const bs=document.createElement("div");bs.className="seg two";
+    const o=document.createElement("button");o.textContent="Seed code";o.addEventListener("click",()=>qrShow(v.name,"Scan this with the phone standing at the seed's spot.",seedUrl(v)));
+    const x=document.createElement("button");x.textContent="Remove";x.addEventListener("click",()=>send({type:"stadium-vx-seeds",action:"remove",id:v.id}));
+    bs.append(o,x);r.appendChild(bs);box.appendChild(r);
+  });
+  if(!on){$("vxOut").textContent=vxSeeds.length<3?"Place at least three seeds, spread out and not in a line, so the map can find everyone.":"not running";return}
+  if(!vxMap){$("vxOut").textContent="starting, phones are joining";return}
+  let inf=0,placed=0;vxMap.phones.forEach(p=>{if(p[2]>=0)inf++;if(p[0]!==null)placed++});
+  $("vxOut").textContent=vxMap.phones.length+" phones playing, "+inf+" infected, "+placed+" on the map, "+vxMap.pairs+" measured pairs, a hop is about "+vxMap.hopLen+" m";
+}
+$("vxGo").addEventListener("click",()=>{
+  if(cue&&cue.type==="virus"){show.type="hold";sendCue({type:"hold"});vxMap=null;renderVx();return}
+  if(!layout){say("Pick a layout first. The Field preset works as a dance floor.");return}
+  vxMap=null;sendCue({type:"virus",at:now()+2000});renderVx();say("Virus running. Phones on the floor start calling.");
+});
+$("vxFloor").addEventListener("click",()=>{if(!room){say("Pick a room first.");return}qrShow("Join the floor","Guests scan this to join the floor game without a seat.",floorUrl())});
+$("vxAdd").addEventListener("click",()=>{if(!layout){say("Pick a layout first.");return}vxPlacing=true;say("Tap the seed's spot on the map above.")});
+
+/* ---------- entry kiosks ---------- */
+let entry={kiosks:[],ticketsOnly:false,total:0};
+function kioskUrl(k){return location.origin+"/rainbow-run-stadium-kiosk-v1.html?stadium="+encodeURIComponent(room)+"&kiosk="+encodeURIComponent(k.id)+"&key="+encodeURIComponent(k.token)}
+function renderEntry(){
+  const box=$("kioskList");box.textContent="";
+  entry.kiosks.forEach(k=>{
+    const r=document.createElement("div");r.style.cssText="padding:8px 0;border-top:1px solid #eef2f7";
+    const l=document.createElement("div");l.style.cssText="font-weight:700;font-size:.88rem;margin:0 0 6px";l.textContent=k.name+", "+k.handed+" handed out, "+k.taken+" seated";r.appendChild(l);
+    const bs=document.createElement("div");bs.className="seg three";
+    if(k.token){
+      const o=document.createElement("button");o.textContent="Open";o.addEventListener("click",()=>window.open(kioskUrl(k),"_blank"));
+      const c=document.createElement("button");c.textContent="Copy link";c.addEventListener("click",async()=>{try{await navigator.clipboard.writeText(kioskUrl(k));say("Kiosk link copied for "+k.name+".")}catch(e){say(kioskUrl(k))}});
+      const x=document.createElement("button");x.textContent="Remove";let armed=0;x.addEventListener("click",()=>{if(Date.now()-armed>3000){armed=Date.now();say("Tap Remove again to shut "+k.name+". Its seats stay given out.");return}send({type:"stadium-kiosks",action:"remove",id:k.id})});
+      bs.append(o,c,x);r.appendChild(bs);
+    }
+    box.appendChild(r);
+  });
+  $("onlyOff").classList.toggle("on",!entry.ticketsOnly);$("onlyOn").classList.toggle("on",!!entry.ticketsOnly);
+  let seated=0;entry.kiosks.forEach(k=>seated+=k.taken);
+  $("entryOut").textContent=entry.total?entry.total+" codes handed out, "+seated+" phones seated with them":"none yet";
+}
+$("kioskAdd").addEventListener("click",()=>{if(!host){say("Unlock the host screen first.");return}send({type:"stadium-kiosks",action:"add",name:$("kioskName").value.trim()});$("kioskName").value=""});
+$("onlyOff").addEventListener("click",()=>send({type:"stadium-kiosks",action:"only",on:false}));
+$("onlyOn").addEventListener("click",()=>{send({type:"stadium-kiosks",action:"only",on:true});say("Only kiosk codes seat new phones now. Phones already in a seat stay.")});
+$("entryCsv").addEventListener("click",()=>send({type:"stadium-entry"}));
+function downloadEntry(rows){
+  const iso=t=>t?new Date(t).toISOString():"";
+  const lines=["seat,section,row,seat_number,door,handed_out,taken_by_phone,taken_at"];
+  rows.sort((a,b)=>a.at-b.at).forEach(r=>{const s=all.find(x=>x.id===r.seat);lines.push([r.seat,s?s.sec:"",s?s.row:"",s?s.seat:"",'"'+String(r.kiosk).replace(/"/g,"'")+'"',iso(r.at),r.device,iso(r.takenAt)].join(","))});
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([lines.join("\n")+"\n"],{type:"text/csv"}));
+  a.download="rainbow-run-v1-seats-"+room+".csv";document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500);
+  say(rows.length+" seats in the list.");
+}
+function printSection(id){
+  const list=all.filter(x=>x.sec===id),sheet=$("sheet");sheet.textContent="";
+  $("printTitle").textContent="Section "+id+", "+list.length+" seats, room "+room;
+  list.forEach(x=>{
+    const q=qrcode(0,"M");q.addData(seatUrl(x.id));q.make();
+    const t=document.createElement("div");t.className="tag";
+    t.innerHTML=q.createSvgTag({cellSize:3,margin:2,scalable:true})+"<b>"+x.id+"</b><small>Row "+x.row+", seat "+x.seat+"</small>";
+    sheet.appendChild(t);
+  });
+  $("print").hidden=false;
+}
+$("printGo").addEventListener("click",()=>window.print());
+$("printClose").addEventListener("click",()=>{$("print").hidden=true});
+
+/* ---------- seating plan ---------- */
+let plan={guests:0,pattern:"pack",shape:"heart",text:"",fit:"venue",assigned:[]},planView=false,planDirty=true,ord=[],sim=0;
+let planTimer=null;
+function sendPlanSoon(){clearTimeout(planTimer);planTimer=setTimeout(()=>send({type:"stadium-plan",plan:plan}),200)}
+/* A text shape is drawn on a small canvas the shape of the venue; seats under the letters belong to it. */
+function textMask(){
+  const t=(plan.text||"").trim();if(!t||!all.length)return null;
+  const b=STADIUM.bounds(all),ar=b.w/b.h,w=Math.max(16,Math.min(240,Math.round(Math.sqrt(9000*ar)))),h=Math.max(16,Math.round(w/ar));
+  const c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d");
+  let size=h;x.font="900 "+size+"px sans-serif";while(size>4&&x.measureText(t).width>w*0.92){size--;x.font="900 "+size+"px sans-serif"}
+  x.textAlign="center";x.textBaseline="middle";x.fillText(t,w/2,h/2+size*0.05);
+  const px=x.getImageData(0,0,w,h).data;
+  return (u,v)=>{const i=Math.min(h-1,Math.max(0,Math.floor(v*h)))*w+Math.min(w-1,Math.max(0,Math.floor(u*w)));return px[i*4+3]>100};
+}
+function planOrder(){
+  if(!planDirty)return ord;planDirty=false;
+  if(!layout){ord=[];return ord}
+  const q=Object.assign({},plan);let mask=null;
+  if(q.pattern==="shape"&&q.shape==="text")mask=textMask();
+  ord=STADIUM.order(layout,q,mask);return ord;
+}
+/* The seats that show in the planner: handed out, then the simulated guests still to come. */
+function shownSeats(){
+  const o=planOrder(),held=new Set(plan.assigned),extra=Math.max(0,sim-plan.assigned.length);
+  for(let i=0;i<Math.min(extra,o.length);i++)held.add(o[i].id);
+  return held;
+}
+function guestBox(ids){
+  const set=ids instanceof Set?ids:new Set(ids||[]),list=all.filter(s=>set.has(s.id));
+  if(list.length<2)return null;const b=STADIUM.bounds(list);return {x0:b.x0,y0:b.y0,x1:b.x1,y1:b.y1};
+}
+function renderPlan(){
+  const total=all.length;
+  if(!plan.guests||plan.guests>total)plan.guests=Math.min(total,plan.guests||total);
+  $("guestsOut").textContent=plan.guests+" of "+total;
+  document.querySelectorAll("[data-fill]").forEach(b=>b.classList.toggle("on",b.dataset.fill===plan.pattern));
+  document.querySelectorAll("[data-shape]").forEach(b=>{b.classList.toggle("on",b.dataset.shape===plan.shape);b.disabled=plan.pattern!=="shape"});
+  $("shapeText").disabled=!(plan.pattern==="shape"&&plan.shape==="text");
+  if(document.activeElement!==$("shapeText"))$("shapeText").value=plan.text||"";
+  $("fitVenue").classList.toggle("on",plan.fit!=="guests");$("fitGuests").classList.toggle("on",plan.fit==="guests");
+  const si=$("simIn");si.max=String(plan.guests);if(sim>plan.guests)sim=plan.guests;si.value=String(sim);
+  $("simOut").textContent=sim+" guests";
+  $("seatedOut").textContent=plan.assigned.length+" handed out, "+Math.max(0,plan.guests-plan.assigned.length)+" to come";
+}
+function setPlan(k,v){plan[k]=v;planDirty=true;renderPlan();sendPlanSoon();if(k==="fit"&&cue)sendCue(cue.type==="picture"?{type:"picture",img:cue.img}:{})}
+document.querySelectorAll("[data-g]").forEach(b=>b.addEventListener("click",()=>{setPlan("guests",Math.max(plan.assigned.length,Math.min(all.length,plan.guests+ +b.dataset.g)))}));
+document.querySelectorAll("[data-fill]").forEach(b=>b.addEventListener("click",()=>setPlan("pattern",b.dataset.fill)));
+document.querySelectorAll("[data-shape]").forEach(b=>b.addEventListener("click",()=>setPlan("shape",b.dataset.shape)));
+$("shapeText").addEventListener("input",()=>setPlan("text",$("shapeText").value.slice(0,12)));
+$("fitVenue").addEventListener("click",()=>setPlan("fit","venue"));
+$("fitGuests").addEventListener("click",()=>setPlan("fit","guests"));
+$("simIn").addEventListener("input",()=>{sim=+$("simIn").value;$("simOut").textContent=sim+" guests"});
+/* At the door: the next seat in the fill order goes to the server, which makes sure no two door screens hand out one seat. */
+let waiting="",retries=0;
+function nextGuest(){
+  if(!host){say("Unlock the host screen first.");return}
+  if(plan.assigned.length>=plan.guests){say("Every expected guest has a seat. Raise the guest count to seat more.");return}
+  const o=planOrder();if(!o.length){say("No free seats left.");return}
+  waiting=o[0].id;send({type:"stadium-assign",seat:waiting});
+}
+function onAssigned(m){
+  if(m.seat!==waiting)return;
+  if(!m.ok){if(retries++<5){planDirty=true;waiting="";setTimeout(nextGuest,150)}return}
+  retries=0;waiting="";
+  if(plan.assigned.indexOf(m.seat)<0)plan.assigned.push(m.seat);planDirty=true;renderPlan();
+  const s=all.find(x=>x.id===m.seat);
+  $("doorSeat").textContent=m.seat;$("doorWhere").textContent=s?"Section "+s.sec+", row "+s.row+", seat "+s.seat:"";
+  const q=qrcode(0,"M");q.addData(seatUrl(m.seat,m.ticket));q.make();$("doorQr").innerHTML=q.createSvgTag({cellSize:4,margin:2,scalable:true});
+  $("door").hidden=false;
+  if(plan.fit==="guests"&&cue)sendCue(cue.type==="picture"?{type:"picture",img:cue.img,at:cue.at}:{at:cue.at});
+}
+$("nextGuest").addEventListener("click",nextGuest);
+$("doorNext").addEventListener("click",nextGuest);
+$("doorDone").addEventListener("click",()=>{$("door").hidden=true});
+$("undoGuest").addEventListener("click",()=>{if(!plan.assigned.length)return;const id=plan.assigned.pop();planDirty=true;renderPlan();sendPlanSoon();say("Seat "+id+" is free again.")});
+let clearArmed=0;
+$("clearGuests").addEventListener("click",()=>{
+  if(Date.now()-clearArmed>3000){clearArmed=Date.now();say("Tap Clear seating again to free every handed out seat.");return}
+  clearArmed=0;plan.assigned=[];planDirty=true;renderPlan();sendPlanSoon();say("Every seat is free again.");
+});
+
+/* ---------- seat grid editor ---------- */
+function renderGrid(){
+  const box=$("gridRows");box.textContent="";
+  const sec=layout&&layout.sections[sel];if(!sec){$("gridEd").hidden=true;return}
+  $("gridTitle").textContent="Section "+sec.id+", "+all.filter(x=>x.sec===sec.id).length+" seats";
+  const off=new Set(sec.off||[]);
+  for(let r=0;r<sec.rows;r++){
+    const n=STADIUM.rowSeats(sec,r),line=document.createElement("div");line.className="grow";
+    const ctl=document.createElement("div");ctl.className="ctl";
+    const minus=document.createElement("button");minus.textContent="\u2212";minus.setAttribute("aria-label","One seat fewer in row "+(r+1));
+    const lab=document.createElement("b");lab.textContent="R"+(r+1)+" "+n;
+    const plus=document.createElement("button");plus.textContent="+";plus.setAttribute("aria-label","One seat more in row "+(r+1));
+    minus.addEventListener("click",()=>setRow(r,n-1));plus.addEventListener("click",()=>setRow(r,n+1));
+    ctl.append(minus,lab,plus);
+    const cells=document.createElement("div");cells.className="cells";
+    for(let k=0;k<n;k++){const c=document.createElement("button");c.className="cell"+(off.has((r+1)+"-"+(k+1))?" off":"");c.setAttribute("aria-label","Row "+(r+1)+" seat "+(k+1));
+      c.addEventListener("click",()=>toggleSeat(r,k,c));cells.appendChild(c)}
+    line.append(ctl,cells);box.appendChild(line);
+  }
+}
+function setRow(r,n){
+  const sec=layout.sections[sel];if(n<0||n>400)return;
+  if(!sec.rowSeats)sec.rowSeats=[];const old=sec.rowSeats[r];sec.rowSeats[r]=n;
+  if(STADIUM.count(layout)>STADIUM.MAX){sec.rowSeats[r]=old;say("That would go over "+STADIUM.MAX+" seats.");return}
+  const keepScroll=$("gridRows").scrollTop;rebuild();sendLayoutSoon();$("gridRows").scrollTop=keepScroll;
+}
+function toggleSeat(r,k,cell){
+  const sec=layout.sections[sel],key=(r+1)+"-"+(k+1);if(!sec.off)sec.off=[];
+  const i=sec.off.indexOf(key);if(i>=0)sec.off.splice(i,1);else sec.off.push(key);
+  cell.classList.toggle("off",i<0);all=STADIUM.placeAll(layout);planDirty=true;renderPlan();renderSeats();renderCount();
+  $("gridTitle").textContent="Section "+sec.id+", "+all.filter(x=>x.sec===sec.id).length+" seats";sendLayoutSoon();
+}
+$("gridOpen").addEventListener("click",()=>{if(!layout){say("Pick a layout first.");return}renderGrid();$("gridEd").hidden=false});
+$("gridClose").addEventListener("click",()=>{$("gridEd").hidden=true});
+
+/* ---------- preview ---------- */
+let taintSaid=false,lastFrame=null;
+function boxOf(q){return {x0:q.x0,y0:q.y0,x1:q.x1,y1:q.y1,w:Math.max(1,q.x1-q.x0),h:Math.max(1,q.y1-q.y0)}}
+const pv=$("pv"),g=pv.getContext("2d");let PW=0,PH=0,view=null;
+function size(){const d=Math.min(2,devicePixelRatio||1),r=pv.getBoundingClientRect();PW=r.width;PH=r.height;pv.width=Math.round(PW*d);pv.height=Math.round(PH*d);g.setTransform(d,0,0,d,0,0)}
+addEventListener("resize",size);
+function draw(){
+  requestAnimationFrame(draw);
+  if(!PW)size();
+  g.fillStyle="#17202d";g.fillRect(0,0,PW,PH);
+  if(!all.length){g.fillStyle="#9fb0c8";g.font="600 14px sans-serif";g.textAlign="center";g.fillText("No seat layout yet",PW/2,PH/2);return}
+  /* BLUE PHONE: while every screen shows a whole picture or video, the seats move to the left and the picture
+     gets the right side of the preview, so neither covers the other */
+  const side=!!(cue&&(cue.type==="image"||cue.type==="youtube"||cue.type==="share"||(cue.type==="video"&&!(cue.stunt&&STADIUM_MOSAIC.current()&&!STADIUM_MOSAIC.current().tainted))));
+  const MW=side?PW*0.54:PW;
+  const b=STADIUM.bounds(all),pad=14,sc=Math.min((MW-2*pad)/b.w,(PH-2*pad)/b.h),ox=MW/2-b.cx*sc,oy=PH/2-b.cy*sc;
+  view={sc,ox,oy};
+  const t=now(),bc=cue?STADIUM.beatCount(loop,cue,t):0,ct=cue?(t-cue.at)/1000:0,dot=Math.max(1.2,Math.min(6,sc*0.5));
+  const selId=layout&&layout.sections[sel]?layout.sections[sel].id:"";
+  /* In the Plan tab only the handed out and simulated guests light up; empty seats stay dark. */
+  const shown=planView?shownSeats():null;
+  let pc=cue;
+  if(cue&&planView&&plan.fit==="guests"){const bx=guestBox(shown);pc=Object.assign({},cue,{box:bx||undefined})}
+  /* A demo or a video stunt: one shared frame, and each seat shows the color under it. */
+  let mframe=null,mbox=null;
+  if(STADIUM_MOSAIC.wants(pc)){
+    mbox=pc.box?boxOf(pc.box):b;
+    const src=STADIUM_MOSAIC.make(pc,mbox.w/mbox.h,()=>now());
+    if(src&&src.tainted&&!taintSaid){taintSaid=true;say("That video's site will not let its pixels be read, so it plays whole on each screen instead.")}
+    if(src&&ct>=0)mframe=src.grab()||lastFrame;lastFrame=mframe;
+  } else {STADIUM_MOSAIC.make(null);if(pc&&pc.type==="share"&&shareFrame){mframe=shareFrame;mbox=pc.box?boxOf(pc.box):b}}
+  const mcol=s=>mframe?STADIUM_MOSAIC.sample(mframe,(s.x-mbox.x0)/mbox.w,(s.y-mbox.y0)/mbox.h):null;
+  for(let i=0;i<all.length;i++){
+    const s=all[i],x=ox+s.x*sc,y=oy+s.y*sc;
+    if(shown){
+      if(!shown.has(s.id)){g.globalAlpha=1;g.fillStyle="#2a3446";g.fillRect(x-dot*0.5,y-dot*0.5,dot,dot);continue}
+      const c=mcol(s)||(pc&&ct>=0?STADIUM.color(pc,s,ct,bc):[90,140,220]);g.globalAlpha=1;g.fillStyle="rgb("+c[0]+","+c[1]+","+c[2]+")";g.fillRect(x-dot,y-dot,dot*2,dot*2);continue;
+    }
+    const hl=cue&&cue.type==="hype"?hypeSeats[s.id]:undefined;
+    const c=hl!==undefined?(hl<5?[Math.round(30+hl/4.5*225),200,60]:[255,Math.round(200-(hl-4.5)/4.5*170),40]):mcol(s)||(cue&&ct>=0?STADIUM.color(cue,s,ct,bc):[60,70,86]),on=filled.has(s.id);
+    g.fillStyle="rgb("+c[0]+","+c[1]+","+c[2]+")";g.globalAlpha=on||!phones?1:0.45;
+    const r=on?dot:dot*0.7;g.fillRect(x-r,y-r,r*2,r*2);
+  }
+  g.globalAlpha=1;
+  STADIUM_YT.sync($("ytPv"),cue,t,{muted:!hear});if(STADIUM_YT.error){say(STADIUM_YT.error+".");STADIUM_YT.error=""}
+  if(cue&&(cue.type==="image"||(cue.type==="video"&&!(cue.stunt&&mframe))||(cue.type==="share"&&shareLocal))&&ct>=0)drawMedia(ct);
+  if(selId){g.strokeStyle="#5aa2ff";g.lineWidth=1.5;const sb=STADIUM.bounds(all.filter(s=>s.sec===selId));g.strokeRect(ox+sb.x0*sc-dot-3,oy+sb.y0*sc-dot-3,sb.w*sc+2*dot+6,sb.h*sc+2*dot+6)}
+  g.fillStyle="#ffffff";g.font="700 11px sans-serif";g.textAlign="center";g.fillText("STAGE",ox+b.cx*sc,Math.max(11,oy+b.y0*sc-dot-6));
+  /* the floor game: every phone the map has placed, in its strain's color, and the seeds as rings */
+  if(cue&&cue.type==="virus"){
+    if(vxMap)vxMap.phones.forEach(p=>{if(p[0]===null)return;const c=p[2]>=0?STADIUM_VIRUS.COLORS[p[2]%STADIUM_VIRUS.COLORS.length]:[150,170,200];
+      g.fillStyle="rgb("+c.join(",")+")";g.beginPath();g.arc(ox+p[0]*sc,oy+p[1]*sc,3.5,0,6.283);g.fill()});
+  }
+  vxSeeds.forEach((v,i)=>{const c=STADIUM_VIRUS.COLORS[i%STADIUM_VIRUS.COLORS.length];g.strokeStyle="rgb("+c.join(",")+")";g.lineWidth=2.5;g.beginPath();g.arc(ox+v.x*sc,oy+v.y*sc,7,0,6.283);g.stroke()});
+  if(flight){const e=(t-flight.at)/1000;if(e>flight.dur+2)flight=null;else if(e>=0&&e<=flight.dur){const p=STADIUM.sourceAt(flight,b,e);
+    g.fillStyle="#ffd23a";g.beginPath();g.arc(ox+p[0]*sc,oy+p[1]*sc,6,0,6.283);g.fill()}}
+}
+/* The preview shows the picture or the video the screens show, in step with them. */
+const pImg=new Image(),pVid=document.createElement("video");pVid.muted=true;pVid.playsInline=true;let pKey="";
+function drawMedia(ct){
+  let el=null;
+  if(cue.type==="share"){el=shareVid&&shareVid.readyState>=2?shareVid:null}
+  else if(cue.type==="image"){if(pKey!==cue.src){pKey=cue.src;pImg.src=cue.src}el=pImg.complete&&pImg.naturalWidth?pImg:null}
+  else{const k=cue.at+cue.url;if(pKey!==k){pKey=k;pVid.src=cue.url;pVid.loop=!!cue.loop;pVid.play().catch(()=>{})}
+    if(pVid.readyState>=2){el=pVid;if(isFinite(pVid.duration)){let t=cue.loop?ct%pVid.duration:ct;if(Math.abs(pVid.currentTime-t)>0.4&&t<=pVid.duration)pVid.currentTime=t}}}
+  if(!el)return;const w=el.videoWidth||el.naturalWidth,h=el.videoHeight||el.naturalHeight;if(!w||!h)return;
+  const s=Math.min(PW*0.42/w,(PH-24)/h),dw=w*s,dh=h*s,x0=PW*0.56+(PW*0.42-dw)/2,y0=(PH-dh)/2;
+  g.fillStyle="#000";g.fillRect(x0-4,y0-4,dw+8,dh+8);g.drawImage(el,x0,y0,dw,dh);
+}
+pv.addEventListener("click",e=>{
+  if(!view||!layout)return;const r=pv.getBoundingClientRect(),x=(e.clientX-r.left-view.ox)/view.sc,y=(e.clientY-r.top-view.oy)/view.sc;
+  if(vxPlacing){vxPlacing=false;send({type:"stadium-vx-seeds",action:"add",x:Math.round(x*10)/10,y:Math.round(y*10)/10});say("Seed placed. Open its code on the phone that stands there.");return}
+  let best=null,d=Infinity;all.forEach(s=>{const k=Math.hypot(s.x-x,s.y-y);if(k<d){d=k;best=s}});
+  if(best){sel=best.si;renderLayout();say("Section "+best.sec+", nearest seat "+best.id)}
+});
+
+renderShow();renderSound();renderLayout();renderSeats();renderBand();renderCount();renderPlan();draw();
+/* the sign in settings are kept on the phone too, so a jammed network still finds them */
+(async()=>{
+  await loadCfg(room);cfg.loadedFor=room;
+  const saved=keep(APP+"-host-mode");
+  mode=cfg.room?"own":saved==="own"&&ownCfg()?"own":cfg.server?"server":cfg.code?"code":"own";
+  if(mode==="own")makeOwnAuth(cfg.room||ownCfg());
+  setUTab(mode==="own"?"own":"in");renderWho();
+  const a=activeAuth();
+  if(room&&(mode==="code"?keep(APP+"-host-code"):a&&a.token)){if(mode==="code")code=keep(APP+"-host-code");connect()}
+})();
+window.RRHost={get layout(){return layout},get filled(){return filled},get phones(){return phones},get host(){return host},get kioskLinks(){return entry.kiosks.filter(k=>k.token).map(kioskUrl)}};
+})();
+</script>
+</body>
+</html>

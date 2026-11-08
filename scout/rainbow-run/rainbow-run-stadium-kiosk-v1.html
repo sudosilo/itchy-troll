@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#d6eef9">
+<title>Rainbow Run Entry Kiosk</title>
+<!-- BLUE PHONE: Rainbow Run entry kiosk. The host makes a kiosk link in the Plan tab and opens it on any phone,
+     tablet or screen at a door. The kiosk shows a seat code for the next guest. The guest scans it, gets their
+     seat, and the kiosk shows the next code on its own. Each code works once: the server records which kiosk
+     gave the seat, when, and which phone took it. Every door shares one fill order, and the server makes sure
+     no two doors give out the same seat. -->
+<style>
+:root{--ink:#1f2433;--soft:#5b6478;--blue:#2f6fd6;--bg:#d6eef9;--line:#c9d3e0}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);
+  font-family:ui-rounded,"SF Pro Rounded","Nunito","Trebuchet MS",system-ui,sans-serif}
+#wrap{position:fixed;inset:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;padding:max(14px,env(safe-area-inset-top,0px)) 16px max(14px,env(safe-area-inset-bottom,0px));max-width:720px;margin:0 auto}
+header{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px}
+h1{margin:0;font-size:clamp(20px,5vw,34px);color:var(--blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tally{font-weight:800;font-size:.85rem;background:#fff;border:1px solid var(--line);border-radius:999px;padding:5px 12px;white-space:nowrap}
+main{display:grid;align-content:center;justify-items:center;gap:10px;min-height:0}
+#prompt{font-weight:900;font-size:clamp(22px,6.5vw,46px);text-align:center}
+#qrBox{width:min(78vw,52vh,440px);aspect-ratio:1;background:#fff;border:4px solid var(--blue);border-radius:18px;padding:10px}
+#qrBox svg{width:100%;height:100%;display:block}
+#seat{font-weight:900;font-size:clamp(26px,8vw,56px);letter-spacing:.03em}
+#where{color:var(--soft);font-size:clamp(14px,3.6vw,22px);text-align:center;min-height:1.4em}
+#done{position:fixed;inset:0;display:grid;place-content:center;text-align:center;background:var(--blue);color:#fff;padding:20px}
+#done b{font-size:clamp(34px,10vw,80px)}
+#done span{font-size:clamp(18px,5vw,34px);margin-top:10px}
+footer{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center}
+#msg{color:var(--soft);font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+button{font:inherit;font-weight:800;font-size:.95rem;border-radius:12px;border:1px solid var(--line);background:#fff;color:var(--ink);padding:12px 18px;min-height:46px}
+#stop{position:fixed;inset:0;display:grid;place-content:center;text-align:center;padding:24px;background:var(--bg)}
+#stop p{font-size:1.1rem;color:var(--soft);max-width:420px}
+</style>
+<link rel="manifest" href="rainbow-run-v1.webmanifest">
+<link rel="icon" href="rainbow-run-v1-icon-192.png">
+</head>
+<body>
+<div id="wrap">
+  <header><h1 id="name">Entry kiosk</h1><span id="tally">0 seated</span></header>
+  <main>
+    <div id="prompt">Scan to get your seat</div>
+    <div id="qrBox"></div>
+    <div id="seat">&nbsp;</div>
+    <div id="where">&nbsp;</div>
+  </main>
+  <footer><span id="msg">connecting</span><button id="skip">Next code</button></footer>
+</div>
+<div id="done" hidden><b id="doneSeat"></b><span>Enjoy the show</span></div>
+<div id="stop" hidden><div><h1>Entry kiosk</h1><p id="stopMsg"></p></div></div>
+<script src="stompbox-lab-v3-config.js"></script>
+<script src="rainbow-run-stadium-v1-core.js"></script>
+<script src="rainbow-run-stadium-v1-qr.js"></script>
+<script>
+(function(){
+"use strict";
+const APP="rainbow-run",SYNC_URL=(window.STOMPBOX_LAB_CONFIG&&window.STOMPBOX_LAB_CONFIG.syncUrl)||"";
+const $=id=>document.getElementById(id),q=new URLSearchParams(location.search);
+const room=String(q.get("stadium")||"").toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,24),kid=String(q.get("kiosk")||""),token=String(q.get("key")||"");
+let device="";try{device=localStorage.getItem(APP+"-kiosk-device")||"";if(!device){device=Date.now().toString(16)+Math.random().toString(16).slice(2);localStorage.setItem(APP+"-kiosk-device",device)}}catch(e){device=Date.now().toString(16)}
+let sock=null,retry=0,ok=false,layout=null,plan=null,all=[],cur=null,waiting="",tries=0,mine=0,doneTimer=null;
+function send(m){if(sock&&sock.readyState===1){sock.send(JSON.stringify(Object.assign({app:APP},m)));return true}return false}
+function say(t){$("msg").textContent=t||""}
+function stop(t){$("stopMsg").textContent=t;$("stop").hidden=false}
+if(!room||!kid||!token){stop("This kiosk link is missing its room or key. Open it from the host screen's Plan tab.");return}
+
+/* the same fill order the host uses, so every door follows one plan */
+function textMask(){
+  const t=(plan.text||"").trim();if(!t||!all.length)return null;
+  const b=STADIUM.bounds(all),ar=b.w/b.h,w=Math.max(16,Math.min(240,Math.round(Math.sqrt(9000*ar)))),h=Math.max(16,Math.round(w/ar));
+  const c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d");
+  let size=h;x.font="900 "+size+"px sans-serif";while(size>4&&x.measureText(t).width>w*0.92){size--;x.font="900 "+size+"px sans-serif"}
+  x.textAlign="center";x.textBaseline="middle";x.fillText(t,w/2,h/2+size*0.05);
+  const px=x.getImageData(0,0,w,h).data;
+  return (u,v)=>{const i=Math.min(h-1,Math.max(0,Math.floor(v*h)))*w+Math.min(w-1,Math.max(0,Math.floor(u*w)));return px[i*4+3]>100};
+}
+function order(){
+  if(!layout||!plan)return [];
+  const mask=plan.pattern==="shape"&&plan.shape==="text"?textMask():null;
+  return STADIUM.order(layout,plan,mask);
+}
+function seatUrl(id,t){return location.origin+"/?stadium="+encodeURIComponent(room)+"&seat="+encodeURIComponent(id)+"&t="+encodeURIComponent(t)}
+function showCode(seat,ticket){
+  cur={seat:seat,ticket:ticket};
+  const code=qrcode(0,"M");code.addData(seatUrl(seat,ticket));code.make();
+  $("qrBox").innerHTML=code.createSvgTag({cellSize:4,margin:2,scalable:true});
+  const s=all.find(x=>x.id===seat);
+  $("seat").textContent=seat;$("where").textContent=s?"Section "+s.sec+", row "+s.row+", seat "+s.seat:"";
+  $("prompt").textContent="Scan to get your seat";say("Waiting for a guest to scan");
+}
+function next(){
+  /* one request at a time, so a door never holds two seats */
+  if(!ok||waiting)return;
+  if(!layout){say("The host has not set a seat layout yet");return}
+  if(!plan)plan={guests:0,pattern:"pack",assigned:[]};
+  const left=(plan.guests||all.length)-(plan.assigned||[]).length;
+  if(left<=0){$("qrBox").innerHTML="";$("seat").textContent="Full";$("where").textContent="Every expected guest has a seat";$("prompt").textContent="This show is full";say("The host can raise the guest count");cur=null;return}
+  const o=order();if(!o.length){$("seat").textContent="Full";cur=null;return}
+  waiting=o[Math.min(o.length-1,tries)].id;send({type:"stadium-assign",seat:waiting});say("Getting the next seat");
+}
+function onMsg(m){
+  if(m.type==="stadium-kiosk"){
+    if(!m.ok){ok=false;stop(m.reason||"This kiosk link is not valid.");return}
+    ok=true;$("name").textContent=m.name||"Entry kiosk";
+    if(m.pending){cur={seat:m.pending.seat,ticket:m.pending.ticket};setTimeout(()=>{if(layout)all=STADIUM.placeAll(layout);showCode(m.pending.seat,m.pending.ticket)},50)}else setTimeout(()=>{if(!cur)next()},300);
+    return}
+  if(m.type==="stadium-layout"){layout=m.layout||null;all=layout?STADIUM.placeAll(layout):[];if(ok&&!cur)setTimeout(()=>{if(!cur)next()},300);return}
+  if(m.type==="stadium-plan"){plan=m.plan||plan;return}
+  if(m.type==="stadium-assigned"){
+    if(m.seat!==waiting)return;waiting="";
+    if(!m.ok){tries++;if(tries<8)setTimeout(()=>{if(!cur)next()},180);else{tries=0;say("Busy doors, trying again");setTimeout(next,1200)}return}
+    tries=0;showCode(m.seat,m.ticket);return}
+  if(m.type==="stadium-ticket-taken"){
+    if(cur&&m.ticket===cur.ticket){mine++;$("tally").textContent=mine+" seated here";
+      $("doneSeat").textContent="Seat "+m.seat;$("done").hidden=false;clearTimeout(doneTimer);
+      doneTimer=setTimeout(()=>{$("done").hidden=true},2500);cur=null;next()}
+    return}
+}
+function connect(){
+  if(!SYNC_URL)return;
+  const s=sock=new WebSocket(SYNC_URL+"?app="+APP+"&room="+encodeURIComponent(room)+"&device="+encodeURIComponent(device)+"&mode=stadium-host");
+  s.onopen=()=>{retry=0;send({type:"stadium-kiosk",id:kid,token:token})};
+  s.onmessage=e=>{if(sock!==s)return;let m;try{m=JSON.parse(e.data)}catch(_){return}if(m&&m.app===APP)onMsg(m)};
+  s.onclose=()=>{if(sock!==s)return;ok=false;say("reconnecting");setTimeout(connect,Math.min(15000,500*Math.pow(2,retry++)))};
+  s.onerror=()=>s.close();
+}
+/* a code that nobody scans stays valid; Next code just moves this door on to a fresh seat */
+$("skip").addEventListener("click",()=>{cur=null;next()});
+setInterval(()=>{if(sock&&sock.readyState===1)send({type:"beat"})},10000);
+(async()=>{try{await navigator.wakeLock.request("screen")}catch(e){}})();
+document.addEventListener("visibilitychange",async()=>{if(document.visibilityState==="visible"){try{await navigator.wakeLock.request("screen")}catch(e){}}});
+connect();
+window.RRKiosk={get current(){return cur?seatUrl(cur.seat,cur.ticket):""}};
+})();
+</script>
+</body>
+</html>

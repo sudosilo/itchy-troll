@@ -56,7 +56,16 @@ function drum(name,amp){
 }
 const hz=function(m){return 440*Math.pow(2,(m-69)/12)};
 const partAt=function(s,bar){return s.pending&&bar>=s.pending.atBar?s.pending:s};
+/* BLUE PHONE: while the phone's microphone is on, the spectrum and waveform come straight from it. */
+function micFill(){
+  let M=null;try{M=window.__mic?window.__mic():null}catch(e){}
+  if(!M)return null;
+  freqData.set(M.freq.subarray(0,N));timeData.set(M.time.subarray(0,N));
+  let top=0,at=0;for(let i=2;i<N;i++)if(freqData[i]>top){top=freqData[i];at=i}
+  return {loudHz:top>40?at*M.rate/M.fft:0,t:performance.now()/1000};
+}
 function fill(){
+  const live=micFill();if(live)return live;
   const r=window.__room?window.__room():null,ep=r?r.epoch:0,room=r&&r.state&&typeof r.state.tempo==="number"&&r.state.tempo>0&&typeof r.state.epoch==="number"?r.state:null;
   const P=window.StompboxPattern,sNow=ep+performance.now(),tNow=sNow/1000;
   acc.fill(0);
