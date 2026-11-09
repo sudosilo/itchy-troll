@@ -1,0 +1,2449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>FLIPCOUNT</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-egyptian-hieroglyphs@5.3.0/index.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/noto-sans-ethiopic@5.3.0/index.css">
+<style>
+  :root{
+    --panel-hi: #eef0f2;
+    --panel-lo: #c3c8cd;
+    --chrome-hi: #ffffff;
+    --chrome-lo: #9aa0a6;
+    --glass: #16181c;
+    --glass-edge: #05070a;
+    --amber: #ff9d3c;
+    --amber-bright: #ffd39b;
+    --red: #d1483a;
+    --red-bright: #ff8a78;
+    --ink: #2b2f33;
+    --grid-line: rgba(0,0,0,0.045);
+  }
+  *{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{
+    margin:0;
+    min-height:100%;
+    background:
+      radial-gradient(ellipse at 50% 0%, var(--panel-hi), var(--panel-lo) 75%),
+      repeating-linear-gradient(0deg, var(--grid-line) 0px, transparent 1px, transparent 26px),
+      repeating-linear-gradient(90deg, var(--grid-line) 0px, transparent 1px, transparent 26px);
+    color: var(--ink);
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    user-select: none;
+  }
+  .stage{
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 30px 16px 50px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  .eyebrow{
+    letter-spacing: 0.3em;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: #6b7178;
+    margin-bottom: 8px;
+  }
+  h1{
+    margin: 0 0 18px;
+    font-size: 32px;
+    letter-spacing: 0.08em;
+    color: var(--ink);
+    text-shadow: 0 1px 0 rgba(255,255,255,0.7);
+  }
+  .subhead{
+    margin: -10px 0 20px;
+    font-size: 12px;
+    color: #5c6268;
+    text-align:center;
+    max-width: 460px;
+    line-height: 1.6;
+  }
+
+  /* tab bar */
+  .tabs{
+    display:flex;
+    gap: 8px;
+    background: var(--panel-lo);
+    padding: 5px;
+    border-radius: 50px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15) inset;
+    margin-bottom: 22px;
+  }
+  .tab-btn{
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    padding: 9px 20px;
+    border-radius: 50px;
+    border: none;
+    cursor: pointer;
+    background: transparent;
+    color: #5c6268;
+  }
+  .tab-btn.active{
+    background: linear-gradient(180deg, var(--chrome-hi), var(--panel-lo));
+    color: #8a4e00;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.9) inset, 0 2px 6px rgba(0,0,0,0.2);
+  }
+
+  .panel{
+    width: 100%;
+    display:none;
+    flex-direction:column;
+    align-items:center;
+  }
+  .panel.active{
+    display:flex;
+  }
+
+  /* shared console / tube styling */
+  .console{
+    width: 100%;
+    background: linear-gradient(180deg, var(--chrome-hi), var(--panel-lo) 12%, var(--panel-lo) 88%, var(--chrome-lo));
+    border-radius: 18px;
+    padding: 26px 14px 22px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.9) inset,
+      0 -2px 0 rgba(0,0,0,0.15) inset,
+      0 10px 24px rgba(0,0,0,0.18),
+      0 1px 0 rgba(255,255,255,0.6);
+    position:relative;
+  }
+  .console::before{
+    content:"";
+    position:absolute;
+    inset: 6px;
+    border-radius: 13px;
+    border: 1px solid rgba(255,255,255,0.7);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.06) inset;
+    pointer-events:none;
+  }
+  .rivet{
+    position:absolute;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fff, #9aa0a6 70%, #7d838a 100%);
+    box-shadow: 0 1px 1px rgba(0,0,0,0.3);
+  }
+  .rivet.tl{ top: 10px; left: 10px; }
+  .rivet.tr{ top: 10px; right: 10px; }
+  .rivet.bl{ bottom: 10px; left: 10px; }
+  .rivet.br{ bottom: 10px; right: 10px; }
+
+  .rail-wrap{
+    width: 100%;
+    overflow-x: auto;
+    padding: 6px 6px 4px;
+  }
+  .rail{
+    display:flex;
+    justify-content:center;
+    gap: 10px;
+    width: fit-content;
+    margin: 0 auto;
+  }
+  .tube-unit{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    width: 58px;
+  }
+  .tube-unit.tappable{ cursor: pointer; }
+  .tube{
+    width: 52px;
+    height: 84px;
+    border-radius: 26px 26px 10px 10px;
+    background:
+      radial-gradient(120% 60% at 30% 8%, rgba(255,255,255,0.35), transparent 55%),
+      linear-gradient(180deg, var(--glass), var(--glass-edge));
+    border: 1px solid rgba(0,0,0,0.6);
+    box-shadow:
+      0 0 0 3px rgba(255,255,255,0.55),
+      0 4px 10px rgba(0,0,0,0.35) inset,
+      0 3px 6px rgba(0,0,0,0.25);
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+    transition: transform 0.08s ease;
+  }
+  .tube-unit.tappable:active .tube{
+    transform: scale(0.94);
+  }
+  .digit{
+    position:absolute;
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--amber);
+    opacity: 0.08;
+    transition: opacity 0.2s ease, text-shadow 0.2s ease, color 0.2s ease;
+  }
+  .digit.lit{
+    opacity: 1;
+    color: var(--amber-bright);
+    text-shadow:
+      0 0 4px var(--amber),
+      0 0 14px var(--amber),
+      0 0 26px rgba(255,157,60,0.65);
+  }
+  .digit.flicker{
+    animation: flicker 0.35s ease;
+  }
+  @keyframes flicker{
+    0%{ opacity: 0.2; }
+    35%{ opacity: 1; }
+    52%{ opacity: 0.45; }
+    70%{ opacity: 1; }
+    100%{ opacity: 1; }
+  }
+  .socket{
+    width: 34px;
+    height: 8px;
+    margin-top: -2px;
+    background: linear-gradient(180deg, #d7dade, #9aa0a6);
+    border-radius: 0 0 4px 4px;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.6) inset;
+  }
+  .place-label{
+    margin-top: 8px;
+    font-size: 10px;
+    color: #6b7178;
+    letter-spacing: 0.05em;
+  }
+
+  /* counter specific */
+  .hand-panel{
+    margin-top: 26px;
+    width: 100%;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  .hand-label{
+    letter-spacing: 0.25em;
+    font-size: 10px;
+    color: #6b7178;
+    margin-bottom: 12px;
+  }
+  .hand-card{
+    background: linear-gradient(180deg, var(--chrome-hi), var(--panel-lo) 12%, var(--panel-lo) 88%, var(--chrome-lo));
+    border-radius: 16px;
+    padding: 14px 18px 10px;
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.9) inset,
+      0 -2px 0 rgba(0,0,0,0.12) inset,
+      0 8px 16px rgba(0,0,0,0.16);
+  }
+  #hand{
+    width: 190px;
+    height: auto;
+    display:block;
+  }
+  .palm{
+    fill: var(--panel-hi);
+    stroke: var(--chrome-lo);
+    stroke-width: 2;
+  }
+  .finger-rect{
+    fill: var(--panel-lo);
+    stroke: var(--chrome-lo);
+    stroke-width: 1.5;
+    transform-origin: 0px 0px;
+    transform: rotate(var(--down));
+    transition: transform 0.35s cubic-bezier(.4,.6,.3,1.2), fill 0.3s ease, stroke 0.3s ease, filter 0.3s ease;
+  }
+  .finger-rect.up{
+    fill: var(--amber-bright);
+    stroke: var(--amber);
+    transform: rotate(var(--up));
+    filter: drop-shadow(0 0 5px var(--amber)) drop-shadow(0 0 12px rgba(255,157,60,0.6));
+  }
+  .weight-label{
+    font-size: 10px;
+    fill: #6b7178;
+    text-anchor: middle;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  .hand-caption{
+    margin-top: 12px;
+    max-width: 380px;
+    font-size: 11px;
+    line-height: 1.7;
+    color: #6b7178;
+    text-align:center;
+  }
+  .readout{
+    margin-top: 26px;
+  }
+  .plaque{
+    background: linear-gradient(180deg, var(--chrome-hi), var(--panel-lo));
+    border-radius: 10px;
+    padding: 4px;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.8) inset, 0 6px 12px rgba(0,0,0,0.15);
+  }
+  .plaque-inner{
+    background: linear-gradient(180deg, var(--glass), var(--glass-edge));
+    border-radius: 7px;
+    padding: 14px 30px;
+    text-align:center;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.4) inset;
+  }
+  .plaque .label{
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: #8a6a3f;
+    display:block;
+    margin-bottom: 6px;
+  }
+  .plaque .value{
+    font-size: 42px;
+    font-weight: 700;
+    color: var(--amber-bright);
+    text-shadow: 0 0 6px var(--amber), 0 0 18px rgba(255,157,60,0.6);
+  }
+  .controls{
+    margin-top: 26px;
+    display:flex;
+    gap: 16px;
+  }
+  .note{
+    margin-top: 26px;
+    max-width: 440px;
+    font-size: 11px;
+    line-height: 1.7;
+    color: #6b7178;
+    text-align:center;
+  }
+
+  /* game specific */
+  .hud{
+    width: 100%;
+    max-width: 460px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom: 16px;
+  }
+  .hud-block{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+  .hud-label{
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: #6b7178;
+    margin-bottom: 4px;
+  }
+  .hud-value{
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .lives{
+    display:flex;
+    gap: 6px;
+  }
+  .life-dot{
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--amber-bright);
+    box-shadow: 0 0 5px var(--amber), 0 0 10px rgba(255,157,60,0.6);
+    transition: background 0.25s ease, box-shadow 0.25s ease, opacity 0.25s ease;
+  }
+  .life-dot.gone{
+    background: #cfd3d7;
+    box-shadow: none;
+    opacity: 0.5;
+  }
+  .target-plaque{
+    margin: 0 auto 18px;
+    width: fit-content;
+    background: linear-gradient(180deg, var(--chrome-hi), var(--panel-lo));
+    border-radius: 10px;
+    padding: 4px;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.8) inset, 0 6px 12px rgba(0,0,0,0.15);
+  }
+  .target-inner{
+    background: linear-gradient(180deg, var(--glass), var(--glass-edge));
+    border-radius: 7px;
+    padding: 10px 30px;
+    text-align:center;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.4) inset;
+  }
+  .target-inner .label{
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    color: #8a6a3f;
+    display:block;
+    margin-bottom: 4px;
+  }
+  .target-inner .value{
+    font-size: 38px;
+    font-weight: 700;
+    color: var(--amber-bright);
+    text-shadow: 0 0 6px var(--amber), 0 0 18px rgba(255,157,60,0.6);
+  }
+  .timer-track{
+    width: 100%;
+    max-width: 380px;
+    height: 8px;
+    margin: 0 auto 20px;
+    border-radius: 5px;
+    background: var(--panel-lo);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2) inset;
+    overflow:hidden;
+  }
+  .timer-fill{
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, var(--amber), var(--amber-bright));
+    box-shadow: 0 0 8px var(--amber);
+  }
+  .timer-fill.danger{
+    background: linear-gradient(90deg, var(--red), var(--red-bright));
+    box-shadow: 0 0 8px var(--red);
+  }
+  .current-row{
+    margin-top: 18px;
+    display:flex;
+    justify-content:center;
+  }
+  .current-plaque{
+    font-size: 12px;
+    color: #6b7178;
+    display:flex;
+    align-items:center;
+    gap: 8px;
+  }
+  .current-plaque .val{
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ink);
+    transition: color 0.2s ease;
+  }
+  .current-plaque .val.match{
+    color: #4a8f4a;
+  }
+  .hint{
+    margin-top: 22px;
+    max-width: 420px;
+    font-size: 11px;
+    line-height: 1.7;
+    color: #6b7178;
+    text-align:center;
+  }
+  .overlay{
+    position:absolute;
+    inset: 0;
+    background: rgba(238,240,242,0.94);
+    border-radius: 18px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap: 14px;
+    text-align:center;
+    padding: 20px;
+    z-index: 5;
+  }
+  .overlay h2{
+    margin:0;
+    font-size: 22px;
+    letter-spacing: 0.05em;
+  }
+  .overlay p{
+    margin:0;
+    font-size: 12px;
+    color: #5c6268;
+    max-width: 300px;
+    line-height: 1.6;
+  }
+  .overlay .score-line{
+    font-size: 14px;
+    color: var(--ink);
+  }
+  .overlay .score-line b{
+    color: #8a4e00;
+  }
+
+  button{
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 14px;
+    letter-spacing: 0.06em;
+    padding: 13px 20px;
+    border-radius: 50px;
+    border: none;
+    cursor: pointer;
+    background: radial-gradient(circle at 35% 30%, var(--chrome-hi), var(--panel-lo) 70%, var(--chrome-lo));
+    color: var(--ink);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.9) inset,
+      0 3px 0 var(--chrome-lo),
+      0 6px 10px rgba(0,0,0,0.2);
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+  }
+  button:active{
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.6) inset, 0 0 0 var(--chrome-lo), 0 2px 4px rgba(0,0,0,0.2);
+  }
+  button#counterInc, button#counterDec, .overlay button{
+    color: #8a4e00;
+  }
+  button#counterReset{
+    color: #444;
+  }
+
+  .bank-row{
+    margin-top: 24px;
+    display:flex;
+    justify-content:center;
+  }
+  .bank-btn{
+    font-size: 16px;
+    padding: 16px 44px;
+    color: #8a4e00;
+  }
+  @keyframes flashFail{
+    0%{ box-shadow: 0 0 0 0 rgba(209,72,58,0); }
+    30%{ box-shadow: 0 0 0 6px rgba(209,72,58,0.35); }
+    100%{ box-shadow: 0 0 0 0 rgba(209,72,58,0); }
+  }
+  .console.flash-fail{
+    animation: flashFail 0.4s ease;
+  }
+
+  @media (max-width: 420px){
+    h1{ font-size: 26px; }
+    .tube-unit{ width: 48px; }
+    .tube{ width: 42px; height: 68px; border-radius: 21px 21px 8px 8px; }
+    .digit{ font-size: 26px; }
+    #hand{ width: 160px; }
+    .target-inner .value{ font-size: 30px; }
+  }
+  /* shared additions for the counting style tabs */
+  .tabs{ flex-wrap: wrap; justify-content: center; border-radius: 22px; max-width: 100%; }
+  .tab-btn{ padding: 9px 14px; }
+  .controls{ flex-wrap: wrap; justify-content: center; gap: 12px; }
+  .ctl-amber{ color: #8a4e00; }
+  .ctl-btn.auto-on{
+    background: radial-gradient(circle at 35% 30%, var(--amber-bright), var(--amber) 75%);
+    color: #5a3200;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.6) inset, 0 3px 0 #c06f1e, 0 0 14px rgba(255,157,60,0.6);
+  }
+  .readline{ margin: 16px 0 0; text-align: center; font-size: 12px; color: #5c6268; line-height: 1.8; }
+  .readline b{ color: var(--ink); font-size: 15px; }
+
+  /* flip-dot */
+  .fd-wrap{ --fd: 14px; }
+  .fd-board{
+    display: grid;
+    gap: 3px;
+    justify-content: center;
+    width: fit-content;
+    margin: 0 auto;
+    padding: 14px;
+    background: linear-gradient(180deg, #dfe3e6, #cdd2d6);
+    border-radius: 10px;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.18) inset;
+  }
+  .fd-dot{ width: var(--fd); height: var(--fd); perspective: 60px; }
+  .fd-disc{
+    width: 100%; height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    transition: transform 0.32s cubic-bezier(.4,.6,.3,1.3);
+  }
+  .fd-dot.on .fd-disc{ transform: rotateY(180deg); }
+  .fd-face{ position: absolute; inset: 0; border-radius: 50%; backface-visibility: hidden; }
+  .fd-off{ background: radial-gradient(circle at 35% 30%, #b9bec3, #8f959b); box-shadow: 0 1px 1px rgba(0,0,0,0.25); }
+  .fd-on{
+    background: radial-gradient(circle at 35% 30%, #fff2b8, #ffc53d 60%, #e09a10);
+    transform: rotateY(180deg);
+    box-shadow: 0 0 6px rgba(255,190,60,0.7);
+  }
+  .fd-bits{ display: flex; gap: 6px; justify-content: center; margin-top: 16px; }
+  .fd-bit-col{ display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .fd-bits .fd-dot{ width: 26px; height: 26px; }
+  .fd-bit-label{ font-size: 9px; color: #6b7178; }
+
+  /* gray code wheel */
+  .gray-svg{ width: 100%; max-width: 300px; height: auto; display: block; margin: 0 auto; }
+  .gray-rotor{
+    transform-box: view-box;
+    transform-origin: 160px 160px;
+    transition: transform 0.45s cubic-bezier(.4,.6,.3,1.1);
+  }
+  .bit-rows{ margin-top: 14px; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .bit-row{ display: flex; align-items: center; gap: 10px; }
+  .bit-row-label{ width: 54px; text-align: right; font-size: 10px; letter-spacing: 0.15em; color: #6b7178; }
+  .bit-cells{ display: flex; gap: 5px; }
+  .bit-cell{
+    width: 28px; height: 32px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 16px;
+    background: linear-gradient(180deg, #f4f5f6, #d6dadd);
+    color: #a3a8ad;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.8) inset, 0 2px 4px rgba(0,0,0,0.12);
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  .bit-cell.on{
+    background: linear-gradient(180deg, var(--amber-bright), var(--amber));
+    color: #5a3200;
+    box-shadow: 0 0 10px rgba(255,157,60,0.55);
+  }
+  .bit-cell.changed{ animation: cellPing 0.5s ease; }
+  @keyframes cellPing{ 0%{ transform: scale(1); } 40%{ transform: scale(1.18); } 100%{ transform: scale(1); } }
+
+  /* abacus */
+  .ab-title{ font-size: 10px; letter-spacing: 0.25em; color: #6b7178; text-align: center; margin: 4px 0 10px; }
+  .ab-title.second{ margin-top: 22px; }
+  .ab-frame{
+    position: relative;
+    margin: 0 auto;
+    background: linear-gradient(180deg, #f6eedc, #e6d7b6);
+    border-radius: 10px;
+    box-shadow: 0 0 0 6px #c9b28a inset, 0 6px 12px rgba(0,0,0,0.15);
+  }
+  .ab-rod{
+    position: absolute;
+    width: 4px;
+    background: linear-gradient(90deg, #9aa0a6, #e6e8ea, #9aa0a6);
+    border-radius: 2px;
+  }
+  .ab-beam{
+    position: absolute;
+    left: 6px; right: 6px;
+    height: 8px;
+    background: linear-gradient(180deg, #b08b55, #8a6a3f);
+    border-radius: 2px;
+  }
+  .ab-bead{
+    position: absolute;
+    height: 22px;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at 40% 30%, #ffffff, #c3c8cd 60%, #9aa0a6);
+    box-shadow: 0 2px 3px rgba(0,0,0,0.25);
+    transition: top 0.28s cubic-bezier(.4,.6,.3,1.2), background 0.25s ease, box-shadow 0.25s ease;
+  }
+  .ab-bead.on{
+    background: radial-gradient(ellipse at 40% 30%, #fff3d6, var(--amber-bright) 45%, var(--amber));
+    box-shadow: 0 2px 3px rgba(0,0,0,0.2), 0 0 10px rgba(255,157,60,0.6);
+  }
+  .ab-labels{ display: flex; justify-content: center; margin: 6px auto 0; }
+  .ab-labels span{ text-align: center; font-size: 10px; color: #6b7178; }
+
+  /* mayan */
+  .my-stack{ display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .my-level{ display: flex; align-items: center; gap: 12px; }
+  .my-tile{
+    width: 150px; height: 90px;
+    background: linear-gradient(180deg, #f6efe0, #e8dcc2);
+    border-radius: 8px;
+    box-shadow: 0 0 0 1px #cdbb95 inset, 0 3px 6px rgba(0,0,0,0.12);
+  }
+  .my-tile svg{ width: 100%; height: 100%; display: block; }
+  .my-tile.pop svg{ animation: myPop 0.3s ease; }
+  @keyframes myPop{ 0%{ transform: scale(0.92); opacity: 0.5; } 100%{ transform: scale(1); opacity: 1; } }
+  .my-mult{ width: 56px; font-size: 12px; color: #6b7178; }
+  .my-mark{ filter: drop-shadow(0 0 3px rgba(255,157,60,0.7)); }
+
+  @media (max-width: 420px){
+    .fd-wrap{ --fd: 12px; }
+    .bit-cell{ width: 24px; height: 28px; font-size: 14px; }
+  }
+  /* languages */
+  .lang-picker{ display: flex; justify-content: center; margin-bottom: 16px; }
+  .lang-picker select{
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 14px;
+    color: var(--ink);
+    padding: 11px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--chrome-lo);
+    background: linear-gradient(180deg, var(--chrome-hi), var(--panel-hi));
+    box-shadow: 0 1px 0 rgba(255,255,255,0.9) inset, 0 3px 8px rgba(0,0,0,0.12);
+    max-width: 100%;
+  }
+  .lang-glass{
+    background: linear-gradient(180deg, var(--glass), var(--glass-edge));
+    border-radius: 12px;
+    min-height: 150px;
+    padding: 20px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.6), 0 4px 12px rgba(0,0,0,0.4) inset;
+    overflow-x: auto;
+  }
+  .lang-glyph{
+    font-size: 46px;
+    line-height: 1.25;
+    font-weight: 700;
+    text-align: center;
+    color: var(--amber-bright);
+    text-shadow: 0 0 6px var(--amber), 0 0 18px rgba(255,157,60,0.55);
+    word-break: break-word;
+  }
+  .lang-glyph.words{ font-size: 24px; font-weight: 600; }
+  .lang-glyph.hiero{ font-family: "Noto Sans Egyptian Hieroglyphs", serif; font-weight: 400; font-size: 42px; letter-spacing: 2px; }
+  .lang-glyph.geez{ font-family: "Noto Sans Ethiopic", serif; }
+  .lang-glyph.empty{ font-size: 15px; font-weight: 400; color: #c9b08a; text-shadow: none; }
+  .lang-glyph svg{ display: block; max-width: 100%; height: auto; }
+  .lang-glyph.pop{ animation: myPop 0.3s ease; }
+  .lang-reading{ margin-top: 14px; text-align: center; font-size: 14px; color: var(--ink); min-height: 20px; line-height: 1.6; }
+  .lang-goto{ margin-top: 16px; display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 0.15em; color: #6b7178; }
+  .lang-goto input{
+    width: 92px;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 16px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--chrome-lo);
+    background: #fff;
+    color: var(--ink);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="eyebrow">BINARY TOOLKIT</div>
+    <h1>FLIPCOUNT</h1>
+    <p class="subhead">Ways to count: glass tubes, two binary games, flip dots, a gray code wheel, an abacus, Mayan numerals, and dozens of languages and ancient scripts.</p>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="counter">COUNTER</button>
+      <button class="tab-btn" data-tab="game">BITMATCH</button>
+      <button class="tab-btn" data-tab="overflow">OVERFLOW</button>
+      <button class="tab-btn" data-tab="flipdot">FLIPDOT</button>
+      <button class="tab-btn" data-tab="gray">GRAY WHEEL</button>
+      <button class="tab-btn" data-tab="abacus">ABACUS</button>
+      <button class="tab-btn" data-tab="mayan">MAYAN</button>
+      <button class="tab-btn" data-tab="languages">LANGUAGES</button>
+    </div>
+
+    <!-- ===================== COUNTER PANEL ===================== -->
+    <div class="panel active" id="panel-counter">
+      <div class="console">
+        <div class="rivet tl"></div>
+        <div class="rivet tr"></div>
+        <div class="rivet bl"></div>
+        <div class="rivet br"></div>
+        <div class="rail-wrap">
+          <div class="rail" id="counterRail"></div>
+        </div>
+      </div>
+
+      <div class="hand-panel">
+        <div class="hand-label">FIVE FINGER REFERENCE &middot; 0 TO 31</div>
+        <div class="hand-card">
+          <svg id="hand" viewBox="0 0 220 260">
+            <rect class="palm" x="55" y="148" width="110" height="92" rx="28"/>
+
+            <g transform="translate(58,182)">
+              <rect class="finger-rect" id="finger-thumb" x="-9" y="0" width="18" height="50" rx="9" style="--down:-125deg; --up:-35deg;"/>
+            </g>
+            <text class="weight-label" x="42" y="234">1</text>
+
+            <g transform="translate(76,148)">
+              <rect class="finger-rect" id="finger-index" x="-8" y="-60" width="16" height="60" rx="8" style="--down:105deg; --up:0deg;"/>
+            </g>
+            <text class="weight-label" x="76" y="200">2</text>
+
+            <g transform="translate(99,148)">
+              <rect class="finger-rect" id="finger-middle" x="-8" y="-70" width="16" height="70" rx="8" style="--down:105deg; --up:0deg;"/>
+            </g>
+            <text class="weight-label" x="99" y="200">4</text>
+
+            <g transform="translate(122,148)">
+              <rect class="finger-rect" id="finger-ring" x="-8" y="-64" width="16" height="64" rx="8" style="--down:105deg; --up:0deg;"/>
+            </g>
+            <text class="weight-label" x="122" y="200">8</text>
+
+            <g transform="translate(145,148)">
+              <rect class="finger-rect" id="finger-pinky" x="-8" y="-50" width="16" height="50" rx="8" style="--down:100deg; --up:0deg;"/>
+            </g>
+            <text class="weight-label" x="145" y="200">16</text>
+          </svg>
+        </div>
+        <p class="hand-caption">Thumb is the ones place, pinky is the sixteens place. Raise a finger for every 1 in the binary readout above and the hand always matches the tubes.</p>
+      </div>
+
+      <div class="readout">
+        <div class="plaque">
+          <div class="plaque-inner">
+            <span class="label">DECIMAL</span>
+            <span class="value" id="counterDecimal">0</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="counterDec">-1</button>
+        <button id="counterReset">RESET</button>
+        <button id="counterInc">+1</button>
+      </div>
+
+      <p class="note">Rightmost tube is the ones place. Press +1 and it lights the 1. Roll it back to 0 and the carry lights the next tube left, same ripple a binary counter always does.</p>
+    </div>
+
+    <!-- ===================== GAME PANEL ===================== -->
+    <div class="panel" id="panel-game">
+      <div class="hud">
+        <div class="hud-block">
+          <span class="hud-label">SCORE</span>
+          <span class="hud-value" id="gameScore">0</span>
+        </div>
+        <div class="hud-block">
+          <span class="hud-label">LIVES</span>
+          <div class="lives" id="gameLives">
+            <div class="life-dot"></div>
+            <div class="life-dot"></div>
+            <div class="life-dot"></div>
+          </div>
+        </div>
+        <div class="hud-block">
+          <span class="hud-label">BEST</span>
+          <span class="hud-value" id="gameBest">0</span>
+        </div>
+      </div>
+
+      <div class="console" id="gameConsole">
+        <div class="target-plaque">
+          <div class="target-inner">
+            <span class="label">MATCH THIS</span>
+            <span class="value" id="gameTarget">0</span>
+          </div>
+        </div>
+
+        <div class="timer-track">
+          <div class="timer-fill" id="gameTimerFill"></div>
+        </div>
+
+        <div class="rail-wrap">
+          <div class="rail" id="gameRail"></div>
+        </div>
+
+        <div class="current-row">
+          <div class="current-plaque">
+            <span>YOUR VALUE</span>
+            <span class="val" id="gameCurrent">0</span>
+          </div>
+        </div>
+
+        <div class="overlay" id="gameStartOverlay">
+          <h2>BITMATCH</h2>
+          <p>Tap the tubes to light the bits that add up to the target number before the bar runs out. Three misses ends the run.</p>
+          <button id="gameStartBtn">TAP TO START</button>
+        </div>
+
+        <div class="overlay" id="gameEndOverlay" style="display:none;">
+          <h2>RUN OVER</h2>
+          <p class="score-line">SCORE <b id="gameFinalScore">0</b></p>
+          <p class="score-line">BEST <b id="gameFinalBest">0</b></p>
+          <button id="gameRetryBtn">PLAY AGAIN</button>
+        </div>
+      </div>
+
+      <p class="hint">Rightmost tube is 1, then 2, 4, 8, and so on. The bar speeds up and the rail grows wider as your score climbs.</p>
+    </div>
+
+    <!-- ===================== OVERFLOW PANEL ===================== -->
+    <div class="panel" id="panel-overflow">
+      <div class="hud">
+        <div class="hud-block">
+          <span class="hud-label">SCORE</span>
+          <span class="hud-value" id="ofScore">0</span>
+        </div>
+        <div class="hud-block">
+          <span class="hud-label">LIVES</span>
+          <div class="lives" id="ofLives">
+            <div class="life-dot"></div>
+            <div class="life-dot"></div>
+            <div class="life-dot"></div>
+          </div>
+        </div>
+        <div class="hud-block">
+          <span class="hud-label">BEST</span>
+          <span class="hud-value" id="ofBest">0</span>
+        </div>
+      </div>
+
+      <div class="console" id="ofConsole">
+        <div class="rail-wrap">
+          <div class="rail" id="ofRail"></div>
+        </div>
+
+        <div class="bank-row">
+          <button id="ofBankBtn" class="bank-btn">BANK</button>
+        </div>
+
+        <div class="overlay" id="ofStartOverlay">
+          <h2>OVERFLOW</h2>
+          <p>The rail counts itself up, faster every time you bank. Tap BANK to cash in the current value before it overflows past five bits. Wait longer for a bigger payout, but three overflows ends the run.</p>
+          <button id="ofStartBtn">TAP TO START</button>
+        </div>
+
+        <div class="overlay" id="ofEndOverlay" style="display:none;">
+          <h2>OVERFLOWED</h2>
+          <p class="score-line">SCORE <b id="ofFinalScore">0</b></p>
+          <p class="score-line">BEST <b id="ofFinalBest">0</b></p>
+          <button id="ofRetryBtn">PLAY AGAIN</button>
+        </div>
+      </div>
+
+      <p class="hint">Five tubes, max value 31. Bank early for a safe trickle of points, or push toward the top bit for a bigger payout. Every bank speeds the climb up a little more.</p>
+    </div>
+
+    <!-- ===================== FLIPDOT PANEL ===================== -->
+    <div class="panel" id="panel-flipdot">
+      <div class="console fd-wrap">
+        <div class="rivet tl"></div>
+        <div class="rivet tr"></div>
+        <div class="rivet bl"></div>
+        <div class="rivet br"></div>
+        <div class="fd-board" id="fdBoard"></div>
+        <div class="fd-bits" id="fdBits"></div>
+      </div>
+      <p class="readline" id="fdRead"></p>
+      <div class="controls">
+        <button class="ctl-btn ctl-amber" id="fdDec">-1</button>
+        <button class="ctl-btn" id="fdReset">RESET</button>
+        <button class="ctl-btn ctl-amber" id="fdInc">+1</button>
+        <button class="ctl-btn" id="fdAuto">AUTO</button>
+      </div>
+      <p class="note">Each dot is a disc, dull on one side and bright on the other, the same trick old bus and train station signs used. The big board shows the number in decimal, the row of eight discs underneath shows it in binary, 0 to 255.</p>
+    </div>
+
+    <!-- ===================== GRAY WHEEL PANEL ===================== -->
+    <div class="panel" id="panel-gray">
+      <div class="console">
+        <div class="rivet tl"></div>
+        <div class="rivet tr"></div>
+        <div class="rivet bl"></div>
+        <div class="rivet br"></div>
+        <svg class="gray-svg" id="grayWheel" viewBox="0 0 320 320"></svg>
+        <div class="bit-rows">
+          <div class="bit-row">
+            <span class="bit-row-label">BINARY</span>
+            <div class="bit-cells" id="grayBin"></div>
+          </div>
+          <div class="bit-row">
+            <span class="bit-row-label">GRAY</span>
+            <div class="bit-cells" id="grayGray"></div>
+          </div>
+        </div>
+      </div>
+      <p class="readline" id="grayRead"></p>
+      <div class="controls">
+        <button class="ctl-btn ctl-amber" id="grayDec">-1</button>
+        <button class="ctl-btn" id="grayReset">RESET</button>
+        <button class="ctl-btn ctl-amber" id="grayInc">+1</button>
+        <button class="ctl-btn" id="grayAuto">AUTO</button>
+      </div>
+      <p class="note">Five rings, 32 slices, read straight down through the window at the top. Watch the GRAY row: only one bit ever changes per step, while plain binary can flip several at once. That is why real rotary encoders on knobs and motors use this pattern.</p>
+    </div>
+
+    <!-- ===================== ABACUS PANEL ===================== -->
+    <div class="panel" id="panel-abacus">
+      <div class="console">
+        <div class="rivet tl"></div>
+        <div class="rivet tr"></div>
+        <div class="rivet bl"></div>
+        <div class="rivet br"></div>
+        <div class="ab-title">SOROBAN &middot; BASE TEN</div>
+        <div class="rail-wrap">
+          <div class="ab-frame" id="abTen"></div>
+          <div class="ab-labels" id="abTenLabels"></div>
+        </div>
+        <div class="ab-title second">BINARY &middot; BASE TWO</div>
+        <div class="rail-wrap">
+          <div class="ab-frame" id="abTwo"></div>
+          <div class="ab-labels" id="abTwoLabels"></div>
+        </div>
+      </div>
+      <p class="readline" id="abRead"></p>
+      <div class="controls">
+        <button class="ctl-btn ctl-amber" id="abDec">-1</button>
+        <button class="ctl-btn" id="abReset">RESET</button>
+        <button class="ctl-btn ctl-amber" id="abInc">+1</button>
+        <button class="ctl-btn" id="abAuto">AUTO</button>
+      </div>
+      <p class="note">Top frame is a Japanese soroban. A bead pushed against the beam counts. The single bead above the beam is worth 5, each bead below is worth 1. Bottom frame does the same number in binary, one bead per rod, up is 1, down is 0.</p>
+    </div>
+
+    <!-- ===================== MAYAN PANEL ===================== -->
+    <div class="panel" id="panel-mayan">
+      <div class="console">
+        <div class="rivet tl"></div>
+        <div class="rivet tr"></div>
+        <div class="rivet bl"></div>
+        <div class="rivet br"></div>
+        <div class="my-stack" id="myStack"></div>
+      </div>
+      <p class="readline" id="myRead"></p>
+      <div class="controls">
+        <button class="ctl-btn ctl-amber" id="myDec">-1</button>
+        <button class="ctl-btn" id="myReset">RESET</button>
+        <button class="ctl-btn ctl-amber" id="myInc">+1</button>
+        <button class="ctl-btn" id="myAuto">AUTO</button>
+      </div>
+      <p class="note">The Maya counted in base twenty. A dot is 1, a bar is 5, and the shell means zero. Places stack bottom to top: ones, then twenties, then four hundreds. Hit 20 and a new level appears on top, same carry idea as binary.</p>
+    </div>
+
+    <!-- ===================== LANGUAGES PANEL ===================== -->
+    <div class="panel" id="panel-languages">
+      <div class="lang-picker">
+        <select id="langSelect" aria-label="Counting language"></select>
+      </div>
+      <div class="console">
+        <div class="rivet tl"></div>
+        <div class="rivet tr"></div>
+        <div class="rivet bl"></div>
+        <div class="rivet br"></div>
+        <div class="lang-glass">
+          <div class="lang-glyph" id="langGlyph"></div>
+        </div>
+        <div class="lang-reading" id="langReading"></div>
+      </div>
+      <p class="readline" id="langRead"></p>
+      <div class="controls">
+        <button class="ctl-btn ctl-amber" id="langDec">-1</button>
+        <button class="ctl-btn" id="langReset">RESET</button>
+        <button class="ctl-btn ctl-amber" id="langInc">+1</button>
+        <button class="ctl-btn" id="langAuto">AUTO</button>
+      </div>
+      <div class="lang-goto">
+        <span>JUMP TO</span>
+        <input id="langGoto" type="number" min="0" max="9999" inputmode="numeric" placeholder="0">
+      </div>
+      <p class="note" id="langAbout"></p>
+    </div>
+  </div>
+
+<script>
+  // ===================== TAB SWITCHING =====================
+  const tabBtns = document.querySelectorAll('.tab-btn');
+  const panels = {
+    counter: document.getElementById('panel-counter'),
+    game: document.getElementById('panel-game'),
+    overflow: document.getElementById('panel-overflow'),
+    flipdot: document.getElementById('panel-flipdot'),
+    gray: document.getElementById('panel-gray'),
+    abacus: document.getElementById('panel-abacus'),
+    mayan: document.getElementById('panel-mayan'),
+    languages: document.getElementById('panel-languages')
+  };
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.tab;
+      tabBtns.forEach(b => b.classList.toggle('active', b === btn));
+      Object.keys(panels).forEach(key => {
+        panels[key].classList.toggle('active', key === target);
+      });
+      document.dispatchEvent(new CustomEvent('flipcount:tab', { detail: target }));
+    });
+  });
+</script>
+
+<script>
+  // ===================== COUNTER LOGIC =====================
+  (function(){
+    const MIN_BITS = 4;
+    let value = 0;
+
+    const rail = document.getElementById('counterRail');
+    const decimalEl = document.getElementById('counterDecimal');
+
+    const FINGER_IDS = ['finger-thumb', 'finger-index', 'finger-middle', 'finger-ring', 'finger-pinky'];
+    const fingerEls = FINGER_IDS.map(id => document.getElementById(id));
+
+    function updateHand(v){
+      fingerEls.forEach((el, n) => {
+        const bit = (v >> n) & 1;
+        el.classList.toggle('up', bit === 1);
+      });
+    }
+
+    function widthFor(v){
+      const needed = v <= 0 ? 1 : v.toString(2).length;
+      return Math.max(MIN_BITS, needed);
+    }
+
+    function bitsArray(v, width){
+      return v.toString(2).padStart(width, '0').split('').map(Number);
+    }
+
+    function buildRail(width){
+      rail.innerHTML = '';
+      for(let i = 0; i < width; i++){
+        const place = width - 1 - i;
+        const unit = document.createElement('div');
+        unit.className = 'tube-unit';
+        unit.dataset.bit = '0';
+        unit.dataset.place = String(place);
+        unit.innerHTML =
+          '<div class="tube">' +
+            '<span class="digit digit-0 lit">0</span>' +
+            '<span class="digit digit-1">1</span>' +
+          '</div>' +
+          '<div class="socket"></div>' +
+          '<div class="place-label">2^' + place + '</div>';
+        rail.appendChild(unit);
+      }
+    }
+
+    function render(newValue){
+      const width = widthFor(newValue);
+      const existing = rail.children.length;
+      if(existing !== width){
+        buildRail(width);
+      }
+      const bits = bitsArray(newValue, width);
+      const units = Array.from(rail.children);
+      units.forEach((unit, i) => {
+        const bit = bits[i];
+        if(unit.dataset.bit !== String(bit)){
+          const d0 = unit.querySelector('.digit-0');
+          const d1 = unit.querySelector('.digit-1');
+          d0.classList.remove('lit', 'flicker');
+          d1.classList.remove('lit', 'flicker');
+          void unit.offsetWidth;
+          if(bit === 1){
+            d1.classList.add('lit', 'flicker');
+          } else {
+            d0.classList.add('lit', 'flicker');
+          }
+          unit.dataset.bit = String(bit);
+        }
+      });
+      value = newValue;
+      decimalEl.textContent = String(value);
+      updateHand(value);
+    }
+
+    document.getElementById('counterInc').addEventListener('click', () => render(value + 1));
+    document.getElementById('counterDec').addEventListener('click', () => render(Math.max(0, value - 1)));
+    document.getElementById('counterReset').addEventListener('click', () => render(0));
+
+    buildRail(widthFor(0));
+    render(0);
+  })();
+</script>
+
+<script>
+  // ===================== BITMATCH GAME LOGIC =====================
+  (function(){
+    const railEl = document.getElementById('gameRail');
+    const targetEl = document.getElementById('gameTarget');
+    const currentEl = document.getElementById('gameCurrent');
+    const scoreEl = document.getElementById('gameScore');
+    const bestEl = document.getElementById('gameBest');
+    const livesEl = document.getElementById('gameLives');
+    const timerFill = document.getElementById('gameTimerFill');
+    const startOverlay = document.getElementById('gameStartOverlay');
+    const endOverlay = document.getElementById('gameEndOverlay');
+    const finalScoreEl = document.getElementById('gameFinalScore');
+    const finalBestEl = document.getElementById('gameFinalBest');
+
+    let bestScore = 0;
+    try{
+      bestScore = parseInt(localStorage.getItem('bitmatch-best') || '0', 10) || 0;
+    } catch(e){ bestScore = 0; }
+    bestEl.textContent = String(bestScore);
+
+    let running = false;
+    let roundActive = false;
+    let score = 0;
+    let lives = 3;
+    let level = 1;
+    let bits = [];
+    let target = 0;
+    let roundId = 0;
+    let roundTimeout = null;
+    let roundStart = 0;
+    let roundDuration = 6000;
+    let pausedRemaining = null;
+
+    function bitWidthForLevel(l){
+      return Math.min(6, 4 + Math.floor((l - 1) / 4));
+    }
+    function durationForLevel(l){
+      return Math.max(2200, 6000 - (l - 1) * 150);
+    }
+
+    function buildRail(width){
+      railEl.innerHTML = '';
+      for(let i = 0; i < width; i++){
+        const place = width - 1 - i;
+        const unit = document.createElement('div');
+        unit.className = 'tube-unit tappable';
+        unit.dataset.index = String(i);
+        unit.innerHTML =
+          '<div class="tube">' +
+            '<span class="digit digit-0 lit">0</span>' +
+            '<span class="digit digit-1">1</span>' +
+          '</div>' +
+          '<div class="socket"></div>' +
+          '<div class="place-label">2^' + place + '</div>';
+        unit.addEventListener('click', () => toggleBit(i));
+        railEl.appendChild(unit);
+      }
+    }
+
+    function renderTubes(){
+      const units = Array.from(railEl.children);
+      units.forEach((unit, i) => {
+        const bit = bits[i];
+        const d0 = unit.querySelector('.digit-0');
+        const d1 = unit.querySelector('.digit-1');
+        d0.classList.toggle('lit', bit === 0);
+        d1.classList.toggle('lit', bit === 1);
+      });
+    }
+
+    function bitsToValue(){
+      return bits.reduce((acc, b) => (acc << 1) | b, 0);
+    }
+
+    function updateLivesUI(){
+      const dots = Array.from(livesEl.children);
+      dots.forEach((dot, i) => dot.classList.toggle('gone', i >= lives));
+    }
+
+    function startGame(){
+      score = 0;
+      lives = 3;
+      level = 1;
+      running = true;
+      scoreEl.textContent = '0';
+      updateLivesUI();
+      startOverlay.style.display = 'none';
+      endOverlay.style.display = 'none';
+      startRound();
+    }
+
+    function startRound(){
+      roundId++;
+      roundActive = true;
+      pausedRemaining = null;
+      const width = bitWidthForLevel(level);
+      if(railEl.children.length !== width){
+        buildRail(width);
+      }
+      bits = new Array(width).fill(0);
+      renderTubes();
+      currentEl.textContent = '0';
+      currentEl.classList.remove('match');
+
+      const max = Math.pow(2, width) - 1;
+      target = 1 + Math.floor(Math.random() * max);
+      targetEl.textContent = String(target);
+
+      roundDuration = durationForLevel(level);
+      roundStart = performance.now();
+
+      timerFill.classList.remove('danger');
+      timerFill.style.transition = 'none';
+      timerFill.style.width = '100%';
+      void timerFill.offsetWidth;
+      timerFill.style.transition = 'width ' + roundDuration + 'ms linear';
+      timerFill.style.width = '0%';
+
+      clearTimeout(roundTimeout);
+      const thisRound = roundId;
+      roundTimeout = setTimeout(() => handleTimeout(thisRound), roundDuration);
+      setTimeout(() => {
+        if(roundId === thisRound && running) timerFill.classList.add('danger');
+      }, Math.max(0, roundDuration - 1200));
+    }
+
+    function toggleBit(i){
+      if(!running) return;
+      bits[i] = bits[i] ? 0 : 1;
+      renderTubes();
+      const value = bitsToValue();
+      currentEl.textContent = String(value);
+      if(value === target){
+        handleMatch();
+      }
+    }
+
+    function handleMatch(){
+      roundActive = false;
+      clearTimeout(roundTimeout);
+      currentEl.classList.add('match');
+      const elapsed = performance.now() - roundStart;
+      const remainingFrac = Math.max(0, 1 - elapsed / roundDuration);
+      const gained = Math.round(20 + remainingFrac * 30 + level * 3);
+      score += gained;
+      scoreEl.textContent = String(score);
+      level++;
+      const thisRound = roundId;
+      setTimeout(() => { if(running && roundId === thisRound) startRound(); }, 450);
+    }
+
+    function handleTimeout(id){
+      if(id !== roundId || !running) return;
+      roundActive = false;
+      lives--;
+      updateLivesUI();
+      if(lives <= 0){
+        endGame();
+      } else {
+        const thisRound = roundId;
+        setTimeout(() => { if(running && roundId === thisRound) startRound(); }, 500);
+      }
+    }
+
+    function endGame(){
+      running = false;
+      roundActive = false;
+      clearTimeout(roundTimeout);
+      if(score > bestScore){
+        bestScore = score;
+        try{ localStorage.setItem('bitmatch-best', String(bestScore)); } catch(e){}
+      }
+      bestEl.textContent = String(bestScore);
+      finalScoreEl.textContent = String(score);
+      finalBestEl.textContent = String(bestScore);
+      endOverlay.style.display = 'flex';
+    }
+
+    // pause the round timer when the player switches to the counter tab
+    // mid run, resume it with the time that was left when they come back
+    function pauseRound(){
+      if(!running || !roundActive || pausedRemaining !== null) return;
+      const elapsed = performance.now() - roundStart;
+      pausedRemaining = Math.max(300, roundDuration - elapsed);
+      clearTimeout(roundTimeout);
+      const frac = Math.max(0, Math.min(1, pausedRemaining / roundDuration));
+      timerFill.style.transition = 'none';
+      timerFill.style.width = (frac * 100) + '%';
+    }
+
+    function resumeRound(){
+      if(!running || !roundActive || pausedRemaining === null) return;
+      const dur = pausedRemaining;
+      pausedRemaining = null;
+      roundDuration = dur;
+      roundStart = performance.now();
+      void timerFill.offsetWidth;
+      timerFill.style.transition = 'width ' + dur + 'ms linear';
+      timerFill.style.width = '0%';
+      const thisRound = roundId;
+      roundTimeout = setTimeout(() => handleTimeout(thisRound), dur);
+    }
+
+    document.addEventListener('flipcount:tab', (e) => {
+      if(e.detail === 'game'){
+        resumeRound();
+      } else {
+        pauseRound();
+      }
+    });
+
+    document.getElementById('gameStartBtn').addEventListener('click', startGame);
+    document.getElementById('gameRetryBtn').addEventListener('click', startGame);
+
+    buildRail(bitWidthForLevel(1));
+  })();
+</script>
+
+<script>
+  // ===================== OVERFLOW GAME LOGIC =====================
+  (function(){
+    const railEl = document.getElementById('ofRail');
+    const scoreEl = document.getElementById('ofScore');
+    const bestEl = document.getElementById('ofBest');
+    const livesEl = document.getElementById('ofLives');
+    const consoleEl = document.getElementById('ofConsole');
+    const startOverlay = document.getElementById('ofStartOverlay');
+    const endOverlay = document.getElementById('ofEndOverlay');
+    const finalScoreEl = document.getElementById('ofFinalScore');
+    const finalBestEl = document.getElementById('ofFinalBest');
+    const bankBtn = document.getElementById('ofBankBtn');
+
+    const WIDTH = 5;
+    const MAX = Math.pow(2, WIDTH) - 1;
+    const START_INTERVAL = 800;
+    const MIN_INTERVAL = 180;
+
+    let bestScore = 0;
+    try{
+      bestScore = parseInt(localStorage.getItem('overflow-best') || '0', 10) || 0;
+    } catch(e){ bestScore = 0; }
+    bestEl.textContent = String(bestScore);
+
+    let running = false;
+    let score = 0;
+    let lives = 3;
+    let value = 0;
+    let intervalMs = START_INTERVAL;
+    let tickTimeout = null;
+
+    function buildRail(){
+      railEl.innerHTML = '';
+      for(let i = 0; i < WIDTH; i++){
+        const place = WIDTH - 1 - i;
+        const unit = document.createElement('div');
+        unit.className = 'tube-unit';
+        unit.dataset.bit = '0';
+        unit.innerHTML =
+          '<div class="tube">' +
+            '<span class="digit digit-0 lit">0</span>' +
+            '<span class="digit digit-1">1</span>' +
+          '</div>' +
+          '<div class="socket"></div>' +
+          '<div class="place-label">2^' + place + '</div>';
+        railEl.appendChild(unit);
+      }
+    }
+
+    function renderValue(){
+      const bits = value.toString(2).padStart(WIDTH, '0').split('').map(Number);
+      const units = Array.from(railEl.children);
+      units.forEach((unit, i) => {
+        const bit = bits[i];
+        if(unit.dataset.bit !== String(bit)){
+          const d0 = unit.querySelector('.digit-0');
+          const d1 = unit.querySelector('.digit-1');
+          d0.classList.toggle('lit', bit === 0);
+          d1.classList.toggle('lit', bit === 1);
+          unit.dataset.bit = String(bit);
+        }
+      });
+    }
+
+    function updateLivesUI(){
+      Array.from(livesEl.children).forEach((dot, i) => dot.classList.toggle('gone', i >= lives));
+    }
+
+    function scheduleTick(){
+      clearTimeout(tickTimeout);
+      tickTimeout = setTimeout(tick, intervalMs);
+    }
+
+    function tick(){
+      if(!running) return;
+      value++;
+      if(value > MAX){
+        overflow();
+        return;
+      }
+      renderValue();
+      scheduleTick();
+    }
+
+    function overflow(){
+      lives--;
+      updateLivesUI();
+      flashFail();
+      value = 0;
+      renderValue();
+      if(lives <= 0){
+        endGame();
+      } else {
+        scheduleTick();
+      }
+    }
+
+    function flashFail(){
+      consoleEl.classList.remove('flash-fail');
+      void consoleEl.offsetWidth;
+      consoleEl.classList.add('flash-fail');
+    }
+
+    function bank(){
+      if(!running || value === 0) return;
+      score += value;
+      scoreEl.textContent = String(score);
+      value = 0;
+      renderValue();
+      intervalMs = Math.max(MIN_INTERVAL, intervalMs - 40);
+      scheduleTick();
+    }
+
+    function startGame(){
+      score = 0;
+      lives = 3;
+      value = 0;
+      intervalMs = START_INTERVAL;
+      running = true;
+      scoreEl.textContent = '0';
+      updateLivesUI();
+      renderValue();
+      startOverlay.style.display = 'none';
+      endOverlay.style.display = 'none';
+      scheduleTick();
+    }
+
+    function endGame(){
+      running = false;
+      clearTimeout(tickTimeout);
+      tickTimeout = null;
+      if(score > bestScore){
+        bestScore = score;
+        try{ localStorage.setItem('overflow-best', String(bestScore)); } catch(e){}
+      }
+      bestEl.textContent = String(bestScore);
+      finalScoreEl.textContent = String(score);
+      finalBestEl.textContent = String(bestScore);
+      endOverlay.style.display = 'flex';
+    }
+
+    // pause the auto tick when the player leaves this tab mid run,
+    // resume from the same interval when they come back
+    document.addEventListener('flipcount:tab', (e) => {
+      if(e.detail === 'overflow'){
+        if(running && tickTimeout === null){
+          scheduleTick();
+        }
+      } else {
+        if(running && tickTimeout !== null){
+          clearTimeout(tickTimeout);
+          tickTimeout = null;
+        }
+      }
+    });
+
+    bankBtn.addEventListener('click', bank);
+    document.getElementById('ofStartBtn').addEventListener('click', startGame);
+    document.getElementById('ofRetryBtn').addEventListener('click', startGame);
+
+    buildRail();
+    renderValue();
+  })();
+</script>
+
+<script>
+  // ===================== SHARED STEPPER FOR COUNTING STYLE TABS =====================
+  // each counting tab gets -1, RESET, +1 and AUTO buttons wired the same way.
+  // render(value, delta) draws the tab, delta is how many steps it moved.
+  function makeStepper(prefix, tabName, max, render){
+    let value = 0;
+    let autoTimer = null;
+    const autoBtn = document.getElementById(prefix + 'Auto');
+
+    function setTo(next, delta){
+      const size = max + 1;
+      value = ((next % size) + size) % size;
+      render(value, delta);
+    }
+    function stopAuto(){
+      clearInterval(autoTimer);
+      autoTimer = null;
+      autoBtn.classList.remove('auto-on');
+      autoBtn.textContent = 'AUTO';
+    }
+    function startAuto(){
+      autoTimer = setInterval(() => setTo(value + 1, 1), 650);
+      autoBtn.classList.add('auto-on');
+      autoBtn.textContent = 'STOP';
+    }
+
+    document.getElementById(prefix + 'Inc').addEventListener('click', () => setTo(value + 1, 1));
+    document.getElementById(prefix + 'Dec').addEventListener('click', () => setTo(value - 1, -1));
+    document.getElementById(prefix + 'Reset').addEventListener('click', () => { stopAuto(); setTo(0, -value); });
+    autoBtn.addEventListener('click', () => { if(autoTimer) stopAuto(); else startAuto(); });
+
+    // stop auto counting when leaving the tab so nothing runs in the background
+    document.addEventListener('flipcount:tab', (e) => { if(e.detail !== tabName && autoTimer) stopAuto(); });
+
+    render(0, 0);
+  }
+</script>
+
+<script>
+  // ===================== FLIPDOT =====================
+  (function(){
+    const board = document.getElementById('fdBoard');
+    const bitsEl = document.getElementById('fdBits');
+    const readEl = document.getElementById('fdRead');
+    const ROWS = 7;
+    const COLS = 17;
+
+    // 5 wide by 7 tall dot font for 0 through 9
+    const FONT = {
+      '0':['01110','10001','10011','10101','11001','10001','01110'],
+      '1':['00100','01100','00100','00100','00100','00100','01110'],
+      '2':['01110','10001','00001','00010','00100','01000','11111'],
+      '3':['11111','00010','00100','00010','00001','10001','01110'],
+      '4':['00010','00110','01010','10010','11111','00010','00010'],
+      '5':['11111','10000','11110','00001','00001','10001','01110'],
+      '6':['00110','01000','10000','11110','10001','10001','01110'],
+      '7':['11111','00001','00010','00100','01000','01000','01000'],
+      '8':['01110','10001','10001','01110','10001','10001','01110'],
+      '9':['01110','10001','10001','01111','00001','00010','01100']
+    };
+
+    function makeDot(){
+      const dot = document.createElement('div');
+      dot.className = 'fd-dot';
+      dot.innerHTML = '<div class="fd-disc"><div class="fd-face fd-off"></div><div class="fd-face fd-on"></div></div>';
+      return dot;
+    }
+
+    board.style.gridTemplateColumns = 'repeat(' + COLS + ', var(--fd))';
+    const grid = [];
+    for(let r = 0; r < ROWS; r++){
+      grid.push([]);
+      for(let c = 0; c < COLS; c++){
+        const dot = makeDot();
+        dot.querySelector('.fd-disc').style.transitionDelay = (c * 14) + 'ms';
+        board.appendChild(dot);
+        grid[r].push(dot);
+      }
+    }
+
+    const bitDots = [];
+    for(let i = 0; i < 8; i++){
+      const col = document.createElement('div');
+      col.className = 'fd-bit-col';
+      const dot = makeDot();
+      const label = document.createElement('span');
+      label.className = 'fd-bit-label';
+      label.textContent = String(Math.pow(2, 7 - i));
+      col.appendChild(dot);
+      col.appendChild(label);
+      bitsEl.appendChild(col);
+      bitDots.push(dot);
+    }
+
+    function render(v){
+      const text = String(v).padStart(3, ' ');
+      for(let r = 0; r < ROWS; r++){
+        for(let c = 0; c < COLS; c++){
+          const slot = Math.floor(c / 6);
+          const inner = c % 6;
+          let on = false;
+          if(inner < 5){
+            const ch = text[slot];
+            if(ch !== ' ') on = FONT[ch][r][inner] === '1';
+          }
+          grid[r][c].classList.toggle('on', on);
+        }
+      }
+      const bin = v.toString(2).padStart(8, '0');
+      bitDots.forEach((dot, i) => dot.classList.toggle('on', bin[i] === '1'));
+      readEl.innerHTML = 'DECIMAL <b>' + v + '</b> &middot; BINARY <b>' + bin + '</b>';
+    }
+
+    makeStepper('fd', 'flipdot', 255, render);
+  })();
+</script>
+
+<script>
+  // ===================== GRAY CODE WHEEL =====================
+  (function(){
+    const svg = document.getElementById('grayWheel');
+    const binEl = document.getElementById('grayBin');
+    const grayEl = document.getElementById('grayGray');
+    const readEl = document.getElementById('grayRead');
+    const NS = 'http://www.w3.org/2000/svg';
+    const CX = 160, CY = 160, N = 32, BITS = 5;
+    const STEP = 360 / N;
+    const R0 = 46, RING = 21, GAP = 1;
+
+    function pt(r, deg){
+      const a = deg * Math.PI / 180;
+      return (CX + r * Math.cos(a)).toFixed(2) + ',' + (CY + r * Math.sin(a)).toFixed(2);
+    }
+    function el(tag, attrs){
+      const node = document.createElementNS(NS, tag);
+      Object.keys(attrs).forEach(k => node.setAttribute(k, attrs[k]));
+      return node;
+    }
+
+    svg.appendChild(el('circle', { cx: CX, cy: CY, r: 158, fill: '#eef0f2', stroke: '#9aa0a6', 'stroke-width': 2 }));
+
+    const rotor = el('g', { class: 'gray-rotor' });
+    for(let k = 0; k < BITS; k++){
+      const bitIndex = BITS - 1 - k; // inner ring is the top bit, outer ring is the ones bit
+      const r1 = R0 + k * (RING + GAP);
+      const r2 = r1 + RING;
+      for(let i = 0; i < N; i++){
+        const g = i ^ (i >> 1);
+        const on = (g >> bitIndex) & 1;
+        const center = -90 + i * STEP;
+        const a0 = center - STEP / 2 + 0.5;
+        const a1 = center + STEP / 2 - 0.5;
+        const d = 'M' + pt(r2, a0) + ' A' + r2 + ',' + r2 + ' 0 0 1 ' + pt(r2, a1) +
+                  ' L' + pt(r1, a1) + ' A' + r1 + ',' + r1 + ' 0 0 0 ' + pt(r1, a0) + ' Z';
+        rotor.appendChild(el('path', { d: d, fill: on ? '#ffb35c' : '#d6dadd' }));
+      }
+    }
+    svg.appendChild(rotor);
+
+    // reading window at the top
+    const outer = R0 + BITS * (RING + GAP);
+    svg.appendChild(el('rect', {
+      x: CX - 9, y: CY - outer - 3, width: 18, height: outer - R0 + 6, rx: 5,
+      fill: 'none', stroke: '#2b2f33', 'stroke-width': 2.5
+    }));
+
+    // glass hub showing the decimal value
+    svg.appendChild(el('circle', { cx: CX, cy: CY, r: 38, fill: '#16181c', stroke: '#ffffff', 'stroke-width': 3 }));
+    const hubText = el('text', {
+      x: CX, y: CY, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+      'font-family': 'ui-monospace, Menlo, Consolas, monospace', 'font-size': 28, 'font-weight': 700,
+      fill: '#ffd39b', style: 'filter: drop-shadow(0 0 4px #ff9d3c);'
+    });
+    svg.appendChild(hubText);
+
+    function makeCells(container){
+      const cells = [];
+      for(let i = 0; i < BITS; i++){
+        const c = document.createElement('div');
+        c.className = 'bit-cell';
+        c.textContent = '0';
+        container.appendChild(c);
+        cells.push(c);
+      }
+      return cells;
+    }
+    const binCells = makeCells(binEl);
+    const grayCells = makeCells(grayEl);
+
+    function paint(cells, str){
+      cells.forEach((cell, i) => {
+        const bit = str[i];
+        if(cell.textContent !== bit){
+          cell.classList.remove('changed');
+          void cell.offsetWidth;
+          cell.classList.add('changed');
+        }
+        cell.textContent = bit;
+        cell.classList.toggle('on', bit === '1');
+      });
+    }
+
+    let angle = 0;
+    function render(v, delta){
+      angle -= delta * STEP;
+      rotor.style.transform = 'rotate(' + angle + 'deg)';
+      const bin = v.toString(2).padStart(BITS, '0');
+      const gray = (v ^ (v >> 1)).toString(2).padStart(BITS, '0');
+      paint(binCells, bin);
+      paint(grayCells, gray);
+      hubText.textContent = String(v);
+      readEl.innerHTML = 'DECIMAL <b>' + v + '</b> &middot; BINARY <b>' + bin + '</b> &middot; GRAY <b>' + gray + '</b>';
+    }
+
+    makeStepper('gray', 'gray', N - 1, render);
+  })();
+</script>
+
+<script>
+  // ===================== ABACUS =====================
+  (function(){
+    const readEl = document.getElementById('abRead');
+    const BEAD_H = 22;
+
+    function buildFrame(frameEl, labelsEl, rods, spacing, beadW, height, labelFor){
+      const width = rods * spacing + 24;
+      frameEl.style.width = width + 'px';
+      frameEl.style.height = height + 'px';
+      labelsEl.style.width = width + 'px';
+      labelsEl.style.padding = '0 12px';
+      const columns = [];
+      for(let i = 0; i < rods; i++){
+        const cx = 12 + spacing / 2 + i * spacing;
+        const rod = document.createElement('div');
+        rod.className = 'ab-rod';
+        rod.style.left = (cx - 2) + 'px';
+        rod.style.top = '8px';
+        rod.style.height = (height - 16) + 'px';
+        frameEl.appendChild(rod);
+        columns.push({ cx: cx, beads: [] });
+        const label = document.createElement('span');
+        label.style.width = spacing + 'px';
+        label.textContent = labelFor(i);
+        labelsEl.appendChild(label);
+      }
+      return { columns: columns, beadW: beadW };
+    }
+    function addBead(frameEl, col, beadW){
+      const b = document.createElement('div');
+      b.className = 'ab-bead';
+      b.style.width = beadW + 'px';
+      b.style.left = (col.cx - beadW / 2) + 'px';
+      frameEl.appendChild(b);
+      col.beads.push(b);
+      return b;
+    }
+    function addBeam(frameEl, top){
+      const beam = document.createElement('div');
+      beam.className = 'ab-beam';
+      beam.style.top = top + 'px';
+      frameEl.appendChild(beam);
+    }
+
+    // soroban: 3 rods, hundreds tens ones, one 5 bead above the beam, four 1 beads below
+    const tenEl = document.getElementById('abTen');
+    const ten = buildFrame(tenEl, document.getElementById('abTenLabels'), 3, 60, 46, 200,
+      i => ['100s', '10s', '1s'][i]);
+    addBeam(tenEl, 56);
+    ten.columns.forEach(col => {
+      addBead(tenEl, col, ten.beadW);
+      for(let j = 0; j < 4; j++) addBead(tenEl, col, ten.beadW);
+    });
+
+    // binary: 8 rods, one bead each, up against the beam means 1
+    const twoEl = document.getElementById('abTwo');
+    const two = buildFrame(twoEl, document.getElementById('abTwoLabels'), 8, 36, 30, 110,
+      i => String(Math.pow(2, 7 - i)));
+    addBeam(twoEl, 22);
+    two.columns.forEach(col => addBead(twoEl, col, two.beadW));
+
+    function render(v){
+      const digits = String(v).padStart(3, '0').split('').map(Number);
+      ten.columns.forEach((col, i) => {
+        const d = digits[i];
+        const heaven = col.beads[0];
+        const fiveOn = d >= 5;
+        heaven.style.top = (fiveOn ? 32 : 12) + 'px';
+        heaven.classList.toggle('on', fiveOn);
+        const ones = d % 5;
+        for(let j = 0; j < 4; j++){
+          const b = col.beads[1 + j];
+          const on = j < ones;
+          b.style.top = (66 + j * (BEAD_H + 1) + (on ? 0 : BEAD_H + 1)) + 'px';
+          b.classList.toggle('on', on);
+        }
+      });
+      const bin = v.toString(2).padStart(8, '0');
+      two.columns.forEach((col, i) => {
+        const on = bin[i] === '1';
+        col.beads[0].style.top = (on ? 32 : 78) + 'px';
+        col.beads[0].classList.toggle('on', on);
+      });
+      readEl.innerHTML = 'DECIMAL <b>' + v + '</b> &middot; BINARY <b>' + bin + '</b>';
+    }
+
+    makeStepper('ab', 'abacus', 255, render);
+  })();
+</script>
+
+<script>
+  // ===================== MAYAN NUMERALS =====================
+  (function(){
+    const stack = document.getElementById('myStack');
+    const readEl = document.getElementById('myRead');
+    const MAX = 7999;
+    const MULTS = [1, 20, 400];
+    const INK = '#e07f1f';
+    let prevDigits = [];
+
+    function glyph(d){
+      let s = '<svg viewBox="0 0 150 90"><g class="my-mark">';
+      if(d === 0){
+        s += '<ellipse cx="75" cy="45" rx="34" ry="18" fill="none" stroke="' + INK + '" stroke-width="4"/>';
+        s += '<path d="M48,45 Q75,30 102,45" fill="none" stroke="' + INK + '" stroke-width="2.5"/>';
+        s += '<path d="M48,45 Q75,60 102,45" fill="none" stroke="' + INK + '" stroke-width="2.5"/>';
+      } else {
+        const bars = Math.floor(d / 5);
+        const dots = d % 5;
+        const BAR_H = 9, BAR_GAP = 6, DOT_R = 6;
+        const dotBlock = dots ? (DOT_R * 2 + 8) : 0;
+        const total = dotBlock + (bars ? bars * BAR_H + (bars - 1) * BAR_GAP : 0);
+        let y = 45 - total / 2;
+        if(dots){
+          for(let k = 0; k < dots; k++){
+            const x = 75 + (k - (dots - 1) / 2) * 20;
+            s += '<circle cx="' + x + '" cy="' + (y + DOT_R) + '" r="' + DOT_R + '" fill="' + INK + '"/>';
+          }
+          y += dotBlock;
+        }
+        for(let b = 0; b < bars; b++){
+          s += '<rect x="25" y="' + (y + b * (BAR_H + BAR_GAP)) + '" width="100" height="' + BAR_H + '" rx="4" fill="' + INK + '"/>';
+        }
+      }
+      return s + '</g></svg>';
+    }
+
+    function render(v){
+      const digits = [];
+      let n = v;
+      do { digits.push(n % 20); n = Math.floor(n / 20); } while(n > 0);
+      stack.innerHTML = '';
+      for(let lvl = digits.length - 1; lvl >= 0; lvl--){
+        const row = document.createElement('div');
+        row.className = 'my-level';
+        const tile = document.createElement('div');
+        tile.className = 'my-tile';
+        if(prevDigits[lvl] !== digits[lvl]) tile.classList.add('pop');
+        tile.innerHTML = glyph(digits[lvl]);
+        const mult = document.createElement('span');
+        mult.className = 'my-mult';
+        mult.innerHTML = '&times; ' + MULTS[lvl];
+        row.appendChild(tile);
+        row.appendChild(mult);
+        stack.appendChild(row);
+      }
+      prevDigits = digits;
+      const parts = [];
+      for(let lvl = digits.length - 1; lvl >= 0; lvl--){
+        parts.push(digits[lvl] + ' &times; ' + MULTS[lvl]);
+      }
+      readEl.innerHTML = 'DECIMAL <b>' + v + '</b> &middot; ' + parts.join(' + ');
+    }
+
+    makeStepper('my', 'mayan', MAX, render);
+  })();
+</script>
+
+<script>
+  // ===================== LANGUAGES =====================
+  (function(){
+    const MAX = 9999;
+    const sel = document.getElementById('langSelect');
+    const glyphEl = document.getElementById('langGlyph');
+    const readingEl = document.getElementById('langReading');
+    const readEl = document.getElementById('langRead');
+    const aboutEl = document.getElementById('langAbout');
+    const gotoEl = document.getElementById('langGoto');
+    const autoBtn = document.getElementById('langAuto');
+
+    const digitsOf = n => String(n).padStart(4, '0').split('').map(Number); // thousands, hundreds, tens, ones
+
+    // ---------- spoken words ----------
+    function english(n){
+      const o = ['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+      const t = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+      const u100 = x => x < 20 ? o[x] : t[Math.floor(x/10)] + (x%10 ? '-' + o[x%10] : '');
+      const u1000 = x => {
+        const h = Math.floor(x/100), r = x%100;
+        return (h ? o[h] + ' hundred' : '') + (h && r ? ' ' : '') + (r || !h ? u100(r) : '');
+      };
+      if(n === 0) return 'zero';
+      const th = Math.floor(n/1000), rest = n%1000;
+      return (th ? o[th] + ' thousand' : '') + (th && rest ? ' ' : '') + (rest ? u1000(rest) : '');
+    }
+
+    function spanish(n){
+      const o = ['cero','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve','veinte','veintiuno','veintidós','veintitrés','veinticuatro','veinticinco','veintiséis','veintisiete','veintiocho','veintinueve'];
+      const t = ['','','','treinta','cuarenta','cincuenta','sesenta','setenta','ochenta','noventa'];
+      const h = ['','ciento','doscientos','trescientos','cuatrocientos','quinientos','seiscientos','setecientos','ochocientos','novecientos'];
+      const u100 = x => x < 30 ? o[x] : t[Math.floor(x/10)] + (x%10 ? ' y ' + o[x%10] : '');
+      const u1000 = x => {
+        const hh = Math.floor(x/100), r = x%100;
+        if(!hh) return u100(r);
+        const head = (hh === 1 && r === 0) ? 'cien' : h[hh];
+        return head + (r ? ' ' + u100(r) : '');
+      };
+      if(n === 0) return 'cero';
+      const th = Math.floor(n/1000), rest = n%1000;
+      const head = th ? (th === 1 ? 'mil' : o[th] + ' mil') : '';
+      return head + (th && rest ? ' ' : '') + (rest ? u1000(rest) : '');
+    }
+
+    function french(n){
+      const u = ['zéro','un','deux','trois','quatre','cinq','six','sept','huit','neuf','dix','onze','douze','treize','quatorze','quinze','seize'];
+      const tn = ['','','vingt','trente','quarante','cinquante','soixante'];
+      function u100(x){
+        if(x < 17) return u[x];
+        if(x < 20) return 'dix-' + u[x-10];
+        const t = Math.floor(x/10), o = x%10;
+        if(t < 7) return tn[t] + (o === 0 ? '' : o === 1 ? ' et un' : '-' + u[o]);
+        if(t === 7) return 'soixante' + (x === 71 ? ' et onze' : '-' + u100(x-60));
+        if(t === 8) return o === 0 ? 'quatre-vingts' : 'quatre-vingt-' + u[o];
+        return 'quatre-vingt-' + u100(x-80);
+      }
+      function u1000(x){
+        const h = Math.floor(x/100), r = x%100;
+        if(!h) return u100(r);
+        const head = h === 1 ? 'cent' : u[h] + ' cent' + (r === 0 ? 's' : '');
+        return head + (r ? ' ' + u100(r) : '');
+      }
+      if(n === 0) return 'zéro';
+      const th = Math.floor(n/1000), rest = n%1000;
+      const head = th ? (th === 1 ? 'mille' : u[th] + ' mille') : '';
+      return head + (th && rest ? ' ' : '') + (rest ? u1000(rest) : '');
+    }
+
+    function german(n){
+      const o = ['null','eins','zwei','drei','vier','fünf','sechs','sieben','acht','neun','zehn','elf','zwölf','dreizehn','vierzehn','fünfzehn','sechzehn','siebzehn','achtzehn','neunzehn'];
+      const t = ['','','zwanzig','dreißig','vierzig','fünfzig','sechzig','siebzig','achtzig','neunzig'];
+      const pre = d => d === 1 ? 'ein' : o[d];
+      const u100 = x => x < 20 ? o[x] : (x%10 ? pre(x%10) + 'und' : '') + t[Math.floor(x/10)];
+      const u1000 = x => {
+        const h = Math.floor(x/100), r = x%100;
+        return (h ? pre(h) + 'hundert' : '') + (r ? u100(r) : '');
+      };
+      if(n === 0) return 'null';
+      const th = Math.floor(n/1000), rest = n%1000;
+      return (th ? pre(th) + 'tausend' : '') + (rest ? u1000(rest) : '');
+    }
+
+    function koreanSino(n){
+      const d = ['영','일','이','삼','사','오','육','칠','팔','구'];
+      const r = ['yeong','il','i','sam','sa','o','yuk','chil','pal','gu'];
+      const uH = ['천','백','십',''], uR = ['cheon','baek','sip',''];
+      if(n === 0) return { text: '영', read: 'yeong' };
+      let text = '', read = [];
+      digitsOf(n).forEach((dg, i) => {
+        if(!dg) return;
+        const skipOne = dg === 1 && i < 3;
+        text += (skipOne ? '' : d[dg]) + uH[i];
+        read.push((skipOne ? '' : r[dg]) + uR[i]);
+      });
+      return { text: text, read: read.join('-') };
+    }
+
+    function koreanNative(n){
+      const oH = ['','하나','둘','셋','넷','다섯','여섯','일곱','여덟','아홉'];
+      const oR = ['','hana','dul','set','net','daseot','yeoseot','ilgop','yeodeol','ahop'];
+      const tH = ['','열','스물','서른','마흔','쉰','예순','일흔','여든','아흔'];
+      const tR = ['','yeol','seumul','seoreun','maheun','swin','yesun','ilheun','yeodeun','aheun'];
+      if(n < 1 || n > 99) return null;
+      const t = Math.floor(n/10), o = n%10;
+      return { text: tH[t] + oH[o], read: [tR[t], oR[o]].filter(Boolean).join(' ') };
+    }
+
+    function japanese(n){
+      const k = ['零','一','二','三','四','五','六','七','八','九'];
+      const r = ['rei','ichi','ni','san','yon','go','roku','nana','hachi','kyuu'];
+      if(n === 0) return { text: '零', read: 'rei' };
+      const [th, h, t, o] = digitsOf(n);
+      let text = '', read = [];
+      if(th){
+        text += (th === 1 ? '' : k[th]) + '千';
+        read.push(th === 1 ? 'sen' : th === 3 ? 'sanzen' : th === 8 ? 'hassen' : r[th] + 'sen');
+      }
+      if(h){
+        text += (h === 1 ? '' : k[h]) + '百';
+        read.push(h === 1 ? 'hyaku' : h === 3 ? 'sanbyaku' : h === 6 ? 'roppyaku' : h === 8 ? 'happyaku' : r[h] + 'hyaku');
+      }
+      if(t){
+        text += (t === 1 ? '' : k[t]) + '十';
+        read.push(t === 1 ? 'juu' : r[t] + 'juu');
+      }
+      if(o){ text += k[o]; read.push(r[o]); }
+      return { text: text, read: read.join(' ') };
+    }
+
+    function mandarin(n){
+      const c = ['零','一','二','三','四','五','六','七','八','九'];
+      const p = ['líng','yī','èr','sān','sì','wǔ','liù','qī','bā','jiǔ'];
+      const uC = ['千','百','十',''], uP = ['qiān','bǎi','shí',''];
+      if(n === 0) return { text: '零', read: 'líng' };
+      let text = '', read = [], started = false, zeroPending = false;
+      digitsOf(n).forEach((d, i) => {
+        if(d === 0){ if(started) zeroPending = true; return; }
+        if(zeroPending){ text += '零'; read.push('líng'); zeroPending = false; }
+        const leadTen = i === 2 && d === 1 && !started;
+        if(!leadTen){ text += c[d]; read.push(p[d]); }
+        if(uC[i]){ text += uC[i]; read.push(uP[i]); }
+        started = true;
+      });
+      return { text: text, read: read.join(' ') };
+    }
+
+    // ---------- ancient and alphabetic systems ----------
+    function base60(n){
+      const out = [];
+      do { out.unshift(n % 60); n = Math.floor(n / 60); } while(n > 0);
+      return out;
+    }
+
+    function sumerianWords(n){
+      const t = ['','u','niš','ušu','nimin','ninnu'];
+      const o = ['','diš','min','eš','limmu','ia','aš','imin','ussu','ilimmu'];
+      const u60 = x => [t[Math.floor(x/10)], o[x%10]].filter(Boolean).join('-');
+      if(n === 0) return '';
+      const ds = base60(n);
+      const names = ['', 'geš', 'šar'];
+      const parts = [];
+      ds.forEach((d, i) => {
+        const place = ds.length - 1 - i;
+        if(!d) return;
+        if(place === 0) parts.push(u60(d));
+        else parts.push(d === 1 ? names[place] : u60(d) + ' ' + names[place]);
+      });
+      return parts.join(' + ');
+    }
+
+    function cuneiformSVG(n){
+      const ink = '#ffc477';
+      const ds = n === 0 ? [0] : base60(n);
+      const H = 90;
+      let x = 10, body = '';
+      const wedge = (cx, cy) =>
+        '<path d="M' + (cx-7) + ',' + cy + ' L' + (cx+7) + ',' + cy + ' L' + cx + ',' + (cy+11) + ' Z" fill="' + ink + '"/>' +
+        '<rect x="' + (cx-1.4) + '" y="' + (cy+8) + '" width="2.8" height="16" rx="1.2" fill="' + ink + '"/>';
+      const corner = (cx, cy) =>
+        '<path d="M' + (cx+9) + ',' + (cy-10) + ' L' + (cx-9) + ',' + cy + ' L' + (cx+9) + ',' + (cy+10) + ' L' + (cx+3) + ',' + cy + ' Z" fill="' + ink + '"/>';
+      const placeholder = (cx) =>
+        '<path d="M' + (cx-8) + ',30 L' + (cx+4) + ',22 L' + (cx-2) + ',36 Z" fill="' + ink + '"/>' +
+        '<path d="M' + (cx-8) + ',52 L' + (cx+4) + ',44 L' + (cx-2) + ',58 Z" fill="' + ink + '"/>';
+      ds.forEach((d, idx) => {
+        if(idx > 0) x += 22;
+        if(d === 0){ body += placeholder(x + 8); x += 20; return; }
+        const tens = Math.floor(d / 10), ones = d % 10;
+        // corner wedges for tens, stacked in a column of up to 3
+        for(let k = 0; k < tens; k++){
+          const col = Math.floor(k / 3), row = k % 3;
+          body += corner(x + 10 + col * 20, 22 + row * 22);
+        }
+        if(tens) x += Math.ceil(tens / 3) * 20 + 6;
+        // vertical wedges for ones, rows of up to 3
+        const rows = ones <= 3 ? 1 : ones <= 6 ? 2 : 3;
+        const perRow = Math.ceil(ones / rows);
+        const startY = rows === 1 ? 30 : rows === 2 ? 18 : 6;
+        for(let k = 0; k < ones; k++){
+          const row = Math.floor(k / perRow), col = k % perRow;
+          body += wedge(x + 8 + col * 16, startY + row * 27);
+        }
+        if(ones) x += perRow * 16 + 2;
+      });
+      const W = x + 10;
+      return '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + Math.min(W * 1.6, 520) + '">' + body + '</svg>';
+    }
+
+    function egyptian(n){
+      if(n === 0) return '';
+      const signs = ['\u{131BC}', '\u{13362}', '\u{13386}', '\u{133FA}']; // lotus 1000, coil 100, heel bone 10, stroke 1
+      return digitsOf(n).map((d, i) => signs[i].repeat(d)).join('');
+    }
+
+    function roman(n){
+      if(n < 1 || n > 3999) return '';
+      const map = [[1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],[100,'C'],[90,'XC'],[50,'L'],[40,'XL'],[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
+      let s = '';
+      map.forEach(([v, r]) => { while(n >= v){ s += r; n -= v; } });
+      return s;
+    }
+
+    function greek(n){
+      if(n === 0) return '';
+      const o = ' αβγδεϛζηθ', t = ' ικλμνξοπϟ', h = ' ρστυφχψωϡ';
+      const [th, hh, tt, oo] = digitsOf(n);
+      const rest = (hh ? h[hh] : '') + (tt ? t[tt] : '') + (oo ? o[oo] : '');
+      return (th ? '͵' + o[th] : '') + (rest ? rest + 'ʹ' : '');
+    }
+
+    function hebrew(n){
+      if(n === 0) return '';
+      const o = ['','א','ב','ג','ד','ה','ו','ז','ח','ט'];
+      const t = ['','י','כ','ל','מ','נ','ס','ע','פ','צ'];
+      const h = ['','ק','ר','ש','ת','תק','תר','תש','תת','תתק'];
+      const [th, hh, tt, oo] = digitsOf(n);
+      const lo = tt * 10 + oo;
+      let rest = h[hh];
+      if(lo === 15) rest += 'טו';
+      else if(lo === 16) rest += 'טז';
+      else rest += t[tt] + o[oo];
+      if(rest.length > 1) rest = rest.slice(0, -1) + '״' + rest.slice(-1);
+      else if(rest.length === 1) rest += '׳';
+      return (th ? o[th] + '׳' : '') + rest;
+    }
+
+    function geez(n){
+      if(n === 0) return '';
+      const one = d => String.fromCodePoint(0x1369 + d - 1);
+      const ten = d => String.fromCodePoint(0x1372 + d - 1);
+      const pair = x => (Math.floor(x/10) ? ten(Math.floor(x/10)) : '') + (x%10 ? one(x%10) : '');
+      const hi = Math.floor(n / 100), lo = n % 100;
+      return (hi ? (hi === 1 ? '' : pair(hi)) + '፻' : '') + pair(lo);
+    }
+
+    function armenian(n){
+      if(n === 0) return '';
+      const bases = [0x54C, 0x543, 0x53A, 0x531];
+      return digitsOf(n).map((d, i) => d ? String.fromCodePoint(bases[i] + d - 1) : '').join('');
+    }
+
+    function georgian(n){
+      if(n === 0) return '';
+      const rows = ['ჩცძწჭხჴჯჰ', 'რსტჳფქღყშ', 'იკლმნჲოპჟ', 'აბგდევზჱთ'];
+      return digitsOf(n).map((d, i) => d ? rows[i][d - 1] : '').join('');
+    }
+
+    const digitScript = base => n => String(n).split('').map(c => String.fromCodePoint(base + Number(c))).join('');
+
+    // ---------- the list ----------
+    const W = (text, read) => ({ text: text, read: read || '', cls: 'words' });
+    const G = (text, read, cls) => ({ text: text, read: read || '', cls: cls || '' });
+
+    const SYSTEMS = [
+      { group: 'Spoken words', id: 'en', name: 'English', f: n => W(english(n)),
+        about: 'Every number up to 9999 built from 28 basic words plus hundred and thousand.' },
+      { group: 'Spoken words', id: 'es', name: 'Spanish', f: n => W(spanish(n)),
+        about: 'Numbers from 16 to 29 fuse into one word, like veintitrés. Above that, tens and ones join with y.' },
+      { group: 'Spoken words', id: 'fr', name: 'French', f: n => W(french(n)),
+        about: 'French counts by twenties above 60: 70 is sixty-ten, 80 is four-twenties, 90 is four-twenties-ten. That is a leftover of an older base twenty system.' },
+      { group: 'Spoken words', id: 'de', name: 'German', f: n => W(german(n)),
+        about: 'German says the ones before the tens, so 21 is one-and-twenty, and writes the whole number as one long word.' },
+      { group: 'Spoken words', id: 'ko', name: 'Korean (Sino-Korean)', f: n => { const k = koreanSino(n); return W(k.text, k.read); },
+        about: 'The number system Korean uses for money, dates, phone numbers and math. Ten digits plus 십 ten, 백 hundred and 천 thousand.' },
+      { group: 'Spoken words', id: 'ko-native', name: 'Korean (native, 1 to 99)', f: n => { const k = koreanNative(n); return k ? W(k.text, k.read) : G('', 'Native Korean words run from 1 to 99. Larger numbers switch to Sino-Korean.', 'empty'); },
+        about: 'The older native Korean counting words, used for ages, hours and counting things. Each ten has its own word.' },
+      { group: 'Spoken words', id: 'ja', name: 'Japanese', f: n => { const k = japanese(n); return W(k.text, k.read); },
+        about: 'Kanji digits plus 十 ten, 百 hundred and 千 thousand. Some combos shift sound, like 300 sanbyaku and 800 happyaku.' },
+      { group: 'Spoken words', id: 'zh', name: 'Mandarin Chinese', f: n => { const k = mandarin(n); return W(k.text, k.read); },
+        about: 'Same idea as Japanese kanji with pinyin readings. A 零 zero gets spoken whenever a gap sits inside the number, like 1001 one-thousand-zero-one.' },
+      { group: 'Spoken words', id: 'sux', name: 'Sumerian', f: n => n === 0 ? G('', 'Sumerian had no sign for zero.', 'empty') : G(cuneiformSVG(n), sumerianWords(n)),
+        about: 'Cuneiform pressed into clay, base sixty. A corner wedge is 10, a vertical wedge is 1. Each group is a place worth 60 times the one to its right: ones, then geš (60), then šar (3600). Readings are the standard Sumerian number words.' },
+
+      { group: 'Ancient systems', id: 'egy', name: 'Egyptian hieroglyphs', f: n => n === 0 ? G('', 'Egyptian numerals had no sign for zero.', 'empty') : G(egyptian(n), '', 'hiero'),
+        about: 'A stroke is 1, a heel bone is 10, a coil of rope is 100, a lotus flower is 1000. You repeat each sign as many times as needed and add them up.' },
+      { group: 'Ancient systems', id: 'rom', name: 'Roman numerals', f: n => n === 0 ? G('', 'Roman numerals had no sign for zero.', 'empty') : n > 3999 ? G('', 'Standard Roman numerals stop at 3999.', 'empty') : G(roman(n)),
+        about: 'I 1, V 5, X 10, L 50, C 100, D 500, M 1000. A smaller sign before a bigger one subtracts, so IV is 4.' },
+      { group: 'Ancient systems', id: 'grc', name: 'Greek (Ionic)', f: n => n === 0 ? G('', 'Greek letter numerals had no sign for zero.', 'empty') : G(greek(n)),
+        about: 'Letters stand for numbers: alpha 1, iota 10, rho 100. A mark after the letters flags them as a number, and a mark in front multiplies by 1000.' },
+      { group: 'Ancient systems', id: 'heb', name: 'Hebrew', f: n => n === 0 ? G('', 'Hebrew letter numerals had no sign for zero.', 'empty') : G(hebrew(n), '', 'rtl'),
+        about: 'Letters stand for numbers and add up, read right to left. 15 and 16 are written 9+6 and 9+7 to avoid spelling a name of God.' },
+      { group: 'Ancient systems', id: 'gez', name: 'Geʼez (Ethiopic)', f: n => n === 0 ? G('', 'Geʼez numerals had no sign for zero.', 'empty') : G(geez(n), '', 'geez'),
+        about: 'Still used in Ethiopia and Eritrea. Signs for 1 to 9 and 10 to 90, then ፻ means hundred and multiplies whatever sits before it.' },
+      { group: 'Ancient systems', id: 'hye', name: 'Armenian', f: n => n === 0 ? G('', 'Armenian letter numerals had no sign for zero.', 'empty') : G(armenian(n)),
+        about: 'Each of 36 letters has a value from 1 to 9000. Write the letters for each place and add them.' },
+      { group: 'Ancient systems', id: 'kat', name: 'Georgian', f: n => n === 0 ? G('', 'Georgian letter numerals had no sign for zero.', 'empty') : G(georgian(n)),
+        about: 'Like Armenian, every letter carries a value from 1 to 9000, and a number is the letters added together.' },
+
+      { group: 'Modern digit scripts', id: 'ar', name: 'Arabic (Eastern)', f: n => G(digitScript(0x660)(n)), about: 'The digits used across much of the Arab world. Same place value system as 0 to 9, different shapes.' },
+      { group: 'Modern digit scripts', id: 'fa', name: 'Persian and Urdu', f: n => G(digitScript(0x6F0)(n)), about: 'A variant of Eastern Arabic digits with different 4, 5 and 6.' },
+      { group: 'Modern digit scripts', id: 'hi', name: 'Hindi, Marathi, Nepali (Devanagari)', f: n => G(digitScript(0x966)(n)), about: 'Devanagari digits, from the same Indian family the modern 0 to 9 came from.' },
+      { group: 'Modern digit scripts', id: 'bn', name: 'Bengali', f: n => G(digitScript(0x9E6)(n)), about: 'Bengali digits, used in Bangladesh and eastern India.' },
+      { group: 'Modern digit scripts', id: 'pa', name: 'Punjabi (Gurmukhi)', f: n => G(digitScript(0xA66)(n)), about: 'Gurmukhi digits, used for Punjabi.' },
+      { group: 'Modern digit scripts', id: 'gu', name: 'Gujarati', f: n => G(digitScript(0xAE6)(n)), about: 'Gujarati digits, used in western India.' },
+      { group: 'Modern digit scripts', id: 'or', name: 'Odia', f: n => G(digitScript(0xB66)(n)), about: 'Odia digits, used in eastern India.' },
+      { group: 'Modern digit scripts', id: 'ta', name: 'Tamil', f: n => G(digitScript(0xBE6)(n)), about: 'Tamil digits. Older Tamil also had separate signs for 10, 100 and 1000.' },
+      { group: 'Modern digit scripts', id: 'te', name: 'Telugu', f: n => G(digitScript(0xC66)(n)), about: 'Telugu digits, used in southern India.' },
+      { group: 'Modern digit scripts', id: 'kn', name: 'Kannada', f: n => G(digitScript(0xCE6)(n)), about: 'Kannada digits, used in southern India.' },
+      { group: 'Modern digit scripts', id: 'ml', name: 'Malayalam', f: n => G(digitScript(0xD66)(n)), about: 'Malayalam digits, used in Kerala.' },
+      { group: 'Modern digit scripts', id: 'th', name: 'Thai', f: n => G(digitScript(0xE50)(n)), about: 'Thai digits, still common on signs and official papers.' },
+      { group: 'Modern digit scripts', id: 'lo', name: 'Lao', f: n => G(digitScript(0xED0)(n)), about: 'Lao digits, close cousins of the Thai set.' },
+      { group: 'Modern digit scripts', id: 'km', name: 'Khmer', f: n => G(digitScript(0x17E0)(n)), about: 'Khmer digits, used in Cambodia. The oldest known written zero is a Khmer inscription from the year 683.' },
+      { group: 'Modern digit scripts', id: 'my', name: 'Burmese', f: n => G(digitScript(0x1040)(n)), about: 'Burmese digits, used in Myanmar.' },
+      { group: 'Modern digit scripts', id: 'bo', name: 'Tibetan', f: n => G(digitScript(0xF20)(n)), about: 'Tibetan digits.' },
+      { group: 'Modern digit scripts', id: 'mn', name: 'Mongolian', f: n => G(digitScript(0x1810)(n)), about: 'Traditional Mongolian script digits.' },
+
+      { group: 'Machine bases', id: 'bin', name: 'Binary (base 2)', f: n => G(n.toString(2)), about: 'Two digits. Every place is worth twice the one to its right.' },
+      { group: 'Machine bases', id: 'oct', name: 'Octal (base 8)', f: n => G(n.toString(8)), about: 'Eight digits. Each octal digit packs exactly three binary bits.' },
+      { group: 'Machine bases', id: 'hex', name: 'Hexadecimal (base 16)', f: n => G(n.toString(16).toUpperCase()), about: 'Sixteen digits, A to F stand for 10 to 15. Each hex digit packs exactly four binary bits.' }
+    ];
+
+    // build the dropdown
+    let currentGroup = null, groupEl = null;
+    SYSTEMS.forEach(s => {
+      if(s.group !== currentGroup){
+        groupEl = document.createElement('optgroup');
+        groupEl.label = s.group;
+        sel.appendChild(groupEl);
+        currentGroup = s.group;
+      }
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.name;
+      groupEl.appendChild(opt);
+    });
+
+    let saved = null;
+    try{ saved = localStorage.getItem('flipcount-lang'); } catch(e){}
+    if(saved && SYSTEMS.some(s => s.id === saved)) sel.value = saved;
+
+    let value = 0;
+    let autoTimer = null;
+
+    function render(){
+      const sys = SYSTEMS.find(s => s.id === sel.value) || SYSTEMS[0];
+      const out = sys.f(value);
+      glyphEl.className = 'lang-glyph ' + out.cls;
+      glyphEl.dir = out.cls === 'rtl' ? 'rtl' : 'ltr';
+      if(out.cls === 'empty'){
+        glyphEl.textContent = out.read;
+        readingEl.textContent = '';
+      } else {
+        glyphEl.innerHTML = out.text.startsWith('<svg') ? out.text : '';
+        if(!out.text.startsWith('<svg')) glyphEl.textContent = out.text;
+        readingEl.textContent = out.read;
+      }
+      void glyphEl.offsetWidth;
+      glyphEl.classList.add('pop');
+      readEl.innerHTML = 'DECIMAL <b>' + value + '</b> &middot; BINARY <b>' + value.toString(2) + '</b>';
+      aboutEl.textContent = sys.about;
+    }
+
+    function setTo(next){
+      const size = MAX + 1;
+      value = ((next % size) + size) % size;
+      render();
+    }
+    function stopAuto(){
+      clearInterval(autoTimer);
+      autoTimer = null;
+      autoBtn.classList.remove('auto-on');
+      autoBtn.textContent = 'AUTO';
+    }
+
+    document.getElementById('langInc').addEventListener('click', () => setTo(value + 1));
+    document.getElementById('langDec').addEventListener('click', () => setTo(value - 1));
+    document.getElementById('langReset').addEventListener('click', () => { stopAuto(); setTo(0); });
+    autoBtn.addEventListener('click', () => {
+      if(autoTimer){ stopAuto(); return; }
+      autoTimer = setInterval(() => setTo(value + 1), 900);
+      autoBtn.classList.add('auto-on');
+      autoBtn.textContent = 'STOP';
+    });
+    gotoEl.addEventListener('change', () => {
+      const n = parseInt(gotoEl.value, 10);
+      if(!isNaN(n)) setTo(Math.max(0, Math.min(MAX, n)));
+    });
+    sel.addEventListener('change', () => {
+      try{ localStorage.setItem('flipcount-lang', sel.value); } catch(e){}
+      render();
+    });
+    document.addEventListener('flipcount:tab', (e) => { if(e.detail !== 'languages' && autoTimer) stopAuto(); });
+
+    render();
+  })();
+</script>
+
+<!-- =====================================================================
+     MOHAVE TECHNOLOGY GROUP // CREATOR SEAL
+     ===================================================================== -->
+<script>
+(function () {
+
+  var CONFIG = {
+    org:      "Mohave Technology Group",
+    monogram: "MTG",
+    mission:  "Practical software and hardware, built in the field.",
+    github:   "https://github.com/sudosilo",
+    linkedin: "https://www.linkedin.com/in/dicktemple"
+  };
+
+  var head = document.head || document.getElementsByTagName("head")[0];
+
+  head.appendChild(document.createComment(
+    " Made by " + CONFIG.org + " // " + CONFIG.github + " // " + CONFIG.linkedin + " "
+  ));
+
+  var metaAuthor = document.createElement("meta");
+  metaAuthor.setAttribute("name", "author");
+  metaAuthor.setAttribute("content", CONFIG.org);
+  head.appendChild(metaAuthor);
+
+  [CONFIG.github, CONFIG.linkedin].forEach(function (url) {
+    var l = document.createElement("link");
+    l.setAttribute("rel", "me");
+    l.setAttribute("href", url);
+    head.appendChild(l);
+  });
+
+  var ld = document.createElement("script");
+  ld.type = "application/ld+json";
+  ld.textContent = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": CONFIG.org,
+    "sameAs": [CONFIG.github, CONFIG.linkedin]
+  });
+  head.appendChild(ld);
+
+  var css = ''
+    + '.mtg-seal{box-sizing:border-box;width:100%;background:#efe9da;'
+    + 'border-top:1px solid #cabfa3;color:#2b2620;'
+    + 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;'
+    + 'padding:18px 20px;display:flex;flex-direction:column;align-items:center;gap:12px;'
+    + 'margin-top:40px;}'
+    + '.mtg-seal-row{display:flex;align-items:center;gap:14px;}'
+    + '.mtg-seal-btn{background:none;border:0;padding:0;margin:0;cursor:pointer;'
+    + 'display:flex;align-items:center;gap:14px;color:inherit;font:inherit;}'
+    + '.mtg-seal-svg{display:block;transition:transform .18s ease;}'
+    + '.mtg-seal.open .mtg-seal-svg{transform:scale(.94);}'
+    + '.mtg-seal-label{text-align:left;line-height:1.3;}'
+    + '.mtg-seal-org{font-family:Georgia,"Times New Roman",serif;font-size:14px;'
+    + 'letter-spacing:.3px;color:#2b2620;}'
+    + '.mtg-seal-ask{font-size:12px;color:#7a2e28;text-decoration:underline;}'
+    + '.mtg-seal-panel{overflow:hidden;max-height:0;opacity:0;'
+    + 'transition:max-height .25s ease,opacity .25s ease;width:100%;max-width:360px;}'
+    + '.mtg-seal.open .mtg-seal-panel{max-height:200px;opacity:1;}'
+    + '.mtg-seal-mission{font-style:italic;color:#4a443b;font-size:13px;'
+    + 'text-align:center;margin:0 0 12px;line-height:1.5;}'
+    + '.mtg-seal-links{display:flex;justify-content:center;gap:10px;}'
+    + '.mtg-seal-links a{flex:1;text-align:center;text-decoration:none;'
+    + 'font-size:13px;color:#2b2620;background:#faf7ef;border:1px solid #cabfa3;'
+    + 'border-radius:6px;padding:8px 10px;transition:background .15s ease;}'
+    + '.mtg-seal-links a:hover{background:#fff;}'
+    + '.mtg-seal-btn:focus-visible{outline:2px solid #7a2e28;outline-offset:3px;border-radius:4px;}'
+    + '.mtg-seal-links a:focus-visible{outline:2px solid #7a2e28;outline-offset:2px;}'
+    + '@media (prefers-reduced-motion: reduce){'
+    + '.mtg-seal-svg,.mtg-seal-panel{transition:none;}}';
+
+  var style = document.createElement("style");
+  style.textContent = css;
+  head.appendChild(style);
+
+  function buildSeal() {
+    var org = CONFIG.org.toUpperCase();
+    return ''
+      + '<svg class="mtg-seal-svg" viewBox="0 0 120 120" width="58" height="58" '
+      +   'role="img" aria-label="' + CONFIG.org + ' seal">'
+      +   '<defs>'
+      +     '<path id="mtgTop" d="M 23,60 A 37,37 0 0 1 97,60" fill="none"/>'
+      +   '</defs>'
+      +   '<circle cx="60" cy="60" r="55" fill="none" stroke="#7a2e28" stroke-width="2.5"/>'
+      +   '<circle cx="60" cy="60" r="48" fill="none" stroke="#7a2e28" stroke-width="1"/>'
+      +   '<text font-family="Georgia,serif" font-size="8" fill="#7a2e28">'
+      +     '<textPath href="#mtgTop" startOffset="50%" text-anchor="middle" '
+      +     'textLength="106" lengthAdjust="spacingAndGlyphs">'
+      +     org + '</textPath>'
+      +   '</text>'
+      +   '<text x="60" y="60" text-anchor="middle" dominant-baseline="central" '
+      +     'font-family="Georgia,serif" font-weight="700" font-size="27" '
+      +     'fill="#7a2e28">' + CONFIG.monogram + '</text>'
+      +   '<g fill="#7a2e28">'
+      +     '<rect x="58" y="83.5" width="4" height="4"/>'
+      +     '<rect x="63" y="88.5" width="4" height="4"/>'
+      +     '<rect x="53" y="93.5" width="4" height="4"/>'
+      +     '<rect x="58" y="93.5" width="4" height="4"/>'
+      +     '<rect x="63" y="93.5" width="4" height="4"/>'
+      +   '</g>'
+      + '</svg>';
+  }
+
+  var seal = document.createElement("footer");
+  seal.className = "mtg-seal";
+  seal.innerHTML = ''
+    + '<div class="mtg-seal-row">'
+    +   '<button class="mtg-seal-btn" type="button" aria-expanded="false">'
+    +     buildSeal()
+    +     '<span class="mtg-seal-label">'
+    +       '<span class="mtg-seal-org">' + CONFIG.org + '</span><br>'
+    +       '<span class="mtg-seal-ask">Who made this?</span>'
+    +     '</span>'
+    +   '</button>'
+    + '</div>'
+    + '<div class="mtg-seal-panel">'
+    +   '<p class="mtg-seal-mission">' + CONFIG.mission + '</p>'
+    +   '<div class="mtg-seal-links">'
+    +     '<a href="' + CONFIG.github + '" target="_blank" rel="noopener me">GitHub</a>'
+    +     '<a href="' + CONFIG.linkedin + '" target="_blank" rel="noopener me">LinkedIn</a>'
+    +   '</div>'
+    + '</div>';
+
+  var btn = seal.querySelector(".mtg-seal-btn");
+  btn.addEventListener("click", function () {
+    var nowOpen = seal.classList.toggle("open");
+    btn.setAttribute("aria-expanded", nowOpen ? "true" : "false");
+  });
+
+  document.body.appendChild(seal);
+
+})();
+</script>
+<!-- ===================== END CREATOR SEAL ===================== -->
+</body>
+</html>

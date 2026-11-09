@@ -4,8 +4,10 @@ Road Layers is a browser tool for stacking cars from several drives onto one roa
 
 You pick two or more clips of the same stretch. One clip is marked Base and supplies the road. Each drive started recording at a different spot, so an auto line up step makes every clip start at the same place, with a flip view or a see through view to check it. Then you set the length, frames per second, width, and detection strength, and build a composite. The result can be scrubbed, played, tinted by clip, and recorded as a video.
 
+It also has a Record tab, an in app recording library, stop motion capture, a Map tab for coverage routes, and a Road tab that tracks lane lines and bends.
+
 Live at downfree-foundry.vercel.app
 
-Latest change. 2026-11-07, v2026.11.07. Added a Record tab to Road Layers. It records from the phone camera and keeps a timing log with the GPS position.
+Latest change. 2026-11-08, v2026.11.08. Recordings now save inside the app in a library, with crash recovery and a battery stop. Added stop motion capture by distance or time, alongside or instead of full video. Added a Map tab with coverage routes, spot search, and projects. Added a Road tab that tracks lane lines, the vanishing point, and bends, and can lock onto your own lane on multi lane roads. The composite step now lets you pick which roadside things to cut out.
 
 Full history is in CHANGELOG.md.
