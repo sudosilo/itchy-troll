@@ -1,3 +1,5 @@
+2026-11-09, v2026.11.09. Added a Music tab to Road Layers. It finds kick, snare, and hi-hat hits in a song, and cutouts pop in on the hits with the song playing in the composite and in recordings. Play and pause are more reliable, dragging to pan no longer pulls you back, and each kind of cutout gets a color coded drum.
+
 2026-11-08, v2026.11.08. Recordings now save inside the app in a library, with crash recovery and a battery stop. Added stop motion capture by distance or time, alongside or instead of full video. Added a Map tab with coverage routes, spot search, and projects. Added a Road tab that tracks lane lines, the vanishing point, and bends, and can lock onto your own lane on multi lane roads. The composite step now lets you pick which roadside things to cut out.
 
 2026-11-07, v2026.11.07. Added a Record tab to Road Layers. It records from the phone camera and keeps a timing log with the GPS position.

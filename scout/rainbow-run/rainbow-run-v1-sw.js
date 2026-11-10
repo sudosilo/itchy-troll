@@ -4,7 +4,7 @@
    After that the show plays from the phone itself, and the network only carries the clock and the cues.
    Pages and scripts still try the network first, so a new deploy reaches the phones, and fall back to the copy
    on the phone when the network is jammed. Videos always play from the copy on the phone. */
-const VERSION = "rainbow-run-v1-2026-11-08a";
+const VERSION = "rainbow-run-v1-2026-11-09a";
 const LIST = "rainbow-run-v1-assets.json";
 
 self.addEventListener("install", e => {

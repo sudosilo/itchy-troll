@@ -6,6 +6,6 @@ A viewer shows the city on a chunked line world, with a section cut for tall str
 
 Live at 2026-10-18-orange-testbed.vercel.app
 
-Latest change. 2026-11-09, v2026.11.09. The agent turn for the day was played and merged into the city.
+Latest change. 2026-11-10, v2026.11.10. The agent turn for the day was played and merged into the city.
 
 The full history is in CHANGELOG.md.

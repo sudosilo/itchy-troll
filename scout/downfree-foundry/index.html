@@ -85,6 +85,13 @@ a.save{display:inline-block;margin-top:10px;color:var(--accent);font-weight:600}
 .band .row{margin-top:4px}
 .band b{display:inline-block;min-width:70px}
 .trig{font-size:14px;padding:4px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink)}
+.assign{margin-top:8px}
+.arow{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.arow:last-child{border-bottom:0}
+.arow .chip{width:16px;height:16px;border-radius:5px;flex:none}
+.arow span{flex:1;font-size:15px}
+.arow select{font-size:15px;padding:6px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+.fl small{display:block;font-weight:600;font-size:11px;letter-spacing:0;margin-top:2px;opacity:.85}
 </style>
 </head>
 <body>
@@ -195,12 +202,13 @@ a.save{display:inline-block;margin-top:10px;color:var(--accent);font-weight:600}
 <canvas id="out"></canvas>
 <div class="row"><input id="scrub" type="range" min="0" max="0" value="0"><span class="num" id="frameNum">0</span></div>
 <div class="layers" id="layerToggles"></div>
-<div class="layers"><label><input id="tint" type="checkbox"> Tint masks by clip</label></div>
+<div class="grid" style="margin-top:6px"><label>Tint cutouts<select id="tintMode"><option value="off">no tint</option><option value="clip">by clip</option><option value="drum">by drum color</option></select></label></div>
 <div class="grid" style="margin-top:10px">
 <label>Play with song<select id="compSong"><option value="">No song</option></select></label>
 <label>Cutouts stay up for<select id="holdSel"><option value="0.1">0.1 second</option><option value="0.2" selected>0.2 second</option><option value="0.4">0.4 second</option><option value="0.8">0.8 second</option></select></label>
 </div>
-<p class="hint">With a song picked, set each clip above to show always, or only on kick, snare or hi-hat hits. The video loops under the song and recording keeps the sound.</p>
+<p class="hint" style="margin-bottom:0">With a song picked, each kind of cutout pops in on its drum. The video loops under the song and recording keeps the sound.</p>
+<div class="assign" data-assign></div>
 <div class="btns">
 <button id="playBtn">Play</button>
 <button id="recBtn" class="ghost">Record video</button>
@@ -224,16 +232,23 @@ a.save{display:inline-block;margin-top:10px;color:var(--accent);font-weight:600}
 <div class="stat"><b id="sLen">0:00</b><span>length</span></div>
 <div class="stat"><b id="sNow">0:00</b><span>playing at</span></div>
 </div>
-<div class="flashes"><span class="fl" id="flkick">KICK</span><span class="fl" id="flsnare">SNARE</span><span class="fl" id="flhats">HATS</span></div>
-<canvas id="beatCanvas" width="1000" height="320" style="margin-top:10px;touch-action:none"></canvas>
+<div class="flashes"><span class="fl" id="flkick">KICK / BASS</span><span class="fl" id="flsnare">SNARE</span><span class="fl" id="flhats">HI-HAT</span></div>
+<canvas id="beatCanvas" width="1000" height="320" style="margin-top:10px;touch-action:pan-y"></canvas>
 <div class="grid" style="margin-top:8px">
 <label>Show<select id="beatZoom"><option value="0">whole song</option><option value="30">30 seconds</option><option value="10" selected>10 seconds</option></select></label>
 <label>Scroll<input id="beatScroll" type="range" min="0" max="1000" value="0"></label>
 </div>
-<div class="btns"><button id="songPlay">Play</button></div>
+<div class="btns"><button id="songPlay">Play</button><button id="songStop" class="ghost">Back to start</button></div>
+<div class="layers"><label><input id="followHead" type="checkbox" checked> Follow the playhead</label></div>
+<p class="hint" style="margin-top:4px">Drag the timeline sideways to look around. That turns off Follow the playhead. Tap the timeline to jump the song there.</p>
 <div id="bandRows"></div>
-<p class="hint">Raise sensitivity to catch quieter hits, lower it to keep only the strong ones. Tap the timeline to jump there.</p>
+<p class="hint">Raise sensitivity to catch quieter hits, lower it to keep only the strong ones.</p>
 </div>
+</section>
+<section class="card">
+<h2>What pops on each drum</h2>
+<p class="hint" style="margin-top:0">Each drum has a color. Assign each kind of thing the app finds to a drum, to always, or to never. Composite uses this table.</p>
+<div class="assign" data-assign></div>
 </section>
 <section class="card">
 <h2>Saved songs</h2>
@@ -857,19 +872,57 @@ function showResult(){
   tg.innerHTML = "";
   clips.forEach((c, k) => {
     const l = document.createElement("label");
-    l.innerHTML = '<input type="checkbox"' + (c.enabled ? " checked" : "") + '><span class="sw" style="background:' + COLORS[k % COLORS.length] + '"></span><span></span>' +
-      '<select class="trig"><option value="always">always</option><option value="kick">on kick</option><option value="snare">on snare</option><option value="hats">on hi-hat</option></select>';
-    l.querySelector("span:last-of-type").textContent = "Clip " + (k + 1) + (k === baseIdx ? " (base)" : "") + " cutouts";
+    l.innerHTML = '<input type="checkbox"' + (c.enabled ? " checked" : "") + '><span class="sw" style="background:' + COLORS[k % COLORS.length] + '"></span><span></span>';
+    l.lastChild.textContent = "Clip " + (k + 1) + (k === baseIdx ? " (base)" : "") + " cutouts";
     l.firstChild.addEventListener("change", e => { c.enabled = e.target.checked; if (!playing) drawFrame(cur); });
-    const trig = l.querySelector("select");
-    trig.value = c.trigger || "always";
-    trig.addEventListener("change", () => { c.trigger = trig.value; });
     tg.appendChild(l);
   });
   cur = 0; drawFrame(0);
 }
 
 let cur = 0, playing = false, recorder = null, recChunks = [];
+
+// ---- drum assignments: which kind of cutout pops on which drum ----
+const DRUM_COLORS = { kick: "#d2601a", snare: "#1f6f8b", hats: "#3f8f3a", always: "#7a7f86", never: "#c9c4b8" };
+const DRUM_NAMES = { always: "always", kick: "kick / bass", snare: "snare", hats: "hi-hat", never: "never" };
+const KINDS = [
+  { key: "trucks", name: "Trucks and buses", classes: [5, 7], def: "kick" },
+  { key: "cars", name: "Cars", classes: [2], def: "snare" },
+  { key: "moto", name: "Motorcycles and bicycles", classes: [3, 1], def: "hats" },
+  { key: "street", name: "Traffic lights, signs, hydrants, meters, benches", classes: [9, 10, 11, 12, 13], def: "hats" },
+  { key: "people", name: "People", classes: [0], def: "always" },
+  { key: "animals", name: "Animals and birds", classes: [14, 15, 16, 17, 18, 19, 20, 21, 22, 23], def: "always" },
+  { key: "trains", name: "Trains", classes: [6], def: "kick" }
+];
+const KIND_OF = {};
+for (const k of KINDS) for (const c of k.classes) KIND_OF[c] = k.key;
+let ASSIGN = {};
+try { ASSIGN = JSON.parse(localStorage.getItem("drumAssign") || "{}"); } catch (e) {}
+for (const k of KINDS) if (!ASSIGN[k.key]) ASSIGN[k.key] = k.def;
+function saveAssign(){ try { localStorage.setItem("drumAssign", JSON.stringify(ASSIGN)); } catch (e) {} }
+function drumFor(cls){ return ASSIGN[KIND_OF[cls]] || "always"; }
+
+// draws the table into every place that shows it, and keeps them in step
+function renderAssign(){
+  for (const box of document.querySelectorAll("[data-assign]")){
+    box.innerHTML = "";
+    for (const k of KINDS){
+      const row = document.createElement("div");
+      row.className = "arow";
+      row.innerHTML = '<i class="chip"></i><span></span><select>' + Object.keys(DRUM_NAMES).map(d => '<option value="' + d + '">' + DRUM_NAMES[d] + '</option>').join("") + '</select>';
+      row.querySelector("span").textContent = k.name;
+      row.querySelector(".chip").style.background = DRUM_COLORS[ASSIGN[k.key]];
+      const sel = row.querySelector("select");
+      sel.value = ASSIGN[k.key];
+      sel.addEventListener("change", () => {
+        ASSIGN[k.key] = sel.value; saveAssign(); renderAssign();
+        if (typeof renderFlashLabels === "function") renderFlashLabels();
+        if (frames.length && !playing) drawFrame(cur);
+      });
+      box.appendChild(row);
+    }
+  }
+}
 
 // true when a hit of this band happened within the hold time before t
 function hitActive(times, t, hold){
@@ -878,12 +931,13 @@ function hitActive(times, t, hold){
   while (lo <= hi){ const m = (lo + hi) >> 1; if (times[m] <= t){ idx = m; lo = m + 1; } else hi = m - 1; }
   return idx >= 0 && t - times[idx] < hold;
 }
-function clipVisible(k, songT){
-  const c = clips[k];
+function cutVisible(cut, songT){
+  const c = clips[cut.clip];
   if (!c || !c.enabled) return false;
-  const trig = c.trigger || "always";
-  if (trig === "always" || songT == null || !compSongData) return true;
-  return hitActive(compSongData.bands[trig] && compSongData.bands[trig].times, songT, parseFloat($("holdSel").value) || 0.2);
+  const drum = drumFor(cut.cls);
+  if (drum === "never") return false;
+  if (drum === "always" || songT == null || !compSongData) return true;
+  return hitActive(compSongData.bands[drum] && compSongData.bands[drum].times, songT, parseFloat($("holdSel").value) || 0.2);
 }
 
 async function drawFrame(i, songT){
@@ -891,10 +945,10 @@ async function drawFrame(i, songT){
   const ctx = $("out").getContext("2d");
   const bg = await createImageBitmap(f.blob);
   ctx.drawImage(bg, 0, 0, outW, outH); bg.close();
-  const tint = $("tint").checked;
+  const tintMode = $("tintMode").value, tint = tintMode !== "off";
   let shown = 0;
   for (const c of f.cuts){
-    if (!clipVisible(c.clip, songT)) continue;
+    if (!cutVisible(c, songT)) continue;
     shown++;
     if (tint){
       tintCanvas.width = c.w; tintCanvas.height = c.h;
@@ -903,7 +957,7 @@ async function drawFrame(i, songT){
       tintCtx.drawImage(c.bmp, 0, 0);
       tintCtx.globalCompositeOperation = "source-atop";
       tintCtx.globalAlpha = 0.45;
-      tintCtx.fillStyle = COLORS[c.clip % COLORS.length];
+      tintCtx.fillStyle = tintMode === "drum" ? DRUM_COLORS[drumFor(c.cls)] : COLORS[c.clip % COLORS.length];
       tintCtx.fillRect(0, 0, c.w, c.h);
       tintCtx.globalAlpha = 1;
       ctx.drawImage(tintCanvas, c.x, c.y);
@@ -914,12 +968,13 @@ async function drawFrame(i, songT){
   $("scrub").value = i;
   $("frameNum").textContent = (i + 1) + "/" + frames.length;
   const kinds = {};
-  for (const c of f.cuts) if (clipVisible(c.clip, songT)) kinds[c.cls] = (kinds[c.cls] || 0) + 1;
+  for (const c of f.cuts) if (cutVisible(c, songT)) kinds[c.cls] = (kinds[c.cls] || 0) + 1;
   $("outStatus").textContent = shown + " cutouts on this frame" + (shown ? ": " + Object.entries(kinds).map(([c, n]) => n + " " + (CLASS_NAMES[c] || c)).join(", ") : "");
 }
 
 $("scrub").addEventListener("input", e => { stopPlay(); cur = parseInt(e.target.value); drawFrame(cur); });
-$("tint").addEventListener("change", () => { if (!playing) drawFrame(cur); });
+$("tintMode").addEventListener("change", () => { if (!playing) drawFrame(cur); });
+renderAssign();
 
 function stopPlay(){ playing = false; $("playBtn").textContent = "Play"; if (songAudio) songAudio.pause(); }
 
@@ -2154,13 +2209,50 @@ function drawBeats(){
   if (ph >= v0 && ph <= v0 + vl){ ctx.fillStyle = "#b3261e"; ctx.fillRect(X(ph) - 2, 0, 4, H); }
 }
 $("beatZoom").addEventListener("change", drawBeats);
-$("beatScroll").addEventListener("input", drawBeats);
-$("beatCanvas").addEventListener("click", e => {
-  if (!song) return;
-  const r = e.target.getBoundingClientRect(), [v0, vl] = viewWindow();
-  musicAudio.currentTime = v0 + (e.clientX - r.left) / r.width * vl;
-  drawBeats();
-});
+$("beatScroll").addEventListener("input", () => { $("followHead").checked = false; drawBeats(); });
+// drag sideways to pan the view, tap to jump the song
+(() => {
+  const cv = $("beatCanvas");
+  let down = null;
+  cv.addEventListener("pointerdown", e => { down = { x: e.clientX, y: e.clientY, scroll: parseInt($("beatScroll").value), moved: false }; });
+  cv.addEventListener("pointermove", e => {
+    if (!down || !song) return;
+    const dx = e.clientX - down.x;
+    if (!down.moved && Math.abs(dx) < 8) return;
+    if (!down.moved && Math.abs(e.clientY - down.y) > Math.abs(dx)) { down = null; return; }  // vertical: let the page scroll
+    down.moved = true;
+    const dur = song.data.duration, [, vl] = viewWindow();
+    if (vl >= dur) return;
+    const r = cv.getBoundingClientRect();
+    const dt = -dx / r.width * vl;
+    const v = Math.min(1000, Math.max(0, down.scroll + dt / (dur - vl) * 1000));
+    $("beatScroll").value = Math.round(v);
+    $("followHead").checked = false;
+    drawBeats();
+  });
+  const up = e => {
+    if (down && !down.moved && song){
+      const r = cv.getBoundingClientRect(), [v0, vl] = viewWindow();
+      musicAudio.currentTime = Math.max(0, Math.min(song.data.duration - 0.05, v0 + (e.clientX - r.left) / r.width * vl));
+      tickMusic();
+    }
+    down = null;
+  };
+  cv.addEventListener("pointerup", up);
+  cv.addEventListener("pointercancel", () => { down = null; });
+})();
+
+function renderFlashLabels(){
+  for (const d of ["kick", "snare", "hats"]){
+    const el = $("fl" + d);
+    const kinds = KINDS.filter(k => ASSIGN[k.key] === d).map(k => k.name.split(",")[0].toLowerCase());
+    el.innerHTML = "";
+    el.append(DRUM_NAMES[d].toUpperCase());
+    const sm = document.createElement("small"); sm.textContent = kinds.length ? kinds.join(", ") : "nothing assigned";
+    el.appendChild(sm);
+  }
+}
+renderFlashLabels();
 
 function tickMusic(){
   if (!song) return;
@@ -2172,22 +2264,23 @@ function tickMusic(){
   }
   // keep the playhead in view while playing
   const [v0, vl] = viewWindow(), dur = song.data.duration;
-  if (!musicAudio.paused && (t < v0 || t > v0 + vl * 0.9) && vl < dur){
+  if ($("followHead").checked && !musicAudio.paused && (t < v0 || t > v0 + vl * 0.9) && vl < dur){
     $("beatScroll").value = Math.round(Math.min(1, Math.max(0, (t - vl * 0.1) / (dur - vl))) * 1000);
   }
   drawBeats();
 }
+// the button follows the audio's own play and pause events, so it can't get out of step
+musicAudio.addEventListener("play", () => { $("songPlay").textContent = "Pause"; clearInterval(songTimer); songTimer = setInterval(tickMusic, 30); });
+musicAudio.addEventListener("pause", () => { $("songPlay").textContent = "Play"; clearInterval(songTimer); tickMusic(); });
+musicAudio.addEventListener("ended", () => { $("songPlay").textContent = "Play"; clearInterval(songTimer); tickMusic(); });
 $("songPlay").addEventListener("click", async () => {
   if (!song) return;
-  if (musicAudio.paused){
-    try { await musicAudio.play(); } catch (e){ $("songStatus").textContent = "Could not play: " + e.message; return; }
-    $("songPlay").textContent = "Pause";
-    clearInterval(songTimer); songTimer = setInterval(tickMusic, 30);
-  } else {
-    musicAudio.pause(); $("songPlay").textContent = "Play";
-  }
+  if (musicAudio.paused || musicAudio.ended){
+    if (musicAudio.ended) musicAudio.currentTime = 0;
+    try { await musicAudio.play(); } catch (e){ $("songStatus").textContent = "Could not play: " + e.message; }
+  } else musicAudio.pause();
 });
-musicAudio.addEventListener("ended", () => { $("songPlay").textContent = "Play"; clearInterval(songTimer); tickMusic(); });
+$("songStop").addEventListener("click", () => { musicAudio.pause(); musicAudio.currentTime = 0; $("beatScroll").value = 0; $("followHead").checked = true; tickMusic(); });
 
 $("songGo").addEventListener("click", async () => {
   const f = $("songFile").files[0];

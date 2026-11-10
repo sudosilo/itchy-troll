@@ -86,7 +86,7 @@ function sample(frame, u, v) {
 
 /* The scenes Rainbow Run can run, in the groups its own menu shows. */
 const GROUPS = [
-  ["Wall", [["crow", "Crow"], ["highway", "Highway"], ["rain", "Rain"], ["stars", "Stars"]]],
+  ["Wall", [["crow", "Crow"], ["highway", "Highway"], ["rain", "Rain"], ["stars", "Stars"], ["train", "Train window"]]],
   ["Roads", [["cars", "Cars"], ["carpark", "Car park"], ["race", "Car race"], ["bikes", "Downhill bikes"], ["cheese", "Cheese roll"]]],
   ["Sky", [["planes", "Planes"], ["birds", "Birds"], ["satellites", "Satellites"], ["polar", "Polar"], ["tornado", "Tornado"]]],
   ["Water", [["fish", "Fish"], ["galleon", "Galleon"], ["river", "River"], ["boatrace", "Boat race"]]],
