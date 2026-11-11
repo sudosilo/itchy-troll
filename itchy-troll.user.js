@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Itchy Troll page filler
 // @namespace    sudosilo-itchy-troll
-// @version      1.4.0
+// @version      1.5.0
 // @description  Fills an itch.io edit page from pages/REPO.json in the itchy-troll repo
 // @match        https://itch.io/game/edit/*
 // @match        https://itch.io/game/new*
@@ -193,7 +193,11 @@
 
   function setGenre(name) {
     const sel = q('select[name="game[genre]"]') || q('select[name*="genre"]') ||
-      [...document.querySelectorAll('select')].find((s) => [...s.options].some((o) => /no genre/i.test(o.textContent)));
+      [...document.querySelectorAll('select')].find((s) => [...s.options].some((o) => /no genre/i.test(o.textContent))) ||
+      [...document.querySelectorAll('select')].find((s) => {
+        const t = [...s.options].map((o) => o.textContent.trim().toLowerCase());
+        return t.includes('platformer') && t.includes('simulation');
+      });
     if (!sel) return false;
     const want = name.trim().toLowerCase();
     const opt = [...sel.options].find((o) => o.textContent.trim().toLowerCase() === want) ||
@@ -224,6 +228,38 @@
     return joined.length > 0;
   }
 
+  function labelInput(re) {
+    const lab = [...document.querySelectorAll('label')].find((l) => re.test((l.textContent || '').replace(/\s+/g, ' ').trim()));
+    if (!lab) return null;
+    return lab.querySelector('input') || (lab.htmlFor && document.getElementById(lab.htmlFor)) || null;
+  }
+
+  function tick(input, on) {
+    if (!input) return false;
+    if (input.checked !== on) input.click();
+    if (input.checked !== on) { input.checked = on; poke(input); }
+    return input.checked === on;
+  }
+
+  // Answers the AI generation disclosure with Yes. itch.io will not save the page while it is blank.
+  function setAiYes() {
+    const input = labelInput(/^Yes\b.*Generative AI/i);
+    return tick(input, true);
+  }
+
+  // Kind of project HTML, the html5 upload played in the browser, pricing Paid.
+  function setHtmlPaid() {
+    const notes = [];
+    const kind = [...document.querySelectorAll('select')].find((s) => [...s.options].some((o) => /^\s*HTML/i.test(o.textContent)));
+    if (kind) {
+      const opt = [...kind.options].find((o) => /^\s*HTML/i.test(o.textContent));
+      if (kind.value !== opt.value) { kind.value = opt.value; poke(kind); }
+    } else notes.push('kind HTML');
+    if (!tick(labelInput(/played in the browser/i), true)) notes.push('played in the browser box');
+    if (!tick(labelInput(/^Paid$/i), true)) notes.push('Paid pricing');
+    return notes;
+  }
+
   function findSave() {
     return [...document.querySelectorAll('button, input[type="submit"]')].find((b) => /^\s*save\s*$/i.test(b.textContent || b.value || ''));
   }
@@ -248,6 +284,10 @@
   }
 
   const ui = panel();
+  try {
+    const done = sessionStorage.getItem('itchy-saved');
+    if (done) { sessionStorage.removeItem('itchy-saved'); ui.msg.textContent = done; }
+  } catch (e) {}
 
   if (/^\/game\/new/.test(location.pathname)) {
     ui.btn.textContent = 'Create next game from Itchy Troll';
@@ -311,10 +351,8 @@
     if (spec.tagline && !setTagline(spec.tagline)) missed.push('tagline');
     if (spec.description && !setDescription(spec.description)) missed.push('description');
     if (spec.tags && spec.tags.length && !setTags(spec.tags)) missed.push('tags');
-    if (missed.length) {
-      ui.msg.textContent = `Filled the rest. Could not find: ${missed.join(', ')}. Nothing saved yet.`;
-      return;
-    }
+    missed.push(...setHtmlPaid());
+    if (!setAiYes()) missed.push('AI disclosure');
     const imgNotes = [];
     if (spec.cover || (spec.screenshots && spec.screenshots.length)) {
       armPicker();
@@ -343,17 +381,15 @@
       await waitForUploads(60000);
     }
     const imgText = imgNotes.length ? ` Images: ${imgNotes.join(', ')}.` : '';
-    const skipped = spec.genre && !(await pickGenre(spec.genre)) ? ` Genre ${spec.genre} not set, pick it by hand.` : '';
-    if (skipped) {
-      ui.msg.textContent = `Filled.${imgText}${skipped} Then tap Save.`;
-      return;
-    }
+    if (spec.genre && !(await pickGenre(spec.genre))) missed.push(`genre ${spec.genre}`);
+    const missText = missed.length ? ` Set by hand later: ${missed.join(', ')}.` : '';
     const save = findSave();
     if (!save) {
-      ui.msg.textContent = 'Filled. Save button not found, tap Save yourself.';
+      ui.msg.textContent = `Filled.${imgText}${missText} Save button not found, tap Save yourself.`;
       return;
     }
-    ui.msg.textContent = `Filled.${imgText} Saving...`;
+    ui.msg.textContent = `Filled.${imgText}${missText} Saving now. The page reloads when itch.io accepts it.`;
+    try { sessionStorage.setItem('itchy-saved', `Itchy Troll tapped Save. A red error box at the top of the page means itch.io refused it.${missText}`); } catch (e) {}
     save.click();
   };
 })();
