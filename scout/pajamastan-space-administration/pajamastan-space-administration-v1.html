@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Pajamastan Space Administration</title>
+<style>
+  :root {
+    --blue: #1e6fd9;
+    --blue-soft: #e3efff;
+    --ink: #17324d;
+    --muted: #5d7590;
+    --panel: rgba(255,255,255,0.94);
+    --line: #c9dcf3;
+    --good: #2e9e5b;
+    --warn: #d98a1e;
+    --bad: #d33f3f;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--ink);
+    background: linear-gradient(180deg, #dcebfb 0%, #f4f9ff 55%, #ffffff 100%);
+  }
+  #scene { position: fixed; inset: 0; width: 100vw; height: 100dvh; display: block; touch-action: none; }
+
+  #topbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 54px;
+    display: flex; align-items: center; gap: 10px; padding: 0 10px;
+    background: var(--panel); border-bottom: 2px solid var(--blue); z-index: 20;
+  }
+  .iconbtn {
+    width: 40px; height: 40px; flex: 0 0 40px; border-radius: 10px;
+    border: 1.5px solid var(--blue); background: #fff; color: var(--blue);
+    font-size: 20px; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  }
+  .iconbtn:active { background: var(--blue-soft); }
+  #title { flex: 1 1 auto; min-width: 0; line-height: 1.1; }
+  #title b { display: block; font-size: 15px; color: var(--blue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #title span { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+
+  #stressbadge {
+    position: fixed; top: 64px; right: 10px; width: 112px; height: 72px; z-index: 15;
+    background: var(--panel); border: 2px solid var(--blue); border-radius: 12px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  #stressbadge small { font-size: 10px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+  #stressval { font-size: 26px; font-weight: 800; }
+  #stresstxt { font-size: 11px; font-weight: 600; }
+
+  #scalebadge {
+    position: fixed; top: 64px; left: 10px; height: 72px; z-index: 15;
+    background: var(--panel); border: 2px solid var(--blue); border-radius: 12px;
+    display: flex; gap: 6px; align-items: center; padding: 0 8px;
+  }
+  .scale { width: 40px; text-align: center; }
+  .scale b { display: block; font-size: 20px; }
+  .scale small { font-size: 9px; color: var(--muted); text-transform: uppercase; }
+
+  #panel {
+    position: fixed; left: 0; right: 0; bottom: 0; height: 38dvh; z-index: 15;
+    background: var(--panel); border-top: 2px solid var(--blue);
+    display: flex; flex-direction: column;
+  }
+  #tabs { display: flex; flex: 0 0 44px; border-bottom: 1px solid var(--line); }
+  .tab {
+    flex: 1 1 0; border: none; background: transparent; font-size: 13px; font-weight: 700;
+    color: var(--muted); border-bottom: 3px solid transparent;
+  }
+  .tab.on { color: var(--blue); border-bottom-color: var(--blue); }
+  #tabbody { flex: 1 1 auto; overflow-y: auto; padding: 8px 12px 16px; -webkit-overflow-scrolling: touch; }
+  .page { display: none; }
+  .page.on { display: block; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: #fff; }
+  .card small { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  .card b { font-size: 18px; }
+  .card i { font-style: normal; font-size: 11px; color: var(--muted); }
+  .wide { grid-column: span 2; }
+  .meter { height: 8px; border-radius: 4px; background: var(--blue-soft); margin-top: 6px; overflow: hidden; }
+  .meter > div { height: 100%; width: 0; background: var(--blue); transition: width .6s; }
+  .ev { border-left: 3px solid var(--blue); padding: 6px 8px; margin-bottom: 8px; background: #fff; border-radius: 0 8px 8px 0; font-size: 13px; }
+  .ev small { display: block; color: var(--muted); font-size: 11px; }
+  .ev pre { white-space: pre-wrap; font-family: inherit; font-size: 12px; margin: 4px 0 0; color: var(--ink); }
+  .empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+  h4 { margin: 10px 0 6px; font-size: 12px; color: var(--blue); text-transform: uppercase; letter-spacing: .05em; }
+
+  #menuveil { position: fixed; inset: 0; background: rgba(23,50,77,0.18); z-index: 40; display: none; }
+  #menu {
+    position: fixed; top: 0; left: 0; bottom: 0; width: min(78vw, 320px); z-index: 41;
+    background: #fff; border-right: 2px solid var(--blue); transform: translateX(-105%);
+    transition: transform .22s ease; overflow-y: auto; padding: 0 0 24px;
+  }
+  #menu.open { transform: translateX(0); }
+  #menuveil.open { display: block; }
+  #menuhead { height: 54px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-bottom: 2px solid var(--blue); }
+  #menuhead b { color: var(--blue); }
+  details { border-bottom: 1px solid var(--line); }
+  summary { padding: 14px 14px; font-weight: 700; color: var(--ink); list-style: none; cursor: pointer; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "▾"; float: right; color: var(--blue); }
+  details[open] summary::after { content: "▴"; }
+  .opt { display: flex; align-items: center; gap: 10px; padding: 9px 16px; font-size: 14px; }
+  .opt input { width: 20px; height: 20px; accent-color: var(--blue); }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .menutext { padding: 4px 16px 12px; font-size: 13px; color: var(--muted); line-height: 1.45; }
+  .src { font-size: 12px; padding: 3px 16px; }
+  .src .ok { color: var(--good); font-weight: 700; }
+  .src .no { color: var(--bad); font-weight: 700; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div id="topbar">
+  <button class="iconbtn" id="menubtn" aria-label="Menu">☰</button>
+  <div id="title"><b>Pajamastan Space Administration</b><span id="updated">Loading space weather…</span></div>
+  <button class="iconbtn" id="refreshbtn" aria-label="Refresh">⟳</button>
+</div>
+
+<div id="scalebadge">
+  <div class="scale"><b id="scR">R0</b><small>Radio</small></div>
+  <div class="scale"><b id="scS">S0</b><small>Radiation</small></div>
+  <div class="scale"><b id="scG">G0</b><small>Geomag</small></div>
+</div>
+
+<div id="stressbadge">
+  <small>Planet stress</small>
+  <div id="stressval">--</div>
+  <div id="stresstxt">loading</div>
+</div>
+
+<div id="panel">
+  <div id="tabs">
+    <button class="tab on" data-p="now">Now</button>
+    <button class="tab" data-p="sat">Satellites</button>
+    <button class="tab" data-p="field">Field</button>
+    <button class="tab" data-p="events">Events</button>
+    <button class="tab" data-p="alerts">Alerts</button>
+  </div>
+  <div id="tabbody">
+    <div class="page on" id="p-now">
+      <div class="grid">
+        <div class="card"><small>Kp index</small><b id="vKp">--</b> <i id="vKpT"></i></div>
+        <div class="card"><small>Kp forecast max</small><b id="vKpF">--</b> <i>next 3 days</i></div>
+        <div class="card"><small>Solar wind speed</small><b id="vV">--</b> <i>km/s</i></div>
+        <div class="card"><small>Proton density</small><b id="vN">--</b> <i>p/cm³</i></div>
+        <div class="card"><small>IMF Bz (GSM)</small><b id="vBz">--</b> <i>nT</i></div>
+        <div class="card"><small>IMF Bt</small><b id="vBt">--</b> <i>nT</i></div>
+        <div class="card"><small>Dynamic pressure</small><b id="vPd">--</b> <i>nPa</i></div>
+        <div class="card"><small>Solar radio flux</small><b id="vF">--</b> <i>sfu (10.7 cm)</i></div>
+        <div class="card wide"><small>Planet stress breakdown</small>
+          <div id="stressparts" style="font-size:12px;color:var(--muted);margin-top:4px">--</div>
+          <div class="meter"><div id="stressmeter"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page" id="p-sat">
+      <div class="grid">
+        <div class="card wide"><small>Radiation hit risk (single event upsets, panel wear)</small>
+          <b id="satRad">--</b> <i id="satRadV"></i><div class="meter"><div id="mRad"></div></div></div>
+        <div class="card wide"><small>Charging risk (high energy electrons)</small>
+          <b id="satChg">--</b> <i id="satChgV"></i><div class="meter"><div id="mChg"></div></div></div>
+        <div class="card wide"><small>Low orbit drag (atmosphere swelling)</small>
+          <b id="satDrag">--</b> <i id="satDragV"></i><div class="meter"><div id="mDrag"></div></div></div>
+        <div class="card wide"><small>Radio and GPS disruption</small>
+          <b id="satRadio">--</b> <i id="satRadioV"></i><div class="meter"><div id="mRadio"></div></div></div>
+      </div>
+    </div>
+
+    <div class="page" id="p-field">
+      <div class="grid">
+        <div class="card"><small>Magnetopause nose</small><b id="vR0">--</b> <i>Earth radii</i></div>
+        <div class="card"><small>Geostationary orbit</small><b>6.6</b> <i>Earth radii</i></div>
+        <div class="card wide"><small>Geostationary exposure</small><b id="vGeo">--</b></div>
+        <div class="card"><small>Aurora edge</small><b id="vAur">--</b> <i>magnetic lat</i></div>
+        <div class="card"><small>Tail stretch</small><b id="vTail">--</b></div>
+        <div class="card wide"><small>Subsolar point</small><b id="vSun" style="font-size:15px">--</b></div>
+        <div class="card wide"><small>Poles shown on the globe</small>
+          <div style="font-size:12px;line-height:1.5;margin-top:4px">
+            <span class="swatch" style="background:#1e6fd9"></span> Geographic poles (spin axis)<br>
+            <span class="swatch" style="background:#c0392b"></span> Geomagnetic poles (best fit dipole axis, field lines wrap around this)<br>
+            <span class="swatch" style="background:#8e44ad"></span> Dip poles (where a compass needle points straight down)
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page" id="p-events"><div id="eventlist" class="empty">Loading NASA DONKI events…</div></div>
+    <div class="page" id="p-alerts"><div id="alertlist" class="empty">Loading NOAA alerts…</div></div>
+  </div>
+</div>
+
+<div id="menuveil"></div>
+<div id="menu">
+  <div id="menuhead"><button class="iconbtn" id="menuclose" aria-label="Close">✕</button><b>Layers and data</b></div>
+  <details open>
+    <summary>Globe layers</summary>
+    <label class="opt"><input type="checkbox" data-l="daynight" checked> Day and night lighting</label>
+    <label class="opt"><input type="checkbox" data-l="poles" checked> Poles and labels</label>
+    <label class="opt"><input type="checkbox" data-l="aurora" checked><span class="swatch" style="background:#27c26b"></span> Auroral ovals</label>
+    <label class="opt"><input type="checkbox" data-l="thermo" checked><span class="swatch" style="background:#ff9b54"></span> Upper atmosphere (drag)</label>
+    <label class="opt"><input type="checkbox" data-l="sun" checked><span class="swatch" style="background:#f5b700"></span> Sun direction</label>
+  </details>
+  <details open>
+    <summary>Magnetosphere layers</summary>
+    <label class="opt"><input type="checkbox" data-l="fieldlines" checked><span class="swatch" style="background:#1e6fd9"></span> Magnetic field lines</label>
+    <label class="opt"><input type="checkbox" data-l="magnetopause" checked><span class="swatch" style="background:#6fa8ff"></span> Magnetopause shell</label>
+    <label class="opt"><input type="checkbox" data-l="bowshock"><span class="swatch" style="background:#9aa9bb"></span> Bow shock</label>
+    <label class="opt"><input type="checkbox" data-l="belts" checked><span class="swatch" style="background:#e0569b"></span> Radiation belts</label>
+    <label class="opt"><input type="checkbox" data-l="geo" checked><span class="swatch" style="background:#333"></span> Geostationary ring</label>
+  </details>
+  <details>
+    <summary>Data</summary>
+    <label class="opt"><input type="checkbox" id="autorefresh" checked> Refresh every five minutes</label>
+    <div id="srclist"></div>
+  </details>
+  <details>
+    <summary>About</summary>
+    <div class="menutext">Solar wind, Kp, radio flux, storm scales, GOES particle counts, and alerts come from the NOAA Space Weather Prediction Center feed. Flares, coronal mass ejections, and storms come from the NASA DONKI event database. The magnetopause shape uses the Shue model driven by live solar wind pressure and Bz. Field lines are a dipole squeezed on the day side and stretched on the night side, which is a teaching picture and not a full physics model. Pole positions are approximate current values.</div>
+  </details>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const GEOMAG_N = { lat: 80.8, lon: -72.7 };
+const GEOMAG_S = { lat: -80.8, lon: 107.3 };
+const DIP_N = { lat: 85.8, lon: 139.3 };
+const DIP_S = { lat: -63.8, lon: 135.9 };
+
+const canvas = document.getElementById('scene');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 800);
+camera.position.set(14, 9, 22);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.minDistance = 1.6;
+controls.maxDistance = 140;
+controls.enablePan = false;
+
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+function ll2v(lat, lon, r = 1) {
+  const phi = (lon + 180) / 360 * Math.PI * 2;
+  const theta = (90 - lat) / 180 * Math.PI;
+  return new THREE.Vector3(-r * Math.cos(phi) * Math.sin(theta), r * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta));
+}
+
+const ambient = new THREE.AmbientLight(0xffffff, 0.32);
+scene.add(ambient);
+const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+scene.add(sunLight);
+
+const earthMat = new THREE.MeshPhongMaterial({ color: 0x3b7dd8, shininess: 12 });
+const earth = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), earthMat);
+scene.add(earth);
+new THREE.TextureLoader().setCrossOrigin('anonymous').load(
+  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_atmos_2048.jpg',
+  (t) => { t.colorSpace = THREE.SRGBColorSpace; earthMat.map = t; earthMat.color.set(0xffffff); earthMat.needsUpdate = true; }
+);
+
+const layers = {};
+function layer(name) { const g = new THREE.Group(); scene.add(g); layers[name] = g; return g; }
+const gPoles = layer('poles'), gAurora = layer('aurora'), gThermo = layer('thermo'), gSun = layer('sun');
+const gField = layer('fieldlines'), gMP = layer('magnetopause'), gBow = layer('bowshock'), gBelts = layer('belts'), gGeo = layer('geo');
+gBow.visible = false;
+
+function clearGroup(g) {
+  while (g.children.length) {
+    const c = g.children.pop();
+    c.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
+  }
+}
+
+function makeLabel(text, color) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 96;
+  const g = c.getContext('2d');
+  g.font = 'bold 40px system-ui, sans-serif';
+  const w = Math.min(500, g.measureText(text).width + 36);
+  g.fillStyle = 'rgba(255,255,255,0.92)';
+  g.strokeStyle = color; g.lineWidth = 5;
+  const x = (512 - w) / 2;
+  g.beginPath(); g.roundRect(x, 12, w, 72, 18); g.fill(); g.stroke();
+  g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, 256, 49);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  s.scale.set(1.4, 0.26, 1); s.renderOrder = 10;
+  return s;
+}
+
+function addPole(p, color, text, lift) {
+  const v = ll2v(p.lat, p.lon, 1.0);
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 12), new THREE.MeshBasicMaterial({ color }));
+  dot.position.copy(v); gPoles.add(dot);
+  const stick = new THREE.BufferGeometry().setFromPoints([v, ll2v(p.lat, p.lon, 1.0 + lift)]);
+  gPoles.add(new THREE.Line(stick, new THREE.LineBasicMaterial({ color })));
+  const lab = makeLabel(text, '#' + new THREE.Color(color).getHexString());
+  lab.position.copy(ll2v(p.lat, p.lon, 1.0 + lift + 0.08)); gPoles.add(lab);
+}
+addPole({ lat: 90, lon: 0 }, 0x1e6fd9, 'Geographic N', 0.55);
+addPole({ lat: -90, lon: 0 }, 0x1e6fd9, 'Geographic S', 0.55);
+addPole(GEOMAG_N, 0xc0392b, 'Geomagnetic N', 0.85);
+addPole(GEOMAG_S, 0xc0392b, 'Geomagnetic S', 0.85);
+addPole(DIP_N, 0x8e44ad, 'Dip N', 0.3);
+addPole(DIP_S, 0x8e44ad, 'Dip S', 0.3);
+const axisN = ll2v(GEOMAG_N.lat, GEOMAG_N.lon).normalize();
+const axisLine = new THREE.BufferGeometry().setFromPoints([axisN.clone().multiplyScalar(-1.9), axisN.clone().multiplyScalar(1.9)]);
+gPoles.add(new THREE.Line(axisLine, new THREE.LineDashedMaterial({ color: 0xc0392b, dashSize: 0.08, gapSize: 0.06 })).computeLineDistances());
+const spinLine = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -1.7, 0), new THREE.Vector3(0, 1.7, 0)]);
+gPoles.add(new THREE.Line(spinLine, new THREE.LineDashedMaterial({ color: 0x1e6fd9, dashSize: 0.08, gapSize: 0.06 })).computeLineDistances());
+
+const geoPts = [];
+for (let i = 0; i <= 128; i++) { const a = i / 128 * Math.PI * 2; geoPts.push(new THREE.Vector3(Math.cos(a) * 6.6, 0, Math.sin(a) * 6.6)); }
+gGeo.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(geoPts), new THREE.LineDashedMaterial({ color: 0x333333, dashSize: 0.25, gapSize: 0.2 })).computeLineDistances());
+const geoLab = makeLabel('Geostationary', '#333333'); geoLab.position.set(6.6, 0.35, 0); gGeo.add(geoLab);
+
+const magQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), axisN);
+
+function subsolar(date) {
+  const d = (date.getTime() / 86400000 + 2440587.5) - 2451545.0;
+  const rad = Math.PI / 180;
+  const g = (357.529 + 0.98560028 * d) * rad;
+  const q = 280.459 + 0.98564736 * d;
+  const L = (q + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * rad;
+  const e = (23.439 - 0.00000036 * d) * rad;
+  const ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L)) / rad;
+  const dec = Math.asin(Math.sin(e) * Math.sin(L)) / rad;
+  const gmst = ((18.697374558 + 24.06570982441908 * d) % 24 + 24) % 24;
+  let lon = ra - gmst * 15;
+  lon = ((lon + 540) % 360) - 180;
+  return { lat: dec, lon };
+}
+
+const S = {
+  kp: null, kpTime: null, kpFcMax: null, v: null, n: null, bz: null, bt: null, f107: null,
+  pFlux: null, eFlux: null, scales: { R: 0, S: 0, G: 0 }, alerts: [], flares: [], cmes: [], storms: [], src: {}
+};
+function num(x, d = 1) { return (x === null || x === undefined || isNaN(x)) ? '--' : Number(x).toFixed(d); }
+function clamp(x, a = 0, b = 1) { return Math.max(a, Math.min(b, x)); }
+
+function eff() {
+  return {
+    kp: S.kp ?? 2, v: S.v ?? 400, n: S.n ?? 5, bz: S.bz ?? 0, f107: S.f107 ?? 120,
+    pFlux: S.pFlux ?? 0.3, eFlux: S.eFlux ?? 300
+  };
+}
+function dynP(e) { return 1.6726e-6 * e.n * e.v * e.v; }
+function shue(e) {
+  const pd = Math.max(0.1, dynP(e));
+  const r0 = (10.22 + 1.29 * Math.tanh(0.184 * (e.bz + 8.14))) * Math.pow(pd, -1 / 6.6);
+  const alpha = (0.58 - 0.007 * e.bz) * (1 + 0.024 * Math.log(pd));
+  return { r0, alpha, pd };
+}
+function kpToAp(kp) {
+  const t = [0, 2, 3, 4, 5, 6, 7, 9, 12, 15, 18, 22, 27, 32, 39, 48, 56, 67, 80, 94, 111, 132, 154, 179, 207, 236, 300, 400];
+  const i = clamp(Math.round(kp * 3), 0, t.length - 1);
+  return t[i];
+}
+
+function lathe(points2, color, opacity, segs = 72) {
+  const geo = new THREE.LatheGeometry(points2, segs);
+  const mat = new THREE.MeshPhongMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthWrite: false, shininess: 30 });
+  return new THREE.Mesh(geo, mat);
+}
+
+function build() {
+  const e = eff();
+  const sun = subsolar(new Date());
+  const sunDir = ll2v(sun.lat, sun.lon).normalize();
+  const { r0, alpha, pd } = shue(e);
+  const tail = 0.6 + e.kp * 0.18 + Math.max(0, -e.bz) * 0.03;
+  const stormy = clamp(e.kp / 9);
+
+  sunLight.position.copy(sunDir.clone().multiplyScalar(50));
+
+  clearGroup(gSun);
+  const sunBall = new THREE.Mesh(new THREE.SphereGeometry(2.2, 32, 24), new THREE.MeshBasicMaterial({ color: 0xf5b700 }));
+  sunBall.position.copy(sunDir.clone().multiplyScalar(60)); gSun.add(sunBall);
+  const sunLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([sunDir.clone().multiplyScalar(1.1), sunDir.clone().multiplyScalar(57)]),
+    new THREE.LineDashedMaterial({ color: 0xf5b700, dashSize: 0.6, gapSize: 0.4 }));
+  sunLine.computeLineDistances(); gSun.add(sunLine);
+  const sunLab = makeLabel('Sun', '#c98d00'); sunLab.position.copy(sunDir.clone().multiplyScalar(60).add(new THREE.Vector3(0, 3, 0))); sunLab.scale.set(5, 0.95, 1); gSun.add(sunLab);
+  const ssDot = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 10), new THREE.MeshBasicMaterial({ color: 0xf5b700 }));
+  ssDot.position.copy(sunDir.clone().multiplyScalar(1.005)); gSun.add(ssDot);
+
+  const sunQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), sunDir);
+  function surface(rNose, a, maxDeg) {
+    const pts = [];
+    for (let d = 0; d <= maxDeg; d += 3) {
+      const th = d * Math.PI / 180;
+      const r = rNose * Math.pow(2 / (1 + Math.cos(th)), a);
+      pts.push(new THREE.Vector2(r * Math.sin(th), r * Math.cos(th)));
+    }
+    return pts;
+  }
+  clearGroup(gMP);
+  const mpColor = new THREE.Color(0x6fa8ff).lerp(new THREE.Color(0xff5a5a), stormy);
+  const mp = lathe(surface(r0, alpha, 135), mpColor, 0.16, 64);
+  mp.quaternion.copy(sunQ); gMP.add(mp);
+  const mpWire = new THREE.LineSegments(new THREE.WireframeGeometry(new THREE.LatheGeometry(surface(r0, alpha, 135), 24)),
+    new THREE.LineBasicMaterial({ color: mpColor, transparent: true, opacity: 0.25 }));
+  mpWire.quaternion.copy(sunQ); gMP.add(mpWire);
+
+  clearGroup(gBow);
+  const bow = lathe(surface(r0 * 1.32, Math.min(0.95, alpha + 0.22), 120), 0x9aa9bb, 0.1, 48);
+  bow.quaternion.copy(sunQ); gBow.add(bow);
+
+  function mpRadiusAt(dirUnit) {
+    const c = clamp(dirUnit.dot(sunDir), -0.999, 1);
+    const th = Math.acos(c);
+    return r0 * Math.pow(2 / (1 + Math.cos(th)), alpha);
+  }
+
+  clearGroup(gField);
+  const fieldColor = new THREE.Color(0x1e6fd9).lerp(new THREE.Color(0xe0413a), stormy * 0.8);
+  const Ls = [1.6, 2.2, 3, 4, 5.5, 7, 9, 11, 14];
+  for (let mi = 0; mi < 12; mi++) {
+    const mu = mi / 12 * Math.PI * 2;
+    for (const L of Ls) {
+      const lamMax = Math.acos(Math.sqrt(1 / L));
+      const pts = [];
+      let open = false;
+      for (let k = 0; k <= 80; k++) {
+        const lam = -lamMax + (2 * lamMax) * k / 80;
+        const r = L * Math.cos(lam) ** 2;
+        const p = new THREE.Vector3(r * Math.cos(lam) * Math.cos(mu), r * Math.sin(lam), r * Math.cos(lam) * Math.sin(mu)).applyQuaternion(magQ);
+        const rr = p.length();
+        const u = p.clone().normalize();
+        const s = u.dot(sunDir);
+        const w = (rr - 1) / rr;
+        let f;
+        if (s > 0) f = 1 - s * w * clamp(1 - r0 / 11.5, -0.2, 0.6);
+        else f = 1 + (-s) * w * tail;
+        p.multiplyScalar(f);
+        const lim = mpRadiusAt(u) * 0.97;
+        if (p.length() > lim) { if (s > 0) p.setLength(lim); else open = true; }
+        pts.push(p);
+      }
+      const geo = new THREE.BufferGeometry().setFromPoints(pts);
+      const op = L > r0 * 0.9 ? 0.25 : 0.6;
+      gField.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color: open ? 0x8a63d2 : fieldColor, transparent: true, opacity: op })));
+    }
+  }
+
+  clearGroup(gBelts);
+  function beltProfile(L1, L2) {
+    const pts = [];
+    const m2 = Math.acos(Math.sqrt(1.08 / L2)), m1 = Math.acos(Math.sqrt(1.08 / L1));
+    for (let k = 0; k <= 40; k++) { const lam = -m2 + 2 * m2 * k / 40; const r = L2 * Math.cos(lam) ** 2; pts.push(new THREE.Vector2(r * Math.cos(lam), r * Math.sin(lam))); }
+    for (let k = 0; k <= 40; k++) { const lam = m1 - 2 * m1 * k / 40; const r = L1 * Math.cos(lam) ** 2; pts.push(new THREE.Vector2(r * Math.cos(lam), r * Math.sin(lam))); }
+    pts.push(pts[0].clone());
+    return pts;
+  }
+  const pLog = clamp((Math.log10(Math.max(e.pFlux, 0.01)) + 1) / 5);
+  const eLog = clamp((Math.log10(Math.max(e.eFlux, 1)) - 2) / 3.5);
+  const inner = lathe(beltProfile(1.25, 2.0), new THREE.Color(0xf29ac4).lerp(new THREE.Color(0xd4145a), pLog), 0.12 + 0.3 * pLog, 72);
+  inner.quaternion.copy(magQ); gBelts.add(inner);
+  const outer = lathe(beltProfile(3.2, 6.0), new THREE.Color(0xf6b8d6).lerp(new THREE.Color(0xc2185b), eLog), 0.07 + 0.3 * eLog, 72);
+  outer.quaternion.copy(magQ); gBelts.add(outer);
+
+  clearGroup(gAurora);
+  const edge = clamp(66 - 2.1 * e.kp, 44, 70);
+  function ovalProfile(a, b, sign) {
+    const pts = [];
+    for (let k = 0; k <= 16; k++) {
+      const lat = (a + (b - a) * k / 16) * Math.PI / 180 * sign;
+      pts.push(new THREE.Vector2(Math.cos(lat) * 1.012, Math.sin(lat) * 1.012));
+    }
+    return pts;
+  }
+  const auroraColor = new THREE.Color(0x27c26b).lerp(new THREE.Color(0xd8327a), clamp((e.kp - 5) / 4));
+  const ovN = lathe(ovalProfile(edge, edge + 9, 1), auroraColor, 0.55, 96); ovN.quaternion.copy(magQ); gAurora.add(ovN);
+  const ovS = lathe(ovalProfile(edge, edge + 9, -1), auroraColor, 0.55, 96); ovS.quaternion.copy(magQ); gAurora.add(ovS);
+
+  clearGroup(gThermo);
+  const ap = kpToAp(e.kp);
+  const dragIdx = clamp((e.f107 - 70) / 180 * 0.6 + ap / 120 * 0.4);
+  const th = new THREE.Mesh(new THREE.SphereGeometry(1.045 + 0.03 * dragIdx, 64, 48),
+    new THREE.MeshPhongMaterial({ color: new THREE.Color(0x9cc9ff).lerp(new THREE.Color(0xff8a3d), dragIdx), transparent: true, opacity: 0.1 + 0.28 * dragIdx, depthWrite: false }));
+  gThermo.add(th);
+
+  ambient.intensity = layers.daynight === false ? 1.2 : 0.32;
+  sunLight.intensity = layers.daynight === false ? 0 : 1.5;
+
+  return { r0, pd, tail, edge, ap, dragIdx, pLog, eLog, sun };
+}
+
+const $ = (id) => document.getElementById(id);
+function setMeter(id, f) { $(id).style.width = (clamp(f) * 100).toFixed(0) + '%'; $(id).style.background = f > 0.66 ? 'var(--bad)' : f > 0.33 ? 'var(--warn)' : 'var(--blue)'; }
+function level(f) { return f > 0.66 ? 'High' : f > 0.33 ? 'Elevated' : 'Low'; }
+
+function render() {
+  const e = eff();
+  const m = build();
+  $('vKp').textContent = num(S.kp, 2);
+  $('vKpT').textContent = S.kpTime ? S.kpTime.slice(5, 16).replace('T', ' ') + ' UTC' : '';
+  $('vKpF').textContent = num(S.kpFcMax, 2);
+  $('vV').textContent = num(S.v, 0);
+  $('vN').textContent = num(S.n, 1);
+  $('vBz').textContent = num(S.bz, 1);
+  $('vBz').style.color = (S.bz ?? 0) < -5 ? 'var(--bad)' : 'inherit';
+  $('vBt').textContent = num(S.bt, 1);
+  $('vPd').textContent = num(m.pd, 2);
+  $('vF').textContent = num(S.f107, 0);
+
+  $('vR0').textContent = num(m.r0, 1);
+  $('vR0').style.color = m.r0 < 6.6 ? 'var(--bad)' : m.r0 < 8 ? 'var(--warn)' : 'inherit';
+  $('vGeo').textContent = m.r0 < 6.6 ? 'Exposed: magnetopause is inside geostationary orbit' : m.r0 < 8 ? 'Squeezed close to geostationary orbit' : 'Protected inside the magnetosphere';
+  $('vAur').textContent = num(m.edge, 0) + '°';
+  $('vTail').textContent = num(m.tail, 2) + '×';
+  $('vSun').textContent = `${num(Math.abs(m.sun.lat), 1)}° ${m.sun.lat >= 0 ? 'N' : 'S'}, ${num(Math.abs(m.sun.lon), 1)}° ${m.sun.lon >= 0 ? 'E' : 'W'}`;
+
+  const kpP = clamp(e.kp / 9) * 40;
+  const bzP = clamp(Math.max(0, -e.bz) / 20) * 20;
+  const pdP = clamp(m.pd / 10) * 15;
+  const prP = m.pLog * 15;
+  const fP = clamp((e.f107 - 70) / 180) * 10;
+  const stress = Math.round(kpP + bzP + pdP + prP + fP);
+  $('stressval').textContent = stress;
+  const sf = stress / 100;
+  const col = sf > 0.6 ? 'var(--bad)' : sf > 0.3 ? 'var(--warn)' : 'var(--good)';
+  $('stressval').style.color = col; $('stresstxt').style.color = col;
+  $('stresstxt').textContent = sf > 0.6 ? 'Storming' : sf > 0.3 ? 'Unsettled' : 'Calm';
+  $('stressparts').textContent = `Kp ${kpP.toFixed(0)} · southward Bz ${bzP.toFixed(0)} · wind pressure ${pdP.toFixed(0)} · protons ${prP.toFixed(0)} · radio flux ${fP.toFixed(0)}`;
+  setMeter('stressmeter', sf);
+
+  const rad = Math.max(m.pLog, S.scales.S / 5);
+  $('satRad').textContent = level(rad); $('satRadV').textContent = `≥10 MeV protons ${num(S.pFlux, 2)} pfu`; setMeter('mRad', rad);
+  const chg = Math.max(m.eLog, clamp(e.kp / 9) * 0.8);
+  $('satChg').textContent = level(chg); $('satChgV').textContent = `≥2 MeV electrons ${num(S.eFlux, 0)} pfu`; setMeter('mChg', chg);
+  $('satDrag').textContent = level(m.dragIdx); $('satDragV').textContent = `radio flux ${num(e.f107, 0)}, Ap ${m.ap}`; setMeter('mDrag', m.dragIdx);
+  const radio = Math.max(S.scales.R / 5, clamp(e.kp / 9) * 0.7);
+  $('satRadio').textContent = level(radio); $('satRadioV').textContent = `R${S.scales.R} flare blackout scale`; setMeter('mRadio', radio);
+
+  for (const k of ['R', 'S', 'G']) {
+    const v = S.scales[k] || 0;
+    $('sc' + k).textContent = k + v;
+    $('sc' + k).style.color = v >= 3 ? 'var(--bad)' : v >= 1 ? 'var(--warn)' : 'var(--good)';
+  }
+
+  renderEvents();
+  renderAlerts();
+  renderSources();
+}
+
+function renderEvents() {
+  const box = $('eventlist');
+  const items = [];
+  for (const f of S.flares) items.push({ t: f.peakTime || f.beginTime, h: `Solar flare ${f.classType || ''}`, d: `Source ${f.sourceLocation || 'unknown'}${f.activeRegionNum ? ', region ' + f.activeRegionNum : ''}` });
+  for (const c of S.cmes) {
+    const a = (c.cmeAnalyses || []).find(x => x.isMostAccurate) || (c.cmeAnalyses || [])[0];
+    items.push({ t: c.startTime, h: 'Coronal mass ejection', d: a ? `Speed ${a.speed ?? '?'} km/s, half width ${a.halfAngle ?? '?'}°, type ${a.type ?? '?'}` : (c.note || '').slice(0, 140) });
+  }
+  for (const g of S.storms) {
+    const mx = Math.max(...(g.allKpIndex || []).map(k => k.kpIndex || 0), 0);
+    items.push({ t: g.startTime, h: 'Geomagnetic storm', d: `Peak Kp ${mx}` });
+  }
+  items.sort((a, b) => (b.t || '').localeCompare(a.t || ''));
+  if (!items.length) { box.className = 'empty'; box.textContent = S.src.donki === false ? 'NASA DONKI did not answer. The demo key may be rate limited; try refresh later.' : 'No flares, mass ejections, or storms logged in the last seven days.'; return; }
+  box.className = '';
+  box.innerHTML = '<h4>Last seven days, NASA DONKI</h4>' + items.slice(0, 40).map(i =>
+    `<div class="ev"><b>${esc(i.h)}</b><small>${esc((i.t || '').replace('T', ' ').replace('Z', ' UTC'))}</small>${esc(i.d)}</div>`).join('');
+}
+function renderAlerts() {
+  const box = $('alertlist');
+  if (!S.alerts.length) { box.className = 'empty'; box.textContent = S.src.alerts === false ? 'NOAA alerts feed did not answer.' : 'No recent alerts.'; return; }
+  box.className = '';
+  box.innerHTML = '<h4>Latest NOAA alerts, watches, warnings</h4>' + S.alerts.slice(0, 15).map(a => {
+    const msg = String(a.message || '');
+    const lines = msg.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    const head = lines.find(l => /^(ALERT|WARNING|WATCH|SUMMARY|EXTENDED WARNING|CANCEL)/i.test(l)) || lines[2] || 'Alert';
+    const body = lines.filter(l => !/^(Space Weather Message Code|Serial Number|Issue Time|NOAA Space Weather Scale descriptions|www\.swpc)/i.test(l) && l !== head).slice(0, 6).join('\n');
+    return `<div class="ev"><b>${esc(head)}</b><small>${esc(a.issue_datetime || '')} UTC</small><pre>${esc(body)}</pre></div>`;
+  }).join('');
+}
+function renderSources() {
+  const names = { kp: 'Kp index', kpf: 'Kp forecast', plasma: 'Solar wind plasma', mag: 'Solar wind magnetic field', flux: 'Radio flux', protons: 'GOES protons', electrons: 'GOES electrons', scales: 'NOAA scales', alerts: 'NOAA alerts', donki: 'NASA DONKI' };
+  $('srclist').innerHTML = Object.keys(names).map(k => `<div class="src">${S.src[k] === true ? '<span class="ok">✔</span>' : S.src[k] === false ? '<span class="no">✖</span>' : '…'} ${names[k]}</div>`).join('');
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+async function getJSON(url) {
+  const r = await fetch(url, { cache: 'no-store' });
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+function rows(data) {
+  if (!Array.isArray(data)) { if (data && Array.isArray(data.data)) data = data.data; else return []; }
+  if (data.length && Array.isArray(data[0])) {
+    const h = data[0].map(x => String(x).toLowerCase().trim());
+    return data.slice(1).map(a => { const o = {}; h.forEach((k, i) => o[k] = a[i]); return o; });
+  }
+  return data.map(o => { const n = {}; for (const k in o) n[k.toLowerCase().trim()] = o[k]; return n; });
+}
+function pick(o, keys) {
+  for (const k of keys) { const v = parseFloat(o[k]); if (o[k] !== null && o[k] !== '' && !isNaN(v)) return v; }
+  return null;
+}
+function lastValid(arr, keys) {
+  for (let i = arr.length - 1; i >= 0; i--) { const v = pick(arr[i], keys); if (v !== null) return { v, t: arr[i].time_tag || arr[i].timestamp || arr[i].time || null }; }
+  return null;
+}
+function scaleNum(x) { if (x === null || x === undefined) return 0; const m = String(typeof x === 'object' ? (x.Scale ?? x.scale ?? '') : x).match(/\d/); return m ? +m[0] : 0; }
+
+const SW = 'https://services.swpc.noaa.gov';
+const DONKI_KEY = 'DEMO_KEY';
+
+async function load() {
+  $('updated').textContent = 'Refreshing…';
+  const end = new Date(); const start = new Date(end.getTime() - 7 * 86400000);
+  const ds = (d) => d.toISOString().slice(0, 10);
+  const D = `https://api.nasa.gov/DONKI`;
+  const q = `startDate=${ds(start)}&endDate=${ds(end)}&api_key=${DONKI_KEY}`;
+
+  const jobs = {
+    kp: getJSON(`${SW}/products/noaa-planetary-k-index.json`).then(d => {
+      const r = rows(d); const x = lastValid(r, ['kp', 'kp_index', 'estimated_kp', 'kp index']);
+      if (!x) throw 0; S.kp = x.v; S.kpTime = x.t;
+    }),
+    kpf: getJSON(`${SW}/products/noaa-planetary-k-index-forecast.json`).then(d => {
+      const r = rows(d); const now = Date.now(); let mx = null;
+      for (const o of r) { const t = Date.parse((o.time_tag || '').replace(' ', 'T') + ((o.time_tag || '').endsWith('Z') ? '' : 'Z')); const v = pick(o, ['kp', 'kp_index']); if (v !== null && (isNaN(t) || t >= now)) mx = Math.max(mx ?? 0, v); }
+      if (mx === null) throw 0; S.kpFcMax = mx;
+    }),
+    plasma: getJSON(`${SW}/products/solar-wind/plasma-1-day.json`).then(d => {
+      const r = rows(d);
+      const n = lastValid(r, ['density', 'proton_density']); const v = lastValid(r, ['speed', 'proton_speed', 'bulk_speed']);
+      if (!n && !v) throw 0; if (n) S.n = n.v; if (v) S.v = v.v;
+    }),
+    mag: getJSON(`${SW}/products/solar-wind/mag-1-day.json`).then(d => {
+      const r = rows(d);
+      const bz = lastValid(r, ['bz_gsm', 'bz']); const bt = lastValid(r, ['bt']);
+      if (!bz) throw 0; S.bz = bz.v; if (bt) S.bt = bt.v;
+    }),
+    flux: getJSON(`${SW}/products/10cm-flux-30-day.json`).then(d => {
+      const r = rows(d); const x = lastValid(r, ['flux', 'f10.7', 'observed_flux', 'f107']);
+      if (!x) throw 0; S.f107 = x.v;
+    }),
+    protons: getJSON(`${SW}/json/goes/primary/integral-protons-1-day.json`).then(d => {
+      const r = rows(d).filter(o => /(>=|≥)\s*10\s*mev/i.test(o.energy || ''));
+      const x = lastValid(r, ['flux']); if (!x) throw 0; S.pFlux = x.v;
+    }),
+    electrons: getJSON(`${SW}/json/goes/primary/integral-electrons-1-day.json`).then(d => {
+      const r = rows(d).filter(o => /(>=|≥)\s*2\s*mev/i.test(o.energy || ''));
+      const x = lastValid(r, ['flux']); if (!x) throw 0; S.eFlux = x.v;
+    }),
+    scales: getJSON(`${SW}/products/noaa-scales.json`).then(d => {
+      const cur = d['0'] || d[0] || (Array.isArray(d) ? d[d.length - 1] : null);
+      if (!cur) throw 0;
+      const g = (k) => cur[k] ?? cur[k.toLowerCase()];
+      S.scales = { R: scaleNum(g('R')), S: scaleNum(g('S')), G: scaleNum(g('G')) };
+    }),
+    alerts: getJSON(`${SW}/products/alerts.json`).then(d => {
+      const r = rows(d); r.sort((a, b) => String(b.issue_datetime || '').localeCompare(String(a.issue_datetime || ''))); S.alerts = r;
+    }),
+    donki: Promise.allSettled([
+      getJSON(`${D}/FLR?${q}`), getJSON(`${D}/CME?${q}`), getJSON(`${D}/GST?${q}`)
+    ]).then(([f, c, g]) => {
+      if (f.status === 'rejected' && c.status === 'rejected' && g.status === 'rejected') throw 0;
+      S.flares = f.status === 'fulfilled' && Array.isArray(f.value) ? f.value : [];
+      S.cmes = c.status === 'fulfilled' && Array.isArray(c.value) ? c.value : [];
+      S.storms = g.status === 'fulfilled' && Array.isArray(g.value) ? g.value : [];
+    })
+  };
+  const keys = Object.keys(jobs);
+  const res = await Promise.allSettled(keys.map(k => jobs[k]));
+  res.forEach((r, i) => { S.src[keys[i]] = r.status === 'fulfilled'; });
+  const okCount = res.filter(r => r.status === 'fulfilled').length;
+  $('updated').textContent = okCount ? `Updated ${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · live NOAA and NASA data` : 'Feeds unreachable, showing quiet day defaults';
+  render();
+}
+
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('on', p.id === 'p-' + b.dataset.p));
+}));
+function openMenu(o) { $('menu').classList.toggle('open', o); $('menuveil').classList.toggle('open', o); }
+$('menubtn').addEventListener('click', () => openMenu(true));
+$('menuclose').addEventListener('click', () => openMenu(false));
+$('menuveil').addEventListener('click', () => openMenu(false));
+$('refreshbtn').addEventListener('click', load);
+document.querySelectorAll('[data-l]').forEach(cb => cb.addEventListener('change', () => {
+  const k = cb.dataset.l;
+  if (k === 'daynight') { layers.daynight = cb.checked; ambient.intensity = cb.checked ? 0.32 : 1.2; sunLight.intensity = cb.checked ? 1.5 : 0; }
+  else if (layers[k]) layers[k].visible = cb.checked;
+}));
+layers.daynight = true;
+
+let timer = setInterval(() => { if ($('autorefresh').checked) load(); }, 300000);
+setInterval(() => build(), 60000);
+
+const clock = new THREE.Clock();
+function loop() {
+  requestAnimationFrame(loop);
+  const t = clock.getElapsedTime();
+  gField.children.forEach((l, i) => { l.material.opacity = (l.userData.base ??= l.material.opacity) * (0.75 + 0.25 * Math.sin(t * 1.6 + i * 0.13)); });
+  controls.update();
+  renderer.render(scene, camera);
+}
+render();
+loop();
+load();
+</script>
+</body>
+</html>

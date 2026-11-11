@@ -1,0 +1,4119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f1f4f7">
+<title>Stackloom</title>
+<style>
+  :root {
+    --page: #f1f4f7;
+    --surface: #ffffff;
+    --edge: #d5dde6;
+    --ink: #1c2833;
+    --muted: #5d6b78;
+    --accent: #2463b0;
+    --pressed: #dbe7f5;
+    --good: #2e7d4f;
+    --warn: #b24a2a;
+    --toast: #fffbe6;
+    --toast-edge: #e8dca8;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    height: 100dvh;
+    overflow: hidden;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button { font-family: inherit; color: inherit; cursor: pointer; }
+  button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  .app { height: 100dvh; display: flex; flex-direction: column; }
+
+  /* Company status bar */
+  .hud {
+    background: var(--surface);
+    padding: calc(env(safe-area-inset-top) + 10px) 16px 0;
+  }
+  .hud-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .money { font-size: 28px; font-weight: 750; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .money.negative { color: var(--warn); }
+  .hud-facts { display: flex; gap: 12px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .hud-office { font-size: 13px; color: var(--muted); margin-top: 1px; }
+  .daybar { height: 3px; background: var(--edge); margin: 10px -16px 0; }
+  .daybar i { display: block; height: 100%; width: 0; background: var(--accent); }
+
+  /* Tabs sit at the top, under the status bar */
+  .tabs {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    background: var(--surface); border-bottom: 1px solid var(--edge);
+  }
+  .tabs button { position: relative; background: none; border: none; padding: 12px 0 13px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .tabs button.on { color: var(--accent); box-shadow: inset 0 -3px 0 var(--accent); }
+  .badge {
+    position: absolute; top: 3px; left: 50%; margin-left: 16px;
+    min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px;
+    background: var(--warn); color: #ffffff; font-size: 11px; line-height: 18px;
+  }
+  .badge[hidden] { display: none; }
+
+  .view { flex: 1; overflow-y: auto; padding: 14px 14px calc(env(safe-area-inset-bottom) + 28px); }
+
+  .section-title { font-size: 17px; font-weight: 650; letter-spacing: -0.01em; margin: 6px 2px 10px; }
+  .spaced { margin-top: 24px; }
+  .note { font-size: 14px; color: var(--muted); line-height: 1.45; margin: 0 2px 12px; max-width: 60ch; }
+  .empty {
+    font-size: 14px; color: var(--muted); line-height: 1.45;
+    margin: 0 0 18px; padding: 14px; border: 1px dashed var(--edge); border-radius: 12px;
+  }
+  .quiet { font-size: 13px; color: var(--muted); line-height: 1.4; }
+
+  /* Order tickets: the strip on top is the palette the customer ordered */
+  .order { background: var(--surface); border: 1px solid var(--edge); border-radius: 14px; overflow: hidden; margin-bottom: 12px; }
+  .strip { display: flex; height: 10px; }
+  .strip i { flex: 1; }
+  .order-body { padding: 12px 14px 14px; }
+  .order-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .customer { font-size: 16px; font-weight: 650; }
+  .spec { font-size: 14px; color: var(--muted); line-height: 1.35; margin-top: 2px; }
+  .motifs { font-size: 20px; letter-spacing: 4px; margin-top: 6px; }
+  .pay { font-size: 18px; font-weight: 700; color: var(--good); font-variant-numeric: tabular-nums; }
+  .meta { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--muted); margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .late { color: var(--warn); font-weight: 600; }
+  .status { font-size: 14px; margin-top: 10px; line-height: 1.4; }
+  .status.warn { color: var(--warn); }
+  .bar { height: 8px; background: var(--page); border: 1px solid var(--edge); border-radius: 99px; overflow: hidden; margin-top: 8px; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width 0.25s linear; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+  .btn {
+    background: var(--surface); border: 1px solid var(--edge); border-radius: 10px;
+    padding: 10px 14px; min-height: 44px; font-size: 15px; font-weight: 600;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #ffffff; }
+  .btn:disabled { opacity: 0.55; }
+  .btn.wide { width: 100%; }
+
+  /* Rows for terminals, staff, offices, upgrades */
+  .row { background: var(--surface); border: 1px solid var(--edge); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
+  .row-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .row-name { font-size: 15px; font-weight: 650; }
+  .row-state { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .row-state.busy { color: var(--accent); font-weight: 600; }
+  .row-state.done { color: var(--good); font-weight: 600; }
+  .row-sub { font-size: 14px; color: var(--muted); line-height: 1.4; margin-top: 3px; }
+  .buy { display: flex; flex-direction: column; gap: 8px; margin: 12px 0 8px; }
+
+  .log { list-style: none; }
+  .log li { font-size: 13px; color: var(--muted); line-height: 1.4; padding: 8px 2px; border-bottom: 1px solid var(--edge); }
+
+  .toast {
+    position: fixed; left: 12px; right: 12px; z-index: 40;
+    bottom: calc(env(safe-area-inset-bottom) + 16px);
+    background: var(--toast); border: 1px solid var(--toast-edge); border-radius: 12px;
+    padding: 12px 14px; font-size: 14px; line-height: 1.4;
+    box-shadow: 0 6px 20px rgba(28, 40, 51, 0.12);
+  }
+  .toast[hidden] { display: none; }
+
+  /* Theme file viewer */
+  .sheet { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; background: rgba(28, 40, 51, 0.25); }
+  .sheet[hidden] { display: none; }
+  .sheet-card {
+    width: 100%; max-height: 86dvh; display: flex; flex-direction: column; gap: 10px;
+    background: var(--surface); border-radius: 18px 18px 0 0;
+    padding: 16px 16px calc(env(safe-area-inset-bottom) + 16px);
+  }
+  .sheet-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .sheet pre {
+    flex: 1; overflow: auto; background: var(--page); border: 1px solid var(--edge); border-radius: 10px;
+    padding: 12px; font-size: 12px; line-height: 1.45; font-family: ui-monospace, "Roboto Mono", monospace;
+    user-select: text; -webkit-user-select: text;
+  }
+
+  /* Play test screen: the engine that every product runs on */
+  .play { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--page); user-select: none; -webkit-user-select: none; }
+  .play[hidden] { display: none; }
+  .play-top { display: flex; align-items: center; gap: 10px; padding: calc(env(safe-area-inset-top) + 10px) 12px 6px; background: var(--surface); border-bottom: 1px solid var(--edge); }
+  .play-title { flex: 1; min-width: 0; }
+  .play-title div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stat { display: flex; flex-direction: column; min-width: 44px; }
+  .label { font-size: 12px; color: var(--muted); }
+  .value { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  #playNext { display: block; width: 44px; height: 44px; }
+
+  .stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 8px; }
+  .board-wrap { position: relative; }
+  #playBoard { display: block; border-radius: 6px; box-shadow: 0 0 0 1px var(--edge); }
+  .overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; padding: 16px; text-align: center; border-radius: 6px; background: rgba(255, 255, 255, 0.93);
+  }
+  .overlay[hidden] { display: none; }
+  .overlay h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; }
+  .overlay p { font-size: 15px; color: var(--muted); line-height: 1.45; max-width: 24ch; }
+
+  .pad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; padding: 6px 12px calc(env(safe-area-inset-bottom) + 14px); }
+  .pad button {
+    height: 62px; border-radius: 14px; background: var(--surface); border: 1px solid var(--edge); color: var(--ink);
+    display: flex; align-items: center; justify-content: center; touch-action: none;
+  }
+  .pad button.pressed { background: var(--pressed); }
+  .pad svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+
+  /* Doku engine screen */
+  .doku { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--page); user-select: none; -webkit-user-select: none; }
+  .doku[hidden] { display: none; }
+  .doku-status { min-height: 22px; padding: 6px 14px 0; font-size: 13px; color: var(--muted); text-align: center; }
+  .doku-status.warn { color: var(--warn); font-weight: 600; }
+  .doku-status.good { color: var(--accent); font-weight: 600; }
+  .doku-stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 8px 12px; }
+  .doku-wrap { position: relative; --side: min(calc(100vw - 24px), calc(100dvh - 330px), 560px); width: var(--side); height: var(--side); }
+  .doku-grid {
+    width: 100%; height: 100%; display: grid; grid-template-columns: repeat(9, 1fr); grid-template-rows: repeat(9, 1fr);
+    border: 2px solid var(--ink); border-radius: 6px; overflow: hidden; background: var(--surface);
+  }
+  .dcell {
+    border: none; border-right: 1px solid var(--edge); border-bottom: 1px solid var(--edge); padding: 0;
+    display: flex; align-items: center; justify-content: center; background: transparent;
+    font-size: calc(var(--side) / 9 * 0.56); font-weight: 700; line-height: 1; touch-action: manipulation;
+  }
+  .dcell.br { border-right: 2px solid var(--ink); }
+  .dcell.bb { border-bottom: 2px solid var(--ink); }
+  .dcell.lastc { border-right: none; }
+  .dcell.lastr { border-bottom: none; }
+  .dcell.given { background: rgba(28, 40, 51, 0.05); }
+  .dcell.peer { background: #eef4fb; }
+  .dcell.given.peer { background: #e3ebf4; }
+  .dcell.same { background: #d6e6f8; }
+  .dcell.mine { text-shadow: 0 0 6px rgba(36, 99, 176, 0.45); }
+  .dcell.bad { background: #fbe1dc; }
+  .dcell.sel { box-shadow: inset 0 0 0 3px var(--accent); }
+  .dpal { display: grid; grid-template-columns: repeat(9, 1fr); gap: 5px; padding: 4px 12px 0; }
+  .dpal button {
+    height: 52px; border-radius: 12px; background: var(--surface); border: 1px solid var(--edge);
+    font-size: 24px; font-weight: 700; padding: 0; display: flex; align-items: center; justify-content: center;
+  }
+  .dpal button.used { opacity: 0.3; }
+  .dtools { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 12px calc(env(safe-area-inset-bottom) + 14px); }
+  .hack-card { border: 2px solid var(--accent); }
+  .hack-strip { height: 10px; background: linear-gradient(90deg, #2463b0, #2fb4e6, #2463b0); }
+  .hack-facts { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .hack-facts b { color: var(--accent); }
+
+  /* Premium tag on orders and catalog */
+  .prem { display: inline-block; font-size: 11px; font-weight: 700; color: #ffffff; background: linear-gradient(90deg, #2463b0, #2fb4e6); border-radius: 99px; padding: 2px 8px; margin-left: 6px; vertical-align: 2px; }
+  .doku-wrap.premium .doku-grid { border-color: #2463b0; box-shadow: 0 0 0 3px #dbe7f5, 0 8px 22px rgba(36, 99, 176, 0.22); }
+  .doku-wrap.premium .dcell.given { background: linear-gradient(160deg, #f4f8ff, #e2ecfa); }
+
+  /* Bubble engine screen */
+  .bub { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--page); user-select: none; -webkit-user-select: none; }
+  .bub[hidden] { display: none; }
+  #bubStatus, #cardStatus { height: 38px; min-height: 38px; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 2px 14px; line-height: 1.3; }
+  #bubCanvas { display: block; border-radius: 6px; box-shadow: 0 0 0 1px var(--edge); touch-action: none; }
+
+  /* Runner engine screen */
+  .runr { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--page); user-select: none; -webkit-user-select: none; }
+  .runr[hidden] { display: none; }
+  #runStatus { height: 38px; min-height: 38px; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 2px 14px; line-height: 1.3; }
+  #runCanvas { display: block; border-radius: 6px; box-shadow: 0 0 0 1px var(--edge); touch-action: none; }
+
+  /* Card engine screen */
+  .cards { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--page); user-select: none; -webkit-user-select: none; }
+  .cards[hidden] { display: none; }
+  .table-wrap { position: relative; flex: 1; min-height: 0; }
+  .table { position: absolute; inset: 0; overflow-y: auto; padding: 10px 8px 24px; }
+  .table .overlay { position: absolute; inset: 0; border-radius: 0; }
+  .crow { display: grid; grid-template-columns: repeat(7, var(--cw)); gap: var(--gap); justify-content: center; }
+  .crow + .crow { margin-top: 12px; }
+  .slot { position: relative; width: var(--cw); height: var(--ch); border-radius: 7px; border: 2px dashed rgba(36, 99, 176, 0.35); }
+  .slot.found::after { content: attr(data-mark); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: calc(var(--cw) * 0.42); opacity: 0.35; }
+  .tcol { position: relative; width: var(--cw); }
+  .card-f, .card-b {
+    position: absolute; left: 0; width: var(--cw); height: var(--ch); border-radius: 7px; overflow: hidden;
+    box-shadow: 0 1px 2px rgba(28, 40, 51, 0.25);
+  }
+  .card-f { background: #ffffff; border: 1px solid #b9c4d0; color: var(--suit, #1c2833); }
+  .card-f .cr { position: absolute; left: 3px; top: 2px; font-size: calc(var(--cw) * 0.24); font-weight: 750; line-height: 1.02; text-align: center; letter-spacing: -0.04em; }
+  .card-f .cr i { display: block; font-style: normal; font-size: calc(var(--cw) * 0.22); }
+  .card-f .cc { position: absolute; left: 0; right: 0; bottom: 6%; text-align: center; font-size: calc(var(--cw) * 0.46); line-height: 1; }
+  .card-f.sel { box-shadow: 0 0 0 3px var(--accent), 0 4px 10px rgba(36, 99, 176, 0.35); }
+  .card-f.held { transform: translateY(-8px); box-shadow: 0 0 0 3px var(--accent); }
+  .held-tag { position: absolute; left: 0; right: 0; top: 40%; text-align: center; font-size: calc(var(--cw) * 0.17); font-weight: 800; color: #ffffff; background: var(--accent); }
+  .card-b { border: 2px solid #ffffff; outline: 1px solid #9fb0c2; }
+  .card-f.premium {
+    background: linear-gradient(155deg, #ffffff 0%, #f3f7ff 55%, #e3ecf9 100%);
+    border: 1px solid #2463b0;
+    box-shadow: inset 0 0 0 3px #ffffff, inset 0 0 0 4px #9cc0ea, 0 2px 5px rgba(28, 40, 51, 0.3);
+  }
+  .card-f.premium .cc { filter: drop-shadow(0 2px 2px rgba(28, 40, 51, 0.35)); }
+  .card-f.premium::after { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0) 35%); pointer-events: none; }
+  .card-b.premium { border: 3px solid #ffffff; outline: 2px solid #2463b0; box-shadow: inset 0 0 0 3px rgba(255,255,255,0.75), 0 2px 5px rgba(28, 40, 51, 0.3); }
+  .card-b .emb { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: calc(var(--cw) * 0.45); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.35)); }
+  .shake { animation: shake 0.25s; }
+  @keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+  .paytable { max-width: 420px; margin: 0 auto 14px; background: var(--surface); border: 1px solid var(--edge); border-radius: 12px; padding: 8px 12px; font-size: 13px; }
+  .paytable div { display: flex; justify-content: space-between; padding: 2px 0; color: var(--muted); }
+  .paytable div.win { color: var(--accent); font-weight: 750; }
+  .hand { position: relative; display: grid; grid-template-columns: repeat(5, var(--cw)); gap: var(--gap); justify-content: center; height: calc(var(--ch) + 12px); padding-top: 10px; }
+  .hand .slotc { position: relative; width: var(--cw); height: var(--ch); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="hud">
+    <div class="hud-row">
+      <div id="hudMoney" class="money">$0</div>
+      <div class="hud-facts"><span id="hudRep">Reputation 50</span><span id="hudDay">Day 1</span></div>
+    </div>
+    <div id="hudOffice" class="hud-office">Garage</div>
+    <div class="daybar"><i id="hudDayFill"></i></div>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="orders" class="on">Orders<span id="badge" class="badge" hidden>0</span></button>
+    <button data-tab="terminals">Terminals</button>
+    <button data-tab="team">Team</button>
+    <button data-tab="office">Office</button>
+    <button data-tab="games">Games</button>
+  </nav>
+
+  <main id="view" class="view"></main>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-card">
+    <div class="sheet-head">
+      <div id="sheetTitle" class="row-name"></div>
+      <button id="sheetClose" class="btn">Close</button>
+    </div>
+    <p class="quiet">This file is the whole product. The engine reads it and turns into this game.</p>
+    <pre id="sheetBody"></pre>
+  </div>
+</div>
+
+<div id="play" class="play" hidden>
+  <header class="play-top">
+    <div class="play-title">
+      <div id="playName" class="row-name"></div>
+      <div id="playFor" class="quiet"></div>
+    </div>
+    <div class="stat"><span class="label">Score</span><span id="playScore" class="value">0</span></div>
+    <div class="stat"><span class="label">Lines</span><span id="playLines" class="value">0</span></div>
+    <canvas id="playNext"></canvas>
+    <button id="playClose" class="btn">Done</button>
+  </header>
+
+  <main id="playStage" class="stage">
+    <div id="playWrap" class="board-wrap">
+      <canvas id="playBoard"></canvas>
+      <div id="playOverlay" class="overlay">
+        <h1 id="playOverlayTitle"></h1>
+        <p id="playOverlayText"></p>
+        <button id="playOverlayButton" class="btn primary">Start</button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="pad">
+    <button data-action="left" aria-label="Move left"><svg viewBox="0 0 24 24"><path d="M15 5 L8 12 L15 19"/></svg></button>
+    <button data-action="down" aria-label="Move down"><svg viewBox="0 0 24 24"><path d="M5 9 L12 16 L19 9"/></svg></button>
+    <button data-action="right" aria-label="Move right"><svg viewBox="0 0 24 24"><path d="M9 5 L16 12 L9 19"/></svg></button>
+    <button data-action="rotate" aria-label="Rotate"><svg viewBox="0 0 24 24"><path d="M19 12 A7 7 0 1 1 16.95 7.05"/><path d="M18 3 V8 H13"/></svg></button>
+    <button data-action="drop" aria-label="Drop"><svg viewBox="0 0 24 24"><path d="M6 4 L12 10 L18 4"/><path d="M6 11 L12 17 L18 11"/><path d="M5 21 H19"/></svg></button>
+  </footer>
+</div>
+
+
+<div id="doku" class="doku" hidden>
+  <header class="play-top">
+    <div class="play-title">
+      <div id="dokuName" class="row-name"></div>
+      <div id="dokuFor" class="quiet"></div>
+    </div>
+    <div class="stat"><span id="dokuStatLabelA" class="label">Mistakes</span><span id="dokuStatA" class="value">0</span></div>
+    <div class="stat" id="dokuStatBoxB"><span class="label">Nodes</span><span id="dokuStatB" class="value">0</span></div>
+    <button id="dokuClose" class="btn">Done</button>
+  </header>
+  <div id="dokuStatus" class="doku-status"></div>
+  <main class="doku-stage">
+    <div id="dokuWrap" class="doku-wrap">
+      <div id="dokuGrid" class="doku-grid"></div>
+      <div id="dokuOverlay" class="overlay">
+        <h1 id="dokuOverlayTitle"></h1>
+        <p id="dokuOverlayText"></p>
+        <button id="dokuOverlayButton" class="btn primary">Start</button>
+      </div>
+    </div>
+  </main>
+  <div id="dokuPal" class="dpal"></div>
+  <div class="dtools">
+    <button id="dokuErase" class="btn">Erase</button>
+    <button id="dokuHint" class="btn primary">Hint</button>
+  </div>
+</div>
+
+<div id="bub" class="bub" hidden>
+  <header class="play-top">
+    <div class="play-title">
+      <div id="bubName" class="row-name"></div>
+      <div id="bubFor" class="quiet"></div>
+    </div>
+    <div class="stat"><span class="label">Score</span><span id="bubScore" class="value">0</span></div>
+    <div class="stat"><span class="label">Drop in</span><span id="bubDrop" class="value">0</span></div>
+    <button id="bubClose" class="btn">Done</button>
+  </header>
+  <div id="bubStatus" class="doku-status"></div>
+  <main id="bubStage" class="stage">
+    <div id="bubWrap" class="board-wrap">
+      <canvas id="bubCanvas"></canvas>
+      <div id="bubOverlay" class="overlay">
+        <h1 id="bubOverlayTitle"></h1>
+        <p id="bubOverlayText"></p>
+        <button id="bubOverlayButton" class="btn primary">Start</button>
+      </div>
+    </div>
+  </main>
+  <div class="dtools">
+    <button id="bubSwap" class="btn">Swap</button>
+    <button id="bubFire" class="btn primary">Fire</button>
+  </div>
+</div>
+
+<div id="runr" class="runr" hidden>
+  <header class="play-top">
+    <div class="play-title">
+      <div id="runName" class="row-name"></div>
+      <div id="runFor" class="quiet"></div>
+    </div>
+    <div class="stat"><span class="label">Crowd</span><span id="runCount" class="value">1</span></div>
+    <div class="stat"><span class="label">Level</span><span id="runLevel" class="value">1</span></div>
+    <button id="runClose" class="btn">Done</button>
+  </header>
+  <div id="runStatus" class="doku-status"></div>
+  <main id="runStage" class="stage">
+    <div id="runWrap" class="board-wrap">
+      <canvas id="runCanvas"></canvas>
+      <div id="runOverlay" class="overlay">
+        <h1 id="runOverlayTitle"></h1>
+        <p id="runOverlayText"></p>
+        <button id="runOverlayButton" class="btn primary">Start</button>
+      </div>
+    </div>
+  </main>
+  <div class="dtools">
+    <button id="runLeft" class="btn primary">Left lane</button>
+    <button id="runRight" class="btn primary">Right lane</button>
+  </div>
+</div>
+
+<div id="cards" class="cards" hidden>
+  <header class="play-top">
+    <div class="play-title">
+      <div id="cardName" class="row-name"></div>
+      <div id="cardFor" class="quiet"></div>
+    </div>
+    <div class="stat"><span id="cardStatLabelA" class="label">Score</span><span id="cardStatA" class="value">0</span></div>
+    <div class="stat"><span id="cardStatLabelB" class="label">Moves</span><span id="cardStatB" class="value">0</span></div>
+    <button id="cardClose" class="btn">Done</button>
+  </header>
+  <div id="cardStatus" class="doku-status"></div>
+  <div class="table-wrap">
+    <main id="cardTable" class="table"></main>
+    <div id="cardOverlay" class="overlay">
+      <h1 id="cardOverlayTitle"></h1>
+      <p id="cardOverlayText"></p>
+      <button id="cardOverlayButton" class="btn primary">Start</button>
+    </div>
+  </div>
+  <div class="dtools">
+    <button id="cardToolA" class="btn">Undo</button>
+    <button id="cardToolB" class="btn primary">Collect</button>
+  </div>
+</div>
+<script>
+// ------------------------------------------------------------------
+// STACKLOOM v3
+// A game about running a studio that manufactures falling block games.
+// Every game the studio sells is the same engine plus a different theme
+// file. The data blocks at the top are the whole catalog of parts.
+// ------------------------------------------------------------------
+const VERSION = "stackloom-meta v3.1";
+
+// Rules shared by every game the studio makes. This is the engine.
+const ENGINE = {
+  rows: 20,
+  lineScores: [0, 100, 300, 500, 800],
+  linesPerLevel: 10,
+  dropMsPerLevel: 70,
+  fastestDropMs: 80,
+  softDropMs: 40,
+  lockDelayMs: 450,
+  maxLockResets: 15,
+  repeatDelayMs: 170,
+  repeatRateMs: 55
+};
+
+// Every shape a customer can order. A 1 is a filled cell.
+const SHAPES = {
+  I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+  O: [[1,1],[1,1]],
+  T: [[0,1,0],[1,1,1],[0,0,0]],
+  S: [[0,1,1],[1,1,0],[0,0,0]],
+  Z: [[1,1,0],[0,1,1],[0,0,0]],
+  J: [[1,0,0],[1,1,1],[0,0,0]],
+  L: [[0,0,1],[1,1,1],[0,0,0]],
+  Plus: [[0,1,0],[1,1,1],[0,1,0]],
+  U: [[1,0,1],[1,1,1],[0,0,0]],
+  Corner: [[1,0,0],[1,0,0],[1,1,1]],
+  Dot: [[1]],
+  Pair: [[1,1],[0,0]],
+  Bend: [[1,0],[1,1]],
+  Three: [[0,0,0],[1,1,1],[0,0,0]]
+};
+
+// Options on an order form. "work" is how much building each option adds.
+const PIECE_SETS = {
+  standard: { label: "standard pieces", work: 0, shapes: ["I", "O", "T", "S", "Z", "J", "L"] },
+  big: { label: "big pieces", work: 12, shapes: ["I", "O", "T", "S", "Z", "J", "L", "Plus", "U", "Corner"] },
+  tiny: { label: "tiny pieces", work: 8, shapes: ["I", "O", "T", "S", "Z", "J", "L", "Dot", "Pair", "Bend", "Three"] }
+};
+
+const BOARDS = {
+  standard: { label: "standard board", columns: 10, work: 0 },
+  narrow: { label: "narrow board", columns: 8, work: 5 },
+  wide: { label: "wide board", columns: 12, work: 5 }
+};
+
+const SPEEDS = {
+  normal: { label: "normal speed", startDropMs: 800, work: 0 },
+  chill: { label: "chill speed", startDropMs: 1050, work: 3 },
+  turbo: { label: "turbo speed", startDropMs: 480, work: 3 }
+};
+
+// The looks customers can order. Add a new block here and customers
+// start ordering it, with no engine changes at all.
+const THEMES = {
+  classic: { label: "Classic", work: 14, board: "#fbfdfc", grid: "#e1eae6", glow: false, motifs: [],
+    colors: ["#3a8fb7", "#e2a93b", "#8a5cb8", "#4fa36c", "#d0584f", "#3f5fbf", "#e07b39"] },
+  neon: { label: "Neon", work: 20, board: "#ffffff", grid: "#efe9f8", glow: true, motifs: [],
+    colors: ["#ff2fd6", "#00c8f0", "#29d614", "#ffc400", "#ff6a00", "#a526ff", "#ff2e63"] },
+  dog: { label: "Dog", work: 24, board: "#fffaf2", grid: "#f0e3d0", glow: false, motifs: ["🐶", "🦴", "🐾"],
+    colors: ["#c68a52", "#e2b07a", "#9a6843", "#e9c9a3", "#b8683c", "#d49a5e", "#8a5a38"] },
+  ninja: { label: "Ninja", work: 26, board: "#f8f8fa", grid: "#e5e5ec", glow: false, motifs: ["🥷", "⭐", "🎋"],
+    colors: ["#4a4f6e", "#c0392b", "#6a7ba2", "#8e44ad", "#2c7a7b", "#b8860b", "#7a5548"] },
+  ocean: { label: "Ocean", work: 22, board: "#f3fbfd", grid: "#d9eef3", glow: false, motifs: ["🐟", "🐚", "🐙"],
+    colors: ["#2a7fbf", "#39b3c6", "#f2a65a", "#5ac8a8", "#e76f6f", "#3d5a99", "#f5d06f"] },
+  space: { label: "Space", work: 28, board: "#f6f6ff", grid: "#e4e4f7", glow: true, motifs: ["🚀", "🪐", "⭐"],
+    colors: ["#5b4bdb", "#8f6ee8", "#2fb4e6", "#e85fb3", "#f0a830", "#4a6fe3", "#b05ce0"] },
+  candy: { label: "Candy", work: 22, board: "#fff7fb", grid: "#f6e1ec", glow: false, motifs: ["🍬", "🍭", "🧁"],
+    colors: ["#ff7eb6", "#ffb86b", "#8be0c9", "#b49cff", "#ff6b81", "#7cc6ff", "#ffd45e"] },
+  dino: { label: "Dinosaur", work: 24, board: "#f8fbf1", grid: "#e3ecd3", glow: false, motifs: ["🦖", "🦕", "🥚"],
+    colors: ["#6a9f3a", "#a3c45a", "#d98c3a", "#4f7d4a", "#c2b25a", "#8b6b3d", "#5fae8a"] },
+  garden: { label: "Garden", work: 22, board: "#fbfcf4", grid: "#e8edd6", glow: false, motifs: ["🌻", "🌷", "🍓"],
+    colors: ["#f2c230", "#e8657a", "#6bb34a", "#d9534f", "#9b72cf", "#f39c4a", "#4aa38c"] },
+  robot: { label: "Robot", work: 26, board: "#f6f8fa", grid: "#e1e6eb", glow: false, motifs: ["🤖", "⚙️", "🔋"],
+    colors: ["#7f8c9a", "#3a8fb7", "#e0a33a", "#5a6b7d", "#d0584f", "#4fa36c", "#9aa9b8"] }
+};
+
+const CUSTOMERS = [
+  "Tiny Moon Toys", "Cobalt Kite Cafe", "Brambleton Library", "Snack Wizard Truck",
+  "Glowbug Skate Rink", "Paw Parlor Grooming", "Quiet Owl Bookshop", "Rocket Sock Club",
+  "Maple Hollow Camp", "Pebble Street Arcade", "Sunny Fern Daycare", "Thunder Turnip Gym",
+  "Velvet Moose Pizza", "Lantern Bay Aquarium"
+];
+
+// ------------------------------------------------------------------
+// SECOND PRODUCT LINE: DOKU
+// Symbol sudoku games. Same idea as the block line: one doku engine,
+// and every product is just a skin file with nine symbols on it.
+// ------------------------------------------------------------------
+const DOKU_THEMES = {
+  hacker: { label: "Hackerdoku", work: 26, board: "#f4f9ff", grid: "#cfe0f5", glow: true,
+    glyphs: ["🐛", "🐴", "⌨️", "🕳️", "🎣", "💣", "🕷️", "👁️", "🔒"],
+    names: ["worm", "trojan", "keylogger", "rootkit", "phishing hook", "zero day", "crawler", "spyware", "ransomware"],
+    colors: ["#2463b0", "#3a8fb7", "#4fa36c", "#5d6b78", "#2fb4e6", "#d0584f", "#8a5cb8", "#3f5fbf", "#e0a33a"] },
+  meow: { label: "Meowdoku", work: 22, board: "#fffaf4", grid: "#f0e1cf", glow: false,
+    glyphs: ["😺", "😸", "😹", "😻", "😼", "😽", "🙀", "😿", "🐈"],
+    names: ["grin cat", "happy cat", "laughing cat", "heart eyes cat", "smirk cat", "kiss cat", "shocked cat", "sad cat", "walking cat"],
+    colors: ["#e2a93b", "#d49a5e", "#c68a52", "#e8657a", "#9a6843", "#ff7eb6", "#8a5cb8", "#3a8fb7", "#7a5548"] },
+  classic: { label: "Numberdoku", work: 14, board: "#fbfdfc", grid: "#e1eae6", glow: false,
+    glyphs: ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
+    names: ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine"],
+    colors: ["#2463b0", "#2463b0", "#2463b0", "#2463b0", "#2463b0", "#2463b0", "#2463b0", "#2463b0", "#2463b0"] },
+  fruit: { label: "Fruitdoku", work: 20, board: "#fffdf4", grid: "#efe8cf", glow: false,
+    glyphs: ["🍎", "🍌", "🍇", "🍓", "🍑", "🍍", "🥝", "🍒", "🍋"],
+    names: ["apple", "banana", "grapes", "strawberry", "peach", "pineapple", "kiwi", "cherry", "lemon"],
+    colors: ["#d0584f", "#f2c230", "#8a5cb8", "#e8657a", "#f39c4a", "#e0a33a", "#6bb34a", "#c0392b", "#f5d06f"] },
+  space: { label: "Spacedoku", work: 24, board: "#f6f6ff", grid: "#e4e4f7", glow: true,
+    glyphs: ["🚀", "🪐", "⭐", "🌙", "☄️", "🛸", "👽", "🌍", "🛰️"],
+    names: ["rocket", "planet", "star", "moon", "comet", "saucer", "alien", "earth", "satellite"],
+    colors: ["#5b4bdb", "#8f6ee8", "#f0a830", "#4a6fe3", "#e85fb3", "#2fb4e6", "#4fa36c", "#2a7fbf", "#7f8c9a"] },
+  candy: { label: "Candydoku", work: 20, board: "#fff7fb", grid: "#f6e1ec", glow: false,
+    glyphs: ["🍬", "🍭", "🧁", "🍩", "🍪", "🍫", "🍰", "🍦", "🎂"],
+    names: ["candy", "lollipop", "cupcake", "donut", "cookie", "chocolate", "cake slice", "ice cream", "birthday cake"],
+    colors: ["#ff7eb6", "#ffb86b", "#8be0c9", "#b49cff", "#c68a52", "#7a5548", "#ff6b81", "#7cc6ff", "#ffd45e"] },
+  dino: { label: "Dinodoku", work: 22, board: "#f8fbf1", grid: "#e3ecd3", glow: false,
+    glyphs: ["🦖", "🦕", "🥚", "🌋", "🦴", "🌿", "🪨", "🐊", "🦎"],
+    names: ["rex", "longneck", "egg", "volcano", "bone", "fern", "rock", "croc", "lizard"],
+    colors: ["#6a9f3a", "#a3c45a", "#c2b25a", "#d98c3a", "#8b6b3d", "#4f7d4a", "#7f8c9a", "#5fae8a", "#6bb34a"] },
+  ocean: { label: "Oceandoku", work: 20, board: "#f3fbfd", grid: "#d9eef3", glow: false,
+    glyphs: ["🐟", "🐚", "🐙", "🦀", "🐬", "🐳", "🦈", "🐠", "🪸"],
+    names: ["fish", "shell", "octopus", "crab", "dolphin", "whale", "shark", "tropical fish", "coral"],
+    colors: ["#2a7fbf", "#f2a65a", "#e76f6f", "#d0584f", "#39b3c6", "#3d5a99", "#5a6b7d", "#f5d06f", "#ff7eb6"] },
+  robot: { label: "Robodoku", work: 22, board: "#f6f8fa", grid: "#e1e6eb", glow: false,
+    glyphs: ["🤖", "⚙️", "🔋", "🔧", "🔩", "💡", "📡", "🛠️", "🧲"],
+    names: ["robot", "gear", "battery", "wrench", "bolt", "bulb", "dish", "toolkit", "magnet"],
+    colors: ["#7f8c9a", "#5a6b7d", "#4fa36c", "#3a8fb7", "#9aa9b8", "#e0a33a", "#2463b0", "#d0584f", "#c0392b"] }
+};
+
+const DOKU_LEVELS = {
+  easy: { label: "easy puzzles", clues: 40, work: 0 },
+  medium: { label: "medium puzzles", clues: 32, work: 6 },
+  hard: { label: "hard puzzles", clues: 26, work: 12 }
+};
+
+// The Hackerdoku campaign. Every solved board is a machine that joins
+// your botnet. Nodes are spent on tools and scans.
+const HACK_KEY = "stackloom-hackerdoku-1";
+const HACK_TARGETS = [
+  { name: "Smart fridge", level: "easy", nodes: 3 },
+  { name: "Neighbor's router", level: "easy", nodes: 5 },
+  { name: "Coffee shop Wi-Fi", level: "easy", nodes: 8 },
+  { name: "Arcade high score server", level: "medium", nodes: 12 },
+  { name: "Print shop network", level: "medium", nodes: 18 },
+  { name: "Campus network", level: "medium", nodes: 25 },
+  { name: "Cloud data center", level: "hard", nodes: 40 },
+  { name: "Weather satellite", level: "hard", nodes: 60 }
+];
+const HACK_ENDLESS = { name: "Random server farm", level: "hard", nodes: 30 };
+const HACK_RANKS = [
+  { at: 0, name: "Script kiddie" },
+  { at: 10, name: "Packet goblin" },
+  { at: 40, name: "Grey hat" },
+  { at: 100, name: "Botnet herder" },
+  { at: 200, name: "Zero day broker" },
+  { at: 350, name: "Satellite whisperer" }
+];
+const HACK_TOOLS = [
+  { key: "scanner", name: "Port scanner", cost: 15, text: "Scans cost 2 nodes instead of 5." },
+  { key: "rootkit", name: "Rootkit", cost: 30, text: "Absorbs your first wrong move on every board, so it never counts as a strike." },
+  { key: "keylogger", name: "Keylogger", cost: 50, text: "Every board starts with three extra cells already cracked." }
+];
+const HACK_STRIKES = 3;
+
+// ------------------------------------------------------------------
+// THIRD PRODUCT LINE: BUBBLES
+// Bubble shooter games. One bubble engine, and every product is a skin
+// file with six bubble colors and six pictures.
+// ------------------------------------------------------------------
+const BUBBLE_THEMES = {
+  classic: { label: "Bubble Classic", work: 16, board: "#f7fbff", glow: false,
+    glyphs: ["", "", "", "", "", ""], names: ["red", "blue", "green", "yellow", "purple", "orange"],
+    colors: ["#e0524b", "#2f7fd6", "#3fae5a", "#f2c230", "#8a5cb8", "#f08a32"] },
+  hacker: { label: "Packet Popper", work: 24, board: "#f4f9ff", glow: true,
+    glyphs: ["🐛", "🐴", "🔒", "💣", "🕷️", "👁️"], names: ["worm", "trojan", "lock", "zero day", "crawler", "spyware"],
+    colors: ["#2463b0", "#2fb4e6", "#4fa36c", "#d0584f", "#8a5cb8", "#e0a33a"] },
+  neon: { label: "Neon Pop", work: 20, board: "#ffffff", glow: true,
+    glyphs: ["", "", "", "", "", ""], names: ["pink", "cyan", "lime", "gold", "orange", "violet"],
+    colors: ["#ff2fd6", "#00c8f0", "#29d614", "#ffc400", "#ff6a00", "#a526ff"] },
+  dog: { label: "Pup Pop", work: 22, board: "#fffaf2", glow: false,
+    glyphs: ["🐶", "🦴", "🐾", "🎾", "🌭", "🐕"], names: ["puppy", "bone", "paw", "ball", "hot dog", "hound"],
+    colors: ["#c68a52", "#e9c9a3", "#9a6843", "#b8d94a", "#d0584f", "#7a5548"] },
+  candy: { label: "Sugar Pop", work: 20, board: "#fff7fb", glow: false,
+    glyphs: ["🍬", "🍭", "🧁", "🍩", "🍪", "🍫"], names: ["candy", "lollipop", "cupcake", "donut", "cookie", "chocolate"],
+    colors: ["#ff7eb6", "#ffb86b", "#8be0c9", "#b49cff", "#d49a5e", "#7a5548"] },
+  ocean: { label: "Bubble Reef", work: 22, board: "#f3fbfd", glow: false,
+    glyphs: ["🐟", "🐚", "🐙", "🦀", "🐬", "🪸"], names: ["fish", "shell", "octopus", "crab", "dolphin", "coral"],
+    colors: ["#2a7fbf", "#f2a65a", "#e76f6f", "#d0584f", "#39b3c6", "#ff7eb6"] },
+  space: { label: "Orbit Pop", work: 24, board: "#f6f6ff", glow: true,
+    glyphs: ["🚀", "🪐", "⭐", "🌙", "☄️", "👽"], names: ["rocket", "planet", "star", "moon", "comet", "alien"],
+    colors: ["#5b4bdb", "#8f6ee8", "#f0a830", "#4a6fe3", "#e85fb3", "#4fa36c"] },
+  fruit: { label: "Fruit Pop", work: 20, board: "#fffdf4", glow: false,
+    glyphs: ["🍎", "🍌", "🍇", "🍓", "🍊", "🥝"], names: ["apple", "banana", "grapes", "strawberry", "orange", "kiwi"],
+    colors: ["#d0584f", "#f2c230", "#8a5cb8", "#e8657a", "#f39c4a", "#6bb34a"] },
+  dino: { label: "Dino Pop", work: 22, board: "#f8fbf1", glow: false,
+    glyphs: ["🦖", "🦕", "🥚", "🌋", "🦴", "🌿"], names: ["rex", "longneck", "egg", "volcano", "bone", "fern"],
+    colors: ["#6a9f3a", "#a3c45a", "#e9c9a3", "#d98c3a", "#8b6b3d", "#4f7d4a"] }
+};
+
+const BUBBLE_PALETTES = {
+  four: { label: "four colors", count: 4, work: 0 },
+  five: { label: "five colors", count: 5, work: 4 },
+  six: { label: "six colors", count: 6, work: 8 }
+};
+
+const BUBBLE_PACES = {
+  normal: { label: "normal ceiling", shots: 6, work: 0 },
+  relaxed: { label: "slow ceiling", shots: 9, work: 2 },
+  frantic: { label: "frantic ceiling", shots: 4, work: 3 }
+};
+
+// ------------------------------------------------------------------
+// FOURTH PRODUCT LINE: CARDS
+// Card games. One deck engine runs solitaire and video poker, and every
+// product is a deck file: four suits, thirteen rank labels, three face
+// pictures, a card back, and a table color.
+// ------------------------------------------------------------------
+const RANKS_STANDARD = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+const CARD_THEMES = {
+  classic: { label: "Classic Deck", work: 16, felt: "#e8f3ec", emblem: "♠",
+    suits: [{ glyph: "♠", name: "spades", color: "#1c2833", red: false }, { glyph: "♥", name: "hearts", color: "#c0392b", red: true },
+            { glyph: "♣", name: "clubs", color: "#1c2833", red: false }, { glyph: "♦", name: "diamonds", color: "#c0392b", red: true }],
+    ranks: RANKS_STANDARD, faces: ["💂", "👸", "🤴"],
+    back: "repeating-linear-gradient(45deg, #2463b0 0 5px, #4f86cf 5px 10px)" },
+  hacker: { label: "Hacker Deck", work: 26, felt: "#eaf3ff", emblem: "💀",
+    suits: [{ glyph: "🐛", name: "worms", color: "#2463b0", red: false }, { glyph: "💣", name: "zero days", color: "#c0392b", red: true },
+            { glyph: "🔒", name: "locks", color: "#2463b0", red: false }, { glyph: "👁️", name: "spyware", color: "#c0392b", red: true }],
+    ranks: ["0x1", "0x2", "0x3", "0x4", "0x5", "0x6", "0x7", "0x8", "0x9", "0xA", "0xB", "0xC", "0xD"], faces: ["🧑‍💻", "🕵️", "🤖"],
+    back: "repeating-linear-gradient(90deg, #2463b0 0 2px, #1d4f8c 2px 4px, #2fb4e6 4px 5px, #1d4f8c 5px 9px)" },
+  dog: { label: "Doggo Deck", work: 22, felt: "#fff6ea", emblem: "🐾",
+    suits: [{ glyph: "🦴", name: "bones", color: "#7a5548", red: false }, { glyph: "🌭", name: "hot dogs", color: "#c0392b", red: true },
+            { glyph: "🐾", name: "paws", color: "#7a5548", red: false }, { glyph: "❤️", name: "belly rubs", color: "#c0392b", red: true }],
+    ranks: RANKS_STANDARD, faces: ["🐕", "🐩", "🐺"],
+    back: "radial-gradient(#e9c9a3 2px, transparent 3px) 0 0 / 10px 10px, #c68a52" },
+  ninja: { label: "Shadow Deck", work: 26, felt: "#f3f3f7", emblem: "🥷",
+    suits: [{ glyph: "🗡️", name: "blades", color: "#4a4f6e", red: false }, { glyph: "🏮", name: "lanterns", color: "#c0392b", red: true },
+            { glyph: "🎋", name: "bamboo", color: "#4a4f6e", red: false }, { glyph: "🐉", name: "dragons", color: "#c0392b", red: true }],
+    ranks: ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "士", "姫", "王"], faces: ["🥷", "👘", "🏯"],
+    back: "repeating-linear-gradient(135deg, #4a4f6e 0 6px, #6a7ba2 6px 8px)" },
+  space: { label: "Cosmic Deck", work: 24, felt: "#f1f1ff", emblem: "🪐",
+    suits: [{ glyph: "🚀", name: "rockets", color: "#3f3a9c", red: false }, { glyph: "☄️", name: "comets", color: "#c0392b", red: true },
+            { glyph: "🪐", name: "planets", color: "#3f3a9c", red: false }, { glyph: "🌞", name: "suns", color: "#c0392b", red: true }],
+    ranks: ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII"], faces: ["👩‍🚀", "👽", "🛸"],
+    back: "radial-gradient(#ffffff 1px, transparent 2px) 0 0 / 9px 9px, linear-gradient(160deg, #5b4bdb, #2fb4e6)" },
+  candy: { label: "Candy Deck", work: 20, felt: "#fff4f9", emblem: "🍭",
+    suits: [{ glyph: "🍫", name: "chocolates", color: "#7a5548", red: false }, { glyph: "🍬", name: "candies", color: "#d6336c", red: true },
+            { glyph: "🍪", name: "cookies", color: "#7a5548", red: false }, { glyph: "🍓", name: "berries", color: "#d6336c", red: true }],
+    ranks: RANKS_STANDARD, faces: ["🧁", "🎂", "🍰"],
+    back: "repeating-linear-gradient(45deg, #ff7eb6 0 6px, #ffffff 6px 12px, #8be0c9 12px 18px, #ffffff 18px 24px)" },
+  ocean: { label: "Tide Deck", work: 22, felt: "#eaf8fb", emblem: "🐚",
+    suits: [{ glyph: "🐟", name: "fish", color: "#1d5f8c", red: false }, { glyph: "🦀", name: "crabs", color: "#c0392b", red: true },
+            { glyph: "🐚", name: "shells", color: "#1d5f8c", red: false }, { glyph: "🐙", name: "octopi", color: "#c0392b", red: true }],
+    ranks: RANKS_STANDARD, faces: ["🧜", "🐳", "🦈"],
+    back: "repeating-radial-gradient(circle at 50% 120%, #2a7fbf 0 6px, #39b3c6 6px 12px)" },
+  dino: { label: "Jurassic Deck", work: 22, felt: "#f2f8e8", emblem: "🦖",
+    suits: [{ glyph: "🦴", name: "bones", color: "#4f6d2a", red: false }, { glyph: "🌋", name: "volcanoes", color: "#c0392b", red: true },
+            { glyph: "🥚", name: "eggs", color: "#4f6d2a", red: false }, { glyph: "🔥", name: "fires", color: "#c0392b", red: true }],
+    ranks: RANKS_STANDARD, faces: ["🦕", "🦖", "🐊"],
+    back: "repeating-linear-gradient(60deg, #6a9f3a 0 7px, #a3c45a 7px 14px)" },
+  robot: { label: "Binary Deck", work: 26, felt: "#eef2f6", emblem: "🤖",
+    suits: [{ glyph: "⚙️", name: "gears", color: "#3d4b5a", red: false }, { glyph: "🔋", name: "batteries", color: "#c0392b", red: true },
+            { glyph: "🔧", name: "wrenches", color: "#3d4b5a", red: false }, { glyph: "💡", name: "bulbs", color: "#c0392b", red: true }],
+    ranks: ["1", "10", "11", "100", "101", "110", "111", "1000", "1001", "1010", "1011", "1100", "1101"], faces: ["🤖", "🦾", "🛰️"],
+    back: "linear-gradient(#9aa9b8 1px, transparent 1px) 0 0 / 8px 8px, linear-gradient(90deg, #9aa9b8 1px, #e1e6eb 1px) 0 0 / 8px 8px" },
+  meow: { label: "Meow Deck", work: 22, felt: "#fff8f0", emblem: "🐈",
+    suits: [{ glyph: "🧶", name: "yarn", color: "#5d4a7a", red: false }, { glyph: "🐟", name: "fish", color: "#c0392b", red: true },
+            { glyph: "🐾", name: "paws", color: "#5d4a7a", red: false }, { glyph: "🐭", name: "mice", color: "#c0392b", red: true }],
+    ranks: RANKS_STANDARD, faces: ["😼", "😻", "🐈"],
+    back: "radial-gradient(#ffffff 2px, transparent 3px) 0 0 / 12px 12px, #e2a93b" }
+};
+Object.values(CARD_THEMES).forEach(t => { t.colors = t.suits.map(s => s.color).concat(["#2463b0"]); t.glyphs = t.suits.map(s => s.glyph); });
+
+const CARD_GAMES = {
+  solitaire: { label: "solitaire", work: 8 },
+  poker: { label: "video poker", work: 5 }
+};
+
+// Premium art: hand drawn style rendering instead of flat emoji. Costs
+// more to build, customers pay almost double.
+const PREMIUM = { work: 16, payBoost: 1.8 };
+
+// ------------------------------------------------------------------
+// FIFTH PRODUCT LINE: RUNNERS
+// The math gate runner from the phone ads. Pick a lane, run through a
+// gate that adds or multiplies your crowd, smash the enemy squads, and
+// outnumber the boss at the end. Every product is a skin file.
+// ------------------------------------------------------------------
+const RUNNER_THEMES = {
+  army: { label: "Gate Commander", work: 18, hero: "💂", enemy: "👹", boss: "🏰", sky: "#eaf3ff", ground: "#d9e8c8", road: "#c9d3df", names: ["soldier", "goblin", "fortress"] },
+  hacker: { label: "Botnet Rush", work: 24, hero: "🤖", enemy: "🛡️", boss: "🏦", sky: "#eef6ff", ground: "#dbe7f5", road: "#c3d2e4", names: ["bot", "firewall", "mainframe"] },
+  zombie: { label: "Horde Math", work: 22, hero: "🧟", enemy: "🧑‍🌾", boss: "🏚️", sky: "#f2f5ec", ground: "#d6e3c3", road: "#cfcabd", names: ["zombie", "farmer", "farmhouse"] },
+  duck: { label: "Duck Duck Multiply", work: 20, hero: "🦆", enemy: "🐊", boss: "🦢", sky: "#eefaff", ground: "#cfeedd", road: "#bfe3f0", names: ["duck", "gator", "swan king"] },
+  dog: { label: "Pack Run", work: 22, hero: "🐕", enemy: "🐈", boss: "🧹", sky: "#fff8ee", ground: "#e9e2c8", road: "#e0d4c0", names: ["dog", "cat", "mail carrier broom"] },
+  ninja: { label: "Clan Count", work: 24, hero: "🥷", enemy: "👺", boss: "🏯", sky: "#f4f2fa", ground: "#e0e6d2", road: "#d3cfdc", names: ["ninja", "oni", "castle"] },
+  space: { label: "Fleet Formula", work: 24, hero: "🚀", enemy: "👾", boss: "🛸", sky: "#f1f1ff", ground: "#e3e1f5", road: "#cfcce8", names: ["rocket", "invader", "mothership"] },
+  penguin: { label: "Waddle Count", work: 20, hero: "🐧", enemy: "🦭", boss: "🐻‍❄️", sky: "#f2fbff", ground: "#e4f3fa", road: "#d5e8f2", names: ["penguin", "seal", "polar bear"] }
+};
+Object.values(RUNNER_THEMES).forEach(t => {
+  t.glyphs = [t.hero, t.enemy, t.boss];
+  t.colors = ["#2463b0", "#d0584f", t.road, t.ground, t.sky];
+});
+
+const RUNNER_MATH = {
+  friendly: { label: "friendly math", ops: ["+", "x"], work: 0 },
+  tricky: { label: "tricky math", ops: ["+", "x", "-", "/"], work: 4 }
+};
+const RUNNER_LENGTHS = {
+  short: { label: "short track", gates: 8, work: 0 },
+  long: { label: "long track", gates: 13, work: 4 }
+};
+
+// ------------------------------------------------------------------
+// Company rules
+// ------------------------------------------------------------------
+const DAY_SECONDS = 45;
+const SAVE_KEY = "stackloom-company-1";
+
+const PRICES = { agent: 500, agentSalary: 60, dev: 1500, devSalary: 150, terminalUpkeep: 10 };
+
+const OFFICES = [
+  { name: "Garage", terminals: 2, agents: 1, devs: 0, rent: 0, cost: 0 },
+  { name: "Shared studio", terminals: 6, agents: 2, devs: 1, rent: 60, cost: 2000 },
+  { name: "Office floor", terminals: 12, agents: 4, devs: 2, rent: 180, cost: 7000 },
+  { name: "Campus", terminals: 24, agents: 8, devs: 3, rent: 450, cost: 20000 }
+];
+
+const UPGRADES = [
+  { key: "schema", name: "Theme schema", cost: 800,
+    text: "A written rule for what a valid theme file must contain. Terminals write fewer bugs." },
+  { key: "tests", name: "Test suite", cost: 1600,
+    text: "Automatic checks run the moment a build finishes and catch most bugs before anyone plays the game." },
+  { key: "engine", name: "Shared engine", cost: 3000,
+    text: "Every game runs on one engine and only the theme file changes, so nothing gets copied. Builds go faster." },
+  { key: "generator", name: "Theme generator", cost: 6000,
+    text: "Terminals write theme files from a short description instead of by hand. Builds go faster and customers pay more." }
+];
+
+const AGENT_NAMES = ["Pim", "Rook", "Juno", "Tock", "Nib", "Orla", "Fen", "Wren"];
+const DEV_NAMES = ["Marlo", "Kestrel", "Ines"];
+
+// Senior hires. Each one is more experienced and more expensive than the
+// last, needs the one before it on staff, and opens a product line.
+const SENIORS = [
+  { key: "puzzle", title: "Puzzle designer", name: "Odessa", cost: 2500, salary: 200, office: 1, needs: "dev", line: "doku", lineName: "Doku line",
+    text: "Knows logic puzzles cold. Customers start ordering symbol sudoku games like Hackerdoku and Meowdoku, and doku builds go faster." },
+  { key: "physics", title: "Physics programmer", name: "Teodor", cost: 4500, salary: 300, office: 1, needs: "puzzle", line: "bubble", lineName: "Bubble line",
+    text: "Makes things bounce right. Customers start ordering bubble shooters like Packet Popper and Pup Pop, and bubble builds go faster." },
+  { key: "ads", title: "Ad producer", name: "Brisco", cost: 6000, salary: 360, office: 1, needs: "physics", line: "runner", lineName: "Runner line",
+    text: "Spent a career making phone ads for games that look nothing like the ads. Customers start ordering math gate runners, the game from the ads, and runner builds go faster." },
+  { key: "systems", title: "Systems designer", name: "Halvard", cost: 7500, salary: 420, office: 2, needs: "physics", line: "cards", lineName: "Card line",
+    text: "Reads rulebooks for fun. Customers start ordering themed card decks for solitaire and video poker, and deck builds go faster." },
+  { key: "art", title: "Art director", name: "Celeste", cost: 12000, salary: 600, office: 2, needs: "systems", line: "art", lineName: "premium line",
+    text: "Refuses to ship flat emoji. Customers start ordering premium versions of every line with drawn art, paying almost double. Premium builds go faster." }
+];
+
+function lineOpen(line) {
+  const senior = SENIORS.find(x => x.line === line);
+  return !!(company.upgrades[line] || (senior && company.seniors[senior.key]));
+}
+function seniorFor(line) { const x = SENIORS.find(y => y.line === line); return x && company.seniors[x.key] ? x : null; }
+function lineBoost(order) {
+  let boost = 1;
+  if (seniorFor(order.line || "blocks")) boost *= 1.2;
+  if (order.premium && seniorFor("art")) boost *= 1.2;
+  return boost;
+}
+
+// ------------------------------------------------------------------
+// Small helpers
+// ------------------------------------------------------------------
+function pick(list) { return list[Math.floor(Math.random() * list.length)]; }
+function clamp(n, low, high) { return Math.max(low, Math.min(high, n)); }
+function plural(n, word) { return n === 1 ? word : word + "s"; }
+// Lighten (positive amount) or darken (negative amount) a hex color.
+function shade(hex, amount) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = [n >> 16, (n >> 8) & 255, n & 255].map(v => amount >= 0 ? Math.round(v + (255 - v) * amount) : Math.round(v * (1 + amount)));
+  return "#" + ch.map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0")).join("");
+}
+function cash(n) { return (n < 0 ? "-$" : "$") + Math.abs(Math.round(n)).toLocaleString("en-US"); }
+
+// ------------------------------------------------------------------
+// Saving and loading the company
+// ------------------------------------------------------------------
+function newCompany() {
+  return {
+    money: 600, reputation: 50, day: 1, dayTimer: 0, time: 0, officeLevel: 0,
+    terminals: [{ job: null }], agents: [], devs: [], seniors: {}, upgrades: {},
+    orders: [], catalog: [], nextId: 1, offerTimer: 2,
+    shipped: 0, bugsShipped: 0, log: []
+  };
+}
+
+function loadCompany() {
+  try {
+    const saved = localStorage.getItem(SAVE_KEY);
+    if (saved) return Object.assign(newCompany(), JSON.parse(saved));
+  } catch (error) { /* broken or blocked save, start fresh */ }
+  return newCompany();
+}
+
+function saveCompany() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(company)); }
+  catch (error) { /* storage unavailable, skip */ }
+}
+
+let company = loadCompany();
+let dirty = true;
+let currentTab = "orders";
+let resetArmedUntil = 0;
+
+// ------------------------------------------------------------------
+// Who runs what. Agents take terminals three at a time, in order.
+// Devs take agents three at a time, in order.
+// ------------------------------------------------------------------
+function findOrder(id) { return company.orders.find(o => o.id === id); }
+function office() { return OFFICES[company.officeLevel]; }
+function isManaged(i) { return i >= 0 && i < company.agents.length * 3; }
+function isBoosted(i) { return i >= 0 && Math.floor(i / 3) < Math.min(company.agents.length, company.devs.length * 3); }
+function agentFor(i) { return company.agents[Math.floor(i / 3)]; }
+function devFor(i) { return company.devs[Math.floor(Math.floor(i / 3) / 3)]; }
+
+function terminalSpeed(i) {
+  let speed = 1;
+  if (company.upgrades.engine) speed *= 1.3;
+  if (company.upgrades.generator) speed *= 1.2;
+  if (isBoosted(i)) speed *= 1.25;
+  return speed;
+}
+
+function bugChance(i) {
+  let chance = 0.35;
+  if (company.upgrades.schema) chance -= 0.15;
+  if (isBoosted(i)) chance -= 0.1;
+  return Math.max(0.04, chance);
+}
+
+function offerInterval() { return Math.max(2.5, (22 - company.reputation * 0.12) / Math.sqrt(company.terminals.length)); }
+function maxOffers() { return Math.min(10, 3 + Math.floor(company.terminals.length / 2)); }
+function terminalPrice() { return 350 + 150 * (company.terminals.length - 1); }
+
+// ------------------------------------------------------------------
+// Manufacturing: an order becomes a theme file
+// ------------------------------------------------------------------
+function isDoku(order) { return order.line === "doku"; }
+function isBubble(order) { return order.line === "bubble"; }
+function isCards(order) { return order.line === "cards"; }
+function isRunner(order) { return order.line === "runner"; }
+function lookFor(order) {
+  if (isDoku(order)) return DOKU_THEMES[order.theme];
+  if (isBubble(order)) return BUBBLE_THEMES[order.theme];
+  if (isCards(order)) return CARD_THEMES[order.theme];
+  if (isRunner(order)) return RUNNER_THEMES[order.theme];
+  return THEMES[order.theme];
+}
+function bugSlots(order) {
+  if (isDoku(order)) return 9;
+  if (isBubble(order)) return BUBBLE_PALETTES[order.palette].count;
+  if (isCards(order)) return 4;
+  if (isRunner(order)) return 3;
+  return PIECE_SETS[order.pieceSet].shapes.length;
+}
+
+function orderSpec(order) {
+  const prem = order.premium ? ", premium art" : "";
+  if (isDoku(order)) return lookFor(order).label + ", " + DOKU_LEVELS[order.level].label + prem;
+  if (isBubble(order)) {
+    const parts = [lookFor(order).label + " bubble shooter", BUBBLE_PALETTES[order.palette].label];
+    if (order.pace !== "normal") parts.push(BUBBLE_PACES[order.pace].label);
+    return parts.join(", ") + prem;
+  }
+  if (isCards(order)) return lookFor(order).label + " for " + CARD_GAMES[order.game].label + prem;
+  if (isRunner(order)) return lookFor(order).label + " gate runner, " + RUNNER_MATH[order.math].label + ", " + RUNNER_LENGTHS[order.length].label + prem;
+  const parts = [lookFor(order).label + " theme"];
+  if (order.premium) parts.push("premium art");
+  if (order.pieceSet !== "standard") parts.push(PIECE_SETS[order.pieceSet].label);
+  if (order.board !== "standard") parts.push(BOARDS[order.board].label);
+  if (order.speed !== "normal") parts.push(SPEEDS[order.speed].label);
+  return parts.join(", ");
+}
+
+function buildDokuFile(customer, themeKey, levelKey) {
+  const look = DOKU_THEMES[themeKey];
+  return {
+    product: "doku",
+    themeName: look.label,
+    customer: customer,
+    size: 9,
+    clues: DOKU_LEVELS[levelKey].clues,
+    board: look.board,
+    grid: look.grid,
+    glow: look.glow,
+    symbols: look.glyphs.map((glyph, i) => ({ name: look.names[i], glyph: glyph, color: look.colors[i] }))
+  };
+}
+
+function buildBubbleFile(customer, themeKey, paletteKey, paceKey, premium) {
+  const look = BUBBLE_THEMES[themeKey];
+  const count = BUBBLE_PALETTES[paletteKey].count;
+  return {
+    product: "bubble",
+    themeName: look.label,
+    customer: customer,
+    premium: !!premium,
+    columns: 8,
+    shotsPerDrop: BUBBLE_PACES[paceKey].shots,
+    board: look.board,
+    glow: look.glow,
+    bubbles: look.colors.slice(0, count).map((color, i) => ({ name: look.names[i], glyph: look.glyphs[i], color: color }))
+  };
+}
+
+function buildCardFile(customer, themeKey, gameKey, premium) {
+  const look = CARD_THEMES[themeKey];
+  return {
+    product: "cards",
+    game: gameKey,
+    themeName: look.label,
+    customer: customer,
+    premium: !!premium,
+    felt: look.felt,
+    back: look.back,
+    emblem: look.emblem,
+    ranks: look.ranks.slice(),
+    faces: look.faces.slice(),
+    suits: look.suits.map(s => ({ name: s.name, glyph: s.glyph, color: s.color, red: s.red }))
+  };
+}
+
+function buildRunnerFile(customer, themeKey, mathKey, lengthKey, premium) {
+  const look = RUNNER_THEMES[themeKey];
+  return {
+    product: "runner",
+    themeName: look.label,
+    customer: customer,
+    premium: !!premium,
+    ops: RUNNER_MATH[mathKey].ops.slice(),
+    gates: RUNNER_LENGTHS[lengthKey].gates,
+    sky: look.sky,
+    ground: look.ground,
+    road: look.road,
+    goodGate: "#2463b0",
+    badGate: "#d0584f",
+    units: [
+      { role: "runner", name: look.names[0], glyph: look.hero },
+      { role: "enemy", name: look.names[1], glyph: look.enemy },
+      { role: "boss", name: look.names[2], glyph: look.boss }
+    ]
+  };
+}
+
+function buildThemeFile(order) {
+  if (isDoku(order)) {
+    const file = buildDokuFile(order.customer, order.theme, order.level);
+    if (order.premium) file.premium = true;
+    return file;
+  }
+  if (isBubble(order)) return buildBubbleFile(order.customer, order.theme, order.palette, order.pace, order.premium);
+  if (isCards(order)) return buildCardFile(order.customer, order.theme, order.game, order.premium);
+  if (isRunner(order)) return buildRunnerFile(order.customer, order.theme, order.math, order.length, order.premium);
+  const look = lookFor(order);
+  return {
+    themeName: look.label,
+    customer: order.customer,
+    premium: !!order.premium,
+    columns: BOARDS[order.board].columns,
+    rows: ENGINE.rows,
+    startDropMs: SPEEDS[order.speed].startDropMs,
+    board: look.board,
+    grid: look.grid,
+    glow: look.glow,
+    pieces: PIECE_SETS[order.pieceSet].shapes.map((shapeName, i) => ({
+      name: shapeName,
+      color: look.colors[i % look.colors.length],
+      motif: look.motifs.length ? look.motifs[i % look.motifs.length] : "",
+      cells: SHAPES[shapeName]
+    }))
+  };
+}
+
+// A bug in this studio is one piece that lost its color and picture.
+function withBug(file, bug) {
+  if (!bug) return file;
+  const copy = JSON.parse(JSON.stringify(file));
+  if (copy.product === "doku") {
+    copy.symbols[bug.pieceIndex].glyph = "?";
+    copy.symbols[bug.pieceIndex].color = "#c3c8ca";
+    return copy;
+  }
+  if (copy.product === "bubble") {
+    copy.bubbles[bug.pieceIndex].glyph = "?";
+    copy.bubbles[bug.pieceIndex].color = "#c3c8ca";
+    return copy;
+  }
+  if (copy.product === "runner") {
+    copy.units[bug.pieceIndex].glyph = "?";
+    return copy;
+  }
+  if (copy.product === "cards") {
+    copy.suits[bug.pieceIndex].glyph = "?";
+    copy.suits[bug.pieceIndex].color = "#a9b1b5";
+    return copy;
+  }
+  copy.pieces[bug.pieceIndex].color = "#c3c8ca";
+  copy.pieces[bug.pieceIndex].motif = "";
+  return copy;
+}
+
+function formatFile(file) {
+  let text = JSON.stringify(file, null, 2);
+  text = text.replace(/\[\s+([\d,\s]+?)\s+\]/g, (match, inner) => "[" + inner.replace(/\s+/g, "") + "]");
+  text = text.replace(/\[\s+((?:\[[\d,]+\],?\s*)+)\]/g, (match, inner) => "[" + inner.replace(/\s+/g, "") + "]");
+  return text;
+}
+
+const HOUSE_DOKU = {
+  id: "housedoku",
+  customer: "the studio",
+  spec: "Hackerdoku, the sample doku every studio keeps on hand",
+  day: 0,
+  bug: false,
+  file: buildDokuFile("The studio", "hacker", "medium")
+};
+
+const HOUSE_BUBBLE = {
+  id: "housebubble",
+  customer: "the studio",
+  spec: "Packet Popper, the sample bubble shooter every studio keeps on hand",
+  day: 0,
+  bug: false,
+  file: buildBubbleFile("The studio", "hacker", "five", "normal", false)
+};
+
+const HOUSE_DECK = {
+  id: "housedeck",
+  customer: "the studio",
+  spec: "Hacker Deck for solitaire, the sample deck every studio keeps on hand",
+  day: 0,
+  bug: false,
+  file: buildCardFile("The studio", "hacker", "solitaire", false)
+};
+
+const HOUSE_POKER = {
+  id: "housepoker",
+  customer: "the studio",
+  spec: "Classic Deck for video poker with premium art, the sample that shows customers what premium looks like",
+  day: 0,
+  bug: false,
+  premium: true,
+  file: buildCardFile("The studio", "classic", "poker", true)
+};
+
+const HOUSE_RUNNER = {
+  id: "houserunner",
+  customer: "the studio",
+  spec: "Botnet Rush gate runner with tricky math, the game from the ads that every studio keeps on hand",
+  day: 0,
+  bug: false,
+  file: buildRunnerFile("The studio", "hacker", "tricky", "short", false)
+};
+
+const HOUSE_GAME = {
+  id: "house",
+  customer: "the studio",
+  spec: "Classic theme, the sample every new studio starts with",
+  day: 0,
+  bug: false,
+  file: buildThemeFile({ customer: "The studio", theme: "classic", pieceSet: "standard", board: "standard", speed: "normal" })
+};
+
+// ------------------------------------------------------------------
+// Orders moving through the studio:
+// offer, then queued, then building, then ready, then shipped
+// ------------------------------------------------------------------
+function makeOffer() {
+  const lines = ["blocks"];
+  if (lineOpen("doku")) lines.push("doku");
+  if (lineOpen("bubble")) lines.push("bubble");
+  if (lineOpen("cards")) lines.push("cards");
+  if (lineOpen("runner")) lines.push("runner");
+  const line = pick(lines);
+  let order;
+  if (line === "doku") order = makeDokuOffer();
+  else if (line === "bubble") order = makeBubbleOffer();
+  else if (line === "cards") order = makeCardOffer();
+  else if (line === "runner") order = makeRunnerOffer();
+  else order = makeBlockOffer();
+  if (lineOpen("art") && Math.random() < 0.3) {
+    order.premium = true;
+    order.work += PREMIUM.work;
+    order.pay = Math.round(order.pay * PREMIUM.payBoost / 5) * 5;
+  }
+  return order;
+}
+
+function priceOrder(order, rate) {
+  let pay = order.work * rate + Math.floor(Math.random() * 13) * 5;
+  pay *= 1 + company.reputation / 200;
+  if (company.upgrades.generator) pay *= 1.25;
+  order.pay = Math.round(pay / 5) * 5;
+  return order;
+}
+
+function makeBubbleOffer() {
+  const order = {
+    id: company.nextId++,
+    line: "bubble",
+    customer: pick(CUSTOMERS),
+    theme: pick(Object.keys(BUBBLE_THEMES)),
+    palette: pick(["four", "five", "five", "six"]),
+    pace: pick(["normal", "normal", "relaxed", "frantic"]),
+    status: "offer", progress: 0, terminal: -1, builtBy: -1, bug: null, tested: false,
+    expiresAt: company.time + 40, deadline: 0, readyAt: 0
+  };
+  order.work = BUBBLE_THEMES[order.theme].work + BUBBLE_PALETTES[order.palette].work + BUBBLE_PACES[order.pace].work;
+  return priceOrder(order, 11);
+}
+
+function makeCardOffer() {
+  const order = {
+    id: company.nextId++,
+    line: "cards",
+    customer: pick(CUSTOMERS),
+    theme: pick(Object.keys(CARD_THEMES)),
+    game: pick(["solitaire", "solitaire", "poker"]),
+    status: "offer", progress: 0, terminal: -1, builtBy: -1, bug: null, tested: false,
+    expiresAt: company.time + 40, deadline: 0, readyAt: 0
+  };
+  order.work = CARD_THEMES[order.theme].work + CARD_GAMES[order.game].work;
+  return priceOrder(order, 12);
+}
+
+function makeRunnerOffer() {
+  const order = {
+    id: company.nextId++,
+    line: "runner",
+    customer: pick(CUSTOMERS),
+    theme: pick(Object.keys(RUNNER_THEMES)),
+    math: pick(["friendly", "tricky", "tricky"]),
+    length: pick(["short", "short", "long"]),
+    status: "offer", progress: 0, terminal: -1, builtBy: -1, bug: null, tested: false,
+    expiresAt: company.time + 40, deadline: 0, readyAt: 0
+  };
+  order.work = RUNNER_THEMES[order.theme].work + RUNNER_MATH[order.math].work + RUNNER_LENGTHS[order.length].work;
+  return priceOrder(order, 12);
+}
+
+function makeBlockOffer() {
+  const order = {
+    id: company.nextId++,
+    customer: pick(CUSTOMERS),
+    theme: pick(Object.keys(THEMES)),
+    pieceSet: pick(["standard", "standard", "big", "tiny"]),
+    board: pick(["standard", "standard", "narrow", "wide"]),
+    speed: pick(["normal", "normal", "chill", "turbo"]),
+    status: "offer", progress: 0, terminal: -1, builtBy: -1, bug: null, tested: false,
+    expiresAt: company.time + 40, deadline: 0, readyAt: 0
+  };
+  order.work = lookFor(order).work + PIECE_SETS[order.pieceSet].work + BOARDS[order.board].work + SPEEDS[order.speed].work;
+  let pay = order.work * 10 + Math.floor(Math.random() * 13) * 5;
+  pay *= 1 + company.reputation / 200;
+  if (company.upgrades.generator) pay *= 1.25;
+  order.pay = Math.round(pay / 5) * 5;
+  return order;
+}
+
+function makeDokuOffer() {
+  const order = {
+    id: company.nextId++,
+    line: "doku",
+    customer: pick(CUSTOMERS),
+    theme: pick(Object.keys(DOKU_THEMES)),
+    level: pick(["easy", "medium", "medium", "hard"]),
+    status: "offer", progress: 0, terminal: -1, builtBy: -1, bug: null, tested: false,
+    expiresAt: company.time + 40, deadline: 0, readyAt: 0
+  };
+  order.work = DOKU_THEMES[order.theme].work + DOKU_LEVELS[order.level].work;
+  let pay = order.work * 11 + Math.floor(Math.random() * 13) * 5;
+  pay *= 1 + company.reputation / 200;
+  if (company.upgrades.generator) pay *= 1.25;
+  order.pay = Math.round(pay / 5) * 5;
+  return order;
+}
+
+function acceptOrder(order) {
+  order.status = "queued";
+  order.deadline = company.time + order.work * 2.5 + 45;
+  dirty = true;
+}
+
+function idleTerminal() {
+  const terminals = company.terminals;
+  for (let i = terminals.length - 1; i >= 0; i--) {
+    if (terminals[i].job == null && !isManaged(i)) return i;
+  }
+  return terminals.findIndex(t => t.job == null);
+}
+
+function startBuild(order, i) {
+  order.status = "building";
+  order.terminal = i;
+  order.progress = 0;
+  company.terminals[i].job = order.id;
+  dirty = true;
+}
+
+function finishBuild(order, i) {
+  company.terminals[i].job = null;
+  order.status = "ready";
+  order.progress = order.work;
+  order.builtBy = i;
+  order.terminal = -1;
+  order.readyAt = company.time;
+
+  if (Math.random() < bugChance(i)) {
+    order.bug = { pieceIndex: Math.floor(Math.random() * bugSlots(order)) };
+    if (company.upgrades.tests && Math.random() < 0.7) {
+      order.bug = null;
+      notify("The test suite caught a bug in the " + lookFor(order).label + " game for " + order.customer + " and it was fixed.");
+    }
+  }
+  dirty = true;
+}
+
+function shipOrder(order) {
+  const c = company;
+  const label = lookFor(order).label;
+  let pay = order.pay;
+  let repChange = 3;
+  let message = "Shipped the " + label + " game to " + order.customer + " for " + cash(order.pay) + ".";
+
+  if (order.bug) {
+    pay = Math.round(order.pay * 0.5);
+    repChange = -6;
+    c.bugsShipped++;
+    message = order.customer + " found a bug in their " + label + " game and kept half the payment. You got " + cash(pay) + ".";
+  } else if (c.time > order.deadline) {
+    pay = Math.round(order.pay * 0.6);
+    repChange = -3;
+    message = order.customer + " got their " + label + " game late and paid " + cash(pay) + " instead of " + cash(order.pay) + ".";
+  }
+
+  c.money += pay;
+  c.reputation = clamp(c.reputation + repChange, 0, 100);
+  c.shipped++;
+  c.catalog.unshift({
+    id: order.id, customer: order.customer, spec: orderSpec(order), day: c.day, premium: !!order.premium,
+    bug: !!order.bug, file: withBug(buildThemeFile(order), order.bug)
+  });
+  if (c.catalog.length > 30) c.catalog.length = 30;
+  order.status = "shipped";
+  notify(message, !isManaged(order.builtBy) || !!order.bug);
+}
+
+function cleanup() {
+  const before = company.orders.length;
+  company.orders = company.orders.filter(o => o.status !== "gone" && o.status !== "shipped");
+  if (company.orders.length !== before) dirty = true;
+}
+
+// ------------------------------------------------------------------
+// Staff behavior
+// ------------------------------------------------------------------
+function runAgents() {
+  const c = company;
+  const managedCount = Math.min(c.terminals.length, c.agents.length * 3);
+
+  for (let i = 0; i < managedCount; i++) {
+    if (c.terminals[i].job != null) continue;
+    let order = c.orders.find(o => o.status === "queued");
+    if (!order) {
+      order = c.orders.find(o => o.status === "offer");
+      if (order) {
+        acceptOrder(order);
+        notify("Agent " + agentFor(i) + " accepted an order from " + order.customer + ".");
+      }
+    }
+    if (order) startBuild(order, i);
+  }
+
+  c.orders.forEach(order => {
+    if (order.status !== "ready" || !isManaged(order.builtBy) || c.time - order.readyAt < 8) return;
+    if (order.bug && isBoosted(order.builtBy) && Math.random() < 0.5) {
+      order.bug = null;
+      notify("Dev " + devFor(order.builtBy) + " reviewed the " + lookFor(order).label + " game and fixed a bug before it shipped.");
+    }
+    shipOrder(order);
+  });
+}
+
+function payBills() {
+  const c = company;
+  const seniorPay = SENIORS.filter(x => c.seniors[x.key]).reduce((sum, x) => sum + x.salary, 0);
+  const bill = office().rent + c.agents.length * PRICES.agentSalary + c.devs.length * PRICES.devSalary + seniorPay + c.terminals.length * PRICES.terminalUpkeep;
+  c.money -= bill;
+  notify("Day " + (c.day - 1) + " ended. Rent, salaries, and upkeep cost " + cash(bill) + ".");
+}
+
+// ------------------------------------------------------------------
+// One step of company time
+// ------------------------------------------------------------------
+function simulate(dt) {
+  const c = company;
+  c.time += dt;
+
+  c.dayTimer += dt;
+  if (c.dayTimer >= DAY_SECONDS) {
+    c.dayTimer -= DAY_SECONDS;
+    c.day++;
+    payBills();
+  }
+
+  c.offerTimer -= dt;
+  if (c.offerTimer <= 0) {
+    if (c.orders.filter(o => o.status === "offer").length < maxOffers()) {
+      c.orders.push(makeOffer());
+      dirty = true;
+    }
+    c.offerTimer = offerInterval();
+  }
+
+  c.orders.forEach(order => {
+    if (order.status === "offer" && c.time >= order.expiresAt) {
+      order.status = "gone";
+      notify(order.customer + " stopped waiting and left.");
+    }
+    const inProgress = order.status === "queued" || order.status === "building" || order.status === "ready";
+    if (inProgress && c.time > order.deadline + 60) {
+      if (order.status === "building") c.terminals[order.terminal].job = null;
+      order.status = "gone";
+      c.reputation = clamp(c.reputation - 5, 0, 100);
+      notify(order.customer + " canceled their " + lookFor(order).label + " order after waiting too long.", true);
+    }
+  });
+
+  c.terminals.forEach((terminal, i) => {
+    if (terminal.job == null) return;
+    const order = findOrder(terminal.job);
+    if (!order || order.status !== "building") { terminal.job = null; return; }
+    order.progress += dt * terminalSpeed(i) * lineBoost(order);
+    if (order.progress >= order.work) finishBuild(order, i);
+  });
+
+  runAgents();
+  cleanup();
+}
+
+// ------------------------------------------------------------------
+// Messages
+// ------------------------------------------------------------------
+const toastEl = document.getElementById("toast");
+let toastTimer = null;
+
+function showToast(message) {
+  toastEl.textContent = message;
+  toastEl.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.hidden = true; }, 3600);
+}
+
+function notify(message, toast) {
+  company.log.unshift("Day " + company.day + ". " + message);
+  if (company.log.length > 15) company.log.length = 15;
+  if (toast) showToast(message);
+  dirty = true;
+}
+
+function spend(amount) {
+  if (company.money < amount) {
+    showToast("Not enough money yet. That costs " + cash(amount) + ".");
+    return false;
+  }
+  company.money -= amount;
+  return true;
+}
+
+// ------------------------------------------------------------------
+// Screens
+// ------------------------------------------------------------------
+const view = document.getElementById("view");
+
+function strip(colors) {
+  return `<div class="strip">${colors.map(color => `<i style="background:${color}"></i>`).join("")}</div>`;
+}
+
+function motifLine(order) {
+  const motifs = (isDoku(order) || isBubble(order) || isCards(order) || isRunner(order) ? lookFor(order).glyphs : THEMES[order.theme].motifs).filter(Boolean);
+  return motifs.length ? `<div class="motifs">${motifs.join(" ")}</div>` : "";
+}
+
+function premTag(item) { return item.premium ? `<span class="prem">Premium</span>` : ""; }
+
+function renderOrders() {
+  const offers = company.orders.filter(o => o.status === "offer");
+  const active = company.orders.filter(o => o.status !== "offer");
+  let html = `<h2 class="section-title">Customers waiting</h2>`;
+
+  if (!offers.length) {
+    html += `<p class="empty">No one is waiting. New customers show up every few seconds, and more often when your reputation is high.</p>`;
+  }
+
+  offers.forEach(order => {
+    html += `
+      <article class="order">
+        ${strip(lookFor(order).colors)}
+        <div class="order-body">
+          <div class="order-top">
+            <div>
+              <div class="customer">${order.customer}${premTag(order)}</div>
+              <div class="spec">${orderSpec(order)}</div>
+            </div>
+            <div class="pay">${cash(order.pay)}</div>
+          </div>
+          ${motifLine(order)}
+          <div class="meta"><span>${order.work} work</span><span data-count="${order.id}" data-kind="offer"></span></div>
+          <div class="actions">
+            <button class="btn primary" data-do="accept" data-id="${order.id}">Accept</button>
+            <button class="btn" data-do="decline" data-id="${order.id}">Decline</button>
+          </div>
+        </div>
+      </article>`;
+  });
+
+  html += `<h2 class="section-title spaced">In production</h2>`;
+  if (!active.length) {
+    html += `<p class="empty">Accepted orders wait here until a terminal builds them.</p>`;
+  }
+
+  active.forEach(order => {
+    let status = "";
+    let buttons = "";
+    let bar = "";
+
+    if (order.status === "queued") {
+      status = "Waiting for a terminal";
+      buttons = `<button class="btn primary" data-do="assign" data-id="${order.id}">Assign to a terminal</button>`;
+    } else if (order.status === "building") {
+      status = "Building on Terminal " + (order.terminal + 1);
+      bar = `<div class="bar"><i data-progress="${order.id}"></i></div>`;
+    } else if (order.status === "ready") {
+      if (isManaged(order.builtBy)) status = "Built. Agent " + agentFor(order.builtBy) + " ships it in a few seconds.";
+      else status = order.tested ? "Built and play tested" : "Built, not play tested yet";
+      bar = `<div class="bar"><i data-progress="${order.id}"></i></div>`;
+      buttons = `
+        <button class="btn primary" data-do="ship" data-id="${order.id}">Ship</button>
+        <button class="btn" data-do="test" data-id="${order.id}">Play test</button>
+        <button class="btn" data-do="file" data-id="${order.id}">View file</button>`;
+    }
+
+    html += `
+      <article class="order">
+        ${strip(lookFor(order).colors)}
+        <div class="order-body">
+          <div class="order-top">
+            <div>
+              <div class="customer">${order.customer}${premTag(order)}</div>
+              <div class="spec">${orderSpec(order)}</div>
+            </div>
+            <div class="pay">${cash(order.pay)}</div>
+          </div>
+          <div class="status">${status}</div>
+          ${bar}
+          <div class="meta"><span>${order.work} work</span><span data-count="${order.id}" data-kind="due"></span></div>
+          ${buttons ? `<div class="actions">${buttons}</div>` : ""}
+        </div>
+      </article>`;
+  });
+
+  return html;
+}
+
+function renderTerminals() {
+  const c = company;
+  const room = office();
+  let html = `<p class="note">Terminals build the games. Each one works on a single order at a time. A terminal with no agent only works when you assign it an order.</p>`;
+
+  c.terminals.forEach((terminal, i) => {
+    const order = terminal.job != null ? findOrder(terminal.job) : null;
+    let runner = isManaged(i) ? "Run by Agent " + agentFor(i) : "No agent, you assign its orders";
+    if (isBoosted(i)) runner += ", supervised by Dev " + devFor(i);
+    html += `
+      <div class="row">
+        <div class="row-top">
+          <div class="row-name">Terminal ${i + 1}</div>
+          <div class="row-state ${order ? "busy" : ""}">${order ? "Building" : "Idle"}</div>
+        </div>
+        <div class="row-sub">${order ? lookFor(order).label + " game for " + order.customer : "Nothing to build"}</div>
+        ${order ? `<div class="bar"><i data-progress="${order.id}"></i></div>` : ""}
+        <div class="row-sub">${runner}</div>
+      </div>`;
+  });
+
+  const full = c.terminals.length >= room.terminals;
+  html += `<div class="buy">
+    ${full
+      ? `<button class="btn wide" disabled>No free desks. Move to a bigger office.</button>`
+      : `<button class="btn primary wide" data-do="buyTerminal">Buy a terminal for ${cash(terminalPrice())}</button>`}
+    <p class="quiet">${c.terminals.length} of ${room.terminals} desks used. Each terminal costs ${cash(PRICES.terminalUpkeep)} a day to run.</p>
+  </div>`;
+  return html;
+}
+
+function renderTeam() {
+  const c = company;
+  const room = office();
+
+  let html = `<h2 class="section-title">Agents</h2>
+    <p class="note">An agent runs up to three terminals by itself. It accepts orders, starts builds, and ships finished games. Agents never play test, so bugs go straight to customers.</p>`;
+
+  if (!c.agents.length) html += `<p class="empty">No agents yet. For now you run every terminal by hand.</p>`;
+
+  c.agents.forEach((name, a) => {
+    const first = a * 3;
+    const last = Math.min(first + 3, c.terminals.length);
+    let runs;
+    if (first >= c.terminals.length) runs = "No terminals to run yet. Buy more terminals.";
+    else if (last - first === 1) runs = "Runs Terminal " + (first + 1);
+    else runs = "Runs Terminals " + (first + 1) + " to " + last;
+    const boss = a < c.devs.length * 3 ? ". Supervised by Dev " + c.devs[Math.floor(a / 3)] : "";
+    html += `
+      <div class="row">
+        <div class="row-top"><div class="row-name">Agent ${name}</div><div class="row-state">${cash(PRICES.agentSalary)} a day</div></div>
+        <div class="row-sub">${runs}${boss}</div>
+      </div>`;
+  });
+
+  html += `<div class="buy">
+    ${c.agents.length >= room.agents
+      ? `<button class="btn wide" disabled>No free agent seats. Move to a bigger office.</button>`
+      : `<button class="btn primary wide" data-do="hireAgent">Hire an agent for ${cash(PRICES.agent)}</button>`}
+    <p class="quiet">${c.agents.length} of ${room.agents} agent ${plural(room.agents, "seat")} used.</p>
+  </div>`;
+
+  html += `<h2 class="section-title spaced">Devs</h2>
+    <p class="note">A dev supervises up to three agents. Terminals under those agents build faster and write fewer bugs, and the dev fixes about half the bugs an agent would have shipped.</p>`;
+
+  if (!c.devs.length) html += `<p class="empty">No devs yet.</p>`;
+
+  c.devs.forEach((name, d) => {
+    const team = c.agents.slice(d * 3, d * 3 + 3).map(agent => "Agent " + agent);
+    const text = team.length ? "Supervises " + team.join(", ") : "No agents to supervise yet. Hire more agents.";
+    html += `
+      <div class="row">
+        <div class="row-top"><div class="row-name">Dev ${name}</div><div class="row-state">${cash(PRICES.devSalary)} a day</div></div>
+        <div class="row-sub">${text}</div>
+      </div>`;
+  });
+
+  html += `<div class="buy">`;
+  if (room.devs === 0) html += `<button class="btn wide" disabled>The garage has no room for a dev</button>`;
+  else if (c.devs.length >= room.devs) html += `<button class="btn wide" disabled>No free dev seats. Move to a bigger office.</button>`;
+  else html += `<button class="btn primary wide" data-do="hireDev">Hire a dev for ${cash(PRICES.dev)}</button>`;
+  html += `<p class="quiet">${c.devs.length} of ${room.devs} dev ${plural(room.devs, "seat")} used.</p></div>`;
+
+  html += `<h2 class="section-title spaced">Senior hires</h2>
+    <p class="note">Experienced developers cost a lot more and each one needs the one before them on staff. Every senior hire opens a new product line for the studio.</p>`;
+  SENIORS.forEach(x => {
+    const hired = c.seniors[x.key];
+    const prev = x.needs === "dev" ? null : SENIORS.find(y => y.key === x.needs);
+    const hasNeed = x.needs === "dev" ? c.devs.length > 0 : !!c.seniors[x.needs];
+    const roomOk = c.officeLevel >= x.office;
+    let button = "";
+    if (hired) button = "";
+    else if (!hasNeed) button = `<button class="btn wide" disabled>Needs ${x.needs === "dev" ? "a dev on staff first" : "a " + prev.title.toLowerCase() + " on staff first"}</button>`;
+    else if (!roomOk) button = `<button class="btn wide" disabled>Needs the ${OFFICES[x.office].name.toLowerCase()} or bigger</button>`;
+    else button = `<button class="btn primary wide" data-do="hireSenior" data-id="${x.key}">Hire for ${cash(x.cost)}</button>`;
+    const already = !hired && company.upgrades[x.line] ? " The " + x.lineName + " is already open from an older license, so this hire only adds speed." : "";
+    html += `
+      <div class="row">
+        <div class="row-top"><div class="row-name">${hired ? x.title + " " + x.name : x.title}</div><div class="row-state ${hired ? "done" : ""}">${hired ? "On staff" : cash(x.salary) + " a day"}</div></div>
+        <div class="row-sub">${x.text}${already}</div>
+        ${button ? `<div class="actions">${button}</div>` : ""}
+      </div>`;
+  });
+
+  html += `<h2 class="section-title spaced">Recent activity</h2>
+    <ul class="log">${c.log.length ? c.log.map(line => `<li>${line}</li>`).join("") : "<li>Nothing has happened yet.</li>"}</ul>`;
+
+  return html;
+}
+
+function renderOffice() {
+  const c = company;
+  const room = office();
+  const next = OFFICES[c.officeLevel + 1];
+
+  let html = `<h2 class="section-title">${room.name}</h2>
+    <p class="note">Room for ${room.terminals} terminals, ${room.agents} ${plural(room.agents, "agent")}, and ${room.devs} ${plural(room.devs, "dev")}. Rent is ${cash(room.rent)} a day.</p>`;
+
+  if (next) {
+    html += `
+      <div class="row">
+        <div class="row-top"><div class="row-name">${next.name}</div><div class="row-state">${cash(next.rent)} a day</div></div>
+        <div class="row-sub">Room for ${next.terminals} terminals, ${next.agents} agents, and ${next.devs} ${plural(next.devs, "dev")}.</div>
+        <div class="actions"><button class="btn primary" data-do="moveOffice">Move in for ${cash(next.cost)}</button></div>
+      </div>`;
+  } else {
+    html += `<p class="empty">This is the biggest office there is.</p>`;
+  }
+
+  html += `<h2 class="section-title spaced">Studio upgrades</h2>
+    <p class="note">An upgrade changes how every terminal works at once, the same way fixing a shared engine fixes every game built on it.</p>`;
+
+  UPGRADES.forEach(upgrade => {
+    const owned = c.upgrades[upgrade.key];
+    html += `
+      <div class="row">
+        <div class="row-top"><div class="row-name">${upgrade.name}</div><div class="row-state ${owned ? "done" : ""}">${owned ? "Installed" : cash(upgrade.cost)}</div></div>
+        <div class="row-sub">${upgrade.text}</div>
+        ${owned ? "" : `<div class="actions"><button class="btn" data-do="upgrade" data-id="${upgrade.key}">Buy for ${cash(upgrade.cost)}</button></div>`}
+      </div>`;
+  });
+
+  html += `<h2 class="section-title spaced">Record</h2>
+    <p class="note">${c.shipped} ${plural(c.shipped, "game")} shipped, ${c.bugsShipped} of them with a bug. Reputation is ${Math.round(c.reputation)} out of 100.</p>
+    <button class="btn wide" data-do="reset">${Date.now() < resetArmedUntil ? "Tap again to erase this company" : "Start a new company"}</button>
+    <p class="quiet" style="margin-top:12px">${VERSION}</p>`;
+
+  return html;
+}
+
+function renderGames() {
+  let html = `<p class="note">Every block game runs on the block engine, every doku on the doku engine, every bubble shooter on the bubble engine, every deck on the deck engine, and every gate runner on the runner engine. The only difference between products on the same engine is the theme file. Premium products are the same file with one flag flipped and a bigger invoice. Tap View file to see one.</p>`;
+  html += renderHackCard();
+  [HOUSE_GAME, HOUSE_DOKU, HOUSE_BUBBLE, HOUSE_DECK, HOUSE_POKER, HOUSE_RUNNER, ...company.catalog].forEach(game => {
+    html += `
+      <article class="order">
+        ${strip(fileColors(game.file))}
+        <div class="order-body">
+          <div class="customer">${game.file.themeName} for ${game.customer}${premTag(game)}</div>
+          <div class="spec">${game.spec}${game.day ? ". Shipped on day " + game.day : ""}</div>
+          ${game.bug ? `<div class="status warn">Shipped with a bug</div>` : ""}
+          <div class="actions">
+            <button class="btn primary" data-do="play" data-id="${game.id}">Play</button>
+            <button class="btn" data-do="gamefile" data-id="${game.id}">View file</button>
+          </div>
+        </div>
+      </article>`;
+  });
+  return html;
+}
+
+const RENDERERS = { orders: renderOrders, terminals: renderTerminals, team: renderTeam, office: renderOffice, games: renderGames };
+
+function render() {
+  const scroll = view.scrollTop;
+  view.innerHTML = RENDERERS[currentTab]();
+  view.scrollTop = scroll;
+  document.querySelectorAll(".tabs button").forEach(tab => tab.classList.toggle("on", tab.dataset.tab === currentTab));
+  dirty = false;
+  refreshLive();
+}
+
+// Fast updates that do not rebuild the screen, so taps never get lost.
+const hudMoney = document.getElementById("hudMoney");
+const hudRep = document.getElementById("hudRep");
+const hudDay = document.getElementById("hudDay");
+const hudOffice = document.getElementById("hudOffice");
+const hudDayFill = document.getElementById("hudDayFill");
+const badge = document.getElementById("badge");
+
+function refreshLive() {
+  const c = company;
+  hudMoney.textContent = cash(c.money);
+  hudMoney.classList.toggle("negative", c.money < 0);
+  hudRep.textContent = "Reputation " + Math.round(c.reputation);
+  hudDay.textContent = "Day " + c.day;
+  hudOffice.textContent = office().name + ", " + c.terminals.length + " " + plural(c.terminals.length, "terminal");
+  hudDayFill.style.width = (c.dayTimer / DAY_SECONDS * 100) + "%";
+
+  const offerCount = c.orders.filter(o => o.status === "offer").length;
+  badge.hidden = offerCount === 0;
+  badge.textContent = offerCount;
+
+  view.querySelectorAll("[data-progress]").forEach(el => {
+    const order = findOrder(Number(el.dataset.progress));
+    if (order) el.style.width = Math.min(100, order.progress / order.work * 100) + "%";
+  });
+
+  view.querySelectorAll("[data-count]").forEach(el => {
+    const order = findOrder(Number(el.dataset.count));
+    if (!order) return;
+    if (el.dataset.kind === "offer") {
+      el.textContent = "Leaves in " + Math.max(0, Math.ceil(order.expiresAt - c.time)) + "s";
+    } else {
+      const left = Math.ceil(order.deadline - c.time);
+      el.textContent = left >= 0 ? "Due in " + left + "s" : "Late by " + (-left) + "s";
+      el.classList.toggle("late", left < 0);
+    }
+  });
+}
+
+// ------------------------------------------------------------------
+// Taps on the management screens
+// ------------------------------------------------------------------
+function gameById(id) {
+  if (id === "house") return HOUSE_GAME;
+  if (id === "housedoku") return HOUSE_DOKU;
+  if (id === "housebubble") return HOUSE_BUBBLE;
+  if (id === "housedeck") return HOUSE_DECK;
+  if (id === "housepoker") return HOUSE_POKER;
+  if (id === "houserunner") return HOUSE_RUNNER;
+  return company.catalog.find(game => game.id === id);
+}
+
+function fileColors(file) {
+  if (file.product === "doku") return file.symbols.map(symbol => symbol.color);
+  if (file.product === "bubble") return file.bubbles.map(b => b.color);
+  if (file.product === "runner") return [file.goodGate, file.badGate, file.road, file.ground, file.sky];
+  if (file.product === "cards") return file.suits.map(suit => suit.color).concat(["#2463b0"]);
+  return file.pieces.slice(0, 7).map(piece => piece.color);
+}
+
+function doAction(action, id) {
+  const c = company;
+  const order = typeof id === "number" ? findOrder(id) : null;
+
+  switch (action) {
+    case "accept":
+      if (order && order.status === "offer") acceptOrder(order);
+      break;
+    case "decline":
+      if (order && order.status === "offer") { order.status = "gone"; cleanup(); }
+      break;
+    case "assign":
+      if (order && order.status === "queued") {
+        const i = idleTerminal();
+        if (i === -1) showToast("Every terminal is busy. Wait for one to finish or buy another.");
+        else startBuild(order, i);
+      }
+      break;
+    case "test":
+      if (order && order.status === "ready") openPlay(withBug(buildThemeFile(order), order.bug), { orderId: order.id });
+      break;
+    case "file":
+      if (order) openSheet(lookFor(order).label + " theme file", withBug(buildThemeFile(order), order.bug));
+      break;
+    case "ship":
+      if (order && order.status === "ready") { shipOrder(order); cleanup(); }
+      break;
+    case "play": {
+      const game = gameById(id);
+      if (game) openPlay(game.file, {});
+      break;
+    }
+    case "gamefile": {
+      const game = gameById(id);
+      if (game) openSheet(game.file.themeName + " theme file", game.file);
+      break;
+    }
+    case "buyTerminal":
+      if (c.terminals.length >= office().terminals) showToast("No free desks. Move to a bigger office.");
+      else if (spend(terminalPrice())) { c.terminals.push({ job: null }); notify("Bought Terminal " + c.terminals.length + "."); }
+      break;
+    case "hireAgent":
+      if (c.agents.length >= office().agents) showToast("No free agent seats. Move to a bigger office.");
+      else if (spend(PRICES.agent)) {
+        const name = AGENT_NAMES[c.agents.length % AGENT_NAMES.length];
+        c.agents.push(name);
+        notify("Hired Agent " + name + ".", true);
+      }
+      break;
+    case "hireDev":
+      if (c.devs.length >= office().devs) showToast("No free dev seats. Move to a bigger office.");
+      else if (spend(PRICES.dev)) {
+        const name = DEV_NAMES[c.devs.length % DEV_NAMES.length];
+        c.devs.push(name);
+        notify("Hired Dev " + name + ".", true);
+      }
+      break;
+    case "hireSenior": {
+      const x = SENIORS.find(y => y.key === id);
+      if (!x || c.seniors[x.key]) break;
+      const hasNeed = x.needs === "dev" ? c.devs.length > 0 : !!c.seniors[x.needs];
+      if (!hasNeed || c.officeLevel < x.office) { showToast("Not yet. Check what this hire needs first."); break; }
+      if (spend(x.cost)) {
+        c.seniors[x.key] = true;
+        notify("Hired " + x.title.toLowerCase() + " " + x.name + ". " + (x.line === "art" ? "Premium orders are open" : "The " + x.lineName + " is open") + " and customers start asking for it.", true);
+      }
+      break;
+    }
+    case "moveOffice": {
+      const next = OFFICES[c.officeLevel + 1];
+      if (next && spend(next.cost)) { c.officeLevel++; notify("Moved into the " + next.name.toLowerCase() + ".", true); }
+      break;
+    }
+    case "upgrade": {
+      const upgrade = UPGRADES.find(u => u.key === id);
+      if (upgrade && !c.upgrades[upgrade.key] && spend(upgrade.cost)) {
+        c.upgrades[upgrade.key] = true;
+        notify("Installed the " + upgrade.name.toLowerCase() + ".", true);
+      }
+      break;
+    }
+    case "hackPlay":
+      openHackTarget();
+      break;
+    case "hackTool": {
+      const tool = HACK_TOOLS.find(t => t.key === id);
+      if (tool && !hack.tools[tool.key]) {
+        if (hack.nodes < tool.cost) showToast("Your botnet needs " + tool.cost + " nodes for the " + tool.name.toLowerCase() + ".");
+        else { hack.nodes -= tool.cost; hack.tools[tool.key] = true; saveHack(); showToast("Installed the " + tool.name.toLowerCase() + "."); }
+      }
+      break;
+    }
+    case "reset":
+      if (Date.now() < resetArmedUntil) {
+        company = newCompany();
+        resetArmedUntil = 0;
+        currentTab = "orders";
+        saveCompany();
+      } else {
+        resetArmedUntil = Date.now() + 4000;
+      }
+      break;
+  }
+  render();
+}
+
+view.addEventListener("click", event => {
+  const button = event.target.closest("[data-do]");
+  if (!button || button.disabled) return;
+  const raw = button.dataset.id;
+  const id = raw == null ? null : (/^\d+$/.test(raw) ? Number(raw) : raw);
+  doAction(button.dataset.do, id);
+});
+
+document.querySelectorAll(".tabs button").forEach(tab => {
+  tab.addEventListener("click", () => {
+    currentTab = tab.dataset.tab;
+    render();
+    view.scrollTop = 0;
+  });
+});
+
+// Hold off on rebuilding a screen while a finger is on it.
+let pointerIsDown = false;
+let lastPointerUp = 0;
+view.addEventListener("pointerdown", () => { pointerIsDown = true; });
+window.addEventListener("pointerup", () => { pointerIsDown = false; lastPointerUp = performance.now(); });
+window.addEventListener("pointercancel", () => { pointerIsDown = false; lastPointerUp = performance.now(); });
+
+// ------------------------------------------------------------------
+// Theme file viewer
+// ------------------------------------------------------------------
+const sheet = document.getElementById("sheet");
+document.getElementById("sheetClose").addEventListener("click", () => { sheet.hidden = true; });
+sheet.addEventListener("click", event => { if (event.target === sheet) sheet.hidden = true; });
+
+function openSheet(title, file) {
+  document.getElementById("sheetTitle").textContent = title;
+  document.getElementById("sheetBody").textContent = formatFile(file);
+  sheet.hidden = false;
+}
+
+// ------------------------------------------------------------------
+// THE ENGINE
+// This part never changes between products. It reads whatever theme
+// file it is handed and becomes that game.
+// ------------------------------------------------------------------
+const playRoot = document.getElementById("play");
+const playStage = document.getElementById("playStage");
+const playWrap = document.getElementById("playWrap");
+const boardCanvas = document.getElementById("playBoard");
+const boardContext = boardCanvas.getContext("2d");
+const nextCanvas = document.getElementById("playNext");
+const nextContext = nextCanvas.getContext("2d");
+const playOverlay = document.getElementById("playOverlay");
+const playOverlayTitle = document.getElementById("playOverlayTitle");
+const playOverlayText = document.getElementById("playOverlayText");
+const playOverlayButton = document.getElementById("playOverlayButton");
+const playScore = document.getElementById("playScore");
+const playLines = document.getElementById("playLines");
+
+let theme = null;
+let playContext = {};
+let playOpen = false;
+
+let grid = [];
+let bag = [];
+let piece = null;
+let nextIndex = 0;
+let score = 0;
+let lines = 0;
+let gameState = "ready"; // ready, playing, paused, over
+let dropTimer = 0;
+let lockTimer = 0;
+let lockResets = 0;
+let softDropping = false;
+let cellSize = 20;
+let lastFrame = 0;
+
+function emptyGrid() {
+  return Array.from({ length: theme.rows }, () => Array(theme.columns).fill(null));
+}
+
+function nextFromBag() {
+  if (bag.length === 0) {
+    bag = theme.pieces.map((unused, i) => i);
+    for (let i = bag.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [bag[i], bag[j]] = [bag[j], bag[i]];
+    }
+  }
+  return bag.pop();
+}
+
+function firstFilledRow(cells) {
+  for (let r = 0; r < cells.length; r++) if (cells[r].some(Boolean)) return r;
+  return 0;
+}
+
+function makePiece(index) {
+  const definition = theme.pieces[index];
+  const cells = definition.cells.map(row => row.slice());
+  return {
+    cells,
+    color: definition.color,
+    motif: definition.motif,
+    x: Math.floor((theme.columns - cells[0].length) / 2),
+    y: -firstFilledRow(cells)
+  };
+}
+
+// Each column, read bottom to top, becomes a new row.
+function rotateClockwise(cells) {
+  return cells[0].map((unused, c) => cells.map(row => row[c]).reverse());
+}
+
+function collides(cells, x, y) {
+  for (let r = 0; r < cells.length; r++) {
+    for (let c = 0; c < cells[r].length; c++) {
+      if (!cells[r][c]) continue;
+      const gx = x + c;
+      const gy = y + r;
+      if (gx < 0 || gx >= theme.columns || gy >= theme.rows) return true;
+      if (gy >= 0 && grid[gy][gx]) return true;
+    }
+  }
+  return false;
+}
+
+function isGrounded() { return collides(piece.cells, piece.x, piece.y + 1); }
+function level() { return Math.floor(lines / ENGINE.linesPerLevel) + 1; }
+function dropInterval() { return Math.max(ENGINE.fastestDropMs, theme.startDropMs - (level() - 1) * ENGINE.dropMsPerLevel); }
+
+function afterSuccessfulMove() {
+  if (isGrounded() && lockResets < ENGINE.maxLockResets) { lockTimer = 0; lockResets++; }
+}
+
+function move(dx) {
+  if (!collides(piece.cells, piece.x + dx, piece.y)) { piece.x += dx; afterSuccessfulMove(); }
+}
+
+function rotate() {
+  const turned = rotateClockwise(piece.cells);
+  const nudges = [[0, 0], [-1, 0], [1, 0], [-2, 0], [2, 0], [0, -1]];
+  for (const [nx, ny] of nudges) {
+    if (!collides(turned, piece.x + nx, piece.y + ny)) {
+      piece.cells = turned;
+      piece.x += nx;
+      piece.y += ny;
+      afterSuccessfulMove();
+      return;
+    }
+  }
+}
+
+function stepDown() {
+  if (!isGrounded()) { piece.y++; score += 1; }
+}
+
+function hardDrop() {
+  let distance = 0;
+  while (!isGrounded()) { piece.y++; distance++; }
+  score += distance * 2;
+  lockPiece();
+}
+
+function lockPiece() {
+  let stuckAboveTop = false;
+  piece.cells.forEach((row, r) => row.forEach((filled, c) => {
+    if (!filled) return;
+    const gy = piece.y + r;
+    if (gy < 0) { stuckAboveTop = true; return; }
+    grid[gy][piece.x + c] = { color: piece.color, motif: piece.motif };
+  }));
+  if (stuckAboveTop) { endGame(); return; }
+
+  const cleared = clearLines();
+  if (cleared > 0) {
+    score += ENGINE.lineScores[Math.min(cleared, 4)] * level();
+    lines += cleared;
+  }
+  spawn();
+}
+
+function clearLines() {
+  let cleared = 0;
+  for (let r = theme.rows - 1; r >= 0; r--) {
+    if (grid[r].every(Boolean)) {
+      grid.splice(r, 1);
+      grid.unshift(Array(theme.columns).fill(null));
+      cleared++;
+      r++;
+    }
+  }
+  return cleared;
+}
+
+function spawn() {
+  piece = makePiece(nextIndex);
+  nextIndex = nextFromBag();
+  dropTimer = 0;
+  lockTimer = 0;
+  lockResets = 0;
+  if (collides(piece.cells, piece.x, piece.y)) endGame();
+}
+
+function startGame() {
+  grid = emptyGrid();
+  bag = [];
+  score = 0;
+  lines = 0;
+  softDropping = false;
+  nextIndex = nextFromBag();
+  spawn();
+  gameState = "playing";
+  playOverlay.hidden = true;
+}
+
+function endGame() {
+  gameState = "over";
+  softDropping = false;
+  showPlayOverlay("Game over", "Score " + score + ". Lines " + lines + ".", "Play again");
+}
+
+function pauseGame() {
+  if (gameState !== "playing") return;
+  gameState = "paused";
+  softDropping = false;
+  showPlayOverlay("Paused", "The board waits here until you come back.", "Resume");
+}
+
+function showPlayOverlay(title, text, buttonLabel) {
+  playOverlayTitle.textContent = title;
+  playOverlayText.textContent = text;
+  playOverlayButton.textContent = buttonLabel;
+  playOverlay.hidden = false;
+}
+
+playOverlayButton.addEventListener("click", () => {
+  if (gameState === "paused") { gameState = "playing"; playOverlay.hidden = true; }
+  else startGame();
+});
+
+function update(dt) {
+  const interval = softDropping ? Math.min(ENGINE.softDropMs, dropInterval()) : dropInterval();
+  dropTimer += dt;
+  while (dropTimer >= interval && !isGrounded()) {
+    dropTimer -= interval;
+    piece.y++;
+    if (softDropping) score += 1;
+  }
+  if (isGrounded()) {
+    dropTimer = 0;
+    lockTimer += dt;
+    if (lockTimer >= ENGINE.lockDelayMs) lockPiece();
+  } else {
+    lockTimer = 0;
+  }
+}
+
+function frame(time) {
+  if (!playOpen) return;
+  const dt = lastFrame ? Math.min(time - lastFrame, 100) : 0;
+  lastFrame = time;
+  if (gameState === "playing") update(dt);
+  draw();
+  playScore.textContent = score;
+  playLines.textContent = lines;
+  requestAnimationFrame(frame);
+}
+
+function drawCell(context, x, y, size, color, motif) {
+  if (theme.glow) { context.shadowColor = color; context.shadowBlur = Math.max(4, size * 0.45); }
+  if (theme.premium && size >= 12) {
+    // Premium art: beveled tile with a gradient face and a glossy top edge.
+    const face = context.createLinearGradient(x, y, x + size, y + size);
+    face.addColorStop(0, shade(color, 0.35));
+    face.addColorStop(0.55, color);
+    face.addColorStop(1, shade(color, -0.3));
+    context.fillStyle = face;
+    context.fillRect(x + 1, y + 1, size - 2, size - 2);
+    context.shadowBlur = 0;
+    context.shadowColor = "transparent";
+    const b = Math.max(2, Math.round(size * 0.14));
+    context.fillStyle = "rgba(255, 255, 255, 0.45)";
+    context.beginPath(); context.moveTo(x + 1, y + 1); context.lineTo(x + size - 1, y + 1); context.lineTo(x + size - 1 - b, y + 1 + b); context.lineTo(x + 1 + b, y + 1 + b); context.closePath(); context.fill();
+    context.fillStyle = "rgba(255, 255, 255, 0.25)";
+    context.beginPath(); context.moveTo(x + 1, y + 1); context.lineTo(x + 1 + b, y + 1 + b); context.lineTo(x + 1 + b, y + size - 1 - b); context.lineTo(x + 1, y + size - 1); context.closePath(); context.fill();
+    context.fillStyle = "rgba(0, 0, 0, 0.22)";
+    context.beginPath(); context.moveTo(x + size - 1, y + 1); context.lineTo(x + size - 1, y + size - 1); context.lineTo(x + size - 1 - b, y + size - 1 - b); context.lineTo(x + size - 1 - b, y + 1 + b); context.closePath(); context.fill();
+    context.fillStyle = "rgba(0, 0, 0, 0.3)";
+    context.beginPath(); context.moveTo(x + 1, y + size - 1); context.lineTo(x + size - 1, y + size - 1); context.lineTo(x + size - 1 - b, y + size - 1 - b); context.lineTo(x + 1 + b, y + size - 1 - b); context.closePath(); context.fill();
+  } else {
+  context.fillStyle = color;
+  context.fillRect(x + 1, y + 1, size - 2, size - 2);
+  context.shadowBlur = 0;
+  context.shadowColor = "transparent";
+  context.fillStyle = "rgba(255, 255, 255, 0.3)";
+  context.fillRect(x + 1, y + 1, size - 2, Math.max(2, Math.round(size * 0.18)));
+  }
+  if (motif && size >= 12) {
+    context.font = Math.floor(size * 0.62) + "px system-ui, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(motif, x + size / 2, y + size / 2 + 1);
+  }
+}
+
+function drawGhostCell(context, x, y, size, color) {
+  context.globalAlpha = 0.45;
+  context.strokeStyle = color;
+  context.lineWidth = 2;
+  context.strokeRect(x + 2, y + 2, size - 4, size - 4);
+  context.globalAlpha = 1;
+}
+
+function draw() {
+  const context = boardContext;
+  const width = cellSize * theme.columns;
+  const height = cellSize * theme.rows;
+
+  context.fillStyle = theme.board;
+  context.fillRect(0, 0, width, height);
+
+  context.strokeStyle = theme.grid;
+  context.lineWidth = 1;
+  context.beginPath();
+  for (let c = 1; c < theme.columns; c++) {
+    context.moveTo(c * cellSize + 0.5, 0);
+    context.lineTo(c * cellSize + 0.5, height);
+  }
+  for (let r = 1; r < theme.rows; r++) {
+    context.moveTo(0, r * cellSize + 0.5);
+    context.lineTo(width, r * cellSize + 0.5);
+  }
+  context.stroke();
+
+  for (let r = 0; r < theme.rows; r++) {
+    for (let c = 0; c < theme.columns; c++) {
+      const cell = grid[r] && grid[r][c];
+      if (cell) drawCell(context, c * cellSize, r * cellSize, cellSize, cell.color, cell.motif);
+    }
+  }
+
+  if (piece && (gameState === "playing" || gameState === "paused")) {
+    let ghostY = piece.y;
+    while (!collides(piece.cells, piece.x, ghostY + 1)) ghostY++;
+    piece.cells.forEach((row, r) => row.forEach((filled, c) => {
+      if (filled && ghostY + r >= 0) drawGhostCell(context, (piece.x + c) * cellSize, (ghostY + r) * cellSize, cellSize, piece.color);
+    }));
+    piece.cells.forEach((row, r) => row.forEach((filled, c) => {
+      if (filled && piece.y + r >= 0) drawCell(context, (piece.x + c) * cellSize, (piece.y + r) * cellSize, cellSize, piece.color, piece.motif);
+    }));
+  }
+
+  drawNext();
+}
+
+function drawNext() {
+  const size = 44;
+  const context = nextContext;
+  context.clearRect(0, 0, size, size);
+  if (gameState === "ready") return;
+
+  const definition = theme.pieces[nextIndex];
+  let minR = Infinity, maxR = -1, minC = Infinity, maxC = -1;
+  definition.cells.forEach((row, r) => row.forEach((filled, c) => {
+    if (!filled) return;
+    minR = Math.min(minR, r); maxR = Math.max(maxR, r);
+    minC = Math.min(minC, c); maxC = Math.max(maxC, c);
+  }));
+
+  const cell = 10;
+  const offsetX = (size - (maxC - minC + 1) * cell) / 2;
+  const offsetY = (size - (maxR - minR + 1) * cell) / 2;
+  definition.cells.forEach((row, r) => row.forEach((filled, c) => {
+    if (filled) drawCell(context, offsetX + (c - minC) * cell, offsetY + (r - minR) * cell, cell, definition.color, "");
+  }));
+}
+
+function resizeBoard() {
+  if (!playOpen) return;
+  const availableWidth = playStage.clientWidth - 16;
+  const availableHeight = playStage.clientHeight - 16;
+  cellSize = Math.max(8, Math.floor(Math.min(availableWidth / theme.columns, availableHeight / theme.rows)));
+
+  const width = cellSize * theme.columns;
+  const height = cellSize * theme.rows;
+  const density = window.devicePixelRatio || 1;
+
+  playWrap.style.width = width + "px";
+  playWrap.style.height = height + "px";
+  boardCanvas.style.width = width + "px";
+  boardCanvas.style.height = height + "px";
+  boardCanvas.width = Math.round(width * density);
+  boardCanvas.height = Math.round(height * density);
+  boardContext.setTransform(density, 0, 0, density, 0, 0);
+
+  nextCanvas.width = Math.round(44 * density);
+  nextCanvas.height = Math.round(44 * density);
+  nextContext.setTransform(density, 0, 0, density, 0, 0);
+
+  draw();
+}
+
+function openPlay(file, context) {
+  if (file.product === "doku") openDoku(file, context);
+  else if (file.product === "bubble") openBubble(file, context);
+  else if (file.product === "cards") openCards(file, context);
+  else if (file.product === "runner") openRunner(file, context);
+  else openBlocks(file, context);
+}
+
+function openBlocks(file, context) {
+  theme = file;
+  playContext = context || {};
+  playOpen = true;
+  grid = emptyGrid();
+  bag = [];
+  piece = null;
+  score = 0;
+  lines = 0;
+  gameState = "ready";
+  document.getElementById("playName").textContent = file.themeName + " theme";
+  document.getElementById("playFor").textContent = "For " + file.customer;
+  showPlayOverlay(
+    file.themeName,
+    playContext.orderId != null
+      ? "Play this build the way the customer will. If a piece looks wrong, that is a bug."
+      : "This is a shipped game running on the studio engine.",
+    "Start"
+  );
+  playRoot.hidden = false;
+  requestAnimationFrame(() => {
+    resizeBoard();
+    lastFrame = 0;
+    requestAnimationFrame(frame);
+  });
+}
+
+function closePlay() {
+  playOpen = false;
+  playRoot.hidden = true;
+  gameState = "ready";
+  softDropping = false;
+
+  finishPlayTest(playContext.orderId);
+  lastTick = performance.now();
+  render();
+}
+
+function finishPlayTest(orderId) {
+  if (orderId == null) return;
+  const order = findOrder(orderId);
+  if (!order) return;
+  order.tested = true;
+  if (order.bug) {
+    if (isDoku(order)) {
+      const symbolName = DOKU_THEMES[order.theme].names[order.bug.pieceIndex];
+      notify("Play test found a bug. The " + symbolName + " symbol had lost its picture and turned into a question mark. Fixed before shipping.", true);
+    } else if (isBubble(order)) {
+      const bubbleName = BUBBLE_THEMES[order.theme].names[order.bug.pieceIndex];
+      notify("Play test found a bug. The " + bubbleName + " bubble had gone grey with a question mark on it. Fixed before shipping.", true);
+    } else if (isRunner(order)) {
+      const unitName = RUNNER_THEMES[order.theme].names[order.bug.pieceIndex];
+      notify("Play test found a bug. The " + unitName + " showed up as a question mark on the track. Fixed before shipping.", true);
+    } else if (isCards(order)) {
+      const suitName = CARD_THEMES[order.theme].suits[order.bug.pieceIndex].name;
+      notify("Play test found a bug. The " + suitName + " suit printed as question marks on every card. Fixed before shipping.", true);
+    } else {
+      const pieceName = PIECE_SETS[order.pieceSet].shapes[order.bug.pieceIndex];
+      notify("Play test found a bug. The " + pieceName + " piece had lost its color and picture. Fixed before shipping.", true);
+    }
+    order.bug = null;
+  } else {
+    notify("Play test passed on the " + lookFor(order).label + " game for " + order.customer + ".", true);
+  }
+}
+
+document.getElementById("playClose").addEventListener("click", closePlay);
+
+// Touch controls for the engine
+function runAction(action) {
+  if (gameState !== "playing") return;
+  if (action === "left") move(-1);
+  else if (action === "right") move(1);
+  else if (action === "rotate") rotate();
+  else if (action === "drop") hardDrop();
+}
+
+document.querySelectorAll("#play .pad button").forEach(button => {
+  const action = button.dataset.action;
+  let delayTimer = null;
+  let repeatTimer = null;
+
+  const release = () => {
+    clearTimeout(delayTimer);
+    clearInterval(repeatTimer);
+    if (action === "down") softDropping = false;
+    button.classList.remove("pressed");
+  };
+
+  button.addEventListener("pointerdown", event => {
+    event.preventDefault();
+    button.setPointerCapture(event.pointerId);
+    button.classList.add("pressed");
+    if (gameState !== "playing") return;
+    if (action === "down") { softDropping = true; stepDown(); return; }
+    runAction(action);
+    if (action === "left" || action === "right") {
+      delayTimer = setTimeout(() => {
+        repeatTimer = setInterval(() => runAction(action), ENGINE.repeatRateMs);
+      }, ENGINE.repeatDelayMs);
+    }
+  });
+
+  button.addEventListener("pointerup", release);
+  button.addEventListener("pointercancel", release);
+  button.addEventListener("lostpointercapture", release);
+});
+
+document.addEventListener("keydown", event => {
+  if (!playOpen) return;
+  if (event.key === "Escape") { closePlay(); return; }
+  if (event.key === "p" || event.key === "P") { pauseGame(); return; }
+  if (gameState !== "playing") return;
+  switch (event.key) {
+    case "ArrowLeft": move(-1); break;
+    case "ArrowRight": move(1); break;
+    case "ArrowUp": rotate(); break;
+    case "ArrowDown": if (!softDropping) { softDropping = true; stepDown(); } break;
+    case " ": if (!event.repeat) hardDrop(); break;
+    default: return;
+  }
+  event.preventDefault();
+});
+
+document.addEventListener("keyup", event => {
+  if (event.key === "ArrowDown") softDropping = false;
+});
+
+window.addEventListener("resize", resizeBoard);
+
+// ------------------------------------------------------------------
+// THE DOKU ENGINE
+// Reads a doku skin file and becomes that game. Every puzzle is made
+// fresh and always has exactly one solution.
+// ------------------------------------------------------------------
+function dokuShuffle(list) {
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list;
+}
+
+// Bit mask of the values still allowed at cell i. Values run one to nine.
+function dokuAllowed(g, i) {
+  const r = Math.floor(i / 9), c = i % 9;
+  const br = r - r % 3, bc = c - c % 3;
+  let used = 0;
+  for (let k = 0; k < 9; k++) {
+    used |= 1 << g[r * 9 + k];
+    used |= 1 << g[k * 9 + c];
+    used |= 1 << g[(br + Math.floor(k / 3)) * 9 + bc + k % 3];
+  }
+  return ~used & 0x3fe;
+}
+
+function dokuBits(mask) { let n = 0; while (mask) { mask &= mask - 1; n++; } return n; }
+
+function dokuFill(g) {
+  const i = g.indexOf(0);
+  if (i === -1) return true;
+  const mask = dokuAllowed(g, i);
+  const values = dokuShuffle([1, 2, 3, 4, 5, 6, 7, 8, 9].filter(v => mask & (1 << v)));
+  for (const v of values) {
+    g[i] = v;
+    if (dokuFill(g)) return true;
+  }
+  g[i] = 0;
+  return false;
+}
+
+// Counts solutions, stopping once it reaches the limit.
+function dokuCount(g, limit) {
+  let best = -1, bestMask = 0, bestBits = 10;
+  for (let i = 0; i < 81; i++) {
+    if (g[i]) continue;
+    const mask = dokuAllowed(g, i);
+    const bits = dokuBits(mask);
+    if (bits === 0) return 0;
+    if (bits < bestBits) { best = i; bestMask = mask; bestBits = bits; if (bits === 1) break; }
+  }
+  if (best === -1) return 1;
+  let total = 0;
+  for (let v = 1; v <= 9 && total < limit; v++) {
+    if (!(bestMask & (1 << v))) continue;
+    g[best] = v;
+    total += dokuCount(g, limit - total);
+  }
+  g[best] = 0;
+  return total;
+}
+
+function makeDokuPuzzle(clues) {
+  const solution = Array(81).fill(0);
+  dokuFill(solution);
+  const puzzle = solution.slice();
+  let filled = 81;
+  for (const i of dokuShuffle(Array.from({ length: 81 }, (unused, n) => n))) {
+    if (filled <= clues) break;
+    const keep = puzzle[i];
+    puzzle[i] = 0;
+    if (dokuCount(puzzle, 2) !== 1) puzzle[i] = keep;
+    else filled--;
+  }
+  return { solution, puzzle };
+}
+
+const dokuRoot = document.getElementById("doku");
+const dokuGridEl = document.getElementById("dokuGrid");
+const dokuPalEl = document.getElementById("dokuPal");
+const dokuStatusEl = document.getElementById("dokuStatus");
+const dokuOverlay = document.getElementById("dokuOverlay");
+const dokuOverlayTitle = document.getElementById("dokuOverlayTitle");
+const dokuOverlayText = document.getElementById("dokuOverlayText");
+const dokuOverlayButton = document.getElementById("dokuOverlayButton");
+const dokuHintButton = document.getElementById("dokuHint");
+
+let dokuOpen = false;
+let dk = null;
+
+function dokuCellButtons() {
+  let html = "";
+  for (let i = 0; i < 81; i++) {
+    const r = Math.floor(i / 9), c = i % 9;
+    const classes = ["dcell"];
+    if (c === 2 || c === 5) classes.push("br");
+    if (r === 2 || r === 5) classes.push("bb");
+    if (c === 8) classes.push("lastc");
+    if (r === 8) classes.push("lastr");
+    html += `<button class="${classes.join(" ")}" data-cell="${i}"></button>`;
+  }
+  dokuGridEl.innerHTML = html;
+}
+
+function dokuPalette() {
+  dokuPalEl.innerHTML = dk.file.symbols.map((symbol, n) =>
+    `<button data-sym="${n + 1}" aria-label="${symbol.name}" style="color:${symbol.color}">${symbol.glyph}</button>`).join("");
+}
+
+function dokuStatus(text, kind) {
+  dokuStatusEl.textContent = text || "";
+  dokuStatusEl.className = "doku-status" + (kind ? " " + kind : "");
+}
+
+function dokuScanCost() { return hack.tools.scanner ? 2 : 5; }
+
+function dokuStats() {
+  const campaign = !!dk.ctx.campaign;
+  document.getElementById("dokuStatLabelA").textContent = campaign ? "Strikes" : "Mistakes";
+  document.getElementById("dokuStatA").textContent = campaign ? dk.strikes + " of " + HACK_STRIKES : dk.mistakes;
+  document.getElementById("dokuStatBoxB").hidden = !campaign;
+  document.getElementById("dokuStatB").textContent = hack.nodes;
+  dokuHintButton.textContent = campaign ? "Scan for " + dokuScanCost() + " nodes" : "Hint";
+}
+
+function dokuDraw() {
+  if (!dk) return;
+  const sel = dk.selected;
+  const selValue = sel >= 0 ? dk.board[sel] : 0;
+  const sr = Math.floor(sel / 9), sc = sel % 9;
+  const counts = Array(10).fill(0);
+  for (let i = 0; i < 81; i++) if (dk.board[i] && !dk.bad.has(i)) counts[dk.board[i]]++;
+
+  dokuGridEl.querySelectorAll(".dcell").forEach(el => {
+    const i = Number(el.dataset.cell);
+    const v = dk.board[i];
+    const r = Math.floor(i / 9), c = i % 9;
+    const peer = sel >= 0 && (r === sr || c === sc || (Math.floor(r / 3) === Math.floor(sr / 3) && Math.floor(c / 3) === Math.floor(sc / 3)));
+    el.classList.toggle("given", dk.given[i]);
+    el.classList.toggle("mine", !!v && !dk.given[i]);
+    el.classList.toggle("peer", peer && i !== sel);
+    el.classList.toggle("same", !!selValue && v === selValue && i !== sel);
+    el.classList.toggle("bad", dk.bad.has(i));
+    el.classList.toggle("sel", i === sel);
+    if (v) {
+      const symbol = dk.file.symbols[v - 1];
+      el.textContent = symbol.glyph;
+      el.style.color = symbol.color;
+    } else {
+      el.textContent = "";
+    }
+  });
+
+  dokuPalEl.querySelectorAll("button").forEach(el => {
+    el.classList.toggle("used", counts[Number(el.dataset.sym)] >= 9);
+  });
+  dokuStats();
+}
+
+function dokuShowOverlay(title, text, label) {
+  dokuOverlayTitle.textContent = title;
+  dokuOverlayText.textContent = text;
+  dokuOverlayButton.textContent = label;
+  dokuOverlay.hidden = false;
+}
+
+function openDoku(file, context) {
+  dk = { file: file, ctx: context || {}, state: "ready", board: Array(81).fill(0), given: Array(81).fill(false),
+    solution: [], bad: new Set(), selected: -1, mistakes: 0, strikes: 0, shield: 0 };
+  dokuOpen = true;
+  document.getElementById("dokuWrap").classList.toggle("premium", !!file.premium);
+  document.getElementById("dokuName").textContent = dk.ctx.campaign ? dk.ctx.target.name : file.themeName;
+  document.getElementById("dokuFor").textContent = dk.ctx.campaign ? hackRank().name + ", " + file.themeName : "For " + file.customer;
+  dokuCellButtons();
+  dokuPalette();
+  dokuStatus("");
+  if (dk.ctx.campaign) {
+    dokuShowOverlay(dk.ctx.target.name,
+      "Every row, column, and box needs each tool once. Three wrong moves and you get traced. Crack it and it joins your botnet for " + dk.ctx.target.nodes + " nodes.",
+      "Start the hack");
+  } else if (dk.ctx.orderId != null) {
+    dokuShowOverlay(file.themeName, "Play this build the way the customer will. If a symbol looks wrong, that is a bug.", "Start");
+  } else {
+    dokuShowOverlay(file.themeName, "Every row, column, and box holds each symbol once. Tap a cell, then tap a symbol.", "Start");
+  }
+  dokuRoot.hidden = false;
+  dokuDraw();
+}
+
+function dokuStart() {
+  const made = makeDokuPuzzle(dk.file.clues);
+  dk.solution = made.solution;
+  dk.board = made.puzzle.slice();
+  dk.given = made.puzzle.map(v => v !== 0);
+  dk.bad = new Set();
+  dk.selected = -1;
+  dk.mistakes = 0;
+  dk.strikes = 0;
+  dk.shield = dk.ctx.campaign && hack.tools.rootkit ? 1 : 0;
+  if (dk.ctx.campaign && hack.tools.keylogger) {
+    const empty = dokuShuffle(dk.board.map((v, i) => v ? -1 : i).filter(i => i >= 0)).slice(0, 3);
+    empty.forEach(i => { dk.board[i] = dk.solution[i]; dk.given[i] = true; });
+    dokuStatus("The keylogger cracked three cells before you started.", "good");
+  } else {
+    dokuStatus(dk.ctx.campaign && dk.shield ? "Rootkit armed for this board." : "");
+  }
+  dk.state = "playing";
+  dokuOverlay.hidden = true;
+  dokuDraw();
+}
+
+function dokuCheckWin() {
+  for (let i = 0; i < 81; i++) if (dk.board[i] !== dk.solution[i]) return;
+  dk.state = "won";
+  dk.selected = -1;
+  if (dk.ctx.campaign) {
+    const target = dk.ctx.target;
+    hack.nodes += target.nodes;
+    hack.total += target.nodes;
+    if (dk.ctx.advance) hack.next++;
+    hack.owned++;
+    saveHack();
+    dokuShowOverlay("Owned", target.name + " joined your botnet for " + target.nodes + " nodes. Rank: " + hackRank().name + ".", "Hack the next target");
+  } else {
+    dokuShowOverlay("Solved", dk.mistakes ? "Solved with " + dk.mistakes + " wrong " + plural(dk.mistakes, "move") + "." : "Clean solve with no wrong moves.", "New puzzle");
+  }
+  dokuDraw();
+}
+
+function dokuPlace(v) {
+  const i = dk.selected;
+  if (dk.state !== "playing" || i < 0 || dk.given[i]) return;
+  if (dk.board[i] === v && !dk.bad.has(i)) return;
+  dk.board[i] = v;
+  if (v !== dk.solution[i]) {
+    dk.bad.add(i);
+    dk.mistakes++;
+    if (dk.ctx.campaign) {
+      if (dk.shield > 0) {
+        dk.shield--;
+        dokuStatus("Wrong tool there. The rootkit hid it, so no strike.", "warn");
+      } else {
+        dk.strikes++;
+        if (dk.strikes >= HACK_STRIKES) {
+          dk.state = "over";
+          dokuDraw();
+          dokuShowOverlay("Traced", "The admins traced you. " + dk.ctx.target.name + " is still out there.", "Try again");
+          return;
+        }
+        dokuStatus("Wrong tool there. Strike " + dk.strikes + " of " + HACK_STRIKES + ".", "warn");
+      }
+    } else {
+      dokuStatus("That symbol breaks a row, column, or box.", "warn");
+    }
+  } else {
+    dk.bad.delete(i);
+    dokuStatus("");
+  }
+  dokuDraw();
+  dokuCheckWin();
+}
+
+function dokuErase() {
+  const i = dk.selected;
+  if (dk.state !== "playing" || i < 0 || dk.given[i]) return;
+  dk.board[i] = 0;
+  dk.bad.delete(i);
+  dokuDraw();
+}
+
+function dokuHint() {
+  if (dk.state !== "playing") return;
+  let i = dk.selected;
+  if (i < 0 || dk.given[i] || (dk.board[i] === dk.solution[i])) {
+    const open = dk.board.map((v, n) => (v !== dk.solution[n] ? n : -1)).filter(n => n >= 0);
+    if (!open.length) return;
+    i = pick(open);
+  }
+  if (dk.ctx.campaign) {
+    const cost = dokuScanCost();
+    if (hack.nodes < cost) { dokuStatus("Your botnet needs " + cost + " nodes to run a scan.", "warn"); return; }
+    hack.nodes -= cost;
+    saveHack();
+    dokuStatus("Scan cracked a cell for " + cost + " nodes.", "good");
+  } else {
+    dokuStatus("Hint filled a cell.", "good");
+  }
+  dk.board[i] = dk.solution[i];
+  dk.given[i] = true;
+  dk.bad.delete(i);
+  dk.selected = i;
+  dokuDraw();
+  dokuCheckWin();
+}
+
+function closeDoku() {
+  dokuOpen = false;
+  dokuRoot.hidden = true;
+  const orderId = dk ? dk.ctx.orderId : null;
+  dk = null;
+  finishPlayTest(orderId);
+  lastTick = performance.now();
+  render();
+}
+
+dokuGridEl.addEventListener("click", event => {
+  const cell = event.target.closest("[data-cell]");
+  if (!cell || !dk || dk.state !== "playing") return;
+  dk.selected = Number(cell.dataset.cell);
+  dokuDraw();
+});
+
+dokuPalEl.addEventListener("click", event => {
+  const button = event.target.closest("[data-sym]");
+  if (button && dk) dokuPlace(Number(button.dataset.sym));
+});
+
+document.getElementById("dokuErase").addEventListener("click", () => { if (dk) dokuErase(); });
+dokuHintButton.addEventListener("click", () => { if (dk) dokuHint(); });
+document.getElementById("dokuClose").addEventListener("click", closeDoku);
+
+dokuOverlayButton.addEventListener("click", () => {
+  if (!dk) return;
+  if (dk.ctx.campaign && dk.state === "won") {
+    openHackTarget();
+    return;
+  }
+  dokuStart();
+});
+
+document.addEventListener("keydown", event => {
+  if (!dokuOpen || !dk) return;
+  if (event.key === "Escape") { closeDoku(); return; }
+  if (dk.state !== "playing") return;
+  if (/^[1-9]$/.test(event.key)) dokuPlace(Number(event.key));
+  else if (event.key === "Backspace" || event.key === "Delete") dokuErase();
+  else if (dk.selected >= 0 && event.key.startsWith("Arrow")) {
+    const r = Math.floor(dk.selected / 9), c = dk.selected % 9;
+    const moves = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+    const [dr, dc] = moves[event.key];
+    dk.selected = clamp(r + dr, 0, 8) * 9 + clamp(c + dc, 0, 8);
+    dokuDraw();
+  } else return;
+  event.preventDefault();
+});
+
+// ------------------------------------------------------------------
+// The Hackerdoku campaign
+// ------------------------------------------------------------------
+function newHack() { return { next: 0, nodes: 0, total: 0, owned: 0, tools: {} }; }
+
+function loadHack() {
+  try {
+    const saved = localStorage.getItem(HACK_KEY);
+    if (saved) return Object.assign(newHack(), JSON.parse(saved));
+  } catch (error) { /* broken or blocked save, start fresh */ }
+  return newHack();
+}
+
+function saveHack() {
+  try { localStorage.setItem(HACK_KEY, JSON.stringify(hack)); }
+  catch (error) { /* storage unavailable, skip */ }
+}
+
+let hack = loadHack();
+
+function hackRank() {
+  let rank = HACK_RANKS[0];
+  HACK_RANKS.forEach(r => { if (hack.total >= r.at) rank = r; });
+  return rank;
+}
+
+function hackTarget() {
+  return hack.next < HACK_TARGETS.length ? HACK_TARGETS[hack.next] : HACK_ENDLESS;
+}
+
+function openHackTarget() {
+  const target = hackTarget();
+  openDoku(buildDokuFile("your botnet", "hacker", target.level), { campaign: true, target: target, advance: hack.next < HACK_TARGETS.length });
+}
+
+function renderHackCard() {
+  const target = hackTarget();
+  const nextRank = HACK_RANKS.find(r => r.at > hack.total);
+  let html = `
+    <article class="order hack-card">
+      <div class="hack-strip"></div>
+      <div class="order-body">
+        <div class="order-top">
+          <div>
+            <div class="customer">Hackerdoku campaign</div>
+            <div class="spec">Crack machines, grow your botnet, spend nodes on tools.</div>
+          </div>
+        </div>
+        <div class="motifs">${DOKU_THEMES.hacker.glyphs.slice(0, 5).join(" ")}</div>
+        <div class="hack-facts">
+          <span>Rank <b>${hackRank().name}</b></span>
+          <span>Botnet <b>${hack.nodes} nodes</b></span>
+          <span>Machines owned <b>${hack.owned}</b></span>
+        </div>
+        <div class="status">Next target: ${target.name}, ${DOKU_LEVELS[target.level].label}, worth ${target.nodes} nodes${nextRank ? ". " + nextRank.name + " at " + nextRank.at + " total nodes" : ""}.</div>
+        <div class="actions"><button class="btn primary" data-do="hackPlay">Hack ${target.name}</button></div>`;
+  HACK_TOOLS.forEach(tool => {
+    const owned = hack.tools[tool.key];
+    html += `
+        <div class="row" style="margin-top:10px">
+          <div class="row-top"><div class="row-name">${tool.name}</div><div class="row-state ${owned ? "done" : ""}">${owned ? "Installed" : tool.cost + " nodes"}</div></div>
+          <div class="row-sub">${tool.text}</div>
+          ${owned ? "" : `<div class="actions"><button class="btn" data-do="hackTool" data-id="${tool.key}">Install for ${tool.cost} nodes</button></div>`}
+        </div>`;
+  });
+  html += `</div></article>`;
+  return html;
+}
+
+// ------------------------------------------------------------------
+// THE BUBBLE ENGINE
+// Reads a bubble skin file and becomes that bubble shooter. Aim by
+// dragging on the board, let go to fire. Three or more of a color pop,
+// and anything left hanging falls.
+// ------------------------------------------------------------------
+const BUB_ROWS = 14;
+const BUB_LOSS_ROW = 12;
+const SQ3 = Math.sqrt(3);
+
+const bubRoot = document.getElementById("bub");
+const bubStage = document.getElementById("bubStage");
+const bubWrap = document.getElementById("bubWrap");
+const bubCanvas = document.getElementById("bubCanvas");
+const bubCtx = bubCanvas.getContext("2d");
+const bubOverlay = document.getElementById("bubOverlay");
+const bubStatusEl = document.getElementById("bubStatus");
+
+let bubOpen = false;
+let bs = null;
+
+function bubStatus(text, kind) {
+  bubStatusEl.textContent = text || "";
+  bubStatusEl.className = "doku-status" + (kind ? " " + kind : "");
+}
+
+function bubShowOverlay(title, text, label) {
+  document.getElementById("bubOverlayTitle").textContent = title;
+  document.getElementById("bubOverlayText").textContent = text;
+  document.getElementById("bubOverlayButton").textContent = label;
+  bubOverlay.hidden = false;
+}
+
+function bubOffset(r) { return ((r + bs.parity) % 2) === 1; }
+function bubMaxC(r) { return bubOffset(r) ? bs.cols - 2 : bs.cols - 1; }
+function bubPos(r, c) {
+  return { x: bs.R + c * 2 * bs.R + (bubOffset(r) ? bs.R : 0), y: bs.R + r * bs.R * SQ3 };
+}
+function bubNeighbors(r, c) {
+  const list = [[r, c - 1], [r, c + 1]];
+  if (bubOffset(r)) list.push([r - 1, c], [r - 1, c + 1], [r + 1, c], [r + 1, c + 1]);
+  else list.push([r - 1, c - 1], [r - 1, c], [r + 1, c - 1], [r + 1, c]);
+  return list.filter(([nr, nc]) => nr >= 0 && nr < BUB_ROWS && nc >= 0 && nc <= bubMaxC(nr));
+}
+function bubCell(r, c) { return bs.grid[r] ? bs.grid[r][c] : null; }
+
+function bubEmptyRow() { return Array(bs.cols).fill(null); }
+
+function bubColorsOnBoard() {
+  const set = new Set();
+  bs.grid.forEach(row => row.forEach(v => { if (v != null) set.add(v); }));
+  return [...set];
+}
+function bubRandomColor() {
+  const present = bubColorsOnBoard();
+  const pool = present.length ? present : bs.file.bubbles.map((b, i) => i);
+  return pick(pool);
+}
+
+function bubFillRow(r) {
+  for (let c = 0; c <= bubMaxC(r); c++) bs.grid[r][c] = Math.floor(Math.random() * bs.file.bubbles.length);
+}
+
+function bubNewBoard() {
+  bs.parity = 0;
+  bs.grid = Array.from({ length: BUB_ROWS }, () => bubEmptyRow());
+  const rows = Math.min(9, 4 + bs.level);
+  for (let r = 0; r < rows; r++) bubFillRow(r);
+  bs.misses = 0;
+  bs.current = bubRandomColor();
+  bs.next = bubRandomColor();
+  bs.shot = null;
+  bs.effects = [];
+}
+
+function bubStart(nextLevel) {
+  if (!nextLevel) { bs.score = 0; bs.level = 1; }
+  bubNewBoard();
+  bs.state = "playing";
+  bubOverlay.hidden = true;
+  bubStatus(nextLevel ? "Level " + bs.level + ". More rows this time." : "Drag on the board to aim. Let go to fire.");
+  bubStats();
+}
+
+function bubStats() {
+  document.getElementById("bubScore").textContent = bs.score;
+  document.getElementById("bubDrop").textContent = Math.max(0, bs.file.shotsPerDrop - bs.misses);
+}
+
+function bubShooter() { return { x: bs.W / 2, y: bs.H - bs.R * 1.6 }; }
+
+function bubFire() {
+  if (!bs || bs.state !== "playing" || bs.shot) return;
+  const s = bubShooter();
+  const speed = bs.R * 38;
+  bs.shot = { x: s.x, y: s.y, vx: Math.cos(bs.angle) * speed, vy: -Math.sin(bs.angle) * speed, color: bs.current };
+  bs.current = bs.next;
+  bs.next = bubRandomColor();
+}
+
+function bubSwap() {
+  if (!bs || bs.state !== "playing" || bs.shot) return;
+  const t = bs.current; bs.current = bs.next; bs.next = t;
+}
+
+function bubSnap(x, y, color) {
+  const R = bs.R;
+  let best = null, bestD = Infinity;
+  const approx = Math.round((y - R) / (R * SQ3));
+  for (let r = Math.max(0, approx - 1); r <= Math.min(BUB_ROWS - 1, approx + 1); r++) {
+    for (let c = 0; c <= bubMaxC(r); c++) {
+      if (bs.grid[r][c] != null) continue;
+      const p = bubPos(r, c);
+      const d = (p.x - x) ** 2 + (p.y - y) ** 2;
+      if (d < bestD) { bestD = d; best = [r, c]; }
+    }
+  }
+  if (!best) { bubLose(); return; }
+  const [r, c] = best;
+  bs.grid[r][c] = color;
+  bubResolve(r, c);
+}
+
+function bubResolve(r, c) {
+  const color = bs.grid[r][c];
+  const seen = new Set([r + "," + c]);
+  const stack = [[r, c]];
+  const cluster = [];
+  while (stack.length) {
+    const [cr, cc] = stack.pop();
+    cluster.push([cr, cc]);
+    bubNeighbors(cr, cc).forEach(([nr, nc]) => {
+      const key = nr + "," + nc;
+      if (!seen.has(key) && bs.grid[nr][nc] === color) { seen.add(key); stack.push([nr, nc]); }
+    });
+  }
+
+  if (cluster.length >= 3) {
+    cluster.forEach(([pr, pc]) => {
+      const p = bubPos(pr, pc);
+      bs.effects.push({ kind: "pop", x: p.x, y: p.y, color: bs.grid[pr][pc], t: 0 });
+      bs.grid[pr][pc] = null;
+    });
+    // Anything no longer hanging from the ceiling falls.
+    const held = new Set();
+    const queue = [];
+    for (let cc = 0; cc <= bubMaxC(0); cc++) if (bs.grid[0][cc] != null) { held.add("0," + cc); queue.push([0, cc]); }
+    while (queue.length) {
+      const [qr, qc] = queue.shift();
+      bubNeighbors(qr, qc).forEach(([nr, nc]) => {
+        const key = nr + "," + nc;
+        if (!held.has(key) && bs.grid[nr][nc] != null) { held.add(key); queue.push([nr, nc]); }
+      });
+    }
+    let dropped = 0;
+    for (let rr = 0; rr < BUB_ROWS; rr++) {
+      for (let cc = 0; cc < bs.cols; cc++) {
+        if (bs.grid[rr][cc] != null && !held.has(rr + "," + cc)) {
+          const p = bubPos(rr, cc);
+          bs.effects.push({ kind: "drop", x: p.x, y: p.y, vy: 0, vx: (Math.random() - 0.5) * bs.R * 4, color: bs.grid[rr][cc], t: 0 });
+          bs.grid[rr][cc] = null;
+          dropped++;
+        }
+      }
+    }
+    const gained = (cluster.length * 10 + dropped * 25) * bs.level;
+    bs.score += gained;
+    bubStatus(dropped ? "Popped " + cluster.length + " and dropped " + dropped + ". Plus " + gained + "." : "Popped " + cluster.length + ". Plus " + gained + ".", dropped ? "good" : "");
+    if (!bubColorsOnBoard().length) {
+      bs.score += 500 * bs.level;
+      bs.state = "cleared";
+      bubShowOverlay("Board cleared", "Level " + bs.level + " done with " + bs.score + " points. The next board starts with more rows.", "Next level");
+      bubStats();
+      return;
+    }
+    if (!bubColorsOnBoard().includes(bs.current)) bs.current = bubRandomColor();
+    if (!bubColorsOnBoard().includes(bs.next)) bs.next = bubRandomColor();
+  } else {
+    bs.misses++;
+    if (bs.misses >= bs.file.shotsPerDrop) {
+      bs.misses = 0;
+      bs.grid.pop();
+      bs.grid.unshift(bubEmptyRow());
+      bs.parity = 1 - bs.parity;
+      bubFillRow(0);
+      bubStatus("The ceiling dropped a row.", "warn");
+    }
+  }
+  for (let rr = BUB_LOSS_ROW; rr < BUB_ROWS; rr++) {
+    if (bs.grid[rr].some(v => v != null)) { bubLose(); return; }
+  }
+  bubStats();
+}
+
+function bubLose() {
+  bs.state = "over";
+  bs.shot = null;
+  bubShowOverlay("Game over", "The bubbles reached the line. Score " + bs.score + " on level " + bs.level + ".", "Play again");
+  bubStats();
+}
+
+function bubUpdate(dt) {
+  const R = bs.R;
+  if (bs.shot) {
+    const s = bs.shot;
+    const steps = Math.ceil(Math.hypot(s.vx, s.vy) * dt / (R / 3));
+    const sdt = dt / Math.max(1, steps);
+    for (let i = 0; i < steps && bs.shot; i++) {
+      s.x += s.vx * sdt;
+      s.y += s.vy * sdt;
+      if (s.x < R) { s.x = R; s.vx = -s.vx; }
+      if (s.x > bs.W - R) { s.x = bs.W - R; s.vx = -s.vx; }
+      let hit = s.y <= R;
+      if (!hit) {
+        const approx = Math.round((s.y - R) / (R * SQ3));
+        for (let r = Math.max(0, approx - 1); r <= Math.min(BUB_ROWS - 1, approx + 1) && !hit; r++) {
+          for (let c = 0; c <= bubMaxC(r); c++) {
+            if (bs.grid[r][c] == null) continue;
+            const p = bubPos(r, c);
+            if ((p.x - s.x) ** 2 + (p.y - s.y) ** 2 < (R * 1.7) ** 2) { hit = true; break; }
+          }
+        }
+      }
+      if (hit) { bs.shot = null; bubSnap(s.x, s.y, s.color); }
+    }
+  }
+  bs.effects.forEach(e => {
+    e.t += dt;
+    if (e.kind === "drop") { e.vy += R * 60 * dt; e.y += e.vy * dt; e.x += e.vx * dt; }
+  });
+  bs.effects = bs.effects.filter(e => (e.kind === "pop" ? e.t < 0.25 : e.y < bs.H + R * 2));
+}
+
+function bubDrawBubble(x, y, R, index, alpha, scale) {
+  const ctx = bubCtx;
+  const b = bs.file.bubbles[index];
+  if (!b) return;
+  const r = R * (scale || 1) - 1;
+  ctx.globalAlpha = alpha == null ? 1 : alpha;
+  if (bs.file.glow) { ctx.shadowColor = b.color; ctx.shadowBlur = R * 0.6; }
+  if (bs.file.premium) {
+    // Premium art: a lit glass sphere with a rim and a highlight.
+    const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r);
+    g.addColorStop(0, shade(b.color, 0.75));
+    g.addColorStop(0.45, b.color);
+    g.addColorStop(1, shade(b.color, -0.45));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0; ctx.shadowColor = "transparent";
+    ctx.lineWidth = Math.max(1, R * 0.08);
+    ctx.strokeStyle = shade(b.color, -0.55);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
+    ctx.beginPath(); ctx.ellipse(x - r * 0.32, y - r * 0.42, r * 0.32, r * 0.18, -0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+    ctx.beginPath(); ctx.arc(x + r * 0.38, y + r * 0.42, r * 0.09, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.fillStyle = b.color;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0; ctx.shadowColor = "transparent";
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = shade(b.color, -0.25);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+    ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.35, r * 0.25, 0, Math.PI * 2); ctx.fill();
+  }
+  if (b.glyph) {
+    ctx.font = Math.floor(r * 1.05) + "px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = b.glyph === "?" ? "#5d6b78" : "#ffffff";
+    if (bs.file.premium) { ctx.shadowColor = "rgba(0,0,0,0.4)"; ctx.shadowBlur = 3; }
+    ctx.fillText(b.glyph, x, y + 1);
+    ctx.shadowBlur = 0; ctx.shadowColor = "transparent";
+  }
+  ctx.globalAlpha = 1;
+}
+
+function bubDraw() {
+  if (!bs) return;
+  const ctx = bubCtx, R = bs.R, W = bs.W, H = bs.H;
+  ctx.fillStyle = bs.file.board;
+  ctx.fillRect(0, 0, W, H);
+  if (bs.file.premium) {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "rgba(36, 99, 176, 0.10)");
+    g.addColorStop(1, "rgba(47, 180, 230, 0.02)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+  // Loss line
+  const lossY = R + BUB_LOSS_ROW * R * SQ3 - R;
+  ctx.strokeStyle = "rgba(178, 74, 42, 0.45)";
+  ctx.setLineDash([6, 6]);
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(0, lossY); ctx.lineTo(W, lossY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  for (let r = 0; r < BUB_ROWS; r++) {
+    for (let c = 0; c <= bubMaxC(r); c++) {
+      const v = bs.grid[r][c];
+      if (v == null) continue;
+      const p = bubPos(r, c);
+      bubDrawBubble(p.x, p.y, R, v);
+    }
+  }
+  bs.effects.forEach(e => {
+    if (e.kind === "pop") bubDrawBubble(e.x, e.y, R, e.color, 1 - e.t / 0.25, 1 + e.t * 2);
+    else bubDrawBubble(e.x, e.y, R, e.color, 0.9);
+  });
+
+  const s = bubShooter();
+  if (bs.state === "playing") {
+    // Aim guide with one bounce
+    ctx.fillStyle = "rgba(36, 99, 176, 0.55)";
+    let x = s.x, y = s.y, vx = Math.cos(bs.angle), vy = -Math.sin(bs.angle);
+    for (let i = 0; i < 26; i++) {
+      x += vx * R * 0.9; y += vy * R * 0.9;
+      if (x < R) { x = R; vx = -vx; }
+      if (x > W - R) { x = W - R; vx = -vx; }
+      if (y < R) break;
+      ctx.beginPath(); ctx.arc(x, y, Math.max(1.5, R * 0.12), 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  // Launcher
+  ctx.fillStyle = "#dbe7f5";
+  ctx.beginPath(); ctx.arc(s.x, s.y, R * 1.35, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#2463b0"; ctx.lineWidth = 2; ctx.stroke();
+  if (bs.shot) bubDrawBubble(bs.shot.x, bs.shot.y, R, bs.shot.color);
+  else if (bs.state === "playing") bubDrawBubble(s.x, s.y, R, bs.current);
+  if (bs.state === "playing") {
+    bubDrawBubble(s.x + R * 3.2, s.y + R * 0.3, R * 0.7, bs.next);
+    ctx.fillStyle = "#5d6b78";
+    ctx.font = Math.floor(R * 0.6) + "px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("next", s.x + R * 3.2, s.y - R * 0.75);
+  }
+}
+
+let bubLast = 0;
+function bubFrame(time) {
+  if (!bubOpen) return;
+  const dt = bubLast ? Math.min(time - bubLast, 50) / 1000 : 0;
+  bubLast = time;
+  if (bs.state === "playing") bubUpdate(dt);
+  else if (bs.effects.length) bubUpdate(dt);
+  bubDraw();
+  requestAnimationFrame(bubFrame);
+}
+
+function bubResize() {
+  if (!bubOpen || !bs) return;
+  const availW = bubStage.clientWidth - 16;
+  const availH = bubStage.clientHeight - 16;
+  const rowsTall = (BUB_ROWS - 1) * SQ3 + 2 + 3.4;
+  const R = Math.max(8, Math.floor(Math.min(availW / (bs.cols * 2), availH / rowsTall)));
+  bs.R = R;
+  bs.W = R * bs.cols * 2;
+  bs.H = Math.round(R * rowsTall);
+  const d = window.devicePixelRatio || 1;
+  bubWrap.style.width = bs.W + "px";
+  bubWrap.style.height = bs.H + "px";
+  bubCanvas.style.width = bs.W + "px";
+  bubCanvas.style.height = bs.H + "px";
+  bubCanvas.width = Math.round(bs.W * d);
+  bubCanvas.height = Math.round(bs.H * d);
+  bubCtx.setTransform(d, 0, 0, d, 0, 0);
+  bubDraw();
+}
+
+function bubAimAt(event) {
+  const rect = bubCanvas.getBoundingClientRect();
+  const s = bubShooter();
+  const x = event.clientX - rect.left, y = event.clientY - rect.top;
+  let a = Math.atan2(s.y - y, x - s.x);
+  bs.angle = clamp(a, 0.12, Math.PI - 0.12);
+}
+
+let bubAiming = false;
+bubCanvas.addEventListener("pointerdown", e => {
+  if (!bs || bs.state !== "playing") return;
+  e.preventDefault();
+  bubCanvas.setPointerCapture(e.pointerId);
+  bubAiming = true;
+  bubAimAt(e);
+});
+bubCanvas.addEventListener("pointermove", e => { if (bubAiming && bs) bubAimAt(e); });
+bubCanvas.addEventListener("pointerup", e => { if (!bubAiming) return; bubAiming = false; bubAimAt(e); bubFire(); });
+bubCanvas.addEventListener("pointercancel", () => { bubAiming = false; });
+
+document.getElementById("bubFire").addEventListener("click", bubFire);
+document.getElementById("bubSwap").addEventListener("click", bubSwap);
+document.getElementById("bubOverlayButton").addEventListener("click", () => {
+  if (!bs) return;
+  if (bs.state === "cleared") { bs.level++; bubStart(true); }
+  else bubStart(false);
+});
+
+function openBubble(file, context) {
+  bs = { file: file, ctx: context || {}, cols: file.columns, state: "ready", grid: [], parity: 0, angle: Math.PI / 2,
+    level: 1, score: 0, misses: 0, current: 0, next: 0, shot: null, effects: [], R: 16, W: 256, H: 400 };
+  bubOpen = true;
+  bubNewBoard();
+  document.getElementById("bubName").textContent = file.themeName + (file.premium ? " premium" : "");
+  document.getElementById("bubFor").textContent = "For " + file.customer;
+  bubStatus("");
+  bubShowOverlay(file.themeName,
+    bs.ctx.orderId != null
+      ? "Play this build the way the customer will. If a bubble looks wrong, that is a bug."
+      : "Drag on the board to aim and let go to fire. Match three or more to pop them. Missed shots bring the ceiling down.",
+    "Start");
+  bubRoot.hidden = false;
+  bubStats();
+  requestAnimationFrame(() => { bubResize(); bubLast = 0; requestAnimationFrame(bubFrame); });
+}
+
+function closeBubble() {
+  bubOpen = false;
+  bubRoot.hidden = true;
+  const orderId = bs ? bs.ctx.orderId : null;
+  bs = null;
+  finishPlayTest(orderId);
+  lastTick = performance.now();
+  render();
+}
+document.getElementById("bubClose").addEventListener("click", closeBubble);
+window.addEventListener("resize", bubResize);
+
+// ------------------------------------------------------------------
+// THE RUNNER ENGINE
+// Reads a runner skin file and becomes that gate runner. Drag left and
+// right or use the lane buttons. Every pair of gates changes the crowd.
+// ------------------------------------------------------------------
+const RUN_SPEED = 7;
+const RUN_GAP = 11;
+const RUN_DEPTH = 7;
+
+const runRoot = document.getElementById("runr");
+const runStage = document.getElementById("runStage");
+const runWrap = document.getElementById("runWrap");
+const runCanvas = document.getElementById("runCanvas");
+const runCtx = runCanvas.getContext("2d");
+const runOverlay = document.getElementById("runOverlay");
+const runStatusEl = document.getElementById("runStatus");
+
+let runOpen = false;
+let rs = null;
+
+function runStatus(text, kind) {
+  runStatusEl.textContent = text || "";
+  runStatusEl.className = "doku-status" + (kind ? " " + kind : "");
+}
+function runShowOverlay(title, text, label) {
+  document.getElementById("runOverlayTitle").textContent = title;
+  document.getElementById("runOverlayText").textContent = text;
+  document.getElementById("runOverlayButton").textContent = label;
+  runOverlay.hidden = false;
+}
+function shortNum(n) {
+  if (n >= 1e9) return (n / 1e9).toFixed(1).replace(/\.0$/, "") + "B";
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1e4) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
+  return String(n);
+}
+function runApply(count, gate) {
+  if (gate.op === "+") return count + gate.val;
+  if (gate.op === "x") return count * gate.val;
+  if (gate.op === "-") return Math.max(0, count - gate.val);
+  return Math.floor(count / gate.val);
+}
+function runLabel(gate) { return (gate.op === "/" ? "÷" : gate.op === "x" ? "×" : gate.op) + gate.val; }
+function runGood(gate) { return gate.op === "+" || gate.op === "x"; }
+
+function runMakeGate(level) {
+  const op = pick(rs.file.ops);
+  const grow = 1 + (level - 1) * 0.6;
+  let val;
+  if (op === "+") val = Math.max(5, Math.round((5 + Math.random() * 35) * grow / 5) * 5);
+  else if (op === "x") val = 2 + Math.floor(Math.random() * 3);
+  else if (op === "-") val = Math.max(5, Math.round((5 + Math.random() * 30) * grow / 5) * 5);
+  else val = 2 + Math.floor(Math.random() * 2);
+  return { op, val };
+}
+
+function runBuildTrack() {
+  const objs = [];
+  let best = 1;
+  let z = RUN_GAP;
+  for (let i = 0; i < rs.file.gates; i++) {
+    let left = runMakeGate(rs.level), right = runMakeGate(rs.level);
+    let guard = 0;
+    while (left.op === right.op && left.val === right.val && guard++ < 10) right = runMakeGate(rs.level);
+    // Every pair offers at least one gate that grows the crowd.
+    if (!runGood(left) && !runGood(right)) { if (Math.random() < 0.5) left = { op: "+", val: 10 * rs.level }; else right = { op: "x", val: 2 }; }
+    objs.push({ kind: "gate", z, left, right, used: false });
+    best = Math.max(runApply(best, left), runApply(best, right));
+    z += RUN_GAP;
+    if (i > 1 && i % 3 === 2) {
+      const n = Math.max(3, Math.round(best * (0.12 + Math.random() * 0.18)));
+      objs.push({ kind: "enemy", z: z - RUN_GAP / 2, count: n, used: false });
+      best = Math.max(0, best - n);
+    }
+  }
+  const boss = Math.max(8, Math.round(best * (0.5 + Math.min(rs.level, 4) * 0.08)));
+  objs.push({ kind: "boss", z: z + RUN_GAP * 0.4, count: boss, used: false });
+  rs.objs = objs;
+  rs.trackEnd = z + RUN_GAP * 0.4;
+}
+
+function runStart(nextLevel) {
+  if (!nextLevel) { rs.level = 1; rs.score = 0; }
+  rs.count = 1;
+  rs.dist = 0;
+  rs.px = 0; rs.target = 0;
+  rs.pops = [];
+  runBuildTrack();
+  rs.state = "playing";
+  runOverlay.hidden = true;
+  runStatus(nextLevel ? "Level " + rs.level + ". Bigger numbers, bigger boss." : "Drag or tap the lane buttons. Pick the gate that grows the crowd most.");
+  runStats();
+}
+
+function runStats() {
+  document.getElementById("runCount").textContent = shortNum(rs.count);
+  document.getElementById("runLevel").textContent = rs.level;
+}
+
+function runPop(text, good) { rs.pops.push({ text, good, t: 0 }); }
+
+function runUpdate(dt) {
+  rs.px += (rs.target - rs.px) * Math.min(1, dt * 10);
+  if (rs.state !== "playing") { rs.pops.forEach(p => { p.t += dt; }); rs.pops = rs.pops.filter(p => p.t < 1); return; }
+  rs.dist += RUN_SPEED * (1 + (rs.level - 1) * 0.08) * dt;
+  for (const o of rs.objs) {
+    if (o.used || o.z - rs.dist > 0) continue;
+    o.used = true;
+    if (o.kind === "gate") {
+      const g = rs.px < 0 ? o.left : o.right;
+      const before = rs.count;
+      rs.count = runApply(rs.count, g);
+      runPop(runLabel(g), rs.count >= before);
+      runStatus(runLabel(g) + " took the crowd from " + shortNum(before) + " to " + shortNum(rs.count) + ".", rs.count >= before ? "good" : "warn");
+      if (rs.count <= 0) { runLose("The whole crowd got divided out of existence."); return; }
+    } else if (o.kind === "enemy") {
+      const before = rs.count;
+      rs.count = Math.max(0, rs.count - o.count);
+      runPop("-" + shortNum(o.count), false);
+      runStatus("Smashed a squad of " + shortNum(o.count) + ". Crowd down to " + shortNum(rs.count) + ".", "warn");
+      if (rs.count <= 0) { runLose("The squad of " + shortNum(o.count) + " wiped out all " + shortNum(before) + "."); return; }
+    } else if (o.kind === "boss") {
+      if (rs.count > o.count) {
+        rs.score += rs.count;
+        rs.state = "won";
+        runShowOverlay("You outnumbered it", shortNum(rs.count) + " beat the boss guard of " + shortNum(o.count) + ". Total score " + shortNum(rs.score) + ".", "Next level");
+      } else {
+        runLose("The boss had " + shortNum(o.count) + " and you showed up with " + shortNum(rs.count) + ".");
+      }
+      runStats();
+      return;
+    }
+    runStats();
+  }
+  rs.pops.forEach(p => { p.t += dt; });
+  rs.pops = rs.pops.filter(p => p.t < 1);
+}
+
+function runLose(why) {
+  rs.state = "over";
+  runShowOverlay("Run over", why + " Score " + shortNum(rs.score) + ".", "Run again");
+  runStats();
+}
+
+// Perspective: z is distance ahead of the crowd. t is the size factor.
+function runProj(z) {
+  const t = 1 / (1 + Math.max(-0.9, z) / RUN_DEPTH);
+  const horizon = rs.H * 0.1, player = rs.H * 0.82;
+  return { t, y: horizon + (player - horizon) * t, half: rs.W * 0.04 + (rs.W * 0.4 - rs.W * 0.04) * t };
+}
+
+function runDrawFigures(cx, cy, size, glyph, count, alpha) {
+  const ctx = runCtx;
+  const shown = Math.min(count, 36);
+  ctx.globalAlpha = alpha == null ? 1 : alpha;
+  ctx.font = Math.floor(size) + "px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  if (rs.file.premium) { ctx.shadowColor = "rgba(28, 40, 51, 0.35)"; ctx.shadowBlur = size * 0.25; ctx.shadowOffsetY = size * 0.08; }
+  for (let i = shown - 1; i >= 0; i--) {
+    const a = i * 2.4, r = Math.sqrt(i) * size * 0.42;
+    ctx.fillText(glyph, cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.5);
+  }
+  ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; ctx.shadowColor = "transparent";
+  ctx.globalAlpha = 1;
+}
+
+function runTag(x, y, text, color, size) {
+  const ctx = runCtx;
+  ctx.font = "700 " + Math.floor(size) + "px system-ui, sans-serif";
+  const w = ctx.measureText(text).width + size * 0.9;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(x - w / 2, y - size * 0.75, w, size * 1.5, size * 0.4);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, x, y + 1);
+}
+
+function runDraw() {
+  if (!rs) return;
+  const ctx = runCtx, W = rs.W, H = rs.H, f = rs.file;
+  const top = runProj(400), bottom = runProj(-0.85);
+  if (f.premium) {
+    const sky = ctx.createLinearGradient(0, 0, 0, top.y);
+    sky.addColorStop(0, shade(f.sky, -0.12)); sky.addColorStop(1, f.sky);
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, top.y + 1);
+    const g = ctx.createLinearGradient(0, top.y, 0, H);
+    g.addColorStop(0, shade(f.ground, 0.2)); g.addColorStop(1, shade(f.ground, -0.12));
+    ctx.fillStyle = g; ctx.fillRect(0, top.y, W, H - top.y);
+  } else {
+    ctx.fillStyle = f.sky; ctx.fillRect(0, 0, W, top.y + 1);
+    ctx.fillStyle = f.ground; ctx.fillRect(0, top.y, W, H - top.y);
+  }
+  // Road
+  ctx.fillStyle = f.road;
+  ctx.beginPath();
+  ctx.moveTo(W / 2 - top.half, top.y); ctx.lineTo(W / 2 + top.half, top.y);
+  ctx.lineTo(W / 2 + bottom.half, H); ctx.lineTo(W / 2 - bottom.half, H); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "#2463b0"; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(W / 2 - top.half, top.y); ctx.lineTo(W / 2 - bottom.half, H);
+  ctx.moveTo(W / 2 + top.half, top.y); ctx.lineTo(W / 2 + bottom.half, H);
+  ctx.stroke();
+  // Moving center dashes
+  ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+  const phase = rs.dist % 3;
+  for (let z = -phase; z < 120; z += 3) {
+    const a = runProj(z), b = runProj(z + 1.4);
+    if (a.y < top.y) break;
+    const wa = Math.max(1, a.t * 4), wb = Math.max(1, b.t * 4);
+    ctx.beginPath();
+    ctx.moveTo(W / 2 - wa, a.y); ctx.lineTo(W / 2 + wa, a.y); ctx.lineTo(W / 2 + wb, b.y); ctx.lineTo(W / 2 - wb, b.y);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // Objects far to near
+  const vis = rs.objs.filter(o => !o.used && o.z - rs.dist > -0.5 && o.z - rs.dist < 70).sort((a, b) => b.z - a.z);
+  vis.forEach(o => {
+    const p = runProj(o.z - rs.dist);
+    if (o.kind === "gate") {
+      const h = p.half * 0.55;
+      [["left", -1], ["right", 1]].forEach(([side, dir]) => {
+        const g = o[side];
+        const x0 = dir < 0 ? W / 2 - p.half + 2 : W / 2 + 2;
+        const w = p.half - 4;
+        const color = runGood(g) ? f.goodGate : f.badGate;
+        if (f.premium) {
+          const grad = ctx.createLinearGradient(x0, p.y - h, x0 + w, p.y);
+          grad.addColorStop(0, shade(color, 0.45)); grad.addColorStop(1, color);
+          ctx.globalAlpha = 0.82; ctx.fillStyle = grad;
+          ctx.shadowColor = color; ctx.shadowBlur = 12 * p.t;
+        } else {
+          ctx.globalAlpha = 0.72; ctx.fillStyle = color;
+        }
+        ctx.fillRect(x0, p.y - h, w, h);
+        ctx.shadowBlur = 0; ctx.shadowColor = "transparent";
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(1, 3 * p.t);
+        ctx.strokeRect(x0, p.y - h, w, h);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "800 " + Math.max(8, Math.floor(h * 0.42)) + "px system-ui, sans-serif";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(runLabel(g), x0 + w / 2, p.y - h / 2);
+      });
+    } else if (o.kind === "enemy") {
+      const size = Math.max(8, 26 * p.t);
+      runDrawFigures(W / 2, p.y - size * 0.4, size, f.units[1].glyph, Math.min(o.count, 24));
+      runTag(W / 2, p.y - size * 2.3, shortNum(o.count), f.badGate, Math.max(8, 14 * p.t));
+    } else if (o.kind === "boss") {
+      const size = Math.max(14, 90 * p.t);
+      ctx.font = Math.floor(size) + "px system-ui, sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+      if (f.premium) { ctx.shadowColor = "rgba(28,40,51,0.4)"; ctx.shadowBlur = size * 0.15; }
+      ctx.fillText(f.units[2].glyph, W / 2, p.y);
+      ctx.shadowBlur = 0; ctx.shadowColor = "transparent";
+      runTag(W / 2, p.y - size * 1.15, shortNum(o.count), f.badGate, Math.max(9, 18 * p.t));
+    }
+  });
+
+  // The crowd
+  const me = runProj(0);
+  const cx = W / 2 + rs.px * me.half;
+  const size = Math.max(12, W * 0.06);
+  runDrawFigures(cx, me.y + size * 0.3, size, f.units[0].glyph, rs.count);
+  runTag(cx, me.y - size * 1.9, shortNum(rs.count), f.goodGate, size * 0.62);
+
+  rs.pops.forEach(p => {
+    ctx.globalAlpha = 1 - p.t;
+    ctx.font = "800 " + Math.floor(size * 1.1) + "px system-ui, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = p.good ? f.goodGate : f.badGate;
+    ctx.fillText(p.text, cx, me.y - size * 3 - p.t * size * 2);
+    ctx.globalAlpha = 1;
+  });
+}
+
+let runLast = 0;
+function runFrame(time) {
+  if (!runOpen) return;
+  const dt = runLast ? Math.min(time - runLast, 50) / 1000 : 0;
+  runLast = time;
+  runUpdate(dt);
+  runDraw();
+  requestAnimationFrame(runFrame);
+}
+
+function runResize() {
+  if (!runOpen || !rs) return;
+  const availW = runStage.clientWidth - 16;
+  const availH = runStage.clientHeight - 16;
+  const W = Math.floor(Math.min(availW, availH * 0.68, 520));
+  const H = Math.floor(Math.min(availH, W * 1.6));
+  rs.W = W; rs.H = H;
+  const d = window.devicePixelRatio || 1;
+  runWrap.style.width = W + "px";
+  runWrap.style.height = H + "px";
+  runCanvas.style.width = W + "px";
+  runCanvas.style.height = H + "px";
+  runCanvas.width = Math.round(W * d);
+  runCanvas.height = Math.round(H * d);
+  runCtx.setTransform(d, 0, 0, d, 0, 0);
+  runDraw();
+}
+
+let runDragging = false;
+function runSteer(event) {
+  const rect = runCanvas.getBoundingClientRect();
+  const me = runProj(0);
+  rs.target = clamp((event.clientX - rect.left - rs.W / 2) / me.half, -0.8, 0.8);
+}
+runCanvas.addEventListener("pointerdown", e => {
+  if (!rs) return;
+  e.preventDefault();
+  runCanvas.setPointerCapture(e.pointerId);
+  runDragging = true;
+  runSteer(e);
+});
+runCanvas.addEventListener("pointermove", e => { if (runDragging && rs) runSteer(e); });
+runCanvas.addEventListener("pointerup", () => { runDragging = false; });
+runCanvas.addEventListener("pointercancel", () => { runDragging = false; });
+document.getElementById("runLeft").addEventListener("click", () => { if (rs) rs.target = -0.5; });
+document.getElementById("runRight").addEventListener("click", () => { if (rs) rs.target = 0.5; });
+document.getElementById("runOverlayButton").addEventListener("click", () => {
+  if (!rs) return;
+  if (rs.state === "won") { rs.level++; runStart(true); }
+  else runStart(false);
+});
+
+function openRunner(file, context) {
+  rs = { file: file, ctx: context || {}, state: "ready", level: 1, score: 0, count: 1, dist: 0, px: 0, target: 0,
+    objs: [], pops: [], trackEnd: 0, W: 300, H: 480 };
+  runOpen = true;
+  runBuildTrack();
+  document.getElementById("runName").textContent = file.themeName + (file.premium ? " premium" : "");
+  document.getElementById("runFor").textContent = "For " + file.customer;
+  runStatus("");
+  runShowOverlay(file.themeName,
+    rs.ctx.orderId != null
+      ? "Play this build the way the customer will. If a runner, enemy, or boss shows up wrong, that is a bug."
+      : "The game from the ads, for real this time. Pick the gate that grows your crowd the most, then outnumber the boss.",
+    "Start");
+  runRoot.hidden = false;
+  runStats();
+  requestAnimationFrame(() => { runResize(); runLast = 0; requestAnimationFrame(runFrame); });
+}
+
+function closeRunner() {
+  runOpen = false;
+  runRoot.hidden = true;
+  const orderId = rs ? rs.ctx.orderId : null;
+  rs = null;
+  finishPlayTest(orderId);
+  lastTick = performance.now();
+  render();
+}
+document.getElementById("runClose").addEventListener("click", closeRunner);
+window.addEventListener("resize", runResize);
+
+// ------------------------------------------------------------------
+// THE DECK ENGINE
+// Reads a deck file and deals either klondike solitaire or jacks or
+// better video poker. Tap a card and the engine moves it to the best
+// legal spot.
+// ------------------------------------------------------------------
+const cardsRoot = document.getElementById("cards");
+const cardTable = document.getElementById("cardTable");
+const cardOverlay = document.getElementById("cardOverlay");
+const cardStatusEl = document.getElementById("cardStatus");
+const cardToolA = document.getElementById("cardToolA");
+const cardToolB = document.getElementById("cardToolB");
+
+let cardsOpen = false;
+let cg = null;
+
+const PAYTABLE = [
+  { key: "royal", name: "Royal flush", pays: 250 },
+  { key: "sflush", name: "Straight flush", pays: 50 },
+  { key: "four", name: "Four of a kind", pays: 25 },
+  { key: "full", name: "Full house", pays: 9 },
+  { key: "flush", name: "Flush", pays: 6 },
+  { key: "straight", name: "Straight", pays: 4 },
+  { key: "three", name: "Three of a kind", pays: 3 },
+  { key: "two", name: "Two pair", pays: 2 },
+  { key: "jacks", name: "Jacks or better", pays: 1 }
+];
+
+function cardStatus(text, kind) {
+  cardStatusEl.textContent = text || "";
+  cardStatusEl.className = "doku-status" + (kind ? " " + kind : "");
+}
+
+function cardShowOverlay(title, text, label) {
+  document.getElementById("cardOverlayTitle").textContent = title;
+  document.getElementById("cardOverlayText").textContent = text;
+  document.getElementById("cardOverlayButton").textContent = label;
+  cardOverlay.hidden = false;
+}
+
+function freshDeck() {
+  const deck = [];
+  for (let s = 0; s < 4; s++) for (let r = 1; r <= 13; r++) deck.push({ s, r, up: false });
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+
+function cardSize(columns) {
+  const cols = columns || 7;
+  const width = Math.min(cardTable.clientWidth - 16, cols === 7 ? 560 : 520);
+  const gap = Math.max(4, Math.floor(width * 0.012));
+  const cw = Math.floor((width - gap * (cols - 1)) / cols);
+  cardTable.style.setProperty("--cw", cw + "px");
+  cardTable.style.setProperty("--ch", Math.round(cw * 1.42) + "px");
+  cardTable.style.setProperty("--gap", gap + "px");
+  cg.cw = cw;
+  cg.ch = Math.round(cw * 1.42);
+}
+
+function cardFace(card, extra, top) {
+  const f = cg.file;
+  const suit = f.suits[card.s];
+  const rank = f.ranks[card.r - 1];
+  let center = suit.glyph;
+  if (card.r >= 11) center = f.faces[card.r - 11];
+  const cls = "card-f" + (f.premium ? " premium" : "") + (extra ? " " + extra : "");
+  return `<div class="${cls}" style="--suit:${suit.color};top:${top || 0}px">` +
+    `<span class="cr">${rank}<i>${suit.glyph}</i></span><span class="cc">${center}</span></div>`;
+}
+
+function cardBack(top) {
+  const f = cg.file;
+  return `<div class="card-b${f.premium ? " premium" : ""}" style="background:${f.back};top:${top || 0}px">` +
+    (f.premium ? `<span class="emb">${f.emblem}</span>` : "") + `</div>`;
+}
+
+function cardStats() {
+  if (cg.file.game === "poker") {
+    document.getElementById("cardStatLabelA").textContent = "Credits";
+    document.getElementById("cardStatA").textContent = cg.credits;
+    document.getElementById("cardStatLabelB").textContent = "Bet";
+    document.getElementById("cardStatB").textContent = cg.bet;
+  } else {
+    document.getElementById("cardStatLabelA").textContent = "Score";
+    document.getElementById("cardStatA").textContent = cg.score;
+    document.getElementById("cardStatLabelB").textContent = "Moves";
+    document.getElementById("cardStatB").textContent = cg.moves;
+  }
+}
+
+/* SOLITAIRE */
+function solDeal() {
+  const deck = freshDeck();
+  cg.tab = [];
+  for (let i = 0; i < 7; i++) {
+    cg.tab.push(deck.splice(0, i + 1));
+    cg.tab[i][i].up = true;
+  }
+  cg.stock = deck;
+  cg.waste = [];
+  cg.found = [[], [], [], []];
+  cg.score = 0;
+  cg.moves = 0;
+  cg.undo = [];
+  cg.state = "playing";
+  cardOverlay.hidden = true;
+  cardStatus("Tap a card to move it. Tap the deck to draw.");
+  solRender();
+}
+
+function solSnapshot() {
+  cg.undo.push(JSON.stringify({ tab: cg.tab, stock: cg.stock, waste: cg.waste, found: cg.found, score: cg.score, moves: cg.moves }));
+  if (cg.undo.length > 120) cg.undo.shift();
+}
+
+function solUndo() {
+  if (!cg.undo.length || cg.state !== "playing") { cardStatus("Nothing to undo."); return; }
+  const snap = JSON.parse(cg.undo.pop());
+  Object.assign(cg, snap);
+  cardStatus("Took back the last move.");
+  solRender();
+}
+
+function solIsRed(card) { return cg.file.suits[card.s].red; }
+
+function solCanFound(card, f) {
+  const pile = cg.found[f];
+  if (!pile.length) return card.r === 1;
+  const top = pile[pile.length - 1];
+  return top.s === card.s && card.r === top.r + 1;
+}
+function solFoundFor(card) {
+  for (let f = 0; f < 4; f++) if (solCanFound(card, f)) return f;
+  return -1;
+}
+function solCanTab(card, t) {
+  const pile = cg.tab[t];
+  if (!pile.length) return card.r === 13;
+  const top = pile[pile.length - 1];
+  return top.up && solIsRed(top) !== solIsRed(card) && card.r === top.r - 1;
+}
+function solTabFor(card, from) {
+  let empty = -1;
+  for (let t = 0; t < 7; t++) {
+    if (t === from) continue;
+    if (!solCanTab(card, t)) continue;
+    if (cg.tab[t].length) return t;
+    if (empty === -1) empty = t;
+  }
+  return empty;
+}
+
+function solFlipTop(t) {
+  const pile = cg.tab[t];
+  if (pile.length && !pile[pile.length - 1].up) { pile[pile.length - 1].up = true; cg.score += 5; }
+}
+
+function solAfterMove() {
+  cg.moves++;
+  if (cg.found.every(p => p.length === 13)) {
+    cg.state = "won";
+    cg.score += 500;
+    solRender();
+    cardShowOverlay("Solved", "Every card made it home in " + cg.moves + " moves. Score " + cg.score + ".", "Deal again");
+    return;
+  }
+  solRender();
+}
+
+function solShake(el) {
+  if (!el) return;
+  el.classList.remove("shake");
+  void el.offsetWidth;
+  el.classList.add("shake");
+}
+
+function solTap(pile, index, el) {
+  if (cg.state !== "playing") return;
+  if (pile === "stock") {
+    solSnapshot();
+    if (cg.stock.length) {
+      const card = cg.stock.pop();
+      card.up = true;
+      cg.waste.push(card);
+    } else if (cg.waste.length) {
+      cg.stock = cg.waste.reverse().map(c => ({ s: c.s, r: c.r, up: false }));
+      cg.waste = [];
+      cg.score = Math.max(0, cg.score - 20);
+      cardStatus("Recycled the waste pile back into the deck.");
+    } else { cg.undo.pop(); return; }
+    solAfterMove();
+    return;
+  }
+  if (pile === "waste") {
+    const card = cg.waste[cg.waste.length - 1];
+    if (!card) return;
+    const f = solFoundFor(card);
+    if (f >= 0) { solSnapshot(); cg.found[f].push(cg.waste.pop()); cg.score += 10; cardStatus(""); solAfterMove(); return; }
+    const t = solTabFor(card, -1);
+    if (t >= 0) { solSnapshot(); cg.tab[t].push(cg.waste.pop()); cg.score += 5; cardStatus(""); solAfterMove(); return; }
+    cardStatus("No legal spot for that card yet.", "warn"); solShake(el); return;
+  }
+  if (pile.startsWith("f")) {
+    const f = Number(pile.slice(1));
+    const card = cg.found[f][cg.found[f].length - 1];
+    if (!card) return;
+    const t = solTabFor(card, -1);
+    if (t >= 0) { solSnapshot(); cg.tab[t].push(cg.found[f].pop()); cg.score = Math.max(0, cg.score - 15); solAfterMove(); return; }
+    cardStatus("No legal spot for that card.", "warn"); solShake(el); return;
+  }
+  if (pile.startsWith("t")) {
+    const t = Number(pile.slice(1));
+    const stack = cg.tab[t];
+    if (index < 0 || index >= stack.length) return;
+    const card = stack[index];
+    if (!card.up) {
+      if (index === stack.length - 1) { solSnapshot(); card.up = true; cg.score += 5; solAfterMove(); }
+      return;
+    }
+    if (index === stack.length - 1) {
+      const f = solFoundFor(card);
+      if (f >= 0) { solSnapshot(); cg.found[f].push(stack.pop()); cg.score += 10; solFlipTop(t); cardStatus(""); solAfterMove(); return; }
+    }
+    const dest = solTabFor(card, t);
+    if (dest >= 0 && !(card.r === 13 && index === 0 && !cg.tab[dest].length)) {
+      solSnapshot();
+      const moving = stack.splice(index);
+      cg.tab[dest].push(...moving);
+      solFlipTop(t);
+      cardStatus("");
+      solAfterMove();
+      return;
+    }
+    cardStatus("No legal spot for that card yet.", "warn"); solShake(el);
+  }
+}
+
+function solCollect() {
+  if (cg.state !== "playing") return;
+  let moved = 0;
+  solSnapshot();
+  let again = true;
+  while (again) {
+    again = false;
+    const w = cg.waste[cg.waste.length - 1];
+    if (w) { const f = solFoundFor(w); if (f >= 0) { cg.found[f].push(cg.waste.pop()); cg.score += 10; moved++; again = true; continue; } }
+    for (let t = 0; t < 7; t++) {
+      const pile = cg.tab[t];
+      const top = pile[pile.length - 1];
+      if (top && top.up) {
+        const f = solFoundFor(top);
+        if (f >= 0) { cg.found[f].push(pile.pop()); cg.score += 10; solFlipTop(t); moved++; again = true; break; }
+      }
+    }
+  }
+  if (!moved) { cg.undo.pop(); cardStatus("Nothing can go home right now."); return; }
+  cardStatus("Sent " + moved + " " + plural(moved, "card") + " home.", "good");
+  cg.moves += moved - 1;
+  solAfterMove();
+}
+
+function solRender() {
+  cardSize();
+  const ch = cg.ch;
+  const downStep = Math.round(ch * 0.12);
+  const upStep = Math.round(ch * 0.27);
+  let html = `<div class="crow">`;
+  html += `<div class="slot" data-pile="stock">${cg.stock.length ? cardBack(0) : ""}</div>`;
+  const w = cg.waste[cg.waste.length - 1];
+  html += `<div class="slot" data-pile="waste">${w ? `<div data-pile="waste">${cardFace(w)}</div>` : ""}</div>`;
+  html += `<div></div>`;
+  for (let f = 0; f < 4; f++) {
+    const top = cg.found[f][cg.found[f].length - 1];
+    html += `<div class="slot found" data-pile="f${f}" data-mark="${cg.file.suits[f].glyph}">${top ? cardFace(top) : ""}</div>`;
+  }
+  html += `</div><div class="crow">`;
+  for (let t = 0; t < 7; t++) {
+    const pile = cg.tab[t];
+    let y = 0, inner = "";
+    pile.forEach((card, i) => {
+      inner += `<div data-pile="t${t}" data-index="${i}">${card.up ? cardFace(card, "", y) : cardBack(y)}</div>`;
+      y += card.up ? upStep : downStep;
+    });
+    const height = pile.length ? y - (pile[pile.length - 1].up ? upStep : downStep) + ch : ch;
+    html += `<div class="tcol" style="height:${height}px">${pile.length ? inner : `<div class="slot" data-pile="t${t}" data-index="-1"></div>`}</div>`;
+  }
+  html += `</div>`;
+  cardTable.innerHTML = html;
+  cardTable.style.background = cg.file.felt;
+  cardStats();
+}
+
+/* VIDEO POKER */
+function pokerReset() {
+  cg.credits = 100;
+  cg.bet = 1;
+  cg.hand = [];
+  cg.held = [false, false, false, false, false];
+  cg.result = null;
+  cg.state = "idle";
+  cardOverlay.hidden = true;
+  cardStatus("Set your bet, then deal.");
+  pokerRender();
+}
+
+function pokerDeal() {
+  if (cg.state === "hold") { pokerDraw(); return; }
+  if (cg.credits < cg.bet) {
+    if (cg.credits <= 0) { cardShowOverlay("Out of credits", "The house always wins. Here is a fresh hundred.", "Refill"); cg.state = "broke"; return; }
+    cg.bet = cg.credits;
+  }
+  cg.credits -= cg.bet;
+  cg.deck = freshDeck();
+  cg.hand = cg.deck.splice(0, 5).map(c => (c.up = true, c));
+  cg.held = [false, false, false, false, false];
+  cg.result = null;
+  cg.state = "hold";
+  cardStatus("Tap the cards you want to keep, then draw.");
+  pokerRender();
+}
+
+function pokerDraw() {
+  cg.hand = cg.hand.map((c, i) => (cg.held[i] ? c : Object.assign(cg.deck.shift(), { up: true })));
+  const result = pokerEval(cg.hand);
+  cg.result = result;
+  cg.state = "idle";
+  if (result) {
+    const row = PAYTABLE.find(p => p.key === result);
+    const win = row.pays * cg.bet;
+    cg.credits += win;
+    cardStatus(row.name + ". Won " + win + " " + plural(win, "credit") + ".", "good");
+  } else {
+    cardStatus("Nothing. Deal again.", "warn");
+  }
+  pokerRender();
+}
+
+function pokerEval(hand) {
+  const ranks = hand.map(c => c.r).sort((a, b) => a - b);
+  const counts = {};
+  ranks.forEach(r => { counts[r] = (counts[r] || 0) + 1; });
+  const groups = Object.values(counts).sort((a, b) => b - a);
+  const flush = hand.every(c => c.s === hand[0].s);
+  const unique = Object.keys(counts).length === 5;
+  const wheel = ranks.join() === "1,2,3,4,5";
+  const broadway = ranks.join() === "1,10,11,12,13";
+  const straight = unique && (ranks[4] - ranks[0] === 4 || broadway || wheel);
+  if (flush && broadway) return "royal";
+  if (flush && straight) return "sflush";
+  if (groups[0] === 4) return "four";
+  if (groups[0] === 3 && groups[1] === 2) return "full";
+  if (flush) return "flush";
+  if (straight) return "straight";
+  if (groups[0] === 3) return "three";
+  if (groups[0] === 2 && groups[1] === 2) return "two";
+  if (groups[0] === 2) {
+    const pair = Number(Object.keys(counts).find(k => counts[k] === 2));
+    if (pair === 1 || pair >= 11) return "jacks";
+  }
+  return null;
+}
+
+function pokerRender() {
+  cardSize(5);
+  let html = `<div class="paytable">` + PAYTABLE.map(p =>
+    `<div class="${cg.result === p.key ? "win" : ""}"><span>${p.name}</span><span>${p.pays * cg.bet}</span></div>`).join("") + `</div>`;
+  html += `<div class="hand">`;
+  for (let i = 0; i < 5; i++) {
+    const card = cg.hand[i];
+    html += `<div class="slotc" data-hold="${i}">`;
+    if (card) html += cardFace(card, cg.held[i] ? "held" : "") + (cg.held[i] ? `<div class="held-tag" style="top:${Math.round(cg.ch * 0.4) - 8}px">HELD</div>` : "");
+    else html += cardBack(0);
+    html += `</div>`;
+  }
+  html += `</div>`;
+  cardTable.innerHTML = html;
+  cardTable.style.background = cg.file.felt;
+  cardToolB.textContent = cg.state === "hold" ? "Draw" : "Deal";
+  cardToolA.textContent = "Bet " + cg.bet;
+  cardStats();
+}
+
+/* SHARED */
+cardTable.addEventListener("click", event => {
+  if (!cg) return;
+  if (cg.file.game === "poker") {
+    const slot = event.target.closest("[data-hold]");
+    if (!slot || cg.state !== "hold") return;
+    const i = Number(slot.dataset.hold);
+    cg.held[i] = !cg.held[i];
+    pokerRender();
+    return;
+  }
+  const target = event.target.closest("[data-pile]");
+  if (!target) return;
+  const index = target.dataset.index != null ? Number(target.dataset.index) : -1;
+  solTap(target.dataset.pile, index, target.querySelector(".card-f") || target);
+});
+
+cardToolA.addEventListener("click", () => {
+  if (!cg) return;
+  if (cg.file.game === "poker") {
+    if (cg.state === "hold") return;
+    cg.bet = cg.bet >= 5 ? 1 : cg.bet + 1;
+    pokerRender();
+  } else solUndo();
+});
+cardToolB.addEventListener("click", () => {
+  if (!cg) return;
+  if (cg.file.game === "poker") pokerDeal();
+  else solCollect();
+});
+
+document.getElementById("cardOverlayButton").addEventListener("click", () => {
+  if (!cg) return;
+  if (cg.file.game === "poker") {
+    if (cg.state === "broke") { cg.credits = 100; cg.bet = 1; cg.state = "idle"; cardOverlay.hidden = true; pokerRender(); return; }
+    pokerReset();
+  } else solDeal();
+});
+
+function openCards(file, context) {
+  cg = { file: file, ctx: context || {}, state: "ready", cw: 40, ch: 57,
+    tab: [[], [], [], [], [], [], []], stock: [], waste: [], found: [[], [], [], []], score: 0, moves: 0, undo: [],
+    credits: 100, bet: 1, hand: [], held: [], result: null, deck: [] };
+  cardsOpen = true;
+  const gameName = file.game === "poker" ? "video poker" : "solitaire";
+  document.getElementById("cardName").textContent = file.themeName + (file.premium ? " premium" : "");
+  document.getElementById("cardFor").textContent = gameName + " for " + file.customer;
+  cardToolA.textContent = file.game === "poker" ? "Bet 1" : "Undo";
+  cardToolB.textContent = file.game === "poker" ? "Deal" : "Collect";
+  cardStatus("");
+  cardsRoot.hidden = false;
+  const intro = cg.ctx.orderId != null
+    ? "Play this build the way the customer will. If a suit looks wrong, that is a bug."
+    : file.game === "poker"
+      ? "Jacks or better. Bet, deal, tap the cards to hold, then draw."
+      : "Klondike, draw one. Tap any card and it moves to the best legal spot. Collect sends everything it can to the foundations.";
+  requestAnimationFrame(() => {
+    if (!cg || cg.file !== file) return;
+    if (file.game === "poker") { cg.hand = []; cg.held = []; pokerRender(); }
+    else { solRenderEmpty(); }
+    cardShowOverlay(file.themeName, intro, "Deal");
+  });
+}
+
+function solRenderEmpty() {
+  cg.tab = [[], [], [], [], [], [], []];
+  cg.stock = freshDeck();
+  solRender();
+}
+
+function closeCards() {
+  cardsOpen = false;
+  cardsRoot.hidden = true;
+  const orderId = cg ? cg.ctx.orderId : null;
+  cg = null;
+  finishPlayTest(orderId);
+  lastTick = performance.now();
+  render();
+}
+document.getElementById("cardClose").addEventListener("click", closeCards);
+window.addEventListener("resize", () => {
+  if (!cardsOpen || !cg) return;
+  if (cg.file.game === "poker") pokerRender(); else solRender();
+});
+
+// ------------------------------------------------------------------
+// The studio clock. Company time stops while you play test.
+// ------------------------------------------------------------------
+let lastTick = performance.now();
+let saveClock = 0;
+
+setInterval(() => {
+  const now = performance.now();
+  const dt = Math.min(1, (now - lastTick) / 1000);
+  lastTick = now;
+
+  const engineOpen = playOpen || dokuOpen || bubOpen || cardsOpen || runOpen;
+  if (!engineOpen && !document.hidden) {
+    simulate(dt);
+    saveClock += dt;
+  }
+  if (saveClock >= 5) { saveClock = 0; saveCompany(); }
+
+  if (!engineOpen) {
+    if (dirty && !pointerIsDown && now - lastPointerUp > 350) render();
+    else refreshLive();
+  }
+}, 250);
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    saveCompany();
+    pauseGame();
+  } else {
+    lastTick = performance.now();
+  }
+});
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>City Seek</title>
+<style>
+:root{--ink:#1a1a2e;--paper:#fbf8f1;--blue:#1f6fff;--blue2:#dce8ff;--yellow:#ffd23f;--red:#e63946;--green:#2d9a5f}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--paper);color:var(--ink);font-family:"Trebuchet MS","Segoe UI",system-ui,sans-serif}
+button{font-family:inherit;color:var(--ink)}
+#stage{position:fixed;inset:0;touch-action:none}
+#world{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+#top{position:fixed;top:0;left:0;right:0;height:52px;background:var(--paper);border-bottom:3px solid var(--ink);display:flex;align-items:center;gap:10px;padding:0 10px;z-index:30}
+.ib{width:40px;height:40px;border:2.5px solid var(--ink);border-radius:8px;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;box-shadow:2px 2px 0 var(--ink);flex:none}
+.ib span{display:block;width:18px;height:3px;background:var(--blue);border-radius:2px}
+.brand{font-weight:900;font-size:20px;letter-spacing:3px;flex:1;white-space:nowrap}
+.brand b{color:var(--blue);margin-left:5px}
+.stat{display:flex;gap:8px;align-items:center;flex:none}
+.pill{border:2.5px solid var(--ink);border-radius:20px;padding:3px 10px;font-weight:800;font-size:14px;background:#fff;min-width:64px;text-align:center;font-variant-numeric:tabular-nums}
+#count{background:var(--blue2)}
+#tray{position:fixed;top:52px;left:0;right:0;height:76px;background:#fff;border-bottom:3px solid var(--ink);display:flex;gap:8px;padding:7px 10px;overflow-x:auto;z-index:29;scrollbar-width:none}
+#tray::-webkit-scrollbar{display:none}
+.chip{flex:none;width:62px;display:flex;flex-direction:column;align-items:center;gap:3px;border:none;background:none}
+.chip .ic{width:44px;height:44px;border:2.5px solid var(--ink);border-radius:9px;background:var(--paper);position:relative;overflow:hidden}
+.chip canvas{width:100%;height:100%;display:block}
+.chip .ct{position:absolute;right:-1px;bottom:-1px;background:var(--ink);color:#fff;font-size:9px;font-weight:900;padding:1px 3px;border-radius:5px 0 6px 0;z-index:2}
+.chip .lb{font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;line-height:1.1;text-align:center;max-width:62px}
+.chip.got .ic{background:var(--blue2);border-color:var(--blue)}
+.chip.got .ct{display:none}
+.chip.got .ic::after{content:"\2713";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(31,111,255,.78);color:#fff;font-size:24px;font-weight:900}
+.chip.got .lb{color:var(--blue)}
+#ctrls{position:fixed;right:10px;top:142px;display:flex;flex-direction:column;gap:8px;z-index:25}
+#ctrls button{width:48px;height:48px;border:2.5px solid var(--ink);border-radius:10px;background:#fff;font-size:22px;font-weight:900;box-shadow:2px 2px 0 var(--ink)}
+#ctrls button.sm{font-size:12px;letter-spacing:1px}
+#hintBtn{background:var(--yellow)!important}
+#ctrls button:active{transform:translate(2px,2px);box-shadow:none}
+#mini{position:fixed;left:10px;bottom:10px;width:150px;height:113px;border:2.5px solid var(--ink);border-radius:8px;background:#fff;z-index:25;box-shadow:2px 2px 0 var(--ink);touch-action:none}
+#mini.off{display:none}
+#toast{position:fixed;left:50%;top:140px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 14px;border-radius:8px;font-weight:800;font-size:13px;letter-spacing:1px;z-index:40;pointer-events:none;opacity:0;transition:opacity .25s;max-width:78vw;text-align:center;border-left:6px solid var(--blue)}
+#toast.on{opacity:1}
+#scrim{position:fixed;inset:0;background:rgba(26,26,46,.18);z-index:50;display:none}
+#scrim.on{display:block}
+#menu{position:fixed;top:0;left:0;bottom:0;width:min(80vw,320px);background:var(--paper);border-right:3px solid var(--ink);z-index:51;transform:translateX(-105%);transition:transform .22s;overflow-y:auto;padding:12px}
+#menu.on{transform:none}
+.mh{display:flex;align-items:center;justify-content:space-between;font-weight:900;letter-spacing:3px;font-size:18px;margin-bottom:10px}
+.mh span{color:var(--blue)}
+.x{width:38px;height:38px;border:2.5px solid var(--ink);border-radius:8px;background:#fff;font-weight:900;font-size:16px}
+details{border:2.5px solid var(--ink);border-radius:10px;background:#fff;margin-bottom:10px;overflow:hidden}
+summary{padding:10px 12px;font-weight:900;letter-spacing:1px;list-style:none;cursor:pointer;background:var(--blue2);border-bottom:2.5px solid var(--ink)}
+summary::-webkit-details-marker{display:none}
+details:not([open]) summary{border-bottom:none}
+.db{padding:10px 12px;display:flex;flex-direction:column;gap:9px;font-size:14px;line-height:1.4}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;padding:9px 0;border:2.5px solid var(--ink);border-radius:8px;background:#fff;font-weight:800}
+.seg button.on{background:var(--blue);color:#fff}
+.big{padding:11px;border:2.5px solid var(--ink);border-radius:9px;background:var(--yellow);font-weight:900;letter-spacing:1px;box-shadow:2px 2px 0 var(--ink)}
+.row{display:flex;gap:6px}
+.row input{flex:1;min-width:0;padding:9px;border:2.5px solid var(--ink);border-radius:8px;font-size:15px;font-family:inherit;background:var(--paper)}
+.row button{padding:0 14px;border:2.5px solid var(--ink);border-radius:8px;background:#fff;font-weight:800}
+.tg{display:flex;align-items:center;gap:10px;font-weight:700}
+.tg input{width:20px;height:20px;accent-color:var(--blue)}
+.code b{color:var(--blue);font-size:16px;letter-spacing:2px}
+.ov{position:fixed;inset:0;background:rgba(26,26,46,.55);z-index:60;display:none;align-items:center;justify-content:center;padding:20px}
+.ov.on{display:flex}
+.card{background:var(--paper);border:3px solid var(--ink);border-radius:14px;box-shadow:5px 5px 0 var(--blue);padding:20px;width:min(92vw,360px);text-align:center;display:flex;flex-direction:column;gap:10px}
+.card h2{font-size:30px;letter-spacing:3px;font-weight:900}
+.card h2 span{color:var(--blue)}
+.stars{font-size:34px;color:var(--yellow);-webkit-text-stroke:1.5px var(--ink);letter-spacing:4px}
+.sline{display:flex;justify-content:space-between;font-weight:800;border-bottom:2px dashed #c9c2b0;padding:4px 0}
+.card .big{margin-top:6px}
+.ghost{padding:10px;border:2.5px solid var(--ink);border-radius:9px;background:#fff;font-weight:800}
+#bview{position:fixed;top:128px;left:0;right:0;bottom:0;z-index:35;background:var(--paper);display:none}
+#bview.on{display:block}
+body.inside #toast{top:192px}
+#bbar{position:absolute;top:0;left:0;right:0;height:52px;display:flex;align-items:center;gap:10px;padding:0 10px;border-bottom:3px solid var(--ink);background:#fff}
+#bExit{height:38px;padding:0 14px;border:2.5px solid var(--ink);border-radius:8px;background:var(--yellow);font-weight:900;letter-spacing:1px;box-shadow:2px 2px 0 var(--ink)}
+#bName{font-weight:900;letter-spacing:2px;font-size:17px;flex:1}
+#fworld{position:absolute;top:52px;left:0;width:100%;height:calc(100% - 52px - 66px);display:block;touch-action:none;cursor:crosshair}
+#floors{position:absolute;left:0;right:0;bottom:0;height:66px;border-top:3px solid var(--ink);background:#fff;display:flex;gap:8px;padding:8px 10px;overflow-x:auto;scrollbar-width:none}
+#floors::-webkit-scrollbar{display:none}
+.fl{flex:none;min-width:70px;border:2.5px solid var(--ink);border-radius:9px;background:var(--paper);font-weight:900;font-size:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.05;padding:0 8px}
+.fl small{font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase}
+.fl.on{background:var(--blue);color:#fff;border-color:var(--ink)}
+#fctrls{position:absolute;right:10px;top:64px;display:flex;flex-direction:column;gap:8px}
+#fctrls button{width:48px;height:48px;border:2.5px solid var(--ink);border-radius:10px;background:#fff;font-size:22px;font-weight:900;box-shadow:2px 2px 0 var(--ink)}
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="world"></canvas></div>
+
+<header id="top">
+  <button class="ib" id="menuBtn" aria-label="Menu"><span></span><span></span><span></span></button>
+  <div class="brand">CITY<b>SEEK</b></div>
+  <div class="stat"><div class="pill" id="time">00:00</div><div class="pill" id="count">0/0</div></div>
+</header>
+<div id="tray"></div>
+
+<div id="ctrls">
+  <button id="zin" aria-label="Zoom in">+</button>
+  <button id="zout" aria-label="Zoom out">&#8722;</button>
+  <button id="zfit" class="sm">FIT</button>
+  <button id="hintBtn" class="sm">HINT</button>
+</div>
+<canvas id="mini"></canvas>
+<div id="toast"></div>
+
+<div id="scrim"></div>
+<aside id="menu">
+  <div class="mh"><div>CITY <span>SEEK</span></div><button class="x" id="menuClose">X</button></div>
+  <details open>
+    <summary>New city</summary>
+    <div class="db">
+      <div class="seg" id="diffSeg"><button data-d="easy">Easy</button><button data-d="normal">Normal</button><button data-d="hard">Hard</button></div>
+      <button class="big" id="newCity">BUILD NEW CITY</button>
+      <div class="code">This city code: <b id="codeOut"></b></div>
+      <div class="row"><input id="codeIn" inputmode="numeric" placeholder="xxxxxx"><button id="codeGo">Load</button></div>
+    </div>
+  </details>
+  <details>
+    <summary>Display</summary>
+    <div class="db">
+      <label class="tg"><input type="checkbox" id="optMini" checked> Show minimap</label>
+      <label class="tg"><input type="checkbox" id="optMarks" checked> Circle found items</label>
+      <label class="tg"><input type="checkbox" id="optSound" checked> Sound effects</label>
+    </div>
+  </details>
+  <details>
+    <summary>Best times</summary>
+    <div class="db" id="records"></div>
+  </details>
+  <details>
+    <summary>How to play</summary>
+    <div class="db">
+      <div>The whole city is far too small to search from up high. Tap anywhere to dive in, then pinch, drag and use the zoom buttons to work the streets, rooftops, parks, plazas and parking lots.</div>
+      <div>Zoom in really close and the roofs turn see through, so you can look inside houses, offices and shops. Sandboxes show their toys the same way.</div>
+      <div>Glass towers show a floor count on the roof. Tap one to go inside, then use the floor buttons along the bottom to switch floors. Exit takes you back to the city.</div>
+      <div>Each card in the top tray shows exactly what you are hunting, and there are ten of every item hidden around the city, so the number on the card counts how many you have found. Tap a card to see its description. Watch for look alikes: a blue cap without the yellow backpack, a silver crown, a bear with the wrong bow.</div>
+      <div>Tap things to poke them: cars honk, dogs bark, balloons pop, pigeons scatter, skylights crack and doors swing open. Bluebirds fly from perch to perch, so you may have to wait for one to land. Tapping a look alike counts as a miss.</div>
+      <div>Once you are zoomed in close, tap an item to grab it. Wrong taps count as misses. A hint circles the area around one item and adds time.</div>
+    </div>
+  </details>
+</aside>
+
+<div id="bview">
+  <div id="bbar"><button id="bExit">EXIT</button><div id="bName"></div></div>
+  <canvas id="fworld"></canvas>
+  <div id="fctrls"><button id="fin" aria-label="Zoom in">+</button><button id="fout" aria-label="Zoom out">&#8722;</button></div>
+  <div id="floors"></div>
+</div>
+
+<div class="ov" id="win">
+  <div class="card">
+    <h2>CITY <span>CLEARED</span></h2>
+    <div class="stars" id="wStars"></div>
+    <div class="sline"><span>Time</span><span id="wTime"></span></div>
+    <div class="sline"><span>Misses</span><span id="wMiss"></span></div>
+    <div class="sline"><span>Hints</span><span id="wHint"></span></div>
+    <div class="sline"><span>Best</span><span id="wBest"></span></div>
+    <button class="big" id="wNext">NEXT CITY</button>
+    <button class="ghost" id="wAgain">Replay this city</button>
+  </div>
+</div>
+
+<script src="cityseek-art.js"></script>
+<script src="cityseek-world.js"></script>
+<script src="cityseek-engine.js"></script>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var store = {
+    get: function (k, d) { try { var v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } }
+  };
+  var diff = store.get('cityseek-v2-diff', 'normal');
+  var best = store.get('cityseek-v2-best', {});
+  var startAt = 0, elapsed = 0, penalty = 0, running = false, paused = false, timerId = 0, info = null, toastId = 0, won = false;
+  var floorCache = {}, curTower = null, curFloor = 0, xray = false;
+
+  function fmt(sec) { sec = Math.max(0, Math.floor(sec)); return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0'); }
+  function now() { return running && !paused ? elapsed + (performance.now() - startAt) / 1000 : elapsed; }
+  function total() { return now() + penalty; }
+  function tick() { $('time').textContent = fmt(total()); }
+  function startClock() { if (running) return; running = true; startAt = performance.now(); clearInterval(timerId); timerId = setInterval(tick, 250); }
+  function stopClock() { if (running && !paused) elapsed += (performance.now() - startAt) / 1000; running = false; clearInterval(timerId); tick(); }
+  function pause(v) { if (!running) return; if (v && !paused) { elapsed += (performance.now() - startAt) / 1000; paused = true; } else if (!v && paused) { startAt = performance.now(); paused = false; } }
+  function toast(msg) { var t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastId); toastId = setTimeout(function () { t.classList.remove('on'); }, 1900); }
+
+  function typeCount(id) { var a = info.targets.filter(function (x) { return x.id === id; }); return [a.filter(function (x) { return x.found; }).length, a.length]; }
+  function found(t) {
+    var c = typeCount(t.id), chip = document.querySelector('.chip[data-id="' + t.id + '"]');
+    if (chip) { chip.querySelector('.ct').textContent = c[0] + '/' + c[1]; if (c[0] === c[1]) chip.classList.add('got'); chip.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); }
+    var n = info.targets.filter(function (x) { return x.found; }).length, all = info.targets.length;
+    $('count').textContent = n + '/' + all; toast('FOUND: ' + t.label.toUpperCase() + ' ' + c[0] + ' OF ' + c[1]);
+    game.redraw();
+    if (n === all && !won) { won = true; setTimeout(win, 700); }
+  }
+  function win() {
+    stopClock();
+    var a = game.getStats(), b = fgame.getStats(), st = { misses: a.misses + b.misses, hints: a.hints };
+    var tt = Math.floor(total()), key = diff, prev = best[key];
+    if (!prev || tt < prev) { best[key] = tt; store.set('cityseek-v2-best', best); }
+    var stars = st.hints <= 1 && st.misses <= 15 ? 3 : st.hints <= 4 && st.misses <= 40 ? 2 : 1;
+    $('wStars').textContent = '\u2605'.repeat(stars) + '\u2606'.repeat(3 - stars);
+    $('wTime').textContent = fmt(tt); $('wMiss').textContent = st.misses; $('wHint').textContent = st.hints;
+    $('wBest').textContent = fmt(best[key]) + ' ' + CitySeek.DIFFICULTY[key].label;
+    closeTower(); renderRecords(); $('win').classList.add('on');
+  }
+
+  var game = CitySeek.create($('world'), {
+    pad: { t: 130, r: 10, b: 10, l: 10 },
+    minimap: $('mini'),
+    onInteract: startClock,
+    onFind: found,
+    onMiss: function (n, look) { toast(look ? 'Close, but that is a look alike' : 'Nothing there'); },
+    onTower: openTower,
+    onView: function (s) {
+      if (s >= CitySeek.ROOF_S * 1.1 && !xray) { xray = true; toast('X-ray: you can see inside the buildings now'); }
+      else if (s < CitySeek.ROOF_S && xray) xray = false;
+    }
+  });
+  var fgame = CitySeek.create($('fworld'), {
+    pad: { t: 10, r: 10, b: 10, l: 10 },
+    onInteract: startClock,
+    onFind: found,
+    onMiss: function (n, look) { toast(look ? 'Close, but that is a look alike' : 'Nothing there'); }
+  });
+
+  function openTower(tw) {
+    curTower = tw;
+    $('bName').textContent = tw.name;
+    var row = $('floors'); row.innerHTML = '';
+    tw.types.forEach(function (name, fi) {
+      var b = document.createElement('button'); b.className = 'fl'; b.dataset.f = fi;
+      b.innerHTML = '<span>' + (fi + 1) + '</span><small></small>';
+      b.querySelector('small').textContent = name;
+      b.addEventListener('click', function () { showFloor(fi); });
+      row.appendChild(b);
+    });
+    $('bview').classList.add('on'); document.body.classList.add('inside'); game.setActive(false);
+    showFloor(0);
+  }
+  function showFloor(fi) {
+    curFloor = fi;
+    var key = curTower.i + ':' + fi;
+    if (!floorCache[key]) floorCache[key] = CitySeek.buildFloor(game.getWorld(), curTower, fi);
+    Array.prototype.forEach.call(document.querySelectorAll('#floors .fl'), function (b) { b.classList.toggle('on', +b.dataset.f === fi); });
+    fgame.load(floorCache[key]);
+    toast(curTower.name + ', floor ' + (fi + 1) + ': ' + curTower.types[fi]);
+  }
+  function closeTower() { $('bview').classList.remove('on'); document.body.classList.remove('inside'); curTower = null; game.setActive(true); }
+
+  function buildTray(targets) {
+    var tray = $('tray'); tray.innerHTML = '';
+    var dpr = Math.min(2, window.devicePixelRatio || 1), seen = {};
+    targets.forEach(function (t) {
+      if (seen[t.id]) return; seen[t.id] = true;
+      var b = document.createElement('button'); b.className = 'chip'; b.dataset.id = t.id;
+      var ic = document.createElement('div'); ic.className = 'ic';
+      var cv = document.createElement('canvas'); cv.width = 44 * dpr; cv.height = 44 * dpr; ic.appendChild(cv);
+      var ct = document.createElement('div'); ct.className = 'ct'; ct.textContent = '0/' + typeCount(t.id)[1]; ic.appendChild(ct);
+      var lb = document.createElement('div'); lb.className = 'lb'; lb.textContent = t.label;
+      b.appendChild(ic); b.appendChild(lb); tray.appendChild(b);
+      game.drawIcon(cv, t);
+      b.addEventListener('click', function () { var c = typeCount(t.id); toast(c[0] === c[1] ? 'All ' + c[1] + ' found: ' + t.label : t.desc + '. Found ' + c[0] + ' of ' + c[1]); });
+    });
+  }
+
+  function start(seed) {
+    $('win').classList.remove('on'); closeTower();
+    stopClock(); elapsed = 0; penalty = 0; running = false; paused = false; won = false; floorCache = {}; tick();
+    info = game.newGame({ seed: seed, difficulty: diff });
+    fgame.resetStats();
+    buildTray(info.targets);
+    $('count').textContent = '0/' + info.targets.length;
+    $('codeOut').textContent = info.seed;
+    store.set('cityseek-v2-last', { seed: info.seed, diff: diff });
+    toast('Tap the city to dive in');
+  }
+
+  function renderRecords() {
+    var html = '';
+    ['easy', 'normal', 'hard'].forEach(function (k) { html += '<div class="sline"><span>' + CitySeek.DIFFICULTY[k].label + '</span><span>' + (best[k] ? fmt(best[k]) : 'none yet') + '</span></div>'; });
+    $('records').innerHTML = html;
+  }
+  function setDiff(d) { diff = d; store.set('cityseek-v2-diff', d); Array.prototype.forEach.call(document.querySelectorAll('#diffSeg button'), function (b) { b.classList.toggle('on', b.dataset.d === d); }); }
+
+  function openMenu(v) { $('menu').classList.toggle('on', v); $('scrim').classList.toggle('on', v); pause(v); if (!v) tick(); }
+  $('menuBtn').addEventListener('click', function () { openMenu(true); });
+  $('menuClose').addEventListener('click', function () { openMenu(false); });
+  $('scrim').addEventListener('click', function () { openMenu(false); });
+  Array.prototype.forEach.call(document.querySelectorAll('#diffSeg button'), function (b) { b.addEventListener('click', function () { setDiff(b.dataset.d); }); });
+  $('newCity').addEventListener('click', function () { openMenu(false); start(); });
+  $('codeGo').addEventListener('click', function () { var v = parseInt($('codeIn').value, 10); if (v > 0) { openMenu(false); start(v); } else toast('Enter a city code'); });
+  $('optMini').addEventListener('change', function (e) { $('mini').classList.toggle('off', !e.target.checked); store.set('cityseek-v2-mini', e.target.checked); game.redraw(); });
+  $('optSound').addEventListener('change', function (e) { CitySeek.setSound(e.target.checked); store.set('cityseek-v2-sound', e.target.checked); });
+  $('optMarks').addEventListener('change', function (e) { game.setMarks(e.target.checked); fgame.setMarks(e.target.checked); store.set('cityseek-v2-marks', e.target.checked); });
+  $('zin').addEventListener('click', function () { startClock(); game.zoomBy(1.6); });
+  $('zout').addEventListener('click', function () { game.zoomBy(1 / 1.6); });
+  $('zfit').addEventListener('click', function () { game.fit(); });
+  $('fin').addEventListener('click', function () { startClock(); fgame.zoomBy(1.6); });
+  $('fout').addEventListener('click', function () { fgame.zoomBy(1 / 1.6); });
+  $('bExit').addEventListener('click', closeTower);
+  $('hintBtn').addEventListener('click', function () {
+    startClock(); var t = game.hint(); if (!t) return;
+    penalty += 20; tick();
+    var where = t.tower ? ' is inside ' + t.tower.name + ' on floor ' + (t.floor + 1) : t.zone === 'indoor' ? ' is inside a building in the circle. Zoom in close to see through the roof' : t.zone === 'sand' ? ' is in a sandbox in the circle. Zoom in close to see the toys' : t.zone === 'air' ? ' is near the circle right now, but it flies, so watch where it lands' : ' is in the circle';
+    toast('Hint: ' + t.label + where + '. Plus twenty seconds');
+  });
+  $('wNext').addEventListener('click', function () { start(); });
+  $('wAgain').addEventListener('click', function () { start(info.seed); });
+
+  var miniOn = store.get('cityseek-v2-mini', true), marksOn = store.get('cityseek-v2-marks', true);
+  $('optMini').checked = miniOn; $('mini').classList.toggle('off', !miniOn);
+  $('optMarks').checked = marksOn; game.setMarks(marksOn); fgame.setMarks(marksOn);
+  var soundOn = store.get('cityseek-v2-sound', true); $('optSound').checked = soundOn; CitySeek.setSound(soundOn);
+  setDiff(diff); renderRecords();
+  var last = store.get('cityseek-v2-last', null);
+  start(last && last.diff === diff ? last.seed : undefined);
+})();
+</script>
+</body>
+</html>

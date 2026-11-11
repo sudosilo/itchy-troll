@@ -1,0 +1,1608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>ASCEND</title>
+
+<!--
+╔══════════════════════════════════════════════════════════════╗
+║  ITERATION MANIFEST — READ THIS FIRST                        ║
+╠══════════════════════════════════════════════════════════════╣
+║  CURRENT BUILD : v0.9 — MILESTONES                           ║
+║  v0.9: gem spawn 0.35 (climb currency ◆), rocket 0.18,      ║
+║        glider 0.10. Every 30 gems AND every 30 coins grants ║
+║        a power-up instantly (alternating rocket/glider),    ║
+║        rainbow banner + burst. HUD shows n/next progress.   ║
+║  v0.8: global wind, gusts shift every 4-9s (±0.28 force).   ║
+║        Pushes airborne player (×2.2 under chute/glider),    ║
+║        zero effect grounded. Rain-streaks lean+thicken with ║
+║        wind, motes drift with it. Streak angle = direction. ║
+║  v0.7: glider pickup (replaces chute for the run; tap=lift  ║
+║        pulse, hold dir=dive 7vy, neutral=3.2vy, tilting     ║
+║        delta wing visual). Gems on climb (◆, +5 coins).     ║
+║        Cloud zone fades in above 300m (sky tint + drifting  ║
+║        cloud puffs). ~15% platforms drift L/R + carry the   ║
+║        player. New audio stubs: glider, gem.                ║
+║  v0.6: rocket pickups (~12% of platforms), 3s flight at     ║
+║        -13 vy, fire exhaust particles, rocket-shaped player ║
+║        (nose cone, fins, window), ends with jump kick.      ║
+║        Chute suppressed during flight. New audio stub:      ║
+║        rocket. Rising never collides (vy<0 skips landing).  ║
+║  BUILT ON      : v0.5 max energy / v0.4 coins                ║
+║  NEXT TARGET   : AUDIO (triggers stubbed: jump, land, die,   ║
+║                  chuteOpen, chuteClose, coin, bgStart)       ║
+║  v0.3: starfield+grid parallax, neon platform hues, LED     ║
+║        chase dots, landing splash+dust, jump puffs           ║
+║  v0.4: parachute coin-catch minigame, gold sparkles, coin   ║
+║        counter HUD, session-persistent coin total            ║
+║  v0.5: rainbow comet trail on player, shooting stars,       ║
+║        ambient floating motes, breathing platform glow      ║
+║        with hue drift, impact-scaled rainbow spark fans     ║
+╠══════════════════════════════════════════════════════════════╣
+║  WHAT EXISTS                                                 ║
+║  ✓ Canvas fills full screen (portrait, no black bars)        ║
+║  ✓ Game loop, delta time, state machine                      ║
+║  ✓ Touch zones (left / middle-jump / right)                  ║
+║  ✓ Infinite vertical world with camera scroll                ║
+║  ✓ Procedural platform generation (seeded chunks)            ║
+║  ✓ Platforms cull when off-screen (memory safe)              ║
+║  ✓ Height score (meters climbed)                             ║
+║  ✓ Best height persisted in localStorage                     ║
+║  ✓ Parachute — auto-deploys after 2s free-fall               ║
+║  ✓ Parachute caps fall speed, drawn as canopy above player   ║
+║  ✓ Parachute collapses on landing                            ║
+║  ✓ Coyote time (100ms grace after walking off edge)          ║
+╠══════════════════════════════════════════════════════════════╣
+║  WHAT DOES NOT EXIST YET                                     ║
+║  ✗ Sprites / pixel art (player is still a box)               ║
+║  ✗ Particles / screen shake                                  ║
+║  ✗ Audio                                                     ║
+║  ✗ Enemies / hazards                                         ║
+║  ✗ Moving platforms                                          ║
+╠══════════════════════════════════════════════════════════════╣
+║  RED PHONE: built v0.2 — infinite scroll + parachute         ║
+╚══════════════════════════════════════════════════════════════╝
+-->
+
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: #0d0d14;
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// ════════════════════════════════════════════════════════════
+//  CONFIG
+// ════════════════════════════════════════════════════════════
+const CFG = {
+  // Physics
+  GRAVITY:        0.42,
+  JUMP_FORCE:    -13.5,  // strong jump
+  BUBBLE_GRAV:    0.08,  // floaty gravity when holding jump at apex
+  FRICTION:       0.80,
+  MAX_FALL:       13,
+  CHUTE_MAX_FALL: 1.6,
+  CHUTE_GRAVITY:  0.08,
+  CHUTE_DEPLOY_S: 2.0,
+  COYOTE_MS:      120,
+
+  // Player
+  PLAYER_W:  14,
+  PLAYER_H:  22,
+  PLAYER_SPEED: 3.8,
+
+  // World
+  PLAT_MIN_W:  55,
+  PLAT_MAX_W: 110,
+  PLAT_H:       8,
+  CHUNK_H:    160,   // world-units per generated chunk
+  PLAT_PER_CHUNK: 3,
+  CULL_BELOW:  80,   // cull platforms this many px below camera bottom
+
+  // Colors  (AESTHETICS iteration: own these)
+  BG:        '#0d0d14',
+  PLAYER:    '#e8e8d0',
+  PLAT:      '#2a2a3a',
+  PLAT_TOP:  '#3a3a55',
+  CHUTE:     '#ff4466',
+  CHUTE_LINE:'#cc2244',
+  ACCENT:    '#ff4466',
+  UI_TEXT:   '#c0c0c0',
+  UI_DIM:    '#606070',
+  SCORE_COL: '#ffe066',
+};
+
+// ════════════════════════════════════════════════════════════
+//  CANVAS — fills full screen, logical coords = pixel coords
+// ════════════════════════════════════════════════════════════
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+let W, H;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ════════════════════════════════════════════════════════════
+//  INPUT
+// ════════════════════════════════════════════════════════════
+const keys  = {};
+const touch = { left: false, right: false, jump: false };
+let jumpPressedThisFrame = false;
+let jumpWasDown = false;
+
+window.addEventListener('keydown', e => { keys[e.code] = true;  e.preventDefault(); });
+window.addEventListener('keyup',   e => { keys[e.code] = false; });
+
+canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+canvas.addEventListener('touchmove',  handleTouchMove,  { passive: false });
+canvas.addEventListener('touchend',   e => {
+  e.preventDefault();
+  touch.left = touch.right = touch.jump = false;
+}, { passive: false });
+
+function handleTouchStart(e) {
+  e.preventDefault();
+  // Tap to start / retry from menu or dead screen
+  if (state !== STATE.PLAYING) {
+    setState(STATE.PLAYING);
+    return;
+  }
+  updateTouchZones(e);
+}
+
+function handleTouchMove(e) {
+  e.preventDefault();
+  updateTouchZones(e);
+}
+
+function updateTouchZones(e) {
+  touch.left = touch.right = touch.jump = false;
+  for (const t of e.touches) {
+    const x = t.clientX;
+    if      (x < W * 0.33) touch.left  = true;
+    else if (x > W * 0.66) touch.right = true;
+    else                    touch.jump  = true;
+  }
+}
+
+function getInput() {
+  const jumpDown = keys['ArrowUp'] || keys['KeyW'] || keys['Space'] || touch.jump;
+  jumpPressedThisFrame = jumpDown && !jumpWasDown;
+  jumpWasDown = jumpDown;
+  return {
+    left:  keys['ArrowLeft']  || keys['KeyA'] || touch.left,
+    right: keys['ArrowRight'] || keys['KeyD'] || touch.right,
+    jump:  jumpDown,
+    jumpPressed: jumpPressedThisFrame,
+  };
+}
+
+// ════════════════════════════════════════════════════════════
+//  STATE MACHINE
+// ════════════════════════════════════════════════════════════
+const STATE = { MENU: 'menu', PLAYING: 'playing', DEAD: 'dead' };
+let state = STATE.MENU;
+
+function setState(s) {
+  state = s;
+  if (s === STATE.PLAYING) initGame();
+}
+
+window.addEventListener('keydown', e => {
+  if ((e.code === 'Space' || e.code === 'Enter') && state !== STATE.PLAYING)
+    setState(STATE.PLAYING);
+});
+
+// ════════════════════════════════════════════════════════════
+//  WORLD — infinite procedural platforms
+// ════════════════════════════════════════════════════════════
+let platforms = [];
+let cameraY = 0;       // world-Y of the top of the screen
+
+// worldY: 0 = starting ground level, negative = higher up.
+// SIMPLE SYSTEM: track highestPlatY (most negative platform generated so far).
+// Keep generating upward whenever camera approaches it. Cull below screen bottom.
+
+let highestPlatY = 0;     // y of the highest platform generated so far
+let worldGenBottom = 800; // lowest rescue platform generated
+
+function rand(min, max) { return min + Math.random() * (max - min); }
+
+function addGround() {
+  platforms.push({ x: 0, y: 0, w: W, h: 40, isGround: true });
+}
+
+// Generate platforms upward until we've covered up to targetY (more negative = higher)
+function generateUpTo(targetY) {
+  while (highestPlatY > targetY) {
+    const gap = rand(55, 90);
+    highestPlatY -= gap;
+    const pw = rand(CFG.PLAT_MIN_W, CFG.PLAT_MAX_W);
+    const px = rand(0, W - pw);
+    const np = { x: px, y: highestPlatY, w: pw, h: CFG.PLAT_H, hue: Math.floor(Math.random() * 360) };
+    // ~15% of platforms drift left-right (harder to land)
+    if (Math.random() < 0.15) {
+      np.vx = (0.6 + Math.random() * 0.9) * (Math.random() < 0.5 ? 1 : -1);
+    }
+    platforms.push(np);
+    maybeSpawnRocket(np);
+    maybeSpawnGlider(np);
+    maybeSpawnGem(np);
+  }
+}
+
+// Rescue platforms below ground for long falls
+function generateBelow(bottomY) {
+  for (let i = 0; i < 4; i++) {
+    const y = bottomY + 80 + i * 90;
+    const pw = rand(CFG.PLAT_MIN_W, CFG.PLAT_MAX_W);
+    const px = rand(0, W - pw);
+    platforms.push({ x: px, y, w: pw, h: CFG.PLAT_H, isRescue: true, hue: 0 });
+  }
+  worldGenBottom = bottomY + 4 * 90 + 80;
+}
+
+// Dissolve platforms that have scrolled off the BOTTOM of the screen (behind the climber)
+function cullPlatforms() {
+  const bottomEdge = cameraY + H + 100; // 100px grace below screen bottom
+  platforms = platforms.filter(p => p.y <= bottomEdge || p.isGround || p.isRescue);
+}
+
+// Moving platforms drift and bounce off screen edges
+function updateMovingPlatforms(dt) {
+  for (const p of platforms) {
+    if (!p.vx) continue;
+    p.x += p.vx * dt;
+    if (p.x < 0)          { p.x = 0;          p.vx =  Math.abs(p.vx); }
+    if (p.x + p.w > W)    { p.x = W - p.w;    p.vx = -Math.abs(p.vx); }
+  }
+}
+
+// Respawn after hitting rescue: back to ground, fresh world, score kept
+function respawnFromY() {
+  platforms = platforms.filter(p => p.isGround);
+  rockets = [];
+  gliders = [];
+  gems = [];
+  coins = [];
+  coinSpawnY = 0;
+  const startY = -CFG.PLAYER_H - 42;
+  player.y        = startY;
+  player.x        = W / 2 - CFG.PLAYER_W / 2;
+  player.vx       = 0;
+  player.vy       = 0;
+  player.onGround = false;
+  player.chute    = false;
+  player.fallTimer = 0;
+  player.peakY    = startY;
+  highestPlatY    = 0;
+  worldGenBottom  = 800;
+  cameraY         = 0;
+  generateUpTo(-H * 2);
+}
+
+// ════════════════════════════════════════════════════════════
+//  PLAYER
+// ════════════════════════════════════════════════════════════
+let player;
+
+function initPlayer() {
+  player = {
+    x:  W / 2 - CFG.PLAYER_W / 2,
+    y: -CFG.PLAYER_H - 42,   // just above the ground slab
+    vx: 0,
+    vy: 0,
+    w:  CFG.PLAYER_W,
+    h:  CFG.PLAYER_H,
+    onGround:    false,
+    coyoteTimer: 0,
+    fallTimer:   0,
+    chute:       false,
+    facing:      1,
+    peakY:       -CFG.PLAYER_H - 42,
+    rocketTimer: 0,
+    hasGlider:   false,
+  };
+}
+
+// ════════════════════════════════════════════════════════════
+//  SCORE
+// ════════════════════════════════════════════════════════════
+let score = 0;      // max height in "meters" (world units / 10)
+let best  = parseInt(localStorage.getItem('best') || '0');
+
+// ════════════════════════════════════════════════════════════
+//  AUDIO TRIGGERS stub
+// ════════════════════════════════════════════════════════════
+const audio = {
+  triggers: {
+    jump:        () => {},
+    land:        () => {},
+    die:         () => {},
+    chuteOpen:   () => {},
+    chuteClose:  () => {},
+    coin:        () => {},
+    rocket:      () => {},
+    glider:      () => {},
+    gem:         () => {},
+    milestone:   () => {},
+    bgStart:     () => {},
+  }
+};
+
+// ════════════════════════════════════════════════════════════
+//  AESTHETICS — RED PHONE: particles, starfield, sparkles
+// ════════════════════════════════════════════════════════════
+
+// ── Particle system ──────────────────────────────────────────
+let particles = [];
+
+function spawnSplash(x, y, hue) {
+  // Color splash — fast radial burst
+  for (let i = 0; i < 14; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 2 + Math.random() * 5;
+    particles.push({
+      x, y,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp - 2,
+      life: 1,
+      decay: 0.03 + Math.random() * 0.03,
+      size: 2 + Math.random() * 3,
+      hue: hue + Math.random() * 40 - 20,
+      type: 'splash',
+    });
+  }
+  // Dust cloud — slow drifting puffs
+  for (let i = 0; i < 8; i++) {
+    particles.push({
+      x: x + (Math.random() - 0.5) * 30,
+      y: y - Math.random() * 6,
+      vx: (Math.random() - 0.5) * 1.5,
+      vy: -0.3 - Math.random() * 0.6,
+      life: 1,
+      decay: 0.012 + Math.random() * 0.01,
+      size: 6 + Math.random() * 10,
+      hue: hue,
+      type: 'cloud',
+    });
+  }
+}
+
+function spawnJumpPuff(x, y) {
+  for (let i = 0; i < 6; i++) {
+    particles.push({
+      x: x + (Math.random() - 0.5) * 14,
+      y,
+      vx: (Math.random() - 0.5) * 2,
+      vy: 0.5 + Math.random(),
+      life: 1,
+      decay: 0.05,
+      size: 2 + Math.random() * 2,
+      hue: 200 + Math.random() * 60,
+      type: 'splash',
+    });
+  }
+}
+
+function updateParticles(dt) {
+  for (const pt of particles) {
+    pt.x += pt.vx * dt;
+    pt.y += pt.vy * dt;
+    pt.vy += 0.05 * dt;       // light gravity
+    pt.life -= pt.decay * dt;
+  }
+  particles = particles.filter(pt => pt.life > 0);
+  if (particles.length > 400) particles.splice(0, particles.length - 400);
+}
+
+function drawParticles() {
+  for (const pt of particles) {
+    if (pt.type === 'cloud') {
+      ctx.globalAlpha = pt.life * 0.25;
+      ctx.fillStyle = 'hsl(' + pt.hue + ', 90%, 65%)';
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, pt.size * (1.4 - pt.life * 0.4), 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.globalAlpha = pt.life;
+      ctx.fillStyle = 'hsl(' + pt.hue + ', 100%, ' + (55 + pt.life * 25) + '%)';
+      ctx.fillRect(pt.x - pt.size / 2, pt.y - pt.size / 2, pt.size, pt.size);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── COIN DESCENT MINIGAME — RED PHONE ────────────────────────
+// Coins spawn below the player while the parachute is open.
+// Steer left/right to catch them. Each catch = gold sparkle burst.
+let coins = [];
+let coinCount = 0;
+let coinSpawnY = 0;   // world-Y we've spawned coins down to
+
+function spawnCoinsBelow(fromY, toY) {
+  let y = fromY;
+  let cx = player.x + player.w / 2;
+  while (y < toY) {
+    y += 60 + Math.random() * 50;
+    // drift the trail horizontally so the player has to steer
+    cx += (Math.random() - 0.5) * 160;
+    cx = Math.max(20, Math.min(W - 20, cx));
+    coins.push({ x: cx, y, r: 7, taken: false, ph: Math.random() * Math.PI * 2 });
+  }
+  coinSpawnY = y;
+}
+
+function updateCoins() {
+  if (player.chute) {
+    // Falling = y increases. Spawn coins from just below player down to 1.5 screens below.
+    const target = player.y + H * 1.5;
+    // Reset spawn cursor if it's stale (above the player or way past the target)
+    if (coinSpawnY < player.y + 60 || coinSpawnY > target + H) {
+      coinSpawnY = player.y + 60;
+    }
+    if (coinSpawnY < target) spawnCoinsBelow(coinSpawnY, target);
+  }
+
+  // Collect
+  const pcx = player.x + player.w / 2;
+  const pcy = player.y + player.h / 2;
+  for (const c of coins) {
+    if (c.taken) continue;
+    const dx = pcx - c.x, dy = pcy - c.y;
+    if (dx * dx + dy * dy < (c.r + 12) * (c.r + 12)) {
+      c.taken = true;
+      coinCount++;
+      // Gold sparkle burst
+      for (let i = 0; i < 10; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 1.5 + Math.random() * 3.5;
+        particles.push({
+          x: c.x, y: c.y,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: 1, decay: 0.04,
+          size: 2 + Math.random() * 2,
+          hue: 48 + Math.random() * 12,
+          type: 'splash',
+        });
+      }
+      audio.triggers.coin();
+    }
+  }
+
+  // Cull coins above the camera (passed) or taken
+  coins = coins.filter(c => !c.taken && c.y > cameraY - 60);
+}
+
+function drawCoins(time) {
+  for (const c of coins) {
+    const sy = c.y - cameraY;
+    if (sy < -20 || sy > H + 20) continue;
+    // Spin illusion: width oscillates
+    const spin = Math.abs(Math.sin(time * 0.004 + c.ph));
+    const rw = c.r * (0.25 + 0.75 * spin);
+    // Glow
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = 'hsl(50, 100%, 60%)';
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, rw + 4, c.r + 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Coin body
+    ctx.fillStyle = 'hsl(48, 100%, ' + (55 + spin * 15) + '%)';
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, rw, c.r, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Inner shine
+    ctx.fillStyle = 'hsl(52, 100%, 85%)';
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, rw * 0.5, c.r * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Twinkle sparkle on top
+    const tw = Math.abs(Math.sin(time * 0.008 + c.ph * 3));
+    if (tw > 0.8) {
+      ctx.globalAlpha = (tw - 0.8) * 5;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(c.x - 1, c.y - c.r - 4, 2, 3);
+      ctx.fillRect(c.x + rw, c.y - 1, 3, 2);
+      ctx.globalAlpha = 1;
+    }
+  }
+}
+
+// ── MILESTONES — RED PHONE ───────────────────────────────────
+// Every 30 climb-gems (◆) and every 30 descent-coins (◉) grants a
+// power-up instantly, alternating rocket / glider.
+let nextGemMilestone  = 30;
+let nextCoinMilestone = 30;
+let banner = { text: '', t: 0 };
+
+function showBanner(text) {
+  banner.text = text;
+  banner.t = 1;
+}
+
+function grantPowerup(kind) {
+  if (kind === 'rocket') {
+    player.rocketTimer = ROCKET_TIME;
+    player.chute = false;
+    player.fallTimer = 0;
+    showBanner('🚀 ROCKET UNLOCKED!');
+  } else {
+    player.hasGlider = true;
+    showBanner('🪂 GLIDER UNLOCKED!');
+  }
+  // celebration burst
+  for (let i = 0; i < 24; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 2 + Math.random() * 6;
+    particles.push({
+      x: player.x + player.w / 2, y: player.y + player.h / 2,
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+      life: 1, decay: 0.02, size: 2 + Math.random() * 3,
+      hue: Math.random() * 360, type: 'splash',
+    });
+  }
+  audio.triggers.milestone();
+}
+
+function checkMilestones() {
+  if (gemCount >= nextGemMilestone) {
+    // alternate: 30 rocket, 60 glider, 90 rocket...
+    grantPowerup((nextGemMilestone / 30) % 2 === 1 ? 'rocket' : 'glider');
+    nextGemMilestone += 30;
+  }
+  if (coinCount >= nextCoinMilestone) {
+    grantPowerup((nextCoinMilestone / 30) % 2 === 1 ? 'glider' : 'rocket');
+    nextCoinMilestone += 30;
+  }
+}
+
+function drawBanner() {
+  if (banner.t <= 0) return;
+  banner.t -= 0.008;
+  const a = Math.min(1, banner.t * 3);
+  ctx.globalAlpha = a;
+  ctx.fillStyle = 'hsl(' + ((1 - banner.t) * 720 % 360) + ', 100%, 65%)';
+  ctx.font = 'bold 18px monospace';
+  ctx.textAlign = 'center';
+  const bob = Math.sin(banner.t * 20) * 2;
+  ctx.fillText(banner.text, W / 2, H * 0.3 + bob);
+  ctx.globalAlpha = 1;
+}
+
+// ── WIND — RED PHONE ─────────────────────────────────────────
+// Global wind drifts between gusts. Pushes the player while airborne
+// (double under chute/glider). Indicated by leaning rain-streaks + motes.
+const wind = { force: 0, target: 0, timer: 0 };
+
+function updateWind(ms) {
+  wind.timer -= ms;
+  if (wind.timer <= 0) {
+    // New gust target every 4-9 seconds, range -0.28..0.28
+    wind.target = (Math.random() - 0.5) * 0.56;
+    wind.timer = 4000 + Math.random() * 5000;
+  }
+  // Ease toward target
+  wind.force += (wind.target - wind.force) * 0.01;
+}
+
+// Rain-like wind streaks (screen space)
+let streaks = [];
+function updateStreaks() {
+  const strength = Math.abs(wind.force);
+  // Spawn rate scales with wind strength — calm = almost none
+  if (Math.random() < 0.1 + strength * 3) {
+    streaks.push({
+      x: Math.random() * W,
+      y: -10,
+      life: 1,
+    });
+  }
+  for (const s of streaks) {
+    s.x += wind.force * 30;          // lean hard with the wind
+    s.y += 7 + strength * 6;         // fall
+    s.life -= 0.012;
+  }
+  streaks = streaks.filter(s => s.life > 0 && s.y < H + 20);
+}
+function drawStreaks() {
+  const strength = Math.abs(wind.force);
+  ctx.strokeStyle = 'rgba(160, 190, 255, 0.35)';
+  ctx.lineWidth = 1;
+  for (const s of streaks) {
+    ctx.globalAlpha = s.life * (0.2 + strength * 1.5);
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y);
+    ctx.lineTo(s.x - wind.force * 30 * 1.8, s.y - (7 + strength * 6) * 1.8);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── GLIDER POWER-UP — RED PHONE ──────────────────────────────
+// Pickup upgrades your parachute to a glider for the rest of the run.
+// Glider: faster fall than chute, steerable dives (hold left/right = speed),
+// tap jump for a small lift pulse to grab missed coins.
+let gliders = [];
+const GLIDER_CHANCE = 0.02;
+const GLIDER_MAX_FALL = 3.2;
+const GLIDER_DIVE_FALL = 7;     // while holding a direction
+const GLIDER_LIFT = -4.5;       // lift pulse on jump tap
+
+function maybeSpawnGlider(p) {
+  if (Math.random() < GLIDER_CHANCE) {
+    gliders.push({ x: p.x + p.w / 2, y: p.y - 14, taken: false, ph: Math.random() * Math.PI * 2 });
+  }
+}
+
+function updateGliders() {
+  const pcx = player.x + player.w / 2;
+  const pcy = player.y + player.h / 2;
+  for (const g of gliders) {
+    if (g.taken) continue;
+    const dx = pcx - g.x, dy = pcy - g.y;
+    if (dx * dx + dy * dy < 22 * 22) {
+      g.taken = true;
+      player.hasGlider = true;
+      audio.triggers.glider();
+      for (let i = 0; i < 16; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 2 + Math.random() * 5;
+        particles.push({
+          x: g.x, y: g.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: 1, decay: 0.03, size: 2 + Math.random() * 3,
+          hue: 175 + Math.random() * 30, type: 'splash',
+        });
+      }
+    }
+  }
+  gliders = gliders.filter(g => !g.taken && g.y < cameraY + H + 200);
+}
+
+function drawGliders(time) {
+  for (const g of gliders) {
+    const sy = g.y - cameraY;
+    if (sy < -20 || sy > H + 20) continue;
+    const bob = Math.sin(time * 0.004 + g.ph) * 3;
+    const y = g.y + bob;
+    ctx.globalAlpha = 0.3 + 0.2 * Math.abs(Math.sin(time * 0.005 + g.ph));
+    ctx.fillStyle = 'hsl(185, 100%, 60%)';
+    ctx.beginPath();
+    ctx.arc(g.x, y, 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Glider icon: swept wing
+    ctx.fillStyle = '#22ddee';
+    ctx.beginPath();
+    ctx.moveTo(g.x - 10, y + 2);
+    ctx.lineTo(g.x, y - 5);
+    ctx.lineTo(g.x + 10, y + 2);
+    ctx.lineTo(g.x, y - 1);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+// ── GEMS (climb collectible, worth 5) — RED PHONE ────────────
+let gems = [];
+let gemCount = 0;
+const GEM_CHANCE = 0.35;
+
+function maybeSpawnGem(p) {
+  if (Math.random() < GEM_CHANCE) {
+    gems.push({ x: p.x + p.w / 2 + (Math.random() - 0.5) * 30, y: p.y - 40 - Math.random() * 30, taken: false, ph: Math.random() * Math.PI * 2 });
+  }
+}
+
+function updateGems() {
+  const pcx = player.x + player.w / 2;
+  const pcy = player.y + player.h / 2;
+  for (const g of gems) {
+    if (g.taken) continue;
+    const dx = pcx - g.x, dy = pcy - g.y;
+    if (dx * dx + dy * dy < 20 * 20) {
+      g.taken = true;
+      gemCount++;
+      audio.triggers.gem();
+      for (let i = 0; i < 12; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 1.5 + Math.random() * 4;
+        particles.push({
+          x: g.x, y: g.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: 1, decay: 0.035, size: 2 + Math.random() * 2.5,
+          hue: 280 + Math.random() * 40, type: 'splash',
+        });
+      }
+    }
+  }
+  gems = gems.filter(g => !g.taken && g.y < cameraY + H + 200);
+}
+
+function drawGems(time) {
+  for (const g of gems) {
+    const sy = g.y - cameraY;
+    if (sy < -20 || sy > H + 20) continue;
+    const bob = Math.sin(time * 0.003 + g.ph) * 4;
+    const y = g.y + bob;
+    const pulse = 0.7 + 0.3 * Math.abs(Math.sin(time * 0.006 + g.ph));
+    // Glow
+    ctx.globalAlpha = 0.35 * pulse;
+    ctx.fillStyle = 'hsl(295, 100%, 65%)';
+    ctx.beginPath();
+    ctx.arc(g.x, y, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Diamond
+    ctx.fillStyle = 'hsl(290, 95%, ' + (55 + pulse * 20) + '%)';
+    ctx.beginPath();
+    ctx.moveTo(g.x, y - 8);
+    ctx.lineTo(g.x + 6, y);
+    ctx.lineTo(g.x, y + 8);
+    ctx.lineTo(g.x - 6, y);
+    ctx.closePath();
+    ctx.fill();
+    // Facet shine
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.beginPath();
+    ctx.moveTo(g.x, y - 8);
+    ctx.lineTo(g.x + 3, y - 2);
+    ctx.lineTo(g.x - 3, y - 2);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+// ── CLOUD ZONE (above 300m) — RED PHONE ──────────────────────
+const CLOUD_START = -3000;  // world y where clouds begin (300m)
+const cloudPuffs = [];
+(function initClouds() {
+  for (let i = 0; i < 14; i++) {
+    cloudPuffs.push({
+      x: Math.random() * 2000,
+      y: Math.random() * 3000,
+      w: 80 + Math.random() * 140,
+      h: 24 + Math.random() * 30,
+      speed: 0.4 + Math.random() * 0.5,
+      drift: (Math.random() - 0.5) * 0.3,
+    });
+  }
+})();
+
+function cloudFactor() {
+  // 0 below the zone, fades to 1 across 800px of altitude
+  return Math.max(0, Math.min(1, (CLOUD_START - cameraY) / 800));
+}
+
+function drawClouds(time) {
+  const f = cloudFactor();
+  if (f <= 0) return;
+  for (const c of cloudPuffs) {
+    const sy = ((c.y - cameraY * c.speed) % H + H) % H;
+    const sx = ((c.x + time * 0.01 * c.drift * 60) % (W + c.w)) - c.w / 2;
+    ctx.globalAlpha = 0.10 * f;
+    ctx.fillStyle = '#dde6ff';
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, c.w / 2, c.h / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.07 * f;
+    ctx.beginPath();
+    ctx.ellipse(sx + c.w * 0.25, sy - c.h * 0.3, c.w * 0.3, c.h * 0.35, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── ROCKET POWER-UP — RED PHONE ──────────────────────────────
+// Pickups spawn on platforms. Grab = 3s uninterrupted upward flight,
+// fire out the back, player turns rocket-shaped, ends with a jump kick.
+let rockets = [];          // pickup items in world
+const ROCKET_TIME = 3.0;   // seconds of flight
+const ROCKET_SPEED = -13;  // upward velocity during flight
+const ROCKET_CHANCE = 0.03; // chance per platform to carry a pickup
+
+function maybeSpawnRocket(p) {
+  if (Math.random() < ROCKET_CHANCE) {
+    rockets.push({ x: p.x + p.w / 2, y: p.y - 14, taken: false, ph: Math.random() * Math.PI * 2 });
+  }
+}
+
+function updateRockets(ms) {
+  // Collect
+  const pcx = player.x + player.w / 2;
+  const pcy = player.y + player.h / 2;
+  for (const r of rockets) {
+    if (r.taken) continue;
+    const dx = pcx - r.x, dy = pcy - r.y;
+    if (dx * dx + dy * dy < 22 * 22) {
+      r.taken = true;
+      player.rocketTimer = ROCKET_TIME;
+      player.chute = false;
+      player.fallTimer = 0;
+      audio.triggers.rocket();
+      // launch burst
+      for (let i = 0; i < 16; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 2 + Math.random() * 5;
+        particles.push({
+          x: r.x, y: r.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: 1, decay: 0.03, size: 2 + Math.random() * 3,
+          hue: 20 + Math.random() * 40, type: 'splash',
+        });
+      }
+    }
+  }
+  rockets = rockets.filter(r => !r.taken && r.y < cameraY + H + 200);
+
+  // Rocket flight
+  if (player.rocketTimer > 0) {
+    player.rocketTimer -= ms / 1000;
+    player.vy = ROCKET_SPEED;
+    // Fire out the back — every frame
+    for (let i = 0; i < 3; i++) {
+      particles.push({
+        x: player.x + player.w / 2 + (Math.random() - 0.5) * 6,
+        y: player.y + player.h,
+        vx: (Math.random() - 0.5) * 1.5,
+        vy: 3 + Math.random() * 3,
+        life: 1, decay: 0.05 + Math.random() * 0.04,
+        size: 2.5 + Math.random() * 3.5,
+        hue: Math.random() < 0.6 ? 18 + Math.random() * 25 : 45 + Math.random() * 15, // orange/yellow
+        type: 'splash',
+      });
+    }
+    // Expiry → ending jump kick
+    if (player.rocketTimer <= 0) {
+      player.rocketTimer = 0;
+      player.vy = CFG.JUMP_FORCE;
+      spawnJumpPuff(player.x + player.w / 2, player.y + player.h);
+    }
+  }
+}
+
+function drawRockets(time) {
+  for (const r of rockets) {
+    const sy = r.y - cameraY;
+    if (sy < -20 || sy > H + 20) continue;
+    const bob = Math.sin(time * 0.004 + r.ph) * 3;
+    const y = r.y + bob;
+    // Glow
+    ctx.globalAlpha = 0.3 + 0.2 * Math.abs(Math.sin(time * 0.005 + r.ph));
+    ctx.fillStyle = 'hsl(25, 100%, 60%)';
+    ctx.beginPath();
+    ctx.arc(r.x, y, 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // Mini rocket icon: body + nose + fins
+    ctx.fillStyle = '#e8e8e8';
+    ctx.fillRect(r.x - 3, y - 6, 6, 10);
+    ctx.fillStyle = '#ff4422';
+    ctx.beginPath();
+    ctx.moveTo(r.x - 3, y - 6);
+    ctx.lineTo(r.x, y - 12);
+    ctx.lineTo(r.x + 3, y - 6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillRect(r.x - 6, y + 2, 3, 4);
+    ctx.fillRect(r.x + 3, y + 2, 3, 4);
+  }
+}
+
+// ── ENERGY LAYER — RED PHONE: trails, shooting stars, motes ──
+
+// Player comet trail
+let trail = [];
+function updateTrail() {
+  const speed = Math.abs(player.vx) + Math.abs(player.vy);
+  if (speed > 1.5) {
+    trail.push({
+      x: player.x + player.w / 2,
+      y: player.y + player.h / 2,
+      life: 1,
+      hue: (performance.now() * 0.1) % 360,  // rainbow cycles over time
+      size: 4 + Math.min(speed * 0.5, 6),
+    });
+  }
+  for (const t of trail) t.life -= 0.06;
+  trail = trail.filter(t => t.life > 0);
+}
+function drawTrail() {
+  for (const t of trail) {
+    ctx.globalAlpha = t.life * 0.5;
+    ctx.fillStyle = 'hsl(' + t.hue + ', 100%, 65%)';
+    const s = t.size * t.life;
+    ctx.fillRect(t.x - s / 2, t.y - s / 2, s, s);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Shooting stars (screen-space, occasional)
+let shooters = [];
+function updateShooters() {
+  if (Math.random() < 0.015) {
+    shooters.push({
+      x: Math.random() * W,
+      y: -10,
+      vx: (Math.random() - 0.5) * 6,
+      vy: 6 + Math.random() * 6,
+      life: 1,
+      hue: Math.random() * 360,
+    });
+  }
+  for (const s of shooters) {
+    s.x += s.vx; s.y += s.vy; s.life -= 0.015;
+  }
+  shooters = shooters.filter(s => s.life > 0 && s.y < H + 20);
+}
+function drawShooters() {
+  for (const s of shooters) {
+    ctx.globalAlpha = s.life * 0.8;
+    const grad = ctx.createLinearGradient(s.x - s.vx * 6, s.y - s.vy * 6, s.x, s.y);
+    grad.addColorStop(0, 'transparent');
+    grad.addColorStop(1, 'hsl(' + s.hue + ', 100%, 70%)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(s.x - s.vx * 6, s.y - s.vy * 6);
+    ctx.lineTo(s.x, s.y);
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(s.x - 1, s.y - 1, 3, 3);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Ambient floating motes (screen-space, drift upward, parallax with camera)
+const motes = [];
+(function initMotes() {
+  for (let i = 0; i < 30; i++) {
+    motes.push({
+      x: Math.random() * 2000,
+      y: Math.random() * 3000,
+      drift: 0.2 + Math.random() * 0.5,
+      size: 1 + Math.random() * 2.5,
+      hue: Math.random() * 360,
+      ph: Math.random() * Math.PI * 2,
+    });
+  }
+})();
+function drawMotes(time) {
+  for (const m of motes) {
+    const sy = ((m.y - cameraY * 0.8 - time * 0.02 * m.drift) % H + H) % H;
+    const sx = ((m.x + Math.sin(time * 0.001 + m.ph) * 20 + time * wind.force * 0.06) % W + W) % W;
+    const pulse = 0.3 + 0.7 * Math.abs(Math.sin(time * 0.003 + m.ph));
+    ctx.globalAlpha = pulse * 0.5;
+    ctx.fillStyle = 'hsl(' + ((m.hue + time * 0.05) % 360) + ', 100%, 70%)';
+    ctx.beginPath();
+    ctx.arc(sx, sy, m.size * pulse + 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── Starfield: 3 parallax layers so falling/climbing is visible ──
+const stars = [];
+(function initStars() {
+  for (let layer = 0; layer < 3; layer++) {
+    const count = 40 - layer * 8;
+    for (let i = 0; i < count; i++) {
+      stars.push({
+        x: Math.random() * 2000,       // wrapped with modulo at draw time
+        y: Math.random() * 4000,
+        layer,                          // 0 = far/slow, 2 = near/fast
+        size: 1 + layer,
+        hue: Math.random() * 360,
+        tw: Math.random() * Math.PI * 2, // twinkle phase
+      });
+    }
+  }
+})();
+
+function drawStarfield(time) {
+  // Each layer scrolls at different fraction of cameraY for parallax depth
+  const speeds = [0.15, 0.35, 0.6];
+  for (const s of stars) {
+    const sy = ((s.y - cameraY * speeds[s.layer]) % H + H) % H;
+    const sx = s.x % W;
+    const twinkle = 0.4 + 0.6 * Math.abs(Math.sin(time * 0.002 + s.tw));
+    ctx.globalAlpha = twinkle * (0.25 + s.layer * 0.25);
+    ctx.fillStyle = 'hsl(' + ((s.hue + time * 0.02) % 360) + ', 90%, 70%)';
+    ctx.fillRect(sx, sy, s.size, s.size);
+  }
+  ctx.globalAlpha = 1;
+
+  // Faint horizontal grid lines that scroll with the world — strong fall cue
+  ctx.globalAlpha = 0.05;
+  ctx.strokeStyle = '#8899ff';
+  ctx.lineWidth = 1;
+  const gridGap = 120;
+  const offset = ((-cameraY) % gridGap + gridGap) % gridGap;
+  for (let gy = offset; gy < H; gy += gridGap) {
+    ctx.beginPath();
+    ctx.moveTo(0, gy);
+    ctx.lineTo(W, gy);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ════════════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════════════
+function initGame() {
+  platforms       = [];
+  rockets         = [];
+  gliders         = [];
+  gems            = [];
+  gemCount        = 0;
+  nextGemMilestone  = 30;
+  nextCoinMilestone = 30;
+  banner.t        = 0;
+  coins           = [];
+  coinCount       = 0;
+  coinSpawnY      = 0;
+  cameraY         = 0;
+  score           = 0;
+  highestPlatY    = 0;
+  worldGenBottom  = 800;
+  addGround();
+  generateUpTo(-H * 2);
+  initPlayer();
+}
+
+// ════════════════════════════════════════════════════════════
+//  PHYSICS
+// ════════════════════════════════════════════════════════════
+function updatePhysics(dt, ms) {
+  const inp = getInput();
+
+  // Horizontal
+  if (inp.left)  player.vx -= CFG.PLAYER_SPEED;
+  if (inp.right) player.vx += CFG.PLAYER_SPEED;
+
+  // Wind push — only while airborne, doubled under canopy
+  if (!player.onGround) {
+    const windMult = player.chute ? 2.2 : 1.0;
+    player.vx += wind.force * windMult * dt;
+  }
+
+  player.vx *= CFG.FRICTION;
+  if (Math.abs(player.vx) < 0.05) player.vx = 0;
+
+  // Gravity — none during rocket flight, bubble at apex when holding jump, reduced under chute
+  if (player.rocketTimer > 0) {
+    // rocket controls vy directly in updateRockets — no gravity
+  } else {
+    let grav;
+    if (player.chute) {
+      grav = player.hasGlider ? 0.16 : CFG.CHUTE_GRAVITY;
+    } else if (inp.jump && player.vy < 0 && player.vy > -4) {
+      grav = CFG.BUBBLE_GRAV;
+    } else {
+      grav = CFG.GRAVITY;
+    }
+    player.vy += grav * dt;
+
+    // Glider controls (active while deployed and hasGlider)
+    if (player.chute && player.hasGlider) {
+      // Lift pulse: tap jump to swoop up a little (grab missed coins)
+      if (inp.jumpPressed) {
+        player.vy = GLIDER_LIFT;
+      }
+      // Dive: holding a direction tilts nose down = faster fall + extra h-speed
+      if (inp.left || inp.right) {
+        if (player.vy > GLIDER_DIVE_FALL) player.vy = GLIDER_DIVE_FALL;
+        player.vx += (inp.right ? 1 : -1) * 1.2;
+      } else {
+        if (player.vy > GLIDER_MAX_FALL) player.vy = GLIDER_MAX_FALL;
+      }
+    }
+  }
+
+  // Terminal velocity
+  let maxFall;
+  if (player.chute) {
+    maxFall = player.hasGlider ? GLIDER_DIVE_FALL : CFG.CHUTE_MAX_FALL;
+  } else {
+    maxFall = CFG.MAX_FALL;
+  }
+  if (player.vy > maxFall) player.vy = maxFall;
+
+  // Jump — uses coyote time
+  const canJump = player.onGround || player.coyoteTimer > 0;
+  if (inp.jumpPressed && canJump) {
+    player.vy = CFG.JUMP_FORCE;
+    player.onGround  = false;
+    player.coyoteTimer = 0;
+    player.chute     = false;
+    player.fallTimer = 0;
+    spawnJumpPuff(player.x + player.w / 2, player.y + player.h);
+    audio.triggers.jump();
+  }
+
+  // Coyote countdown
+  if (!player.onGround) {
+    player.coyoteTimer -= ms;
+    if (player.coyoteTimer < 0) player.coyoteTimer = 0;
+  }
+
+  // Move
+  player.x += player.vx * dt;
+  player.y += player.vy * dt;
+
+  // Facing
+  if (player.vx >  0.1) player.facing =  1;
+  if (player.vx < -0.1) player.facing = -1;
+
+  // Horizontal wrap
+  if (player.x + player.w < 0)  player.x = W;
+  if (player.x > W)              player.x = -player.w;
+
+  // ── Platform collision ──────────────────────────────────
+  const wasOnGround = player.onGround;
+  player.onGround = false;
+
+  for (const p of platforms) {
+    if (
+      player.x + player.w > p.x &&
+      player.x            < p.x + p.w &&
+      player.vy >= 0 &&
+      player.y + player.h >= p.y &&
+      player.y + player.h <= p.y + p.h + player.vy * dt + 4
+    ) {
+      // Landing splash + cloud in this platform's color (only on real impact)
+      if (!player.onGround && player.vy > 2) {
+        spawnSplash(player.x + player.w / 2, p.y, p.hue !== undefined ? p.hue : 230);
+        // Extra ring of sparks proportional to impact speed
+        const extra = Math.min(Math.floor(player.vy * 2), 20);
+        for (let ei = 0; ei < extra; ei++) {
+          const a = Math.PI + (ei / extra) * Math.PI; // upward fan
+          const sp = 3 + Math.random() * 4;
+          particles.push({
+            x: player.x + player.w / 2, y: p.y,
+            vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6,
+            life: 1, decay: 0.025,
+            size: 1.5 + Math.random() * 2,
+            hue: Math.random() * 360,
+            type: 'splash',
+          });
+        }
+      }
+
+      player.y        = p.y - player.h;
+      player.vy       = 0;
+      player.onGround = true;
+      player.fallTimer = 0;
+      if (p.vx) player.x += p.vx * dt;  // carried by moving platform
+
+      // Collapse chute on landing
+      if (player.chute) {
+        player.chute = false;
+        audio.triggers.chuteClose();
+      }
+
+      // Landed on a rescue platform OR back on bare ground after a fall —
+      // respawn fresh platforms above
+      if (p.isRescue || (p.isGround && player.peakY < -300)) {
+        respawnFromY();
+        return;
+      }
+    }
+  }
+
+  // Coyote: just walked off an edge
+  if (wasOnGround && !player.onGround) {
+    player.coyoteTimer = CFG.COYOTE_MS;
+  }
+
+  // ── Parachute logic ─────────────────────────────────────
+  if (!player.onGround && player.vy > 0 && player.rocketTimer <= 0) {
+    player.fallTimer += ms / 1000;
+    if (!player.chute && player.fallTimer >= CFG.CHUTE_DEPLOY_S) {
+      player.chute = true;
+      audio.triggers.chuteOpen();
+    }
+  } else if (player.onGround) {
+    player.fallTimer = 0;
+  }
+
+  // ── Camera follows player in both directions ─────────────
+  const targetCamY = player.y - H * 0.45;
+  cameraY = targetCamY;
+  // Clamp: never scroll below world origin (ground level)
+  if (cameraY > 0) cameraY = 0;
+
+  // ── Track peak height ───────────────────────────────────
+  if (player.y < player.peakY) player.peakY = player.y;
+
+  // ── Score: highest point reached ─────────────────────────
+  const height = Math.floor(-player.y / 10);
+  if (height > score) {
+    score = height;
+    if (score > best) {
+      best = score;
+      localStorage.setItem('best', best);
+    }
+  }
+
+  // ── Generate more world ahead ────────────────────────────
+  // Keep platforms generated at least one screen above the camera top
+  generateUpTo(cameraY - H);
+
+  // Generate rescue platforms only when player has actually fallen below ground
+  if (player.y > 200) {
+    const visibleBottom = cameraY + H + H;
+    if (visibleBottom > worldGenBottom) {
+      generateBelow(worldGenBottom);
+    }
+  }
+
+  cullPlatforms();
+}
+
+// ════════════════════════════════════════════════════════════
+//  RENDER
+// ════════════════════════════════════════════════════════════
+function render(time) {
+  time = time || 0;
+  ctx.fillStyle = CFG.BG;
+  ctx.fillRect(0, 0, W, H);
+
+  if (state === STATE.MENU) { drawMenu(); return; }
+  if (state === STATE.DEAD)  { drawDead(); return; }
+
+  // Sky tint shifts toward dawn-blue inside the cloud zone
+  const cf = cloudFactor();
+  if (cf > 0) {
+    ctx.fillStyle = 'rgba(70, 90, 160, ' + (0.18 * cf) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Parallax starfield + grid (screen-space, scrolls with cameraY)
+  drawStarfield(time);
+  drawClouds(time);
+  drawMotes(time);
+  drawStreaks();
+  drawShooters();
+
+  // ── Camera transform ────────────────────────────────────
+  ctx.save();
+  ctx.translate(0, -cameraY);
+
+  // Platforms — each with its own neon hue, glow strip, LED sparkle dots
+  for (const p of platforms) {
+    const screenY = p.y - cameraY;
+    if (screenY > H + 20 || screenY + p.h < -20) continue;
+
+    if (p.isGround) {
+      ctx.fillStyle = CFG.PLAT;
+      ctx.fillRect(p.x, p.y, p.w, p.h);
+      ctx.fillStyle = CFG.PLAT_TOP;
+      ctx.fillRect(p.x, p.y, p.w, 2);
+      continue;
+    }
+
+    // Slow hue drift + breathing glow
+    const hue = ((p.hue !== undefined ? p.hue : 230) + time * 0.01) % 360;
+    const breathe = 0.2 + 0.18 * Math.abs(Math.sin(time * 0.002 + (p.hue || 0)));
+
+    // Soft glow under the platform — pulses
+    ctx.globalAlpha = breathe;
+    ctx.fillStyle = 'hsl(' + hue + ', 100%, 55%)';
+    ctx.fillRect(p.x - 4, p.y - 3, p.w + 8, p.h + 8);
+    ctx.globalAlpha = breathe * 0.5;
+    ctx.fillRect(p.x - 8, p.y - 6, p.w + 16, p.h + 14);
+    ctx.globalAlpha = 1;
+
+    // Dark body
+    ctx.fillStyle = 'hsl(' + hue + ', 35%, 18%)';
+    ctx.fillRect(p.x, p.y, p.w, p.h);
+
+    // Bright neon top edge
+    ctx.fillStyle = 'hsl(' + hue + ', 100%, 62%)';
+    ctx.fillRect(p.x, p.y, p.w, 2);
+
+    // LED sparkle dots that chase along the edge
+    const ledCount = Math.floor(p.w / 18);
+    for (let li = 0; li < ledCount; li++) {
+      const phase = (time * 0.003 + li * 0.7 + hue) % (Math.PI * 2);
+      const bright = 0.3 + 0.7 * Math.abs(Math.sin(phase));
+      ctx.globalAlpha = bright;
+      ctx.fillStyle = 'hsl(' + ((hue + li * 25) % 360) + ', 100%, 75%)';
+      ctx.fillRect(p.x + 6 + li * 18, p.y + 4, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+
+    // Rescue platforms pulse red
+    if (p.isRescue) {
+      ctx.globalAlpha = 0.3 + 0.3 * Math.abs(Math.sin(time * 0.005));
+      ctx.fillStyle = '#ff2233';
+      ctx.fillRect(p.x, p.y, p.w, p.h);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Player comet trail (world space, under everything else)
+  drawTrail();
+
+  // Rocket pickups
+  drawRockets(time);
+  drawGliders(time);
+  drawGems(time);
+
+  // Coins (descent minigame)
+  drawCoins(time);
+
+  // Particles (world-space, under player)
+  drawParticles();
+
+  // Parachute or glider
+  if (player.chute) {
+    if (player.hasGlider) drawGliderWing();
+    else drawParachute();
+  }
+
+  // Player — rocket shape during flight, box otherwise
+  if (player.rocketTimer > 0) {
+    const cx = player.x + player.w / 2;
+    // Hot glow
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = 'hsl(' + (20 + Math.sin(time * 0.02) * 15) + ', 100%, 60%)';
+    ctx.fillRect(player.x - 4, player.y - 8, player.w + 8, player.h + 12);
+    ctx.globalAlpha = 1;
+    // Body
+    ctx.fillStyle = CFG.PLAYER;
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+    // Nose cone
+    ctx.fillStyle = '#ff4422';
+    ctx.beginPath();
+    ctx.moveTo(player.x, player.y);
+    ctx.lineTo(cx, player.y - 12);
+    ctx.lineTo(player.x + player.w, player.y);
+    ctx.closePath();
+    ctx.fill();
+    // Fins
+    ctx.fillStyle = '#ff4422';
+    ctx.fillRect(player.x - 5, player.y + player.h - 8, 5, 8);
+    ctx.fillRect(player.x + player.w, player.y + player.h - 8, 5, 8);
+    // Window
+    ctx.fillStyle = '#44ccff';
+    ctx.beginPath();
+    ctx.arc(cx, player.y + 7, 3, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(player.x - 2, player.y - 2, player.w + 4, player.h + 4);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = CFG.PLAYER;
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+  }
+
+  ctx.restore();
+
+  drawHUD();
+  drawBanner();
+  drawTouchHints();
+}
+
+function drawGliderWing() {
+  const cx = player.x + player.w / 2;
+  const topY = player.y - 16;
+  // Tilt with horizontal velocity
+  const tilt = Math.max(-0.4, Math.min(0.4, player.vx * 0.06));
+  ctx.save();
+  ctx.translate(cx, topY);
+  ctx.rotate(tilt);
+  // Swept delta wing
+  ctx.fillStyle = '#22ddee';
+  ctx.beginPath();
+  ctx.moveTo(-26, 6);
+  ctx.lineTo(0, -8);
+  ctx.lineTo(26, 6);
+  ctx.lineTo(0, 1);
+  ctx.closePath();
+  ctx.fill();
+  // Wing highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath();
+  ctx.moveTo(-26, 6);
+  ctx.lineTo(0, -8);
+  ctx.lineTo(0, -3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  // Rigging lines
+  ctx.strokeStyle = '#0aa8bb';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - 14, topY + 5);
+  ctx.lineTo(player.x + 2, player.y);
+  ctx.moveTo(cx + 14, topY + 5);
+  ctx.lineTo(player.x + player.w - 2, player.y);
+  ctx.stroke();
+}
+
+function drawParachute() {
+  const cx = player.x + player.w / 2;
+  const topY = player.y - 38;
+
+  // Canopy — simple arc
+  ctx.fillStyle = CFG.CHUTE;
+  ctx.beginPath();
+  ctx.arc(cx, topY, 22, Math.PI, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  // Canopy highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.beginPath();
+  ctx.arc(cx - 5, topY - 4, 9, Math.PI, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  // Lines from canopy to player shoulders
+  ctx.strokeStyle = CFG.CHUTE_LINE;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx - 20, topY + 2);
+  ctx.lineTo(player.x + 2, player.y);
+  ctx.moveTo(cx + 20, topY + 2);
+  ctx.lineTo(player.x + player.w - 2, player.y);
+  ctx.stroke();
+}
+
+function drawHUD() {
+  // Score
+  ctx.fillStyle = CFG.SCORE_COL;
+  ctx.font = 'bold 16px monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText(score + 'm', W - 14, 28);
+
+  // Coin counter
+  if (coinCount > 0) {
+    ctx.fillStyle = 'hsl(48, 100%, 60%)';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('◉ ' + coinCount + '/' + nextCoinMilestone, W - 14, 66);
+  }
+  // Gem counter + next milestone
+  if (gemCount > 0) {
+    ctx.fillStyle = 'hsl(290, 95%, 70%)';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('◆ ' + gemCount + '/' + nextGemMilestone, W - 14, 86);
+  }
+  // Glider owned indicator
+  if (player && player.hasGlider) {
+    ctx.fillStyle = '#22ddee';
+    ctx.font = '10px monospace';
+    ctx.fillText('glider', W - 14, 104);
+  }
+
+  // Best
+  ctx.fillStyle = CFG.UI_DIM;
+  ctx.font = '11px monospace';
+  ctx.fillText('best ' + best + 'm', W - 14, 46);
+
+  // Parachute indicator
+  if (player && !player.onGround && !player.chute && player.vy > 0) {
+    const pct = Math.min(player.fallTimer / CFG.CHUTE_DEPLOY_S, 1);
+    const barW = 60;
+    const bx = 14, by = 14;
+    ctx.fillStyle = '#222233';
+    ctx.fillRect(bx, by, barW, 6);
+    ctx.fillStyle = pct > 0.7 ? CFG.CHUTE : '#5566aa';
+    ctx.fillRect(bx, by, barW * pct, 6);
+    ctx.fillStyle = CFG.UI_DIM;
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('chute', bx, by + 17);
+  }
+}
+
+function drawTouchHints() {
+  ctx.globalAlpha = 0.05;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,        0, W * 0.33, H);
+  ctx.fillRect(W * 0.66, 0, W * 0.34, H);
+  ctx.globalAlpha = 1;
+}
+
+function drawMenu() {
+  ctx.fillStyle = CFG.UI_TEXT;
+  ctx.font = 'bold 32px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('ASCEND', W / 2, H / 2 - 30);
+
+  ctx.fillStyle = CFG.UI_DIM;
+  ctx.font = '13px monospace';
+  ctx.fillText('climb as high as you can', W / 2, H / 2 + 2);
+  ctx.fillText('fall 2s → parachute deploys', W / 2, H / 2 + 22);
+
+  ctx.fillStyle = CFG.ACCENT;
+  ctx.font = 'bold 14px monospace';
+  ctx.fillText('tap to start', W / 2, H / 2 + 56);
+
+  if (best > 0) {
+    ctx.fillStyle = CFG.SCORE_COL;
+    ctx.font = '11px monospace';
+    ctx.fillText('best: ' + best + 'm', W / 2, H / 2 + 80);
+  }
+}
+
+function drawDead() {
+  ctx.fillStyle = CFG.UI_TEXT;
+  ctx.font = 'bold 26px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('FELL', W / 2, H / 2 - 24);
+
+  ctx.fillStyle = CFG.SCORE_COL;
+  ctx.font = 'bold 20px monospace';
+  ctx.fillText(score + 'm', W / 2, H / 2 + 4);
+
+  if (score >= best && score > 0) {
+    ctx.fillStyle = CFG.ACCENT;
+    ctx.font = '12px monospace';
+    ctx.fillText('new best!', W / 2, H / 2 + 24);
+  }
+
+  ctx.fillStyle = CFG.UI_DIM;
+  ctx.font = '12px monospace';
+  ctx.fillText('tap to retry', W / 2, H / 2 + 50);
+}
+
+// ════════════════════════════════════════════════════════════
+//  GAME LOOP
+// ════════════════════════════════════════════════════════════
+let lastTs = 0;
+
+function loop(ts) {
+  const ms = Math.min(ts - lastTs, 50); // cap spike
+  const dt = ms / 16.67;
+  lastTs = ts;
+
+  if (state === STATE.PLAYING) {
+    updatePhysics(dt, ms);
+    updateCoins();
+    updateParticles(dt);
+    updateTrail();
+    updateShooters();
+    updateRockets(ms);
+    updateGliders();
+    updateGems();
+    updateMovingPlatforms(dt);
+    updateWind(ms);
+    updateStreaks();
+    checkMilestones();
+  }
+  render(ts);
+
+  requestAnimationFrame(loop);
+}
+
+initGame();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

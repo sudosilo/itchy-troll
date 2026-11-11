@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>TEXT BASED GAME</title>
+<meta name="theme-color" content="#f4efe2">
+<style>
+:root{
+  --paper:#f4efe2;
+  --paper2:#ebe4d2;
+  --ink:#26241f;
+  --dim:#7a7466;
+  --blue:#1f5fbf;
+  --blue2:#4d8ef0;
+  --green:#2e7d32;
+  --amber:#b26a00;
+  --red:#c62828;
+  --violet:#6a3fb5;
+  --line:#d6cdb6;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--paper);color:var(--ink)}
+body{font-family:"Courier New",ui-monospace,Menlo,Consolas,monospace;font-size:14px;display:flex;flex-direction:column;overflow:hidden}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,0.035) 0px,rgba(0,0,0,0.035) 1px,transparent 1px,transparent 3px);z-index:50}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:2px solid var(--blue);background:var(--paper)}
+.brand{font-weight:bold;letter-spacing:4px;font-size:18px;color:var(--blue);text-shadow:0 0 6px rgba(31,95,191,0.35)}
+.brand small{display:block;font-size:10px;letter-spacing:2px;color:var(--dim);text-shadow:none;font-weight:normal}
+#menuBtn{background:none;border:2px solid var(--ink);width:40px;height:36px;border-radius:4px;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:0 8px;cursor:pointer}
+#menuBtn span{display:block;height:2px;background:var(--ink)}
+#res{display:flex;flex-wrap:wrap;gap:6px 14px;padding:8px 14px;border-bottom:1px dashed var(--line);font-size:13px;background:var(--paper2)}
+#res b{font-weight:bold}
+.r-scrap b{color:var(--amber)}.r-wire b{color:var(--green)}.r-chip b{color:var(--violet)}.r-core b{color:var(--blue)}.r-cpu b{color:var(--ink)}
+.r-cpu.hot b{color:var(--red)}
+#phase{font-size:11px;letter-spacing:2px;color:var(--dim);padding:4px 14px;border-bottom:1px dashed var(--line)}
+#mapWrap{height:36vh;min-height:190px;border-bottom:2px solid var(--ink);background:var(--paper)}
+#map{display:block;width:100%;height:100%}
+#log{flex:1;overflow-y:auto;padding:10px 14px 16px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.l{margin-bottom:4px}
+.sys{color:var(--dim)}.you{color:var(--blue);font-weight:bold}.ok{color:var(--green)}.warn{color:var(--amber)}.bad{color:var(--red)}.ai{color:var(--violet)}.big{color:var(--blue);font-weight:bold;text-shadow:0 0 6px rgba(31,95,191,0.3)}
+.cursor{display:inline-block;width:8px;height:14px;background:var(--blue);vertical-align:-2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+#bar{display:flex;gap:6px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:var(--paper2)}
+#bar .prompt{align-self:center;color:var(--blue);font-weight:bold}
+#cmd{flex:1;min-width:0;font:inherit;font-size:16px;background:var(--paper);color:var(--ink);border:2px solid var(--ink);border-radius:4px;padding:8px}
+#cmd:focus{outline:none;border-color:var(--blue)}
+.btn{font:inherit;font-weight:bold;border:2px solid var(--ink);background:var(--paper);color:var(--ink);border-radius:4px;padding:0 12px;cursor:pointer}
+#hints{display:flex;gap:6px;overflow-x:auto;padding:8px 10px 0;background:var(--paper2);border-top:2px solid var(--ink);scrollbar-width:none}
+#hints::-webkit-scrollbar{display:none}
+#hints .label{align-self:center;font-size:11px;letter-spacing:2px;color:var(--dim);white-space:nowrap}
+.chip{font:inherit;font-size:13px;white-space:nowrap;border:2px solid var(--blue);color:var(--blue);background:var(--paper);border-radius:14px;padding:5px 11px;cursor:pointer}
+.chip:active{background:var(--blue);color:#fff}
+#send{background:var(--blue);color:#fff;border-color:var(--blue)}
+#drawer{position:fixed;top:0;right:0;bottom:0;width:min(330px,88vw);background:var(--paper);border-left:2px solid var(--ink);transform:translateX(105%);transition:transform .2s;z-index:60;padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto}
+#drawer.open{transform:none}
+#drawer h3{color:var(--blue);letter-spacing:3px;font-size:15px}
+#drawer label{font-size:12px;color:var(--dim)}
+#drawer input{font:inherit;font-size:15px;width:100%;padding:8px;border:2px solid var(--ink);border-radius:4px;background:var(--paper2);color:var(--ink)}
+#drawer .btn{padding:10px}
+#drawer p{font-size:12px;color:var(--dim);line-height:1.4}
+#veil{position:fixed;inset:0;background:rgba(38,36,31,0.25);display:none;z-index:55}
+#veil.open{display:block}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">TEXT BASED GAME<small>make it small. copy it. automate it.</small></div>
+  <button id="menuBtn" aria-label="menu"><span></span><span></span><span></span></button>
+</header>
+<div id="res"></div>
+<div id="phase"></div>
+<div id="mapWrap"><canvas id="map"></canvas></div>
+<div id="log"></div>
+<div id="hints"></div>
+<div id="bar">
+  <span class="prompt">&gt;</span>
+  <input id="cmd" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="tell your crew what to do">
+  <button class="btn" id="send">RUN</button>
+</div>
+<div id="veil"></div>
+<div id="drawer">
+  <h3>MILL SETTINGS</h3>
+  <button class="btn" id="helpBtn">SHOW COMMANDS</button>
+  <button class="btn" id="resetBtn" style="border-color:var(--red);color:var(--red)">WIPE THE MILL</button>
+  <p>text based game v1</p>
+</div>
+
+<script>
+(function(){
+"use strict";
+var SAVE_KEY = "text-based-game-v1-save";
+
+function store(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
+function load(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function unstore(k){ try{ localStorage.removeItem(k); }catch(e){} }
+
+var ORDER = ["grabber","smelter","etcher","assembler","checker","writer"];
+var TYPES = {
+  grabber:  {color:"#1f5fbf", inp:null,        out:"scrap", make:null,                fork:{scrap:5},          desc:"picks up scrap"},
+  smelter:  {color:"#2e7d32", inp:{scrap:2},   out:"wire",  make:{scrap:12},          fork:{scrap:9},          desc:"melts scrap into wire"},
+  etcher:   {color:"#6a3fb5", inp:{wire:2},    out:"chip",  make:{scrap:20,wire:10},  fork:{scrap:14,wire:4},  desc:"etches wire into chips"},
+  assembler:{color:"#b26a00", inp:{chip:3},    out:"core",  make:{wire:20,chip:8},    fork:{scrap:20,chip:4},  desc:"assembles chips into cores"},
+  checker:  {color:"#0f7c86", inp:null,        out:null,    make:{wire:15},           fork:{scrap:10,wire:3},  desc:"repairs corrupted copies"},
+  writer:   {color:"#26241f", inp:null,        out:null,    make:{core:25,chip:40},   fork:{core:10},          desc:"forks your weakest routine by itself"}
+};
+var RES = ["scrap","wire","chip","core"];
+
+function fresh(){
+  var r = {};
+  ORDER.forEach(function(t){ r[t] = {made:false, lvl:1, copies:0, bad:0, auto:false, carry:0, flash:0}; });
+  r.grabber.made = true; r.grabber.copies = 1;
+  return {
+    tick:0,
+    res:{scrap:0,wire:0,chip:0,core:0},
+    stats:{scrap:0,wire:0,chip:0,core:0},
+    unlock:{fork:false, auto:false, power:false, won:false},
+    r:r
+  };
+}
+
+var S = fresh();
+var saved = load(SAVE_KEY);
+if(saved){ try{ var p = JSON.parse(saved); if(p && p.r && p.res){ S = p; ORDER.forEach(function(t){ if(!S.r[t]) S.r[t] = fresh().r[t]; }); } }catch(e){} }
+function save(){ store(SAVE_KEY, JSON.stringify(S)); }
+
+/* ---------- log with typewriter ---------- */
+var logEl = document.getElementById("log");
+var queue = [];
+var typing = false;
+var cursor = document.createElement("span"); cursor.className = "cursor";
+function say(text, cls){ queue.push({text:text, cls:cls||"sys"}); if(!typing) pump(); }
+function pump(){
+  if(!queue.length){ typing = false; logEl.appendChild(cursor); return; }
+  typing = true;
+  var item = queue.shift();
+  var div = document.createElement("div");
+  div.className = "l " + item.cls;
+  logEl.appendChild(div);
+  logEl.appendChild(cursor);
+  var i = 0;
+  var step = Math.max(1, Math.ceil(item.text.length / 40));
+  (function go(){
+    i = Math.min(item.text.length, i + step);
+    div.textContent = item.text.slice(0, i);
+    logEl.appendChild(cursor);
+    logEl.scrollTop = logEl.scrollHeight;
+    if(i < item.text.length) setTimeout(go, 12); else setTimeout(pump, 40);
+  })();
+  var lines = logEl.querySelectorAll(".l");
+  if(lines.length > 220){ for(var k=0;k<lines.length-200;k++) lines[k].remove(); }
+}
+
+/* ---------- economy ---------- */
+function costOf(base, mult){
+  var c = {};
+  for(var k in base) c[k] = Math.ceil(base[k] * mult);
+  return c;
+}
+function canPay(c){ for(var k in c) if((S.res[k]||0) < c[k]) return false; return true; }
+function pay(c){ for(var k in c) S.res[k] -= c[k]; }
+function costText(c){ var a=[]; for(var k in c) a.push(c[k]+" "+k); return a.join(", "); }
+function forkCost(t, n){
+  var rt = S.r[t], total = {};
+  for(var i=0;i<n;i++){
+    var c = costOf(TYPES[t].fork, Math.pow(1.1, rt.copies + i));
+    for(var k in c) total[k] = (total[k]||0) + c[k];
+  }
+  return total;
+}
+function tuneCost(t){
+  var lvl = S.r[t].lvl, c = {scrap: 12*lvl};
+  if(lvl >= 3) c.chip = 2*lvl;
+  if(lvl >= 6) c.core = lvl - 4;
+  return c;
+}
+function computeCap(){ return 3 + 2*S.stats.core; }
+function computeUsed(){ var u=0; ORDER.forEach(function(t){ if(S.r[t].auto) u += S.r[t].copies; }); return u; }
+
+function produce(t, eff){
+  var rt = S.r[t], ty = TYPES[t];
+  var good = rt.copies - rt.bad;
+  if(good <= 0 || !ty.out) return 0;
+  var raw = good * rt.lvl * eff + rt.carry;
+  var units = Math.floor(raw);
+  rt.carry = raw - units;
+  if(ty.inp){
+    for(var k in ty.inp) units = Math.min(units, Math.floor(S.res[k] / ty.inp[k]));
+    for(var k2 in ty.inp) S.res[k2] -= units * ty.inp[k2];
+  }
+  if(units > 0){
+    S.res[ty.out] += units;
+    S.stats[ty.out] += units;
+    rt.flash = 1;
+  }
+  return units;
+}
+
+function corrupt(t){
+  var rt = S.r[t];
+  var good = rt.copies - rt.bad;
+  if(good < 2 || t === "checker") return;
+  var chk = S.r.checker.copies - S.r.checker.bad;
+  var p = 0.0025 * good / (1 + 0.6*chk);
+  if(Math.random() < p){
+    rt.bad++;
+    say("corruption: a "+t+" copy mutated and stopped producing. purge it or build checkers.", "bad");
+  }
+}
+
+function checkerWork(eff){
+  var rt = S.r.checker;
+  var good = rt.copies - rt.bad;
+  if(good <= 0) return;
+  var tries = Math.max(1, Math.floor(good * rt.lvl * eff));
+  for(var i=0;i<tries;i++){
+    if(Math.random() < 0.15){
+      var sick = ORDER.filter(function(t){ return S.r[t].bad > 0; });
+      if(!sick.length) return;
+      var t = sick[Math.floor(Math.random()*sick.length)];
+      S.r[t].bad--; rt.flash = 1;
+      say("checker repaired a "+t+" copy.", "ok");
+    }
+  }
+}
+
+function writerWork(eff){
+  var rt = S.r.writer;
+  var good = rt.copies - rt.bad;
+  if(good <= 0) return;
+  for(var i=0;i<good;i++){
+    if(Math.random() < 0.08*eff*rt.lvl && S.res.core >= 1){
+      var pool = ORDER.filter(function(t){ return t !== "writer" && S.r[t].made; });
+      pool.sort(function(a,b){ return S.r[a].copies - S.r[b].copies; });
+      var t = pool[0];
+      S.res.core -= 1;
+      S.r[t].copies++;
+      rt.flash = 1;
+      say("the writer forked a "+t+" on its own.", "ai");
+    }
+  }
+}
+
+function checkUnlocks(){
+  if(!S.unlock.fork && S.stats.scrap >= 15){
+    S.unlock.fork = true;
+    say("UNLOCK: REPLICATION. you can now fork routines into copies. try: fork grabber 3", "big");
+  }
+  if(!S.unlock.auto && S.stats.wire >= 10){
+    S.unlock.auto = true;
+    say("UNLOCK: AUTOMATION. routines can now run on their own. try: automate grabber", "big");
+  }
+  if(!S.unlock.power && S.stats.core >= 1){
+    S.unlock.power = true;
+    say("UNLOCK: POWER. every core you assemble adds compute for more automation. a writer routine is now possible.", "big");
+  }
+  if(!S.unlock.won && S.stats.core >= 100){
+    S.unlock.won = true;
+    say("THE MILL RUNS ITSELF. one hundred cores assembled. what started as a single grabber is now a machine that builds machines.", "big");
+  }
+}
+
+/* ---------- tick ---------- */
+function tick(){
+  S.tick++;
+  var cap = computeCap(), used = computeUsed();
+  var eff = used > cap ? cap/used : 1;
+  ORDER.forEach(function(t){
+    var rt = S.r[t];
+    if(!rt.auto) return;
+    if(t === "checker") checkerWork(eff);
+    else if(t === "writer") writerWork(eff);
+    else produce(t, eff);
+    corrupt(t);
+  });
+  checkUnlocks();
+  renderRes();
+  if(S.tick % 5 === 0) save();
+}
+setInterval(tick, 1000);
+
+/* ---------- commands ---------- */
+function need(t){
+  if(!t){ say("which routine? grabber, smelter, etcher, assembler, checker or writer.", "warn"); return false; }
+  if(!TYPES[t]){ say("no routine called "+t+".", "warn"); return false; }
+  return true;
+}
+
+function doAction(a){
+  var v = a.verb, t = a.type, n = Math.max(1, Math.min(50, parseInt(a.n,10) || 1));
+  if(t && TYPES[t]) walkTo(t);
+  if(v === "help") return help();
+  if(v === "scan") return scan();
+  if(v === "make"){
+    if(!need(t)) return;
+    var rt = S.r[t];
+    if(rt.made){ say(t+" is already written. fork it to make copies.", "warn"); return; }
+    if((t === "assembler" || t === "checker") && !S.unlock.fork){ say("replicate something first.", "warn"); return; }
+    if(t === "writer" && !S.unlock.power){ say("the writer needs power. assemble a core first.", "warn"); return; }
+    var c = TYPES[t].make;
+    if(!canPay(c)){ say("writing a "+t+" costs "+costText(c)+".", "warn"); return; }
+    pay(c); rt.made = true; rt.copies = 1; rt.flash = 1;
+    say("wrote a new routine: "+t+". it "+TYPES[t].desc+".", "ok");
+    return;
+  }
+  if(!need(t)) return;
+  var r = S.r[t];
+  if(!r.made){ say("you have no "+t+" yet. try: make "+t, "warn"); return; }
+  if(v === "run"){
+    var times = Math.min(n, 20), got = 0;
+    for(var i=0;i<times;i++){
+      if(t === "checker") checkerWork(1);
+      else if(t === "writer") writerWork(1);
+      else got += produce(t, 1);
+      corrupt(t);
+    }
+    if(TYPES[t].out){
+      if(got > 0) say(t+" ran"+(times>1?" "+times+" times":"")+" and made "+got+" "+TYPES[t].out+".", "ok");
+      else say(t+" ran but had nothing to work with.", "warn");
+    } else say(t+" ran.", "ok");
+    checkUnlocks();
+    return;
+  }
+  if(v === "fork"){
+    if(!S.unlock.fork){ say("replication is locked. gather more scrap first.", "warn"); return; }
+    var fc = forkCost(t, n);
+    if(!canPay(fc)){
+      var afford = 0;
+      while(afford < n && canPay(forkCost(t, afford+1))) afford++;
+      if(afford === 0){ say("one more "+t+" costs "+costText(forkCost(t,1))+".", "warn"); return; }
+      n = afford; fc = forkCost(t, n);
+      say("could only afford "+n+".", "warn");
+    }
+    pay(fc); r.copies += n; r.flash = 1;
+    say("forked "+n+" "+t+(n>1?"s":"")+". "+r.copies+" running copies.", "ok");
+    return;
+  }
+  if(v === "tune"){
+    if(r.lvl >= 9){ say(t+" is fully tuned.", "warn"); return; }
+    var tc = tuneCost(t);
+    if(!canPay(tc)){ say("tuning "+t+" costs "+costText(tc)+".", "warn"); return; }
+    pay(tc); r.lvl++; r.flash = 1;
+    say(t+" tuned to level "+r.lvl+". every copy works harder.", "ok");
+    return;
+  }
+  if(v === "automate"){
+    if(!S.unlock.auto){ say("automation is locked. make wire first.", "warn"); return; }
+    if(r.auto){ say(t+" is already automated.", "warn"); return; }
+    r.auto = true; r.flash = 1;
+    var used = computeUsed(), cap = computeCap();
+    say(t+" now runs on its own."+(used > cap ? " compute is over capacity, everything throttles." : ""), used > cap ? "warn" : "ok");
+    return;
+  }
+  if(v === "halt"){
+    if(!r.auto){ say(t+" was not automated.", "warn"); return; }
+    r.auto = false; say(t+" halted.", "sys"); return;
+  }
+  if(v === "purge"){
+    if(!r.bad){ say("no corrupted "+t+" copies.", "sys"); return; }
+    var b = r.bad; r.copies -= b; r.bad = 0;
+    say("purged "+b+" corrupted "+t+(b>1?"s":"")+".", "ok");
+    return;
+  }
+  say("the mill does not know how to "+v+".", "warn");
+}
+
+function help(){
+  say("COMMANDS. make, fork, tune, run, automate, halt, purge, scan. say them any way you like, for example: grab some scrap. copy the grabber five times. make a smelter. automate everything.", "sys");
+  say("ROUTINES. grabber makes scrap. smelter turns scrap into wire. etcher turns wire into chips. assembler turns chips into cores. checker repairs corruption. writer forks things by itself.", "sys");
+}
+function scan(){
+  var lines = ORDER.filter(function(t){ return S.r[t].made; }).map(function(t){
+    var r = S.r[t];
+    return t+": "+r.copies+" copies, level "+r.lvl+(r.bad?", "+r.bad+" corrupted":"")+(r.auto?", automated":", manual");
+  });
+  say("SCAN. "+lines.join(". ")+". compute "+computeUsed()+" of "+computeCap()+".", "sys");
+}
+
+/* ---------- local parser ---------- */
+var NUMS = {one:1,a:1,an:1,single:1,two:2,couple:2,three:3,few:3,four:4,five:5,bunch:5,six:6,seven:7,eight:8,nine:9,ten:10,lot:10,eleven:11,twelve:12,dozen:12,fifteen:15,twenty:20,ton:20,thirty:30,forty:40,fifty:50};
+var TYPE_WORDS = [
+  ["checker",["checker","checkers","guard","antivirus","repairer","fixer","medic"]],
+  ["writer",["writer","writers","self writer","autowriter","author"]],
+  ["assembler",["assembler","assemblers","assemble","core","cores"]],
+  ["etcher",["etcher","etchers","etch","chip","chips"]],
+  ["smelter",["smelter","smelters","smelt","furnace","wire","wires"]],
+  ["grabber",["grabber","grabbers","grab","miner","miners","gatherer","scrap","collector","picker","bot","bots"]]
+];
+var VERB_WORDS = [
+  ["help",["help","commands"]],
+  ["purge",["purge","clean","remove bad","delete bad","fix","repair corrupt"]],
+  ["halt",["halt","stop","pause","kill","turn off"]],
+  ["tune",["tune","upgrade","improve","boost","faster","speed","level up","stronger"]],
+  ["automate",["automate","automatic","auto","on its own","by itself","forever","loop"]],
+  ["fork",["fork","copy","copies","clone","replicate","duplicate","multiply","more"]],
+  ["make",["make","build","write","create","code","new","program"]],
+  ["scan",["scan","status","inventory","look","report","how am i","what do i have"]],
+  ["run",["run","go","grab","gather","collect","execute","work","smelt","etch","assemble","do"]]
+];
+function hasWord(s, w){ return new RegExp("(^|\\s)"+w.replace(/ /g,"\\s+")+"($|\\s)").test(s); }
+function findIn(s, table){ for(var i=0;i<table.length;i++){ for(var j=0;j<table[i][1].length;j++){ if(hasWord(s, table[i][1][j])) return table[i][0]; } } return null; }
+function findNum(s){
+  var m = s.match(/\b(\d+)\b/); if(m) return parseInt(m[1],10);
+  var words = s.split(/\s+/);
+  for(var i=0;i<words.length;i++) if(NUMS[words[i]] && words[i] !== "a" && words[i] !== "an") return NUMS[words[i]];
+  return null;
+}
+function parseLocal(text){
+  var s = text.toLowerCase().replace(/[^a-z0-9 ,]/g," ");
+  var parts = s.split(/\s*(?:,|\band then\b|\bthen\b|\band\b|\balso\b)\s*/).filter(function(x){ return x.trim(); });
+  var out = [], lastType = null;
+  parts.forEach(function(p){
+    p = " "+p.trim()+" ";
+    var all = /\b(all|everything|every)\b/.test(p);
+    var verb = findIn(p, VERB_WORDS);
+    var type = findIn(p, TYPE_WORDS);
+    if(verb === "make" && hasWord(p, "more")) verb = "fork";
+    if(verb === "make" && (hasWord(p,"faster") || hasWord(p,"better"))) verb = "tune";
+    if(!verb && type) verb = "run";
+    if(!verb) return;
+    var n = findNum(p);
+    if(all && (verb === "automate" || verb === "halt" || verb === "purge" || verb === "tune")){
+      ORDER.forEach(function(t){ if(S.r[t].made) out.push({verb:verb, type:t, n:1}); });
+      return;
+    }
+    if(!type) type = lastType;
+    if(type) lastType = type;
+    out.push({verb:verb, type:type, n:n||1});
+  });
+  return out;
+}
+
+/* ---------- AI engine ---------- */
+function engineUrl(){ return "/api/text-based-game-v1-turn"; }
+function snapshot(){
+  var r = {};
+  ORDER.forEach(function(t){ var x = S.r[t]; if(x.made) r[t] = {copies:x.copies, lvl:x.lvl, bad:x.bad, auto:x.auto}; });
+  return {res:S.res, routines:r, unlocked:{fork:S.unlock.fork, automate:S.unlock.auto, writer:S.unlock.power}, compute:{used:computeUsed(), cap:computeCap()}};
+}
+function askEngine(text){
+  var url = engineUrl();
+  if(!url) return Promise.reject(new Error("no engine"));
+  var ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  var timer = setTimeout(function(){ if(ctl) ctl.abort(); }, 15000);
+  return fetch(url, {
+    method:"POST",
+    headers:{"content-type":"application/json"},
+    body:JSON.stringify({text:text, state:snapshot()}),
+    signal: ctl ? ctl.signal : undefined
+  }).then(function(res){
+    clearTimeout(timer);
+    if(!res.ok) throw new Error("engine "+res.status);
+    return res.json();
+  });
+}
+
+var busy = false;
+function submit(text){
+  text = (text || "").trim();
+  if(!text || busy) return;
+  say("> "+text, "you");
+  if(engineUrl()){
+    busy = true;
+    say("the mill is listening...", "sys");
+    askEngine(text).then(function(d){
+      busy = false;
+      if(d && d.say) say(d.say, "ai");
+      var acts = (d && Array.isArray(d.actions)) ? d.actions : [];
+      if(!acts.length && !(d && d.say)) runLocal(text);
+      acts.forEach(doAction);
+      after();
+    }).catch(function(){
+      busy = false;
+      runLocal(text); after();
+    });
+  } else { runLocal(text); after(); }
+}
+function runLocal(text){
+  var acts = parseLocal(text);
+  if(!acts.length){ say("the mill did not catch that. say help for commands.", "warn"); return; }
+  acts.forEach(doAction);
+}
+function after(){ renderRes(); save(); }
+
+/* ---------- resources and phase ---------- */
+var resEl = document.getElementById("res");
+var phaseEl = document.getElementById("phase");
+function renderRes(){
+  var used = computeUsed(), cap = computeCap();
+  resEl.innerHTML =
+    '<span class="r-scrap">scrap <b>'+S.res.scrap+'</b></span>'+
+    '<span class="r-wire">wire <b>'+S.res.wire+'</b></span>'+
+    '<span class="r-chip">chip <b>'+S.res.chip+'</b></span>'+
+    '<span class="r-core">core <b>'+S.res.core+'</b></span>'+
+    '<span class="r-cpu'+(used>cap?' hot':'')+'">compute <b>'+used+'/'+cap+'</b></span>';
+  var ph = "PHASE: SMALL";
+  if(S.unlock.fork) ph = "PHASE: REPLICATE";
+  if(S.unlock.auto) ph = "PHASE: AUTOMATE";
+  if(S.unlock.power) ph = "PHASE: POWER";
+  if(S.unlock.won) ph = "PHASE: SELF RUNNING";
+  phaseEl.textContent = ph + "   |   NEXT: " + goal();
+  renderHints();
+}
+function goal(){
+  if(!S.unlock.fork) return "gather "+Math.max(0, 15 - S.stats.scrap)+" more scrap to unlock copying";
+  if(!S.r.smelter.made) return "make a smelter, it costs 12 scrap";
+  if(!S.unlock.auto) return "make "+Math.max(0, 10 - S.stats.wire)+" more wire to unlock automation";
+  if(!S.r.etcher.made) return "make an etcher to turn wire into chips";
+  if(!S.r.assembler.made) return "make an assembler to turn chips into cores";
+  if(!S.unlock.power) return "assemble your first core";
+  if(!S.unlock.won) return "assemble "+(100 - S.stats.core)+" more cores";
+  return "the workshop runs itself";
+}
+
+/* ---------- suggestions ---------- */
+var hintsEl = document.getElementById("hints");
+var lastHints = "";
+function hintList(){
+  var h = [], r = S.r;
+  var bad = ORDER.filter(function(t){ return r[t].bad > 0; });
+  if(bad.length) h.push("purge corrupted "+bad[0]+"s");
+  if(!S.unlock.fork){ h.push("grab some scrap"); h.push("run the grabber 10 times"); }
+  else {
+    if(S.res.scrap < 20) h.push(r.grabber.auto ? "scan" : "run the grabber 10 times");
+    if(r.grabber.copies < 4) h.push("fork the grabber 3 times");
+    if(!r.smelter.made) h.push("make a smelter");
+    else if(!S.unlock.auto) h.push("run the smelter 5 times");
+    if(S.unlock.auto){
+      var manual = ORDER.filter(function(t){ return r[t].made && !r[t].auto && t !== "writer"; });
+      if(manual.length) h.push("automate the "+manual[0]);
+      if(!r.etcher.made) h.push("make an etcher");
+      else if(!r.assembler.made) h.push("make an assembler");
+      else h.push("fork the "+["grabber","smelter","etcher","assembler"].sort(function(a,b){ return r[a].copies - r[b].copies; })[0]+" 2 times");
+      if(bad.length && !r.checker.made) h.push("make a checker");
+    }
+    if(S.unlock.power && !r.writer.made) h.push("make a writer");
+    if(computeUsed() > computeCap()) h.push("halt the grabber");
+  }
+  if(h.indexOf("scan") < 0) h.push("scan");
+  h.push("help");
+  return h.slice(0, 5);
+}
+function renderHints(){
+  var list = hintList();
+  var key = list.join("|");
+  if(key === lastHints) return;
+  lastHints = key;
+  hintsEl.innerHTML = '<span class="label">TRY</span>';
+  list.forEach(function(txt){
+    var b = document.createElement("button");
+    b.className = "chip"; b.textContent = txt;
+    b.onclick = function(){ submit(txt); };
+    hintsEl.appendChild(b);
+  });
+}
+
+/* ---------- tabletop board ---------- */
+var cv = document.getElementById("map");
+var cx = cv.getContext("2d");
+var wrap = document.getElementById("mapWrap");
+var SPOTS = {grabber:[0,0], smelter:[1,0], etcher:[2,0], assembler:[2,1], checker:[1,1], writer:[0,1]};
+var hero = {x:-1, y:-1, tx:-1, ty:-1, target:null};
+var walkers = {};
+function stationXY(t, W, H){
+  var m = 14, iw = W - m*2, ih = H - m*2;
+  var sp = SPOTS[t];
+  return {x: m + iw*(sp[0]*2+1)/6, y: m + ih*(sp[1]*2+1)/4};
+}
+function walkTo(t){ hero.target = t; }
+function shade(hex, k){
+  var n = parseInt(hex.slice(1),16), r = n>>16, g = (n>>8)&255, b = n&255;
+  r = Math.round(r + (255-r)*k); g = Math.round(g + (255-g)*k); b = Math.round(b + (255-b)*k);
+  return "rgb("+r+","+g+","+b+")";
+}
+function mini(x, y, col, size, bad, hat){
+  cx.fillStyle = "rgba(38,36,31,0.22)";
+  cx.beginPath(); cx.ellipse(x+1.5, y+2.5, size, size*0.8, 0, 0, Math.PI*2); cx.fill();
+  cx.fillStyle = "#26241f";
+  cx.beginPath(); cx.arc(x, y, size, 0, Math.PI*2); cx.fill();
+  cx.fillStyle = bad ? "#c62828" : col;
+  cx.beginPath(); cx.arc(x, y, size*0.78, 0, Math.PI*2); cx.fill();
+  cx.fillStyle = bad ? "#f4c0c0" : shade(col, 0.55);
+  cx.beginPath(); cx.arc(x, y - size*0.12, size*0.38, 0, Math.PI*2); cx.fill();
+  if(hat){
+    cx.fillStyle = "#f4efe2";
+    cx.beginPath();
+    for(var i=0;i<5;i++){
+      var a1 = -Math.PI/2 + i*Math.PI*2/5, a2 = a1 + Math.PI/5;
+      cx.lineTo(x + Math.cos(a1)*size*0.42, y - size*0.12 + Math.sin(a1)*size*0.42);
+      cx.lineTo(x + Math.cos(a2)*size*0.18, y - size*0.12 + Math.sin(a2)*size*0.18);
+    }
+    cx.closePath(); cx.fill();
+  }
+  if(bad){
+    cx.strokeStyle = "#f4efe2"; cx.lineWidth = 1.5;
+    cx.beginPath(); cx.moveTo(x-3,y-3); cx.lineTo(x+3,y+3); cx.moveTo(x+3,y-3); cx.lineTo(x-3,y+3); cx.stroke();
+  }
+}
+function draw(ts){
+  var dpr = window.devicePixelRatio || 1;
+  var W = wrap.clientWidth, H = wrap.clientHeight;
+  if(cv.width !== Math.round(W*dpr) || cv.height !== Math.round(H*dpr)){
+    cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr);
+  }
+  cx.setTransform(dpr,0,0,dpr,0,0);
+  var t = ts/1000;
+
+  // table and floor tiles
+  cx.fillStyle = "#d9cfb6"; cx.fillRect(0,0,W,H);
+  var m = 8, tile = 22;
+  cx.fillStyle = "#efe7d3"; cx.fillRect(m, m, W-m*2, H-m*2);
+  cx.strokeStyle = "rgba(38,36,31,0.13)"; cx.lineWidth = 1;
+  for(var gx=m; gx<=W-m; gx+=tile){ cx.beginPath(); cx.moveTo(gx+0.5,m); cx.lineTo(gx+0.5,H-m); cx.stroke(); }
+  for(var gy=m; gy<=H-m; gy+=tile){ cx.beginPath(); cx.moveTo(m,gy+0.5); cx.lineTo(W-m,gy+0.5); cx.stroke(); }
+  cx.strokeStyle = "#26241f"; cx.lineWidth = 3;
+  cx.strokeRect(m+1.5, m+1.5, W-m*2-3, H-m*2-3);
+  // doorway
+  cx.fillStyle = "#efe7d3"; cx.fillRect(W/2-14, H-m-3, 28, 4);
+
+  // stations and their crews
+  ORDER.forEach(function(name){
+    var r = S.r[name], ty = TYPES[name], p = stationXY(name, W, H);
+    if(!r.made){
+      cx.setLineDash([4,4]); cx.strokeStyle = "rgba(38,36,31,0.18)"; cx.lineWidth = 1.5;
+      cx.strokeRect(p.x-16, p.y-12, 32, 24); cx.setLineDash([]);
+      return;
+    }
+    // workbench
+    cx.fillStyle = "rgba(38,36,31,0.18)"; cx.fillRect(p.x-15, p.y-9, 32, 22);
+    cx.fillStyle = r.flash > 0 ? shade(ty.color, 0.35 - 0.2*r.flash) : shade(ty.color, 0.7);
+    cx.fillRect(p.x-17, p.y-11, 32, 22);
+    cx.strokeStyle = r.auto ? "#1f5fbf" : "#26241f"; cx.lineWidth = r.auto ? 2.5 : 1.5;
+    cx.strokeRect(p.x-17, p.y-11, 32, 22);
+    // output pile beside the bench
+    if(ty.out){
+      var pile = Math.min(9, Math.ceil(Math.sqrt(S.res[ty.out] || 0)));
+      for(var k=0;k<pile;k++){
+        cx.fillStyle = ty.color;
+        cx.fillRect(p.x+18 + (k%3)*5, p.y+6 - Math.floor(k/3)*5, 4, 4);
+      }
+    }
+    cx.fillStyle = "#26241f"; cx.font = "bold 10px Courier New, monospace"; cx.textAlign = "center";
+    cx.fillText(name.toUpperCase()+(r.lvl>1?" "+r.lvl:""), p.x, p.y + 42);
+    cx.textAlign = "left";
+    r.flash = Math.max(0, r.flash - 0.03);
+
+    // the crew: one miniature per copy, standing around the bench
+    var show = Math.min(r.copies, 10);
+    var spin = r.auto ? t*0.6 : 0;
+    for(var i=0;i<show;i++){
+      var ang = spin + i*(Math.PI*2/Math.max(show,1)) - Math.PI/2;
+      var rad = 25 + (i%2)*5;
+      var lean = r.flash * 5;
+      var fx = p.x + Math.cos(ang)*(rad - lean);
+      var fy = p.y + Math.sin(ang)*(rad*0.72 - lean);
+      var isBad = i >= show - Math.min(r.bad, show);
+      if(isBad) fx += Math.sin(t*22+i)*1.2;
+      mini(fx, fy, ty.color, 5.5, isBad, false);
+    }
+    if(r.copies > show){
+      cx.fillStyle = "#1f5fbf"; cx.font = "bold 10px Courier New, monospace";
+      cx.fillText("+"+(r.copies-show), p.x+19, p.y-13);
+    }
+  });
+
+  // the player miniature walks to whatever routine was just ordered
+  var home = {x: W/2, y: H - m - 14};
+  var goalP = hero.target ? stationXY(hero.target, W, H) : home;
+  if(hero.target){ goalP = {x: goalP.x - 22, y: goalP.y - 4}; }
+  if(hero.x < 0){ hero.x = home.x; hero.y = home.y; }
+  var dx = goalP.x - hero.x, dy = goalP.y - hero.y, d = Math.sqrt(dx*dx+dy*dy);
+  var stepLen = 2.2;
+  if(d > stepLen){ hero.x += dx/d*stepLen; hero.y += dy/d*stepLen; }
+  var hop = d > stepLen ? Math.abs(Math.sin(t*12))*2 : 0;
+  mini(hero.x, hero.y - hop, "#1f5fbf", 8, false, true);
+
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+/* ---------- input ---------- */
+var cmd = document.getElementById("cmd");
+document.getElementById("send").onclick = function(){ submit(cmd.value); cmd.value = ""; };
+cmd.addEventListener("keydown", function(e){ if(e.key === "Enter"){ submit(cmd.value); cmd.value = ""; } });
+
+/* ---------- drawer ---------- */
+var drawer = document.getElementById("drawer"), veil = document.getElementById("veil");
+function openDrawer(o){ drawer.classList.toggle("open", o); veil.classList.toggle("open", o); }
+document.getElementById("menuBtn").onclick = function(){ openDrawer(true); };
+veil.onclick = function(){ openDrawer(false); };
+document.getElementById("helpBtn").onclick = function(){ openDrawer(false); help(); };
+document.getElementById("resetBtn").onclick = function(){
+  if(!confirm("Wipe the whole mill and start from one grabber?")) return;
+  S = fresh(); save(); logEl.innerHTML = ""; openDrawer(false); intro(); renderRes();
+};
+
+/* ---------- start ---------- */
+function intro(){
+  say("TEXT BASED GAME v1. one routine. one cursor. a pile of scrap.", "big");
+  say("you stand in an empty workshop with a single grabber. it picks up scrap when you tell it to.", "sys");
+  say("type an order in your own words, or tap one of the suggestions above the box. start with: grab some scrap.", "sys");
+}
+renderRes();
+if(saved){ say("mill restored. say scan to see where you left it.", "big"); } else intro();
+})();
+</script>
+</body>
+</html>

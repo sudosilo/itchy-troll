@@ -1,0 +1,3 @@
+City Seek changelog
+
+2026-11-10, v2026.11.10. Created City Seek, a huge zoomable city that is built fresh each time, with hidden items to find. Version three added a city builder with see through interiors, sandboxes, and towers, plus a tower floor view and an x-ray zoom. Ten of every hidden item are spread across the city, and tray cards count the copies you have found. Added swinging outside doors, flying birds, a Bluebird hunt, tap reactions, word bubbles, and synth sound effects with a sound toggle. Added office props, sports fields, basketball courts, traffic cones, and eighteen new hidden items.

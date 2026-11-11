@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Outline</title>
+<style>
+  /* [ORANGE EDIT] light/warm theme per standing preference, readable in sunlight */
+  :root {
+    --bg: #f4efe6;
+    --panel: #fffdf8;
+    --ink: #2b2620;
+    --muted: #8a7f70;
+    --line: #e3dac8;
+    --accent: #c8541f;
+    --accent-soft: #f0d9c8;
+    --done: #4a7a3a;
+    --done-soft: #dde9d4;
+    --shadow: 0 2px 0 #e3dac8, 0 8px 24px rgba(80,60,30,0.08);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font-family: ui-rounded, "Hoefler Text", Georgia, serif;
+    line-height: 1.45;
+    padding: 16px 14px 60px;
+    max-width: 640px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 26px;
+    letter-spacing: -0.5px;
+    margin: 4px 0 2px;
+    font-weight: 800;
+  }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 16px; }
+
+  /* day strip */
+  .strip {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 4px 2px 10px;
+    margin-bottom: 8px;
+    scrollbar-width: none;
+  }
+  .strip::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: 0 0 auto;
+    min-width: 46px;
+    text-align: center;
+    padding: 7px 8px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--panel);
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--muted);
+    transition: transform 0.08s ease;
+  }
+  .chip:active { transform: scale(0.94); }
+  .chip .dow { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .chip .dnum { display: block; font-size: 16px; font-weight: 700; color: var(--ink); }
+  .chip.active { background: var(--accent); border-color: var(--accent); }
+  .chip.active .dnum, .chip.active .dow { color: #fff; }
+  .chip .pips { display: block; height: 4px; margin-top: 3px; }
+  .chip .pips span {
+    display: inline-block; width: 4px; height: 4px; border-radius: 50%;
+    background: var(--line); margin: 0 1px;
+  }
+  .chip .pips span.on { background: var(--done); }
+  .chip.active .pips span { background: rgba(255,255,255,0.4); }
+  .chip.active .pips span.on { background: #fff; }
+
+  .datehead {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin: 6px 2px 14px;
+  }
+  .datehead .big { font-size: 19px; font-weight: 800; }
+  .datehead .prog { font-size: 13px; color: var(--muted); }
+
+  /* point cards */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 14px 14px 12px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow);
+  }
+  .card.done { background: var(--done-soft); border-color: #cfe0c4; }
+  .cardtop { display: flex; align-items: flex-start; gap: 10px; }
+  .num {
+    flex: 0 0 auto;
+    width: 26px; height: 26px;
+    border-radius: 8px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 800; font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 1px;
+  }
+  .card.done .num { background: var(--done); color: #fff; }
+  .titles { flex: 1 1 auto; }
+  .ptitle { font-weight: 800; font-size: 15px; }
+  .phint { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+  .toggle {
+    flex: 0 0 auto;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    background: #fff;
+    cursor: pointer;
+    font-size: 16px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    color: transparent;
+    transition: transform 0.08s ease;
+  }
+  .toggle:active { transform: scale(0.9); }
+  .card.done .toggle { background: var(--done); border-color: var(--done); color: #fff; }
+  textarea {
+    width: 100%;
+    margin-top: 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 9px 10px;
+    font-family: inherit;
+    font-size: 14.5px;
+    color: var(--ink);
+    background: #fffefb;
+    resize: vertical;
+    min-height: 54px;
+  }
+  textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+
+  .seglbl {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--accent);
+    margin: 10px 2px 0;
+  }
+  .seglbl + textarea { margin-top: 4px; min-height: 40px; }
+
+  .calcard { border-left: 4px solid var(--done); }
+  .calrow { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14.5px; }
+  .calrow:first-of-type { border-top: none; }
+  .caltime { flex: 0 0 46px; color: var(--muted); font-size: 12.5px; padding-top: 2px; }
+  .calnote { color: var(--muted); font-size: 12.5px; margin-top: 2px; white-space: pre-wrap; }
+  .calempty { color: var(--muted); font-size: 13.5px; margin-top: 8px; }
+  .chip .calmark { display: block; font-size: 9px; color: var(--done); font-weight: 800; height: 11px; }
+  .chip.active .calmark { color: #fff; }
+  .savednote { text-align: center; color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .acct {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 10px 12px; margin-bottom: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    font-size: 13.5px;
+  }
+  .acct input {
+    flex: 1 1 160px; min-width: 0; border: 1px solid var(--line); border-radius: 10px;
+    padding: 9px 10px; font-family: inherit; font-size: 14.5px; background: #fffefb; color: var(--ink);
+  }
+  .acct .who { flex: 1 1 auto; color: var(--muted); }
+  .acct .btn { flex: 0 0 auto; padding: 9px 12px; }
+  .footer-actions { display: flex; gap: 8px; margin-top: 14px; }
+  .btn {
+    flex: 1 1 0;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .btn.danger { color: var(--accent); }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+  <h1>Daily Outline</h1>
+  <p class="sub">One ambitious goal a day. Documented.</p>
+  <div class="acct" id="acct"></div>
+
+  <div class="strip" id="strip"></div>
+
+  <div class="datehead">
+    <span class="big" id="dateBig"></span>
+    <span class="prog" id="prog"></span>
+  </div>
+
+  <div id="calcard"></div>
+  <div id="cards"></div>
+
+  <div class="footer-actions">
+    <button class="btn" id="copyBtn">Copy text</button>
+    <button class="btn" id="dlBtn">Download .txt</button>
+  </div>
+  <div class="footer-actions">
+    <button class="btn" id="todayBtn">Jump to today</button>
+    <button class="btn danger" id="clearBtn">Clear this day</button>
+  </div>
+  <p class="savednote" id="saved">Saved locally on this device.</p>
+
+<script>
+// [ORANGE EDIT] five-point template, merge-ready field keys mapping to future modules
+var POINTS = [
+  { key: "goal",    title: "The Goal",      hint: "State the day's ambitious goal before you start. Name what it would normally take." },
+  { key: "life",    title: "The Context",   hint: "The ordinary life happening alongside it. The parallel load." },
+  { key: "build",   title: "The Log",       hint: "Update through the day. Coding, notes, planning, dead ends. It all counts.", segments: ["Morning", "Midday", "Afternoon", "Evening"] },
+  { key: "track",   title: "Make a Song & Name It", hint: "Close the day by making one piece of music. Give it a name." },
+  { key: "insight", title: "The Insight",   hint: "Not what you made. The move that made it possible." }
+];
+
+var STORE_KEY = "dailyOutline.v1";
+var DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+function loadAll() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+  catch (e) { return {}; }
+}
+function saveAll(data) {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); }
+  catch (e) {}
+}
+function isoDay(d) {
+  return d.getFullYear() + "-" +
+    String(d.getMonth() + 1).padStart(2, "0") + "-" +
+    String(d.getDate()).padStart(2, "0");
+}
+function dayEntry(data, key) {
+  if (!data[key]) data[key] = { fields: {}, done: {} };
+  if (!data[key].fields) data[key].fields = {};
+  if (!data[key].done) data[key].done = {};
+  return data[key];
+}
+
+var data = loadAll();
+var today = new Date();
+var selected = isoDay(today);
+
+function doneCount(key) {
+  var e = data[key];
+  if (!e || !e.done) return 0;
+  var n = 0;
+  POINTS.forEach(function (p) { if (e.done[p.key]) n++; });
+  return n;
+}
+
+function buildStrip() {
+  var strip = document.getElementById("strip");
+  strip.innerHTML = "";
+  // 14-day strip ending today
+  for (var i = 13; i >= 0; i--) {
+    var d = new Date(today);
+    d.setDate(today.getDate() - i);
+    var key = isoDay(d);
+    var chip = document.createElement("div");
+    chip.className = "chip" + (key === selected ? " active" : "");
+    var pips = "";
+    var dc = doneCount(key);
+    for (var j = 0; j < 5; j++) {
+      pips += '<span class="' + (j < dc ? "on" : "") + '"></span>';
+    }
+    chip.innerHTML =
+      '<span class="dow">' + DOW[d.getDay()] + '</span>' +
+      '<span class="dnum">' + d.getDate() + '</span>' +
+      '<span class="pips">' + pips + '</span>' +
+      '<span class="calmark">' + ((cal.byDate[key] || []).length ? (cal.byDate[key].length + " cal") : "") + '</span>';
+    (function (k) { chip.onclick = function () { selected = k; render(); }; })(key);
+    strip.appendChild(chip);
+  }
+  // keep active chip in view
+  var act = strip.querySelector(".chip.active");
+  if (act) act.scrollIntoView({ inline: "center", block: "nearest" });
+}
+
+function buildCards() {
+  var wrap = document.getElementById("cards");
+  wrap.innerHTML = "";
+  var entry = dayEntry(data, selected);
+  POINTS.forEach(function (p, idx) {
+    var isDone = !!entry.done[p.key];
+    var card = document.createElement("div");
+    card.className = "card" + (isDone ? " done" : "");
+
+    var top = document.createElement("div");
+    top.className = "cardtop";
+    top.innerHTML =
+      '<div class="num">' + (idx + 1) + '</div>' +
+      '<div class="titles"><div class="ptitle">' + p.title + '</div>' +
+      '<div class="phint">' + p.hint + '</div></div>';
+
+    var toggle = document.createElement("button");
+    toggle.className = "toggle";
+    toggle.textContent = "\u2713";
+    toggle.onclick = function () {
+      entry.done[p.key] = !entry.done[p.key];
+      markDirty(selected);
+      saveAll(data);
+      render();
+    };
+    top.appendChild(toggle);
+    card.appendChild(top);
+
+    if (p.segments) {
+      // [ORANGE EDIT] multi-segment log: one labeled box per part of day
+      p.segments.forEach(function (segName) {
+        var fieldKey = p.key + "_" + segName.toLowerCase();
+        var lbl = document.createElement("div");
+        lbl.className = "seglbl";
+        lbl.textContent = segName;
+        card.appendChild(lbl);
+        var sta = document.createElement("textarea");
+        sta.value = entry.fields[fieldKey] || "";
+        sta.placeholder = "What happened...";
+        sta.oninput = function () {
+          entry.fields[fieldKey] = sta.value;
+          markDirty(selected);
+          saveAll(data);
+        };
+        card.appendChild(sta);
+      });
+    } else {
+      var ta = document.createElement("textarea");
+      ta.value = entry.fields[p.key] || "";
+      ta.placeholder = "Write here...";
+      ta.oninput = function () {
+        entry.fields[p.key] = ta.value;
+        markDirty(selected);
+        saveAll(data);
+      };
+      card.appendChild(ta);
+    }
+    wrap.appendChild(card);
+  });
+}
+
+function updateProg() {
+  document.getElementById("prog").textContent = doneCount(selected) + " / 5 done";
+  buildStrip();
+}
+
+// [ORANGE EDIT] calendar feed: what got done, pulled from /api/cal
+var cal = { state: "loading", byDate: {} };
+function loadCal() {
+  if (!cloudUser) { cal.state = "signin"; cal.byDate = {}; render(); return; }
+  sb.auth.getSession().then(function (res) {
+    var tok = res.data && res.data.session ? res.data.session.access_token : "";
+    return fetch("/api/cal", { headers: { Authorization: "Bearer " + tok } });
+  }).then(function (r) { return r.json(); }).then(function (j) {
+    cal.byDate = {};
+    (j.events || []).forEach(function (e) {
+      (cal.byDate[e.date] = cal.byDate[e.date] || []).push(e);
+    });
+    cal.state = j.denied ? "denied" : (!j.connected ? "off" : (j.error ? "error" : "ok"));
+    render();
+  }).catch(function () { cal.state = "error"; render(); });
+}
+function esc(s) {
+  return String(s || "").replace(/[&<>"]/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+  });
+}
+function buildCal() {
+  var box = document.getElementById("calcard");
+  var evs = cal.byDate[selected] || [];
+  var html = '<div class="card calcard"><div class="cardtop"><div class="titles">' +
+    '<div class="ptitle">Done on the Calendar</div>' +
+    '<div class="phint">Pulled from your project calendar for this day.</div></div></div>';
+  if (cal.state === "loading") html += '<div class="calempty">Loading...</div>';
+  else if (cal.state === "signin") html += '<div class="calempty">Sign in above to see your calendar.</div>';
+  else if (cal.state === "denied") html += '<div class="calempty">This account is not allowed to read the calendar.</div>';
+  else if (cal.state === "off") html += '<div class="calempty">Calendar not connected yet.</div>';
+  else if (cal.state === "error") html += '<div class="calempty">Could not reach the calendar right now.</div>';
+  else if (!evs.length) html += '<div class="calempty">Nothing on the calendar this day.</div>';
+  else evs.forEach(function (e) {
+    html += '<div class="calrow"><div class="caltime">' + (e.time || "all day") + '</div><div>' +
+      esc(e.title) + (e.note ? '<div class="calnote">' + esc(e.note) + '</div>' : '') + '</div></div>';
+  });
+  box.innerHTML = html + '</div>';
+}
+
+function render() {
+  var d = new Date(selected + "T00:00:00");
+  var label = d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+  if (selected === isoDay(today)) label = "Today \u00b7 " + label;
+  document.getElementById("dateBig").textContent = label;
+  buildStrip();
+  buildCal();
+  buildCards();
+  document.getElementById("prog").textContent = doneCount(selected) + " / 5 done";
+}
+
+document.getElementById("todayBtn").onclick = function () {
+  selected = isoDay(today);
+  render();
+};
+
+// [ORANGE EDIT] build a plain-text version of the selected day
+function buildText() {
+  var d = new Date(selected + "T00:00:00");
+  var label = d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  var entry = dayEntry(data, selected);
+  var lines = [];
+  lines.push("DAILY OUTLINE - " + label);
+  lines.push(doneCount(selected) + "/5 done");
+  lines.push("");
+  var evs = cal.byDate[selected] || [];
+  if (evs.length) {
+    lines.push("DONE ON THE CALENDAR");
+    evs.forEach(function (e) { lines.push("  " + (e.time || "all day") + "  " + e.title); });
+    lines.push("");
+  }
+  POINTS.forEach(function (p, idx) {
+    var mark = entry.done[p.key] ? "[x]" : "[ ]";
+    lines.push(mark + " " + (idx + 1) + ". " + p.title.toUpperCase());
+    if (p.segments) {
+      p.segments.forEach(function (segName) {
+        var val = (entry.fields[p.key + "_" + segName.toLowerCase()] || "").trim();
+        if (val) lines.push("  " + segName + ": " + val);
+      });
+    } else {
+      var val = (entry.fields[p.key] || "").trim();
+      lines.push(val ? val : "(empty)");
+    }
+    lines.push("");
+  });
+  return lines.join("\n");
+}
+
+document.getElementById("copyBtn").onclick = function () {
+  var text = buildText();
+  var btn = this;
+  function flash() { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy text"; }, 1200); }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(flash, fallback);
+  } else { fallback(); }
+  function fallback() {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    try { document.execCommand("copy"); flash(); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+};
+
+document.getElementById("dlBtn").onclick = function () {
+  var text = buildText();
+  var blob = new Blob([text], { type: "text/plain" });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url;
+  a.download = "outline-" + selected + ".txt";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+};
+
+document.getElementById("clearBtn").onclick = function () {
+  if (confirm("Clear all entries for this day?")) {
+    data[selected] = { fields: {}, done: {} };
+    markDirty(selected);
+    saveAll(data);
+    render();
+  }
+};
+
+
+// [ORANGE EDIT] cloud sync: same sign-in project as the other apps, one row per day
+var SUPABASE_URL = "https://zasyjjoypkpvyqdueums.supabase.co";
+var SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inphc3lqam95cGtwdnlxZHVldW1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMjk1NjQsImV4cCI6MjEwNjgwNTU2NH0.PZrUvG4qsTpMQeihXbbzaFYUAAJ9YV7FtxLTkcQGFVI";
+var DIRTY_KEY = "dailyOutline.dirty";
+var sb = null;
+var cloudUser = null;
+var syncMsg = "";
+var pushTimer = null;
+
+function getDirty() {
+  try { return JSON.parse(localStorage.getItem(DIRTY_KEY)) || {}; } catch (e) { return {}; }
+}
+function setDirty(d) {
+  try { localStorage.setItem(DIRTY_KEY, JSON.stringify(d)); } catch (e) {}
+}
+function markDirty(day) {
+  var e = dayEntry(data, day);
+  e.updatedAt = Date.now();
+  var d = getDirty(); d[day] = true; setDirty(d);
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(cloudPush, 1500);
+}
+
+function cloudPush() {
+  if (!sb || !cloudUser) return Promise.resolve();
+  var d = getDirty();
+  var rows = Object.keys(d).map(function (day) {
+    var e = dayEntry(data, day);
+    return {
+      user_id: cloudUser.id, day: day,
+      fields: e.fields, done: e.done,
+      updated_at: new Date(e.updatedAt || Date.now()).toISOString()
+    };
+  });
+  if (!rows.length) return Promise.resolve();
+  return sb.from("outline_days").upsert(rows, { onConflict: "user_id,day" }).then(function (res) {
+    if (res.error) { syncMsg = "Sync paused: " + res.error.message; }
+    else {
+      var now = getDirty();
+      rows.forEach(function (r) { delete now[r.day]; });
+      setDirty(now);
+      syncMsg = "Synced";
+    }
+    renderAcct();
+  });
+}
+
+function cloudPull() {
+  if (!sb || !cloudUser) return Promise.resolve();
+  return sb.from("outline_days").select("*").then(function (res) {
+    if (res.error) { syncMsg = "Sync paused: " + res.error.message; renderAcct(); return; }
+    var dirty = getDirty();
+    (res.data || []).forEach(function (r) {
+      var remoteMs = Date.parse(r.updated_at) || 0;
+      var local = data[r.day];
+      if (dirty[r.day] && local && (local.updatedAt || 0) >= remoteMs) return;
+      if (!local || (local.updatedAt || 0) < remoteMs) {
+        data[r.day] = { fields: r.fields || {}, done: r.done || {}, updatedAt: remoteMs };
+      }
+    });
+    saveAll(data);
+    syncMsg = "Synced";
+    render();
+  });
+}
+
+function renderAcct() {
+  var box = document.getElementById("acct");
+  if (!sb) { box.innerHTML = '<span class="who">Cloud sync unavailable. Saving on this device.</span>'; return; }
+  if (!cloudUser) {
+    box.innerHTML = '<input id="authEmail" type="email" placeholder="Email for sign-in link">' +
+      '<button class="btn" id="sendLink">Send link</button>' +
+      (syncMsg ? '<span class="who" style="flex-basis:100%">' + esc(syncMsg) + '</span>' : '');
+    document.getElementById("sendLink").onclick = function () {
+      var email = (document.getElementById("authEmail").value || "").trim();
+      if (!email) return;
+      var btn = this; btn.disabled = true; btn.textContent = "Sending";
+      sb.auth.signInWithOtp({ email: email, options: { emailRedirectTo: window.location.origin } }).then(function (res) {
+        syncMsg = res.error ? ("Link failed: " + res.error.message) : "Check your email for the sign-in link.";
+        renderAcct();
+      });
+    };
+    return;
+  }
+  box.innerHTML = '<span class="who">Signed in. ' + esc(syncMsg) + '</span>' +
+    '<button class="btn" id="signOut">Sign out</button>';
+  document.getElementById("signOut").onclick = function () {
+    sb.auth.signOut().then(function () { cloudUser = null; syncMsg = ""; renderAcct(); loadCal(); });
+  };
+}
+
+function initCloud() {
+  // first run of this version: queue every existing day for upload
+  try {
+    if (!localStorage.getItem("dailyOutline.migrated")) {
+      var d = getDirty();
+      Object.keys(data).forEach(function (day) {
+        if (!data[day].updatedAt) data[day].updatedAt = Date.now();
+        d[day] = true;
+      });
+      setDirty(d); saveAll(data);
+      localStorage.setItem("dailyOutline.migrated", "1");
+    }
+  } catch (e) {}
+  if (!window.supabase) { renderAcct(); loadCal(); return; }
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+  });
+  sb.auth.onAuthStateChange(function (event, session) {
+    var wasOut = !cloudUser;
+    cloudUser = session ? session.user : null;
+    renderAcct();
+    if (cloudUser && wasOut) { cloudPull().then(cloudPush); loadCal(); }
+  });
+  sb.auth.getSession().then(function (res) {
+    cloudUser = res.data && res.data.session ? res.data.session.user : null;
+    renderAcct();
+    loadCal();
+    if (cloudUser) cloudPull().then(cloudPush);
+  });
+}
+
+render();
+initCloud();
+</script>
+</body>
+</html>
