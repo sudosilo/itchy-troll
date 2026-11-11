@@ -9,6 +9,7 @@ const SKIP = new Set(['itchy-troll', 'heckle-troll', 'control-troll', 'sudosilo'
 const BACKEND = /(api|backend|server|poller)$/i;
 const MAX_FILE = 600 * 1024;
 const MAX_REPO = 4 * 1024 * 1024;
+const KEEP_SRC = /\.(tsx?|jsx|vue|svelte|cjs|glsl|frag|vert)$|(^|\/)(\.npmrc|\.nvmrc)$/i;
 const KEEP = /\.(html?|css|js|mjs|json|svg|txt|md|webmanifest|png|jpe?g|gif|webp|ico|wav|mp3|ogg|woff2?)$/i;
 
 async function listRepos() {
@@ -53,12 +54,14 @@ function walk(dir, base = dir, out = []) {
     } catch {
       row.skipped = 'clone failed'; index.push(row); continue;
     }
-    if (!fs.existsSync(`${src}/index.html`)) { row.skipped = 'no index.html at top'; index.push(row); continue; }
+    const npmApp = !fs.existsSync(`${src}/index.html`) && fs.existsSync(`${src}/package.json`);
+    if (!fs.existsSync(`${src}/index.html`) && !npmApp) { row.skipped = 'no index.html at top'; index.push(row); continue; }
+    if (npmApp) row.build = 'npm';
     const files = walk(src);
     let total = 0;
     const dropped = [];
     for (const f of files) {
-      if (!KEEP.test(f.rel) || f.size > MAX_FILE || total + f.size > MAX_REPO) { dropped.push(f.rel); continue; }
+      if (!(KEEP.test(f.rel) || (npmApp && KEEP_SRC.test(f.rel))) || f.size > MAX_FILE || total + f.size > MAX_REPO) { dropped.push(f.rel); continue; }
       total += f.size;
       const dest = path.join('scout', r.name, f.rel);
       fs.mkdirSync(path.dirname(dest), { recursive: true });
