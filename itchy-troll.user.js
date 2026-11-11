@@ -353,6 +353,7 @@
     if (spec.tags && spec.tags.length && !setTags(spec.tags)) missed.push('tags');
     missed.push(...setHtmlPaid());
     if (!setAiYes()) missed.push('AI disclosure');
+    if (!tick(labelInput(/^Public\b/i), true)) missed.push('Public visibility');
     const imgNotes = [];
     if (spec.cover || (spec.screenshots && spec.screenshots.length)) {
       armPicker();
