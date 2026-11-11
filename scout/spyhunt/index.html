@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spy Hunt</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; font-family: system-ui, sans-serif; background: #f4f1ea; color: #1b1b1b; }
+  h1 { font-size: 22px; margin: 0 0 12px 0; font-weight: 600; }
+  .card { background: #ffffff; border: 1px solid #d8d2c4; border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+  label { display: block; font-size: 14px; margin: 10px 0 4px 0; }
+  select, input { width: 100%; padding: 10px; font-size: 16px; border: 1px solid #b9b2a2; border-radius: 8px; background: #fff; color: #1b1b1b; }
+  button { width: 100%; padding: 14px; font-size: 18px; border: 0; border-radius: 10px; margin-top: 12px; color: #fff; background: #2a6f3b; }
+  button.stop { background: #8a2a2a; }
+  button.alt { background: #4a4a4a; }
+  .teams { display: flex; gap: 10px; }
+  .team { flex: 1; padding: 16px 0; text-align: center; font-size: 18px; border-radius: 10px; border: 3px solid transparent; color: #fff; }
+  .team.red { background: #c0392b; }
+  .team.blue { background: #2457a6; }
+  .team.sel { border-color: #1b1b1b; }
+  #pulse { height: 90px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; background: #e9e4d6; color: #1b1b1b; transition: background 0.08s; }
+  #pulse.mine { background: #f2c94c; }
+  #pulse.theirs { background: #7fd1a0; }
+  #map { height: 340px; border-radius: 12px; margin-top: 12px; border: 1px solid #d8d2c4; }
+  .small { font-size: 13px; color: #4a4a4a; line-height: 1.4; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<h1>Spy Hunt</h1>
+
+<div id="setup">
+  <div class="card">
+    <div class="teams">
+      <div class="team red sel" id="tRed">Red spy</div>
+      <div class="team blue" id="tBlue">Blue spy</div>
+    </div>
+    <label for="game">Game code (everyone in the game uses the same one)</label>
+    <input id="game" type="text" maxlength="20" placeholder="xxxxxxxx" autocapitalize="none" autocomplete="off">
+    <label for="server">Server address</label>
+    <input id="server" type="text" placeholder="xxxxxxxxxxxxxxxx" autocapitalize="none" autocomplete="off">
+    <label for="cycle">Cycle length in seconds</label>
+    <input id="cycle" type="number" min="2" max="20" step="0.5" value="4">
+    <label for="spies">Total spies in the game</label>
+    <input id="spies" type="number" min="2" max="8" step="1" value="2">
+    <label for="slot">My slot number (0 is the first slot)</label>
+    <input id="slot" type="number" min="0" max="7" step="1" value="0">
+    <p class="small">Every phone must use the same game code, server address, cycle length, and total. Each spy takes a different slot.</p>
+    <button id="go">Start hunting</button>
+  </div>
+</div>
+
+<div id="play" class="hidden">
+  <div class="card">
+    <div id="pulse">waiting</div>
+    <div id="map"></div>
+    <p class="small" id="near">Waiting for the other spy to appear on the map.</p>
+    <p class="small" id="info"></p>
+    <p class="small" id="gps">Location: waiting for signal</p>
+    <button class="alt" id="recenter">Recenter map</button>
+    <button class="stop" id="stop">Stop</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+(function () {
+  var team = 'red';
+  var ctx = null, timer = null, syncTimer = null, gpsWatch = null, wake = null;
+  var cycle = 4, total = 2, slot = 0;
+  var lastScheduled = -1;
+  var me = null;
+  var myId = '';
+  var map = null, meMarker = null, meCircle = null;
+  var others = {};
+  var fitted = false, centered = false;
+
+  var COLORS = { red: '#c0392b', blue: '#2457a6' };
+  var tRed = document.getElementById('tRed');
+  var tBlue = document.getElementById('tBlue');
+  var pulse = document.getElementById('pulse');
+
+  try {
+    document.getElementById('game').value = localStorage.getItem('sh_game') || '';
+    document.getElementById('server').value = localStorage.getItem('sh_server') || '';
+  } catch (e) {}
+
+  function pick(t) {
+    team = t;
+    tRed.className = 'team red' + (t === 'red' ? ' sel' : '');
+    tBlue.className = 'team blue' + (t === 'blue' ? ' sel' : '');
+    document.getElementById('slot').value = t === 'red' ? 0 : 1;
+  }
+  tRed.onclick = function () { pick('red'); };
+  tBlue.onclick = function () { pick('blue'); };
+
+  function click(atTime, freq) {
+    var o = ctx.createOscillator();
+    var g = ctx.createGain();
+    o.type = 'square';
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, atTime);
+    g.gain.exponentialRampToValueAtTime(1.0, atTime + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0001, atTime + 0.12);
+    o.connect(g);
+    g.connect(ctx.destination);
+    o.start(atTime);
+    o.stop(atTime + 0.15);
+  }
+
+  function flash(cls, label, ms) {
+    pulse.className = cls;
+    pulse.textContent = label;
+    setTimeout(function () { pulse.className = ''; pulse.textContent = 'listen'; }, ms);
+  }
+
+  function tick() {
+    var nowMs = Date.now();
+    var cycleMs = cycle * 1000;
+    var myPhase = (slot / total) * cycleMs;
+    var myFreq = team === 'red' ? 880 : 1320;
+    var k = Math.floor((nowMs - myPhase) / cycleMs) + 1;
+    for (var i = 0; i < 2; i++) {
+      var n = k + i;
+      var beepMs = n * cycleMs + myPhase;
+      var ahead = beepMs - nowMs;
+      if (n > lastScheduled && ahead < 400 && ahead > -50) {
+        lastScheduled = n;
+        click(ctx.currentTime + Math.max(0, ahead) / 1000, myFreq);
+        setTimeout(function () { flash('mine', 'your beep', 250); }, Math.max(0, ahead));
+        var half = beepMs + cycleMs / 2;
+        setTimeout(function () { flash('theirs', 'listen now', 600); }, Math.max(0, half - nowMs));
+      }
+    }
+  }
+
+  function meters(a, b) {
+    var R = 6371000;
+    var dLat = (b.lat - a.lat) * Math.PI / 180;
+    var dLng = (b.lng - a.lng) * Math.PI / 180;
+    var x = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  }
+
+  function buildMap() {
+    map = L.map('map', { zoomControl: true }).setView([0, 0], 2);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: 'OpenStreetMap contributors'
+    }).addTo(map);
+  }
+
+  function drawMe() {
+    if (!me || !map) { return; }
+    var ll = [me.lat, me.lng];
+    if (!meMarker) {
+      meMarker = L.circleMarker(ll, { radius: 9, color: '#1b1b1b', weight: 3, fillColor: COLORS[team], fillOpacity: 1 }).addTo(map);
+      meCircle = L.circle(ll, { radius: me.acc, color: COLORS[team], weight: 1, fillOpacity: 0.08 }).addTo(map);
+    } else {
+      meMarker.setLatLng(ll);
+      meCircle.setLatLng(ll);
+      meCircle.setRadius(me.acc);
+    }
+    if (!centered) {
+      map.setView(ll, 18);
+      centered = true;
+    }
+  }
+
+  function drawOthers(list) {
+    var seen = {};
+    list.forEach(function (p) {
+      seen[p.id] = true;
+      var ll = [p.lat, p.lng];
+      var col = COLORS[p.team] || '#555555';
+      if (!others[p.id]) {
+        others[p.id] = {
+          marker: L.circleMarker(ll, { radius: 9, color: '#ffffff', weight: 3, fillColor: col, fillOpacity: 1 }).addTo(map),
+          circle: L.circle(ll, { radius: p.acc, color: col, weight: 1, fillOpacity: 0.08 }).addTo(map)
+        };
+      } else {
+        others[p.id].marker.setLatLng(ll);
+        others[p.id].circle.setLatLng(ll);
+        others[p.id].circle.setRadius(p.acc);
+      }
+    });
+    Object.keys(others).forEach(function (id) {
+      if (!seen[id]) {
+        map.removeLayer(others[id].marker);
+        map.removeLayer(others[id].circle);
+        delete others[id];
+      }
+    });
+    var near = document.getElementById('near');
+    if (!list.length) {
+      near.textContent = 'Waiting for the other spy to appear on the map.';
+      return;
+    }
+    if (me) {
+      var best = null, bestD = 1e12;
+      list.forEach(function (p) {
+        var d = meters(me, p);
+        if (d < bestD) { bestD = d; best = p; }
+      });
+      var err = Math.round(me.acc + best.acc);
+      near.textContent = 'Nearest other spy is about ' + Math.round(bestD) + ' meters away, give or take ' + err + ' meters.';
+      if (!fitted) {
+        var group = [[me.lat, me.lng]];
+        list.forEach(function (p) { group.push([p.lat, p.lng]); });
+        map.fitBounds(group, { padding: [40, 40], maxZoom: 19 });
+        fitted = true;
+      }
+    }
+  }
+
+  function sync() {
+    if (!me) { return; }
+    var url = 'https://' + document.getElementById('server').value.trim() + '/pos';
+    var body = JSON.stringify({
+      game: document.getElementById('game').value.trim(),
+      id: myId, team: team, slot: slot,
+      lat: me.lat, lng: me.lng, acc: me.acc
+    });
+    fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { drawOthers(d.others || []); })
+      .catch(function () {
+        document.getElementById('near').textContent = 'Cannot reach the server. Check the server address.';
+      });
+  }
+
+  document.getElementById('go').onclick = function () {
+    cycle = parseFloat(document.getElementById('cycle').value) || 4;
+    total = parseInt(document.getElementById('spies').value, 10) || 2;
+    slot = parseInt(document.getElementById('slot').value, 10) || 0;
+    if (slot >= total) { slot = total - 1; }
+    var g = document.getElementById('game').value.trim();
+    var s = document.getElementById('server').value.trim();
+    if (!g || !s) { return; }
+    try { localStorage.setItem('sh_game', g); localStorage.setItem('sh_server', s); } catch (e) {}
+    myId = Math.random().toString(36).slice(2, 10);
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx.resume();
+    lastScheduled = -1;
+    fitted = false; centered = false; me = null;
+    document.getElementById('setup').className = 'hidden';
+    document.getElementById('play').className = '';
+    document.getElementById('info').textContent =
+      (team === 'red' ? 'Red' : 'Blue') + ' spy, slot ' + slot + ' of ' + total + ', cycle ' + cycle + ' seconds, offset ' + Math.round((slot / total) * 100) + ' percent.';
+    if (!map) { buildMap(); }
+    setTimeout(function () { map.invalidateSize(); }, 200);
+    timer = setInterval(tick, 50);
+    syncTimer = setInterval(sync, 2500);
+    if (navigator.geolocation) {
+      gpsWatch = navigator.geolocation.watchPosition(function (p) {
+        me = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy };
+        document.getElementById('gps').textContent =
+          'Location: ' + me.lat.toFixed(5) + ', ' + me.lng.toFixed(5) + ' (accuracy ' + Math.round(me.acc) + ' meters)';
+        drawMe();
+      }, function () {
+        document.getElementById('gps').textContent = 'Location: not available';
+      }, { enableHighAccuracy: true, maximumAge: 1000 });
+    }
+    if (navigator.wakeLock) {
+      navigator.wakeLock.request('screen').then(function (w) { wake = w; }).catch(function () {});
+    }
+  };
+
+  document.getElementById('recenter').onclick = function () {
+    if (!me || !map) { return; }
+    var group = [[me.lat, me.lng]];
+    Object.keys(others).forEach(function (id) { group.push(others[id].marker.getLatLng()); });
+    if (group.length > 1) { map.fitBounds(group, { padding: [40, 40], maxZoom: 19 }); }
+    else { map.setView([me.lat, me.lng], 18); }
+  };
+
+  document.getElementById('stop').onclick = function () {
+    clearInterval(timer);
+    clearInterval(syncTimer);
+    if (gpsWatch !== null) { navigator.geolocation.clearWatch(gpsWatch); }
+    if (wake) { wake.release(); }
+    if (ctx) { ctx.close(); }
+    Object.keys(others).forEach(function (id) {
+      map.removeLayer(others[id].marker);
+      map.removeLayer(others[id].circle);
+    });
+    others = {};
+    if (meMarker) { map.removeLayer(meMarker); map.removeLayer(meCircle); meMarker = null; meCircle = null; }
+    document.getElementById('play').className = 'hidden';
+    document.getElementById('setup').className = '';
+  };
+})();
+</script>
+</body>
+</html>

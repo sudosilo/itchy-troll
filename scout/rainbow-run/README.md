@@ -6,6 +6,6 @@ A pixel crow flies across phones lined up in a row, and the wall can also run ra
 
 Live at rainbow-run-ochre.vercel.app
 
-Latest change. 2026-11-09, v2026.11.09. Added a train window scene to the wall, where Stompbox notes and pedals become passing scenery.
+Latest change. 2026-11-10, v2026.11.10. Added a play a song feature. The song and its chiptune now drive the Spectral Engine and Screensaver scenes the way the microphone does.
 
 The full history is in CHANGELOG.md.

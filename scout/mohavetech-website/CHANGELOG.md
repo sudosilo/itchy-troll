@@ -1,5 +1,9 @@
 App Index changelog
 
+2026-11-11, v2026.11.11. Added a dark mode for the modern look with a menu switch. Stars now run behind the links, and the panels are see through. The retro look got stars too. Deploy dates were synced.
+
+2026-11-10, v2026.11.10. Added a retro look for the hub with a menu switch back to the classic look. The retro look became the default, and then a modern look with moving stars replaced it as the default. Sync now adds new apps to Unsorted and drops deleted ones. Fixed sync so it no longer renames apps whose name starts with their old date.
+
 2026-11-05, v2026.11.05. Added a one step sync that updates deploy dates from the live deployments. Added the drive-thru dental simulator, moved CoffeeKit One to Games, and removed retired apps and duplicates. Added monthly reviews under Statistics with the October 2026 deck.
 
 2026-11-04, v2026.11.04. The app index was synced with the live deployments and a retired app was dropped.

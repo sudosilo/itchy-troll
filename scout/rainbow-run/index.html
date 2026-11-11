@@ -155,8 +155,10 @@ canvas{z-index:1}
     <button id="sound">Sound off</button>
     <button id="full">Full screen</button>
     <button id="mic">Microphone off</button>
+    <button id="song">Play a song</button>
+    <input id="songFile" type="file" accept="audio/*" hidden>
   </div>
-  <p class="note" id="micNote">Microphone on makes the Spectral Engine scenes move to the sound this phone hears.</p>
+  <p class="note" id="micNote">The Spectral Engine and Screensaver scenes move to the sound on this phone: the microphone, a song you play, or the chiptune from Sound on.</p>
   <p class="note" id="pace">Own pace, 100 bpm</p>
   </details>
   <p class="note">This panel fades after a few seconds. Tap the menu button to bring it back.</p>
@@ -749,7 +751,7 @@ function wallSync(t){
   const ox=(W-SW*sc)/2-cx*SW*sc,oy=(H-SH*sc)/2-cy*SH*sc+nudge*H;
   wallEl.style.transform="translate("+ox+"px,"+oy+"px) scale("+sc+")";wallEl._tx={ox:ox,oy:oy,sc:sc,w:cols*SW,h:rows*SH};
   /* the band beat for scenes that move to music, as a beat count at a time since the scene started */
-  try{const cw=wallEl.contentWindow;if(cw&&!cw.__mic)cw.__mic=micRead}catch(e){}
+  try{const cw=wallEl.contentWindow;if(cw&&!cw.__mic){cw.__mic=micRead;cw.__audio=micRead}}catch(e){}
   try{const cw=wallEl.contentWindow,ep=cyc*PERIOD;if(cw&&!cw.__band){cw.__band=function(ms){return {active:bandOn(),beat:beatAt(ep+ms)}};cw.__room=function(){return {state:loopState,epoch:ep}}}}catch(e){}
   try{const cw=wallEl.contentWindow;if(cw&&cw.__tick){const st=cw.__tick(t-cyc*PERIOD);if(st==="live"&&!wallEl._shown){wallEl._shown=true;wallEl.style.opacity=1}}}catch(e){}
   return true;
@@ -808,7 +810,7 @@ function blip(type,freq,when,len,vol){
   o.type=type;o.frequency.value=freq;
   v.gain.setValueAtTime(0.0001,when);v.gain.exponentialRampToValueAtTime(vol,when+0.008);
   v.gain.exponentialRampToValueAtTime(0.0001,when+len);
-  o.connect(v);v.connect(actx.destination);o.start(when);o.stop(when+len+0.02);
+  o.connect(v);v.connect(actx.destination);if(playAn)v.connect(playAn);o.start(when);o.stop(when+len+0.02);
 }
 function schedule(){
   if(!soundOn||!actx)return;
@@ -829,15 +831,37 @@ function schedule(){
    BLUE PHONE: the Spectral Engine scenes draw from the microphone while it is on, the way the original
    Spectral Engine does, instead of from the band loop. Each phone listens for itself. */
 let micCtx=null,micAn=null,micStream=null;const micFreq=new Uint8Array(1024),micTime=new Uint8Array(1024);
+/* A song played from a file, and the chiptune from Sound on, both pass through playAn, so the scenes can
+   follow them the same way they follow the microphone. The microphone wins while it is on. */
+let playAn=null,songEl=null,songNode=null;
+function ensurePlay(){
+  if(!actx){const AC=window.AudioContext||window.webkitAudioContext;actx=new AC()}
+  if(!playAn){playAn=actx.createAnalyser();playAn.fftSize=2048;playAn.smoothingTimeConstant=0.6}
+  actx.resume();
+}
+function songPlaying(){return !!songEl&&!songEl.paused}
 function micRead(){
-  if(!micAn)return null;
-  micAn.getByteFrequencyData(micFreq);micAn.getByteTimeDomainData(micTime);
-  return {freq:micFreq,time:micTime,rate:micCtx.sampleRate,fft:micAn.fftSize};
+  if(micAn){micAn.getByteFrequencyData(micFreq);micAn.getByteTimeDomainData(micTime);return {freq:micFreq,time:micTime,rate:micCtx.sampleRate,fft:micAn.fftSize}}
+  if(playAn&&(soundOn||songPlaying())){playAn.getByteFrequencyData(micFreq);playAn.getByteTimeDomainData(micTime);return {freq:micFreq,time:micTime,rate:actx.sampleRate,fft:playAn.fftSize}}
+  return null;
 }
 const micBtn=document.getElementById("mic");
 function renderMic(t){micBtn.textContent=micAn?"Microphone on":"Microphone off";micBtn.classList.toggle("on",!!micAn);
-  document.getElementById("soundName").textContent=(soundOn?"Sound on":"Sound off")+(micAn?", mic on":"");
-  document.getElementById("micNote").textContent=t||(micAn?"The Spectral Engine scenes now move to what this phone hears.":"Microphone on makes the Spectral Engine scenes move to the sound this phone hears.")}
+  const sb=document.getElementById("song");sb.textContent=songPlaying()?"Stop the song":"Play a song";sb.classList.toggle("on",songPlaying());
+  document.getElementById("soundName").textContent=(soundOn?"Sound on":"Sound off")+(micAn?", mic on":"")+(songPlaying()?", song":"");
+  const what=micAn?"what this phone hears":songPlaying()?"the song":soundOn?"the chiptune":"";
+  document.getElementById("micNote").textContent=t||(what?"The Spectral Engine and Screensaver scenes now move to "+what+".":"The Spectral Engine and Screensaver scenes move to the sound on this phone: the microphone, a song you play, or the chiptune from Sound on.")}
+const songFile=document.getElementById("songFile");
+document.getElementById("song").addEventListener("click",()=>{if(songPlaying()){songEl.pause();renderMic();return}songFile.click()});
+songFile.addEventListener("change",()=>{
+  const f=songFile.files&&songFile.files[0];if(!f)return;
+  ensurePlay();
+  if(songEl){songEl.pause();try{songNode.disconnect()}catch(e){}URL.revokeObjectURL(songEl.src)}
+  songEl=new Audio(URL.createObjectURL(f));songEl.loop=true;
+  songNode=actx.createMediaElementSource(songEl);songNode.connect(playAn);songNode.connect(actx.destination);
+  songEl.addEventListener("play",()=>renderMic());songEl.addEventListener("pause",()=>renderMic());
+  songEl.play().catch(()=>{});songFile.value="";
+});
 micBtn.addEventListener("click",async()=>{
   if(micAn){try{micStream.getTracks().forEach(k=>k.stop())}catch(e){}try{micCtx.close()}catch(e){}micAn=null;micCtx=null;micStream=null;renderMic();return}
   try{
@@ -850,9 +874,8 @@ micBtn.addEventListener("click",async()=>{
 });
 const soundBtn=document.getElementById("sound");
 soundBtn.addEventListener("click",()=>{
-  if(!actx){const AC=window.AudioContext||window.webkitAudioContext;actx=new AC()}
-  actx.resume();soundOn=!soundOn;nextStep=null;
-  soundBtn.textContent=soundOn?"Sound on":"Sound off";soundBtn.classList.toggle("on",soundOn);document.getElementById("soundName").textContent=soundBtn.textContent+(micAn?", mic on":"");
+  ensurePlay();soundOn=!soundOn;nextStep=null;
+  soundBtn.textContent=soundOn?"Sound on":"Sound off";soundBtn.classList.toggle("on",soundOn);renderMic();
   clearInterval(schedTimer);if(soundOn)schedTimer=setInterval(schedule,40);
 });
 

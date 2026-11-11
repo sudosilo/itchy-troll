@@ -300,6 +300,8 @@ function physKey(k){
     else if(k==='enter'&&mode==='track'){if(val.length<8){msg=t('needT');drawEntry();}else check();}
     return;
   }
+  // a digit from the start or scan screen opens code entry with that digit already in the first box
+  if(/^\d$/.test(k)&&['attract','scan','result'].includes(curView)){clearTimeout(rTimer);mode='code';val=k;msg='';go('entry');drawEntry();return;}
   if(k==='cancel'&&curView==='scan')go('attract');
 }
 document.querySelector('.scanner').addEventListener('click',()=>{

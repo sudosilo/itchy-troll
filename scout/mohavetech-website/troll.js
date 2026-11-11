@@ -441,3 +441,62 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", go);
   else go();
 })();
+/* retromark */
+(function () {
+  /* DEFAULT is the look every visitor gets: "modern", "future", "retro" or "classic". Change it to put another look back for everyone. */
+  var DEFAULT = "modern";
+  var SHEET = { modern: ["modern.css?v=3", "#ffffff"], future: ["future.css?v=1", "#eef1ec"], retro: ["retro.css?v=2", "#000080"] };
+  var NAME = { modern: "Modern look", future: "Future retro look", retro: "Retro look", classic: "Classic look" };
+  var look = DEFAULT;
+  try { look = localStorage.getItem("hub-look3") || DEFAULT; } catch (e) {}
+  if (!NAME[look]) look = DEFAULT;
+  if (SHEET[look]) {
+    document.documentElement.classList.add(look);
+    var l = document.createElement("link");
+    l.rel = "stylesheet";
+    l.href = SHEET[look][0];
+    document.head.appendChild(l);
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute("content", SHEET[look][1]);
+  }
+  /* dark mode for the modern look. Starts from the phone's own setting until the menu button is used. */
+  var dark = false;
+  if (look === "modern") {
+    var saved = null;
+    try { saved = localStorage.getItem("hub-dark"); } catch (e) {}
+    dark = saved ? saved === "1" : !!(window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+    if (dark) {
+      document.documentElement.classList.add("dark");
+      var tc = document.querySelector('meta[name="theme-color"]');
+      if (tc) tc.setAttribute("content", "#070a12");
+    }
+  }
+  function addSwitch() {
+    var menu = document.getElementById("menu");
+    if (!menu || menu.querySelector(".look-switch")) return;
+    var first = menu.querySelector("details");
+    if (look === "modern") {
+      var d = document.createElement("button");
+      d.className = "look-switch";
+      d.textContent = dark ? "Light mode" : "Dark mode";
+      d.onclick = function () {
+        try { localStorage.setItem("hub-dark", dark ? "0" : "1"); } catch (e) {}
+        location.reload();
+      };
+      menu.insertBefore(d, first);
+    }
+    Object.keys(NAME).forEach(function (k) {
+      if (k === look) return;
+      var b = document.createElement("button");
+      b.className = "look-switch";
+      b.textContent = NAME[k];
+      b.onclick = function () {
+        try { localStorage.setItem("hub-look3", k); } catch (e) {}
+        location.reload();
+      };
+      menu.insertBefore(b, first);
+    });
+  }
+  if (document.readyState === "complete") addSwitch();
+  else window.addEventListener("load", function () { setTimeout(addSwitch, 300); });
+})();

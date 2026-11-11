@@ -8,6 +8,6 @@ Live at mohavetech-website.vercel.app.
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-11-05, v2026.11.05. Added a one step sync that updates deploy dates from the live deployments. Added the drive-thru dental simulator, moved CoffeeKit One to Games, and removed retired apps and duplicates. Added monthly reviews under Statistics with the October 2026 deck.
+Latest change. 2026-11-11, v2026.11.11. Added a dark mode for the modern look with a menu switch. Stars now run behind the links, and the panels are see through. The retro look got stars too. Deploy dates were synced.
 
 Full history is in CHANGELOG.md.

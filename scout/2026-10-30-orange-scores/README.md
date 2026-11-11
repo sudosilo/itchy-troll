@@ -6,6 +6,6 @@ Games post a score with a three letter tag and an optional link through one smal
 
 Live at 2026-10-30-orange-scores.vercel.app
 
-Latest change. 2026-10-31, v2026.10.31. Registered FogWarren on the score hub so its scores show up there.
+Latest change. 2026-11-10, v2026.11.10. Registered Sky Flow on the score hub so its timed round scores show up there.
 
 Full history is in CHANGELOG.md.

@@ -1,3 +1,5 @@
+2026-11-10, v2026.11.10. Added one look across the Field Twin apps, so the map, inventory, and roads share a design. Added a night look that follows sunset and sunrise, and a drawn sign for every kind of place.
+
 2026-10-20, v2026.10.20. Added one sign in across the Field Twin apps.
 
 2026-10-17, v2026.10.17. The app is now shown as Field Twin Glaucous. It shares the Field map, Inventory, and Roads tabs with the other Field Twin apps.

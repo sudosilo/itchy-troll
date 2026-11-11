@@ -4,5 +4,6 @@
 module.exports = {
   edmia: { name: 'EDMIA', max: 200000, perSecond: 2000 },
   'mill-ionaire': { name: 'Mill-ionaire', max: Number.MAX_SAFE_INTEGER, perSecond: 1000000000000, maxMs: 400 * 24 * 3600 * 1000 },
-  'fogwarren-vx': { name: 'FogWarren', max: 30000, perSecond: 5000, maxMs: 24 * 3600 * 1000 }
+  'fogwarren-vx': { name: 'FogWarren', max: 30000, perSecond: 5000, maxMs: 24 * 3600 * 1000 },
+  'sky-flow': { name: 'Sky Flow', max: 20000, perSecond: 150 }
 };
