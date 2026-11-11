@@ -56,9 +56,10 @@ function walk(dir, base = dir, out = []) {
     }
     const topIndex = fs.existsSync(`${src}/index.html`);
     const deep = topIndex ? null : walk(src).map((f) => f.rel).filter((p) => /(^|\/)index\.html$/i.test(p)).sort((x, y) => x.split('/').length - y.split('/').length)[0];
-    const npmApp = !topIndex && (fs.existsSync(`${src}/package.json`) || !!deep);
+    const topHtml = topIndex ? null : fs.readdirSync(src).filter((n) => /\.html?$/i.test(n)).sort()[0];
+    const npmApp = !topIndex && (fs.existsSync(`${src}/package.json`) || !!deep || !!topHtml);
     if (!topIndex && !npmApp) { row.skipped = 'no index.html at top'; row.top = fs.readdirSync(src).filter((n) => n !== '.git').slice(0, 40); index.push(row); continue; }
-    if (npmApp) { row.build = 'npm'; row.entry = deep || null; row.top = fs.readdirSync(src).filter((n) => n !== '.git').slice(0, 40); }
+    if (npmApp) { row.build = 'npm'; row.entry = topHtml || deep || null; row.top = fs.readdirSync(src).filter((n) => n !== '.git').slice(0, 40); }
     const files = walk(src);
     let total = 0;
     const dropped = [];
