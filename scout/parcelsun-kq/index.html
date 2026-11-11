@@ -90,6 +90,12 @@
   .dn-edit { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 8px 0; }
   .wrap-up { display: inline-block; padding: 8px 12px; border: 2px solid var(--line); border-radius: 8px; font-weight: 700; background: #fff; cursor: pointer; }
   [hidden] { display: none !important; }
+  input[type=text] { font: inherit; font-size: 12px; color: var(--ink); background: var(--panel); border: 2px solid var(--line); border-radius: 5px; padding: 4px 8px; width: 100%; }
+  #ftBanner { background: #e6f0fb; border: 2px solid var(--line); border-radius: 8px; padding: 8px 10px; font-weight: 800; text-align: center; color: #0b4ea2; }
+  #skyChart { width: 100%; height: 190px; display: block; border: 2px solid var(--line); border-radius: 6px; background: #f7fbff; }
+  #blkList { height: 132px; overflow-y: auto; border: 2px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+  .blk-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--soft); }
+  .blk-row button { padding: 2px 8px; font-size: 11px; }
   .wrap-list { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 4px 0 8px; }
   .wrap-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; border: 2px solid var(--line); border-radius: 8px; background: #fff; }
   .wrap-item img { height: 44px; max-width: 110px; object-fit: contain; border: 1px solid #c9ced5; }
@@ -122,6 +128,7 @@
 </header>
 
 <main>
+  <div id="ftBanner" hidden></div>
   <section class="card" id="view">
     <div class="hud"><span id="hudSun">Sun</span><span id="hudFacing">Facing</span></div>
     <div class="heatkey" id="heatKey"><span id="keyLo">60</span><i></i><span id="keyHi">160 F</span></div>
@@ -258,6 +265,7 @@
       <div class="ro"><b>Electronics over</b><span id="stElec"></span></div>
       <div class="ro"><b>Boards over</b><span id="stBoard"></span></div>
       <div class="ro"><b>Peak cooling</b><span id="stAC"></span></div>
+      <div class="ro"><b>Blocker shade</b><span id="stBlk"></span></div>
     </div>
   </section>
 
@@ -324,6 +332,21 @@
       <label class="field"><span>Lobby air (F)</span><input type="number" id="indoorT" min="55" max="95" value="76"></label>
       <label class="check"><input type="checkbox" id="backWall" data-build> Back against a wall</label>
       <label class="check"><input type="checkbox" id="dst" checked> Daylight saving clock</label>
+      <div class="subhead">Shade blockers</div>
+      <div class="field full" id="blkBox">
+        <span>Walls, buildings and trees that block the sun, measured standing at the locker. Gray is a blocker, the line is the sun path for the day, blue is the way the front faces.</span>
+        <canvas id="skyChart"></canvas>
+        <div class="grid" style="margin-top:8px">
+          <label class="field full"><span>Blocker name</span><input type="text" id="blkLabel" placeholder="Like store wall"></label>
+          <label class="field"><span>Left edge bearing (deg)</span><input type="number" id="blkLeft" min="0" max="359"></label>
+          <label class="field"><span>Right edge bearing (deg)</span><input type="number" id="blkRight" min="0" max="359"></label>
+          <label class="field"><span>Top edge angle up (deg)</span><input type="number" id="blkTop" min="0" max="89"></label>
+          <label class="field"><span>Or height (ft)</span><input type="number" id="blkH" min="0" max="400"></label>
+          <label class="field"><span>And distance (ft)</span><input type="number" id="blkD" min="0" max="2000"></label>
+          <div class="field" style="justify-content:flex-end"><button id="blkAdd">Add blocker</button></div>
+        </div>
+        <div id="blkList" style="margin-top:8px"></div>
+      </div>
     </div>
   </section>
 
@@ -377,7 +400,9 @@
     <p>Outside air follows the average daily high and low for each month in the Las Vegas valley, with the low near dawn and the high mid afternoon. Heat wave add pushes the whole day hotter.</p>
     <p>The heat tint inside each section rises toward the top in step with how much hotter that section runs than the air outside, and the console heat fades out across the neighboring modules. This tint is for reading the picture; the numbers in the readouts come from the three air space model.</p>
     <p>Modules around a corner take their sun from the direction they face. The air temperatures in the readouts still treat the bank as one straight run facing the starter's direction.</p>
-    <p>All of this assumes clear sky. Clouds, dust storms, nearby walls, and parked cars are not modeled.</p>
+    <p>Shade blockers are walls, buildings and trees around the locker. Each one is a span of compass bearings, left edge to right edge as you face it from the locker, plus how far up its top edge sits. You can enter the top as an angle, or as a height and a distance and the app works the angle out from the middle of the locker. When the sun sits inside a blocker's span and below its top, the locker gets no direct sun at all, only sky light and ground bounce. The sky chart shows each blocker in gray with the sun path for the chosen day across it, so you can see exactly when the shadow lands and when it lets go. Blocker shade in the whole day card counts the daytime hours the locker spends behind a blocker.</p>
+    <p>A locker opened from Field Twin arrives with its name, spot, facing, version, door count, placement and blockers already filled in from the locker page there.</p>
+    <p>All of this assumes clear sky. Clouds, dust storms and parked cars are not modeled.</p>
     <div class="center" style="margin-top:12px"><button id="infoClose2">Close</button></div>
   </div>
 </div>
@@ -486,7 +511,8 @@ function readState() {
     tauC: Math.max(0.05, g('tauC')), tauB: Math.max(0.05, g('tauB')), tauT: Math.max(0.05, g('tauT')),
     ac: $('ac').checked, acCap: Math.max(0, g('acCap')), acSet: g('acSet'),
     limTouch: g('limTouch'), limSkin: g('limSkin'), limElec: g('limElec'), limBoard: g('limBoard'),
-    heatView: $('heatView').checked
+    heatView: $('heatView').checked,
+    blockers: BLOCKERS
   };
   for (const k in S) if (typeof S[k] === 'number' && !isFinite(S[k])) S[k] = 0;
   S.day = clamp(Math.round(S.day) || 1, 1, MDAYS[S.month]);
@@ -541,24 +567,46 @@ function ambientF(S, h) {
   return lo + (hi - lo) * f + S.heatOffset;
 }
 
+// Shade blockers: a span of bearings, left edge clockwise to right edge as seen from the locker, and the angle up
+// to the top edge. With only height and distance, the angle is worked out from the middle of the locker, three feet up.
+function blockerTop(b) {
+  if (isFinite(b.top) && b.top !== null && b.top !== '') return +b.top;
+  if (b.heightFt > 0 && b.distFt > 0) return Math.max(0, Math.atan2(b.heightFt - 3, b.distFt) / D2R);
+  return null;
+}
+function blockerAt(list, sun) {
+  if (!list || !list.length) return null;
+  const az = sun.az / D2R, alt = sun.alt / D2R;
+  for (const b of list) {
+    const top = blockerTop(b);
+    if (top === null || !isFinite(b.left) || !isFinite(b.right)) continue;
+    const w = ((b.right - b.left) % 360 + 360) % 360;
+    const a = ((az - b.left) % 360 + 360) % 360;
+    if (a <= w && alt < top) return b;
+  }
+  return null;
+}
+
 // Outside conditions at one moment, in C and W/m2.
 // Every vertical face is split into the board strip band at the top and the lower section below it,
 // because the hat and awning shadows reach the strip first.
 function conditions(S, doy, h) {
   const sun = sunPos(doy, h, S);
   const indoor = S.shade === 'indoor';
+  const blk = !indoor && sun.alt > 0 ? blockerAt(S.blockers, sun) : null;
   const To = F2C(indoor ? S.indoorT : ambientF(S, h));
   const ho = indoor ? 8 : 5.7 + 3.8 * (S.wind * 0.447);
   const psi = S.facing * D2R;
   const H = S.modH * IN, hs = S.stripH * IN, Hl = H - hs;
   const faceAz = { front: psi, back: psi + Math.PI, left: psi + Math.PI / 2, right: psi - Math.PI / 2 };
   const hatD = S.hat ? S.hatOver * IN : 0;
-  const out = { sun, To, ho };
+  const out = { sun, To, ho, blk };
   const sol = I => To + S.absorb * I / ho;
   for (const k of VFACES) {
     let Ilow = 0, Istrip = 0;
     if (!indoor && sun.alt > 0) {
       const r = irradiance(sun, S.month, faceAz[k], 90, S.rho);
+      if (blk) r.beam = 0;
       let skyF = 1, fracStrip = 0, fracLow = 0;
       if (S.shade === 'full') { fracStrip = 1; fracLow = 1; skyF = 0.4; }
       else {
@@ -582,6 +630,7 @@ function conditions(S, doy, h) {
   let Iroof = 0, roof = To, hatT = null;
   if (!indoor && sun.alt > 0) {
     const r = irradiance(sun, S.month, 0, 0, S.rho);
+    if (blk) r.beam = 0;
     const Iopen = r.beam + r.sky;
     if (S.shade === 'full') { Iroof = 0.4 * r.sky; roof = sol(Iroof); }
     else if (S.hat) { Iroof = Iopen; roof = To + 0.35 * S.absorb * Iopen / ho; }
@@ -1386,6 +1435,7 @@ function resize() {
   camera.aspect = w / h; camera.updateProjectionMatrix();
   requestRender();
   drawChart();
+  drawSky();
 }
 window.addEventListener('resize', resize);
 
@@ -1398,6 +1448,57 @@ function versionDefaults() {
   $('kioskCard').hidden = isBT(LAYOUT.ver);
   $('phoneCard').hidden = !isBT(LAYOUT.ver);
 }
+// Shade blockers live on this phone, and a locker opened from Field Twin brings its own.
+const BKEY = 'parcelsun-blockers-v1';
+let BLOCKERS = [];
+try { BLOCKERS = JSON.parse(localStorage.getItem(BKEY) || '[]') || []; } catch (e) { BLOCKERS = []; }
+function saveBlockers() { try { localStorage.setItem(BKEY, JSON.stringify(BLOCKERS)); } catch (e) {} }
+function cleanBlockers(list) {
+  return (Array.isArray(list) ? list : []).map(b => ({
+    label: String(b.label || 'Blocker').slice(0, 40),
+    left: ((+b.left % 360) + 360) % 360, right: ((+b.right % 360) + 360) % 360,
+    top: b.top === null || b.top === undefined || b.top === '' || !isFinite(+b.top) ? null : clamp(+b.top, 0, 89),
+    heightFt: +b.heightFt > 0 ? +b.heightFt : null, distFt: +b.distFt > 0 ? +b.distFt : null
+  })).filter(b => isFinite(b.left) && isFinite(b.right));
+}
+BLOCKERS = cleanBlockers(BLOCKERS);
+// Field Twin hands a locker over in the link: #ft= then the locker page as base64 JSON.
+(function ftImport() {
+  const m = /[#&]ft=([^&]+)/.exec(location.hash || '');
+  if (!m) return;
+  let d = null;
+  try {
+    const b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
+    const bin = atob(b64 + '==='.slice((b64.length + 3) % 4));
+    d = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
+  } catch (e) { return; }
+  if (!d) return;
+  if (isFinite(d.lat) && isFinite(d.lon)) { $('lat').value = (+d.lat).toFixed(5); $('lon').value = (+d.lon).toFixed(5); }
+  if (isFinite(d.facing) && d.facing !== null) $('facing').value = Math.round(((+d.facing % 360) + 360) % 360);
+  if (['v2', 'v3', 'v4', 'v5'].includes(d.gen)) LAYOUT.ver = d.gen;
+  const doors = +d.doors > 0 ? Math.round(+d.doors) : 0, mods = +d.mods > 0 ? Math.round(+d.mods) : 0;
+  if (doors || mods) {
+    const starter = STARTER_DOORS[0] + STARTER_DOORS[1] + (isBT(LAYOUT.ver) ? 1 : 0);
+    const per = LAYOUT.ver === 'v2' ? 20 : 24;
+    const nA = clamp(mods ? mods - 1 : Math.round(Math.max(0, doors - starter) / per), 0, 30);
+    const col = doors && nA ? clamp(Math.round((doors - starter) / nA / 2), 1, 30) : per / 2;
+    const left = nA >= 2 ? 1 : 0;
+    const ms = [];
+    for (let i = 0; i < left; i++) ms.push({ type: 'adder', turn: 'none', cols: [col, col] });
+    ms.push({ type: 'starter', turn: 'none', cols: STARTER_DOORS.slice() });
+    for (let i = left; i < nA; i++) ms.push({ type: 'adder', turn: 'none', cols: [col, col] });
+    LAYOUT.mods = ms;
+    fixLayout();
+  }
+  saveLayout();
+  if (['none', 'awning', 'full', 'indoor'].includes(d.placement)) $('shade').value = d.placement;
+  if (+d.awning > 0) $('awning').value = Math.round(+d.awning);
+  if (typeof d.backWall === 'boolean') $('backWall').checked = d.backWall;
+  if (Array.isArray(d.blockers)) { BLOCKERS = cleanBlockers(d.blockers); saveBlockers(); }
+  const name = String(d.name || '').trim();
+  $('ftBanner').textContent = 'Simulation of ' + (name ? (/^locker\b/i.test(name) ? name : 'locker ' + name) : 'a Field Twin locker') + (doors ? ', ' + doors + ' doors' : '');
+  $('ftBanner').hidden = false;
+})();
 versionDefaults();
 let S = readState();
 let REC = [];
@@ -1437,7 +1538,7 @@ function updateMoment() {
   $('roGlassBox').className = 'ro' + (gF > S.limTouch ? ' alarm' : gF > S.limSkin ? ' warn' : '');
   $('roConBox').className = 'ro' + (C2F(r.Tc) > S.limElec ? ' alarm' : '');
   $('roStripBox').className = 'ro' + (C2F(r.Tt) > S.limBoard ? ' alarm' : '');
-  $('hudSun').textContent = f.sun.alt > 0 ? `Sun ${Math.round(f.sun.alt / D2R)} up, ${Math.round(f.sun.az / D2R)} ${cardinal(f.sun.az / D2R)}` : 'Sun down';
+  $('hudSun').textContent = f.sun.alt > 0 ? `Sun ${Math.round(f.sun.alt / D2R)} up, ${Math.round(f.sun.az / D2R)} ${cardinal(f.sun.az / D2R)}${f.blk ? ', behind ' + f.blk.label : ''}` : 'Sun down';
   $('hudFacing').textContent = `Front faces ${Math.round(S.facing)} ${cardinal(S.facing)}`;
   $('heatKey').style.display = S.heatView ? 'flex' : 'none';
 
@@ -1445,7 +1546,7 @@ function updateMoment() {
   const dir = new THREE.Vector3(Math.cos(alt) * Math.sin(az), Math.sin(alt), -Math.cos(alt) * Math.cos(az));
   const indoor = S.shade === 'indoor';
   const up = alt > 0 && !indoor;
-  sunLight.intensity = up ? 2.1 : 0;
+  sunLight.intensity = up ? (f.blk ? 0.35 : 2.1) : 0;
   hemi.intensity = up ? 1.6 : (indoor ? 1.9 : 0.9);
   sunLight.position.copy(dir.clone().multiplyScalar(50));
   sunLight.target.position.set(0, 0, 0);
@@ -1455,6 +1556,74 @@ function updateMoment() {
   colorBank(S, r);
   requestRender();
   drawChart();
+  drawSky();
+}
+
+// Sky chart: bearing across, angle up the side. Blockers in gray, the day's sun path on top, the front facing in blue.
+function drawSky() {
+  const cv = $('skyChart');
+  if (!cv) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w) return;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const x = cv.getContext('2d');
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.clearRect(0, 0, w, h);
+  const L = 26, R = 6, T = 6, B = 18;
+  const px = a => L + (w - L - R) * a / 360;
+  const py = v => T + (h - T - B) * (1 - v / 90);
+  x.strokeStyle = '#d6e3f2'; x.lineWidth = 1; x.fillStyle = '#5d5850'; x.font = '10px system-ui, sans-serif';
+  x.textAlign = 'right'; x.textBaseline = 'middle';
+  for (let v = 0; v <= 90; v += 30) { x.beginPath(); x.moveTo(L, py(v)); x.lineTo(w - R, py(v)); x.stroke(); x.fillText(`${v}`, L - 3, py(v)); }
+  x.textAlign = 'center'; x.textBaseline = 'top';
+  [['N', 0], ['E', 90], ['S', 180], ['W', 270], ['N', 360]].forEach(([t, a]) => { x.beginPath(); x.moveTo(px(a), T); x.lineTo(px(a), h - B); x.stroke(); x.fillText(t, px(a), h - B + 4); });
+  const span = (a0, a1, top) => { x.fillRect(px(a0), py(top), px(a1) - px(a0), py(0) - py(top)); x.strokeRect(px(a0), py(top), px(a1) - px(a0), py(0) - py(top)); };
+  x.fillStyle = 'rgba(110,110,110,0.45)'; x.strokeStyle = '#111111'; x.lineWidth = 1.5;
+  S.blockers.forEach(b => {
+    const top = blockerTop(b);
+    if (top === null) return;
+    const wdt = ((b.right - b.left) % 360 + 360) % 360;
+    if (b.left + wdt <= 360) span(b.left, b.left + wdt, top);
+    else { span(b.left, 360, top); span(0, b.left + wdt - 360, top); }
+    x.fillStyle = '#111111'; x.textAlign = 'center'; x.textBaseline = 'bottom';
+    const mid = (b.left + wdt / 2) % 360;
+    x.fillText(b.label, px(mid), Math.max(T + 10, py(top) - 2));
+    x.fillStyle = 'rgba(110,110,110,0.45)';
+  });
+  x.strokeStyle = '#1265c9'; x.lineWidth = 2; x.setLineDash([5, 4]);
+  x.beginPath(); x.moveTo(px(S.facing), T); x.lineTo(px(S.facing), h - B); x.stroke(); x.setLineDash([]);
+  const doy = dayOfYear(S);
+  let prev = null;
+  for (let hr = 0; hr <= 24.001; hr += 0.1) {
+    const sp = sunPos(doy, hr, S);
+    if (sp.alt <= 0) { prev = null; continue; }
+    const a = sp.az / D2R, v = sp.alt / D2R;
+    if (prev && Math.abs(a - prev.a) < 180) {
+      x.strokeStyle = blockerAt(S.blockers, sp) ? '#6e6e6e' : '#ef7a2a'; x.lineWidth = 3;
+      x.beginPath(); x.moveTo(px(prev.a), py(prev.v)); x.lineTo(px(a), py(v)); x.stroke();
+    }
+    prev = { a, v };
+  }
+  const now = sunPos(doy, S.hour, S);
+  if (now.alt > 0) {
+    x.fillStyle = blockerAt(S.blockers, now) ? '#6e6e6e' : '#f6d04d'; x.strokeStyle = '#111111'; x.lineWidth = 2;
+    x.beginPath(); x.arc(px(now.az / D2R), py(now.alt / D2R), 6, 0, 2 * Math.PI); x.fill(); x.stroke();
+  }
+  x.strokeStyle = '#111111'; x.lineWidth = 2;
+  x.strokeRect(L, T, w - L - R, h - T - B);
+}
+function renderBlockers() {
+  const box = $('blkList');
+  if (!BLOCKERS.length) { box.innerHTML = '<div class="sub" style="display:block;padding:6px 0">No blockers yet. Add one above, or open this locker from its Field Twin locker page.</div>'; return; }
+  box.innerHTML = BLOCKERS.map((b, i) => {
+    const top = blockerTop(b);
+    const bits = `${Math.round(b.left)} to ${Math.round(b.right)} deg, top ${top === null ? 'unknown' : Math.round(top) + ' deg up'}` + (b.heightFt ? `, ${b.heightFt} ft tall` : '') + (b.distFt ? `, ${b.distFt} ft away` : '');
+    return `<div class="blk-row"><div><b>${b.label.replace(/[<>&]/g, '')}</b><br><span class="sub" style="display:inline">${bits}</span></div><button data-blk="${i}">Remove</button></div>`;
+  }).join('');
+  box.querySelectorAll('[data-blk]').forEach(el => el.addEventListener('click', () => {
+    BLOCKERS.splice(+el.getAttribute('data-blk'), 1); saveBlockers(); renderBlockers(); recompute(false);
+  }));
 }
 
 function drawChart() {
@@ -1513,6 +1682,7 @@ function updateStats() {
   const qmax = REC.reduce((m, r) => Math.max(m, r.Qac), 0);
   const capped = S.ac && REC.some(r => r.Qac >= S.acCap - 0.5 && C2F(r.Tc) > S.acSet + 0.5);
   $('stAC').textContent = S.ac ? `${Math.round(qmax)} W${capped ? ', maxed out' : ''}` : 'AC off';
+  $('stBlk').textContent = S.blockers.length ? fmtHours(REC.filter(r => r.f && r.f.blk).length * 10 / 60) : 'no blockers';
 }
 
 function recompute(rebuild) {
@@ -1906,9 +2076,19 @@ $('addAdderR').addEventListener('click', () => { LAYOUT.mods.push(newAdder(LAYOU
 $('addQ').addEventListener('click', () => { LAYOUT.mods.push({ type: 'q', turn: 'none', cols: [2, 1] }); layoutChanged(); });
 renderLayout();
 drawOpenList();
+renderBlockers();
+$('blkAdd').addEventListener('click', () => {
+  const num = id => { const v = $(id).value.trim(); return v === '' ? null : parseFloat(v); };
+  const b = cleanBlockers([{ label: $('blkLabel').value.trim() || 'Blocker ' + (BLOCKERS.length + 1), left: num('blkLeft'), right: num('blkRight'), top: num('blkTop'), heightFt: num('blkH'), distFt: num('blkD') }])[0];
+  if (!b || blockerTop(b) === null) { $('blkLabel').placeholder = 'Needs both edges and a top angle, or a height and distance'; return; }
+  BLOCKERS.push(b); saveBlockers();
+  ['blkLabel', 'blkLeft', 'blkRight', 'blkTop', 'blkH', 'blkD'].forEach(id => { $(id).value = ''; });
+  $('blkLabel').placeholder = 'Like store wall';
+  renderBlockers(); recompute(false);
+});
 
 document.querySelectorAll('input, select').forEach(el => {
-  if (el.id === 'hour' || el.id === 'heatView' || el.closest('#layoutCard')) return;
+  if (el.id === 'hour' || el.id === 'heatView' || el.closest('#layoutCard') || el.closest('#blkBox')) return;
   el.addEventListener('input', () => {
     if (el.id === 'color') $('absorb').value = PAINT[el.value].a.toFixed(2);
     recompute(el.hasAttribute('data-build') || el.id === 'color');

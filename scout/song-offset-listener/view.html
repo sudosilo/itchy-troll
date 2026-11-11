@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Song Offset Listener - View</title>
+<style>
+  body {
+    font-family: Georgia, serif;
+    background: #ffffff;
+    color: #111;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    margin: 0;
+    text-align: center;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+  h1 { font-size: 1rem; color: #777; margin-bottom: 4px; }
+  #title { font-size: 1.6rem; color: #1a4fa0; margin-bottom: 4px; }
+  #artist { font-size: 1.1rem; color: #555; margin-bottom: 20px; }
+  #clock { font-size: 4rem; font-variant-numeric: tabular-nums; color: #1a4fa0; }
+  #status { margin-top: 16px; font-size: 0.9rem; color: #999; }
+  #joinBtn {
+    margin-top: 24px;
+    font-size: 1.2rem;
+    padding: 14px 32px;
+    border-radius: 12px;
+    border: 2px solid #1a4fa0;
+    background: #eaf1fb;
+    color: #1a4fa0;
+    cursor: pointer;
+  }
+  #joinBtn:disabled { opacity: 0.4; }
+  #player { margin-top: 20px; width: 1px; height: 1px; overflow: hidden; }
+  #countdown { margin-top: 12px; font-size: 1.4rem; color: #1a4fa0; min-height: 1.6rem; }
+  #nudgeRow button {
+    padding: 6px 12px;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    border: 2px solid #1a4fa0;
+    background: #eaf1fb;
+    color: #1a4fa0;
+    cursor: pointer;
+  }
+  #nudgeValue { font-size: 0.95rem; }
+  .feedItem { border-bottom: 1px solid #ddd; padding: 8px 0; text-align: left; }
+  .ft { color: #1a4fa0; }
+  .fa { color: #333; }
+  .fs { color: #999; font-size: 0.8rem; }
+  #broadcastNudgeRow button {
+    padding: 6px 12px;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    border: 2px solid #1a4fa0;
+    background: #eaf1fb;
+    color: #1a4fa0;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+  <h1>watching shared anchor</h1>
+  <div id="title">--</div>
+  <div id="artist"></div>
+  <div id="clock">--:--</div>
+  <div id="status">waiting for host...</div>
+  <button id="joinBtn" disabled>Join Sync</button>
+  <div id="countdown"></div>
+  <div id="nudgeRow" style="margin-top:10px;">
+    <button id="nudgeBack">- 0.5s</button>
+    <span id="nudgeValue" style="margin:0 10px; color:#1a4fa0;">nudge 0.0s</span>
+    <button id="nudgeForward">+ 0.5s</button>
+    <button id="nudgeReset" style="margin-left:10px;">reset</button>
+    <button id="syncPauseBtn" style="margin-left:10px;">Pause</button>
+  </div>
+  <div style="margin-top:6px;"><a href="#" id="nudgeLogLink" style="font-size:0.8rem; color:#999;">log this offset for testing</a></div>
+  <div id="player"></div>
+
+  <div id="positionsPanel" style="margin-top:24px;">
+    <h3>live positions</h3>
+    <div id="positionsList"></div>
+    <div id="broadcastNudgeRow" style="margin-top:14px;">
+      <div style="font-size:0.85rem; color:#999;">broadcast timing (shifts every phone at once)</div>
+      <button id="broadcastNudgeBack" style="margin-top:6px;">- 0.5s</button>
+      <button id="broadcastNudgeForward" style="margin-left:8px;">+ 0.5s</button>
+      <span id="broadcastNudgeStatus" style="margin-left:8px; font-size:0.85rem; color:#999;"></span>
+    </div>
+  </div>
+
+<script>
+const titleEl = document.getElementById('title');
+const artistEl = document.getElementById('artist');
+const clockEl = document.getElementById('clock');
+const statusEl = document.getElementById('status');
+const joinBtn = document.getElementById('joinBtn');
+const countdownEl = document.getElementById('countdown');
+
+let ytPlayer = null;
+let ytReady = false;
+let scheduledFireEpoch = null;
+let fireTimer = null;
+
+let anchor = null;
+let lastFetchedAt = 0;
+let clockOffsetMs = 0;
+
+let hasCalibratedOnce = false;
+async function calibrateClock() {
+  const samples = [];
+  for (let i = 0; i < 5; i++) {
+    const t0 = Date.now();
+    try {
+      const res = await fetch('/api/time', { cache: 'no-store' });
+      const data = await res.json();
+      const t1 = Date.now();
+      const rtt = t1 - t0;
+      const estimatedServerTimeAtT1 = data.serverTime + rtt / 2;
+      samples.push({ offset: estimatedServerTimeAtT1 - t1, rtt });
+    } catch (err) {
+      // skip failed sample
+    }
+  }
+  if (samples.length === 0) return;
+  samples.sort((a, b) => a.rtt - b.rtt);
+  const freshOffset = samples[0].offset;
+  if (!hasCalibratedOnce) {
+    clockOffsetMs = freshOffset;
+    hasCalibratedOnce = true;
+  } else {
+    const drift = freshOffset - clockOffsetMs;
+    clockOffsetMs += drift * 0.5;
+  }
+  statusEl.textContent = 'clock calibrated';
+}
+setInterval(calibrateClock, 75000);
+
+function now() {
+  return Date.now() + clockOffsetMs;
+}
+
+async function pollAnchor() {
+  try {
+    const res = await fetch('/api/anchor', { cache: 'no-store' });
+    const data = await res.json();
+    if (!data.error) {
+      const isSameSong = anchor && anchor.videoId && data.videoId === anchor.videoId;
+      if (isSameSong) {
+        lastFetchedAt = Date.now();
+        statusEl.textContent = 'synced';
+        joinBtn.disabled = !anchor.videoId;
+      } else {
+        anchor = data;
+        lastFetchedAt = Date.now();
+        titleEl.textContent = anchor.title;
+        artistEl.textContent = anchor.artist;
+        statusEl.textContent = 'synced';
+        joinBtn.disabled = !anchor.videoId;
+      }
+    } else if (!anchor) {
+      statusEl.textContent = data.error;
+    }
+  } catch (err) {
+    statusEl.textContent = 'connection lost, retrying...';
+  }
+}
+
+function loadYouTubeApi() {
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  document.body.appendChild(tag);
+}
+
+window.onYouTubeIframeAPIReady = function () {
+  ytPlayer = new YT.Player('player', {
+    height: '1',
+    width: '1',
+    playerVars: { controls: 0 },
+    events: {
+      onReady: () => { ytReady = true; },
+      onStateChange: (event) => {
+        if (event.data === YT.PlayerState.PLAYING && !syncLive) {
+          ytPlayer.pauseVideo();
+          logPlayEvent({
+            event: 'premature_play_blocked',
+            title: anchor ? anchor.title : null,
+            videoId: anchor ? anchor.videoId : null,
+            nudgeMs
+          });
+        }
+      }
+    }
+  });
+};
+
+joinBtn.addEventListener('click', startSyncJoin);
+
+let syncLive = false;
+
+function startSyncJoin() {
+  if (!anchor || !anchor.videoId || !ytReady) {
+    countdownEl.textContent = 'player not ready yet, try again in a moment';
+    return;
+  }
+
+  if (fireTimer) clearTimeout(fireTimer);
+  syncLive = false;
+
+  const leadMs = 4000;
+  scheduledFireEpoch = now() + leadMs;
+  const initialPosition = anchor.offsetSeconds + (scheduledFireEpoch - anchor.epochMs) / 1000 + (nudgeMs / 1000);
+
+  ytPlayer.cueVideoById(anchor.videoId, Math.max(initialPosition, 0));
+
+  const tickCountdown = () => {
+    const remainingMs = scheduledFireEpoch - now();
+    if (remainingMs <= 0) {
+      const firePosition = anchor.offsetSeconds + (scheduledFireEpoch - anchor.epochMs) / 1000 + (nudgeMs / 1000);
+      ytPlayer.seekTo(Math.max(firePosition, 0), true);
+      ytPlayer.playVideo();
+      countdownEl.textContent = 'live';
+      syncLive = true;
+      logPlayEvent({
+        event: 'view_join_fire',
+        title: anchor.title,
+        videoId: anchor.videoId,
+        position: Math.max(firePosition, 0),
+        nudgeMs
+      });
+      return;
+    }
+    countdownEl.textContent = 'starting in ' + (remainingMs / 1000).toFixed(1) + 's';
+    fireTimer = setTimeout(tickCountdown, 50);
+  };
+  tickCountdown();
+}
+
+function tick() {
+  if (anchor) {
+    const elapsed = (now() - anchor.epochMs) / 1000 + (nudgeMs / 1000);
+    clockEl.textContent = formatOffset(elapsed);
+  }
+  requestAnimationFrame(tick);
+}
+
+function getDeviceId() {
+  let id = localStorage.getItem('songsync:deviceId');
+  if (!id) {
+    id = 'phone-' + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem('songsync:deviceId', id);
+  }
+  return id;
+}
+const deviceId = getDeviceId();
+
+async function logPlayEvent(details) {
+  try {
+    await fetch('/api/play-log', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(Object.assign({ deviceId, playedAtEpochMs: Date.now() }, details))
+    });
+  } catch (err) {}
+}
+
+let nudgeMs = 0;
+const nudgeValueEl = document.getElementById('nudgeValue');
+const nudgeBackBtn = document.getElementById('nudgeBack');
+const nudgeForwardBtn = document.getElementById('nudgeForward');
+const nudgeResetBtn = document.getElementById('nudgeReset');
+const syncPauseBtn = document.getElementById('syncPauseBtn');
+let syncPaused = false;
+
+function renderNudge() {
+  nudgeValueEl.textContent = 'nudge ' + (nudgeMs >= 0 ? '+' : '') + (nudgeMs / 1000).toFixed(1) + 's';
+}
+
+function setNudge(newValueMs) {
+  nudgeMs = newValueMs;
+  renderNudge();
+  if (syncLive && ytPlayer && anchor) {
+    const elapsed = (now() - anchor.epochMs) / 1000 + (nudgeMs / 1000);
+    const target = anchor.offsetSeconds + elapsed;
+    ytPlayer.seekTo(Math.max(target, 0), true);
+  }
+}
+
+let pauseStartedAt = null;
+
+syncPauseBtn.addEventListener('click', () => {
+  if (!syncLive || !ytPlayer) return;
+  if (syncPaused) {
+    if (pauseStartedAt !== null) {
+      const pausedDurationMs = now() - pauseStartedAt;
+      anchor.epochMs += pausedDurationMs;
+      pauseStartedAt = null;
+    }
+    ytPlayer.playVideo();
+    syncPauseBtn.textContent = 'Pause';
+  } else {
+    ytPlayer.pauseVideo();
+    pauseStartedAt = now();
+    syncPauseBtn.textContent = 'Resume';
+  }
+  syncPaused = !syncPaused;
+});
+
+nudgeBackBtn.addEventListener('click', () => setNudge(nudgeMs - 500));
+nudgeForwardBtn.addEventListener('click', () => setNudge(nudgeMs + 500));
+nudgeResetBtn.addEventListener('click', () => setNudge(0));
+renderNudge();
+
+const nudgeLogLink = document.getElementById('nudgeLogLink');
+nudgeLogLink.addEventListener('click', async (e) => {
+  e.preventDefault();
+  const prevText = nudgeLogLink.textContent;
+  try {
+    await fetch('/api/nudge-log', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ nudgeMs, note: 'view page' })
+    });
+    nudgeLogLink.textContent = 'logged';
+    setTimeout(() => { nudgeLogLink.textContent = prevText; }, 1500);
+  } catch (err) {
+    nudgeLogLink.textContent = 'failed to log';
+    setTimeout(() => { nudgeLogLink.textContent = prevText; }, 1500);
+  }
+});
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function reportActivePosition() {
+  if (!(syncLive && ytPlayer && anchor)) return;
+  fetch('/api/positions', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      deviceId,
+      title: anchor.title,
+      videoId: anchor.videoId,
+      position: ytPlayer.getCurrentTime(),
+      paused: syncPaused,
+      nudgeMs
+    })
+  }).catch(() => {});
+}
+setInterval(reportActivePosition, 1500);
+
+const positionsList = document.getElementById('positionsList');
+
+async function pollPositions() {
+  try {
+    const res = await fetch('/api/positions', { cache: 'no-store' });
+    const data = await res.json();
+    renderPositions(data.devices || []);
+  } catch (err) {}
+}
+setInterval(pollPositions, 2000);
+pollPositions();
+
+function renderPositions(devices) {
+  if (devices.length === 0) {
+    positionsList.innerHTML = '<div class="feedItem fs">no phones reporting yet</div>';
+    return;
+  }
+  devices.sort((a, b) => (b.updatedAtEpochMs || 0) - (a.updatedAtEpochMs || 0));
+  positionsList.innerHTML = '';
+  devices.forEach(d => {
+    const staleSec = Math.max(0, Math.round((Date.now() - (d.updatedAtEpochMs || 0)) / 1000));
+    const isMe = d.deviceId === deviceId;
+    const row = document.createElement('div');
+    row.className = 'feedItem';
+    row.innerHTML = '<div class="ft">' + escapeHtml(d.deviceId) + (isMe ? ' (this phone)' : '') + '</div>' +
+      '<div class="fa">' + escapeHtml(d.title || '') + (d.paused ? ', paused' : '') + '</div>' +
+      '<div class="fs">' + formatOffset(d.position || 0) + ' · updated ' + staleSec + 's ago · nudge ' +
+      (d.nudgeMs >= 0 ? '+' : '') + (d.nudgeMs / 1000).toFixed(1) + 's</div>';
+    positionsList.appendChild(row);
+  });
+}
+
+document.getElementById('broadcastNudgeBack').addEventListener('click', () => applyBroadcastNudge(-500));
+document.getElementById('broadcastNudgeForward').addEventListener('click', () => applyBroadcastNudge(500));
+
+async function applyBroadcastNudge(deltaMs) {
+  const statusEl = document.getElementById('broadcastNudgeStatus');
+  try {
+    const res = await fetch('/api/anchor', { cache: 'no-store' });
+    const currentAnchor = await res.json();
+    if (!currentAnchor || currentAnchor.error || typeof currentAnchor.epochMs !== 'number') {
+      statusEl.textContent = 'no active broadcast to adjust';
+      setTimeout(() => { statusEl.textContent = ''; }, 2000);
+      return;
+    }
+    const updated = {
+      title: currentAnchor.title,
+      artist: currentAnchor.artist,
+      offsetSeconds: currentAnchor.offsetSeconds,
+      epochMs: currentAnchor.epochMs - deltaMs,
+      videoId: currentAnchor.videoId,
+      videoDurationSeconds: currentAnchor.videoDurationSeconds
+    };
+    await fetch('/api/anchor', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(updated)
+    });
+    statusEl.textContent = 'shifted ' + (deltaMs > 0 ? '+' : '') + (deltaMs / 1000).toFixed(1) + 's for everyone';
+    setTimeout(() => { statusEl.textContent = ''; }, 2000);
+  } catch (err) {
+    statusEl.textContent = 'failed to adjust';
+    setTimeout(() => { statusEl.textContent = ''; }, 2000);
+  }
+}
+
+function formatOffset(seconds) {
+  if (seconds < 0) seconds = 0;
+  const m = Math.floor(seconds / 60);
+  const s = (seconds % 60).toFixed(1);
+  return m + ':' + s.padStart(4, '0');
+}
+
+calibrateClock();
+loadYouTubeApi();
+pollAnchor();
+setInterval(pollAnchor, 2000);
+setInterval(calibrateClock, 30000);
+tick();
+</script>
+</body>
+</html>

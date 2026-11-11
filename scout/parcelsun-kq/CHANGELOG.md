@@ -1,5 +1,7 @@
 Parcelsun changelog
 
+2026-11-11, v2026.11.11. Added shade blockers. A wall, building or tree is a span of bearings with a top angle, or a height and distance, and the locker gets no direct sun while the sun sits behind it. A sky chart shows the blockers against the day's sun path, and Blocker shade counts the hours. A locker opened from its Field Twin locker page arrives with its name, spot, facing, generation, door count, placement and blockers filled in.
+
 2026-11-10, v2026.11.10. Added a Locker Screen kiosk to Parcelsun. Codes and scans swing a door open on the 3D model, doors can be tapped to open and close, and the tech repair flow opens the matching door. Versions two to five are now set up, with a screen on two and three and a Bluetooth phone pickup on four and five. Added a wrap graphic that stretches a photo across the bank front, or joins several photos side by side.
 
 2026-11-09, v2026.11.09. Parcelsun version five adds a layout editor in the 3D model, door numbers shown on the doors, and a door numbers card with per column numbering, a skipped starter, and door search. Added version four and version five styles, Q units, and outside and inside corners.

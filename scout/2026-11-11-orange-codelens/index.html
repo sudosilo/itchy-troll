@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code Lens</title>
+<script src="https://cdn.jsdelivr.net/npm/acorn@8.12.1/dist/acorn.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/bangers@5/index.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/comic-neue@5/700.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/comic-neue@5/400.css">
+<style>
+:root{--paper:#fffbea;--ink:#111111;--muted:#3d3d3d;--red:#e63946;--yellow:#ffd60a;--blue:#1e6fff;--cyan:#9fe7ff;--pink:#ffb3c7;--code:#ffffff}
+*{box-sizing:border-box}
+html,body{margin:0;color:var(--ink)}
+body{font:17px/1.5 "Comic Neue","Comic Sans MS","Chalkboard SE",system-ui,sans-serif;background-color:var(--paper);background-image:radial-gradient(#f2c94c 1.3px,transparent 1.4px);background-size:12px 12px}
+.wrap{max-width:760px;margin:0 auto;padding:14px 16px 80px}
+header{position:relative;background:var(--yellow);border:4px solid var(--ink);box-shadow:6px 6px 0 var(--ink);padding:12px 14px 14px;margin:6px 6px 18px 0;transform:rotate(-1deg)}
+h1{font:400 46px/1 Bangers,Impact,"Arial Black",sans-serif;letter-spacing:2px;margin:0;color:var(--red);-webkit-text-stroke:2px var(--ink);text-shadow:4px 4px 0 var(--ink)}
+header p{margin:8px 0 0;font-weight:700;font-size:15px}
+.card{background:#fff;border:3px solid var(--ink);box-shadow:5px 5px 0 var(--ink);border-radius:4px;padding:14px;margin:16px 6px 16px 0}
+label{display:block;font:400 18px Bangers,Impact,sans-serif;letter-spacing:1px;color:var(--ink);margin:12px 0 4px}
+input,select,textarea,button{font:inherit}
+input,select,textarea{width:100%;padding:10px;border:3px solid var(--ink);border-radius:4px;background:#fff;color:var(--ink);font-weight:700}
+textarea{min-height:170px;font:13px/1.45 ui-monospace,Menlo,Consolas,monospace}
+.row{display:flex;gap:10px}
+.row input{flex:1;min-width:0}
+button{padding:8px 16px;border:3px solid var(--ink);border-radius:4px;background:var(--red);color:#fff;font:400 20px Bangers,Impact,sans-serif;letter-spacing:1.5px;cursor:pointer;box-shadow:3px 3px 0 var(--ink);text-shadow:1px 1px 0 var(--ink)}
+button:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
+button.ghost{background:var(--cyan);color:var(--ink);text-shadow:none}
+.tabs{display:flex;gap:8px;position:sticky;top:0;background:var(--paper);padding:10px 6px 10px 0;z-index:5;border-bottom:3px solid var(--ink)}
+.tabs button{flex:1;background:#fff;color:var(--ink);text-shadow:none}
+.tabs button.on{background:var(--blue);color:#fff;text-shadow:1px 1px 0 var(--ink);transform:rotate(-2deg)}
+.status{font-weight:700;font-size:15px;min-height:20px;margin-top:10px}
+.status.err{color:var(--red)}
+.hidden{display:none}
+.fn{display:block;width:100%;text-align:left;background:#fff;color:var(--ink);margin:12px 0;padding:10px 12px;font:inherit;text-shadow:none;letter-spacing:0}
+.fn:nth-child(odd){transform:rotate(-.4deg)}
+.fn:nth-child(even){transform:rotate(.4deg)}
+.fn .nm{font:700 16px ui-monospace,Menlo,Consolas,monospace;word-break:break-all}
+.fn.top{background:var(--yellow)}
+.meta{font-size:14px;color:var(--muted);font-weight:700}
+.note{background:var(--pink);border:3px solid var(--ink);padding:8px 10px;font-weight:700;margin:10px 0;box-shadow:3px 3px 0 var(--ink)}
+.step{display:grid;grid-template-columns:40px 1fr;gap:0 10px;padding:12px 0 6px}
+.step.d{border-left:4px dashed var(--ink);padding-left:8px}
+.ln{font:400 18px Bangers,Impact,sans-serif;background:var(--red);color:#fff;border:2px solid var(--ink);border-radius:50%;width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:15px;align-self:start}
+.code{font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;background:#fff;border:3px solid var(--ink);padding:6px 8px;white-space:pre-wrap;word-break:break-word;box-shadow:3px 3px 0 var(--ink)}
+.say{position:relative;margin:16px 0 4px;padding:8px 12px;background:#fff;border:3px solid var(--ink);border-radius:18px;font-weight:700;font-size:16px}
+.say:before{content:"";position:absolute;top:-14px;left:22px;border:7px solid transparent;border-bottom:7px solid var(--ink);border-left:7px solid var(--ink)}
+.say:after{content:"";position:absolute;top:-7px;left:25px;border:4px solid transparent;border-bottom:4px solid #fff;border-left:4px solid #fff}
+.lab{display:inline-block;font:400 17px Bangers,Impact,sans-serif;letter-spacing:1.5px;background:var(--yellow);border:3px solid var(--ink);padding:2px 10px;margin:12px 0 2px;box-shadow:2px 2px 0 var(--ink)}
+a.jump{color:var(--blue);cursor:pointer;text-decoration:underline;text-decoration-thickness:2px}
+details{border:3px solid var(--ink);padding:6px 10px;margin:8px 0;background:var(--cyan);box-shadow:3px 3px 0 var(--ink)}
+details[open]{background:#fff}
+summary{cursor:pointer;font:400 19px Bangers,Impact,sans-serif;letter-spacing:1px}
+.fname{font:700 19px ui-monospace,Menlo,Consolas,monospace;word-break:break-all;margin:0 0 8px;background:var(--yellow);display:inline-block;padding:2px 8px;border:3px solid var(--ink)}
+.links{font-size:15px;margin:8px 0;font-weight:700}
+.burst{float:right;font:400 22px Bangers,Impact,sans-serif;color:#fff;background:var(--red);border:3px solid var(--ink);padding:10px 12px;margin:-28px -24px 6px 8px;transform:rotate(8deg);clip-path:polygon(50% 0,61% 22%,85% 8%,78% 35%,100% 42%,80% 58%,96% 82%,68% 76%,58% 100%,45% 78%,22% 96%,24% 70%,0 62%,18% 47%,4% 22%,30% 26%);padding:22px 24px;text-shadow:2px 2px 0 var(--ink)}
+#mapBox{overflow-x:hidden}
+svg text{font-family:"Comic Neue","Comic Sans MS",system-ui,sans-serif}
+svg .hd{font-family:Bangers,Impact,sans-serif;letter-spacing:1px}
+svg g[data-fn],svg g[data-top]{cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<h1>CODE LENS!</h1>
+<p>Pick one of your GitHub projects. Code Lens reads the code and explains every function in plain English, step by step, using code you already wrote.</p>
+</header>
+
+<section class="card">
+<label for="user">GitHub username</label>
+<div class="row"><input id="user" autocapitalize="off" autocorrect="off" spellcheck="false"><button id="loadRepos">Load</button></div>
+<label for="repo">Project</label>
+<select id="repo" disabled><option>Load your projects first</option></select>
+<label for="file">File</label>
+<select id="file" disabled><option>Pick a project first</option></select>
+<button class="ghost" id="pasteToggle" style="margin-top:12px">Paste code instead</button>
+<div id="pasteBox" class="hidden">
+<label for="paste">Paste HTML or JavaScript</label>
+<textarea id="paste" spellcheck="false"></textarea>
+<button id="pasteGo" style="margin-top:8px">Explain this code</button>
+</div>
+<div class="status" id="status"></div>
+</section>
+
+<nav class="tabs">
+<button data-tab="fns" class="on">Functions</button>
+<button data-tab="map">Map</button>
+<button data-tab="exp">Explain</button>
+</nav>
+<section id="tab-fns"><div class="card meta">Load a project and pick a file. Every function in it shows up here.</div></section>
+<section id="tab-map" class="hidden"><div class="card" id="mapBox"></div></section>
+<section id="tab-exp" class="hidden"><div class="card meta">Tap a function to see it explained line by line.</div></section>
+</div>
+
+<script>
+var S = { user: '', repos: [], repo: null, A: null, sel: null, tab: 'fns' };
+var CS = null;
+
+function $(id) { return document.getElementById(id); }
+function esc(t) { return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function setStatus(t, err) { var s = $('status'); s.textContent = t || ''; s.className = 'status' + (err ? ' err' : ''); }
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+function cap(t) { return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; }
+function listWords(a) { if (a.length < 2) return a.join(''); if (a.length === 2) return a[0] + ' and ' + a[1]; return a.slice(0, -1).join(', ') + ', and ' + a[a.length - 1]; }
+function sh(n, max) {
+  if (!n || !CS) return '';
+  var t = CS.code.slice(n.start, n.end).replace(/\s+/g, ' ').trim();
+  max = max || 40;
+  return t.length > max ? t.slice(0, max - 3) + '...' : t;
+}
+function ref(f) { return '\u0001' + f.id + '\u0002' + f.name + '\u0003'; }
+function rich(t) { return esc(t).replace(/\u0001(\w+)\u0002([^\u0003]*)\u0003/g, '<a class="jump" data-fn="$1">$2</a>'); }
+
+function walkP(node, parent, fn) {
+  if (!node || typeof node.type !== 'string') return;
+  if (fn(node, parent) === false) return;
+  for (var k in node) {
+    if (k === 'loc' || k === 'start' || k === 'end' || k === 'type') continue;
+    var v = node[k];
+    if (Array.isArray(v)) { for (var i = 0; i < v.length; i++) if (v[i] && typeof v[i].type === 'string') walkP(v[i], node, fn); }
+    else if (v && typeof v.type === 'string') walkP(v, node, fn);
+  }
+}
+function isFnNode(n) { return n && (n.type === 'FunctionDeclaration' || n.type === 'FunctionExpression' || n.type === 'ArrowFunctionExpression'); }
+
+/* ---------- GitHub ---------- */
+async function gh(path) {
+  var r = await fetch('https://api.github.com' + path, { headers: { Accept: 'application/vnd.github+json' } });
+  if (r.status === 403 || r.status === 429) throw new Error('GitHub is limiting requests from this connection right now. Wait about an hour and try again, or paste the code instead.');
+  if (r.status === 404) throw new Error('GitHub could not find that. Check the username spelling.');
+  if (r.status === 409) throw new Error('That project has no files yet.');
+  if (!r.ok) throw new Error('GitHub answered with code ' + r.status + '.');
+  return r.json();
+}
+
+async function loadRepos() {
+  var u = $('user').value.trim();
+  if (!u) { setStatus('Type a GitHub username first.', true); return; }
+  S.user = u; store('codelens.user', u);
+  setStatus('Loading projects...');
+  try {
+    var all = [], page = 1;
+    while (page <= 5) {
+      var batch = await gh('/users/' + encodeURIComponent(u) + '/repos?per_page=100&sort=pushed&page=' + page);
+      all = all.concat(batch);
+      if (batch.length < 100) break;
+      page++;
+    }
+    S.repos = all;
+    var sel = $('repo');
+    sel.innerHTML = '<option value="">Pick a project (' + all.length + ')</option>' + all.map(function (r, i) { return '<option value="' + i + '">' + esc(r.name) + '</option>'; }).join('');
+    sel.disabled = false;
+    setStatus(all.length ? 'Pick a project. Most recently changed are at the top.' : 'No public projects found for that username.');
+  } catch (e) { setStatus(e.message, true); }
+}
+
+async function loadFiles() {
+  var i = $('repo').value; if (i === '') return;
+  var r = S.repos[+i]; S.repo = r;
+  var fsel = $('file');
+  fsel.disabled = true; fsel.innerHTML = '<option>Loading files...</option>';
+  setStatus('Reading the file list...');
+  try {
+    var tree = await gh('/repos/' + encodeURIComponent(S.user) + '/' + encodeURIComponent(r.name) + '/git/trees/' + encodeURIComponent(r.default_branch || 'main') + '?recursive=1');
+    var files = (tree.tree || []).filter(function (t) {
+      return t.type === 'blob' && /\.(html?|m?js|jsx)$/i.test(t.path) && !/(^|\/)node_modules\//.test(t.path) && !/\.min\.js$/i.test(t.path) && (t.size || 0) < 900000;
+    }).map(function (t) { return t.path; });
+    files.sort(function (a, b) { return a.split('/').length - b.split('/').length || a.localeCompare(b); });
+    if (!files.length) { fsel.innerHTML = '<option>No HTML or JavaScript files</option>'; setStatus('That project has no HTML or JavaScript files to explain.', true); return; }
+    fsel.innerHTML = files.map(function (p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
+    fsel.disabled = false;
+    var pick = files.indexOf('index.html') >= 0 ? 'index.html' : files[0];
+    fsel.value = pick;
+    loadFile();
+  } catch (e) { fsel.innerHTML = '<option>Could not load files</option>'; setStatus(e.message, true); }
+}
+
+async function loadFile() {
+  var p = $('file').value; if (!p || !S.repo) return;
+  setStatus('Reading ' + p + '...');
+  try {
+    var url = 'https://raw.githubusercontent.com/' + encodeURIComponent(S.user) + '/' + encodeURIComponent(S.repo.name) + '/' + encodeURIComponent(S.repo.default_branch || 'main') + '/' + p.split('/').map(encodeURIComponent).join('/');
+    var r = await fetch(url);
+    if (!r.ok) throw new Error('Could not download that file (code ' + r.status + ').');
+    var text = await r.text();
+    runAnalysis(text, p);
+  } catch (e) { setStatus(e.message, true); }
+}
+
+function runAnalysis(text, name) {
+  if (typeof acorn === 'undefined') { setStatus('The code reader did not load. Check the connection and reload the page.', true); return; }
+  S.A = analyze(text, name);
+  S.sel = null;
+  var n = S.A.fns.length;
+  setStatus(n ? 'Found ' + n + ' function' + (n === 1 ? '' : 's') + ' in ' + name + '. Tap one to learn what it does.' : 'Read ' + name + '.');
+  renderFns();
+  $('tab-exp').innerHTML = '<div class="card meta">Tap a function to see it explained line by line.</div>';
+  showTab('fns');
+}
+
+/* ---------- Analysis ---------- */
+function analyze(text, name) {
+  var A = { name: name, scripts: [], fns: [], byName: Object.create(null), byShort: Object.create(null), taken: Object.create(null), fnByNode: new Map(), events: new Map(), edges: new Set(), errors: [], external: [] };
+  var isHtml = /\.html?$/i.test(name) || (/<script/i.test(text) && /<(html|body|div|head)\b/i.test(text));
+  A.isHtml = isHtml;
+  if (isHtml) {
+    var re = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi, m;
+    while ((m = re.exec(text))) {
+      var attrs = m[1];
+      var sm = attrs.match(/\bsrc\s*=\s*["']?([^"'\s>]+)/i);
+      if (sm) { A.external.push(sm[1]); continue; }
+      var tm = attrs.match(/\btype\s*=\s*["']?([^"'\s>]+)/i);
+      var type = tm ? tm[1].toLowerCase() : '';
+      if (type && !/(javascript|module|ecmascript)/.test(type)) continue;
+      var start = m.index + m[0].indexOf('>') + 1;
+      var off = text.slice(0, start).split('\n').length - 1;
+      if (m[2].trim()) A.scripts.push({ code: m[2], off: off, module: type === 'module' });
+    }
+  } else {
+    A.scripts.push({ code: text, off: 0, module: /^\s*(import|export)\b/m.test(text) });
+  }
+
+  A.scripts.forEach(function (sc, i) {
+    sc.i = i;
+    var tries = sc.module ? ['module', 'script'] : ['script', 'module'], err = null;
+    for (var t = 0; t < tries.length; t++) {
+      try {
+        sc.ast = acorn.parse(sc.code, { ecmaVersion: 'latest', sourceType: tries[t], locations: true, allowHashBang: true, allowReturnOutsideFunction: tries[t] === 'script', allowAwaitOutsideFunction: true, allowImportExportEverywhere: true });
+        break;
+      } catch (e) { if (!err) err = e; }
+    }
+    if (!sc.ast) A.errors.push('Script block ' + (i + 1) + ' could not be read near line ' + ((err && err.loc ? err.loc.line : 1) + sc.off) + '. ' + (err ? err.message.replace(/\s*\(\d+:\d+\)$/, '') : ''));
+  });
+
+  A.scripts.forEach(function (sc) {
+    if (!sc.ast) return;
+    CS = sc;
+    walkP(sc.ast, null, function (n, p) {
+      var nm = null, member = false;
+      if (n.type === 'FunctionDeclaration' && n.id) nm = n.id.name;
+      else if (n.type === 'FunctionExpression' || n.type === 'ArrowFunctionExpression') {
+        if (p && p.type === 'VariableDeclarator' && p.init === n && p.id.type === 'Identifier') nm = p.id.name;
+        else if (p && p.type === 'AssignmentExpression' && p.right === n) { nm = sh(p.left, 60); member = p.left.type === 'MemberExpression'; }
+        else if (p && p.type === 'Property' && p.value === n && !p.computed) { nm = p.key.name || String(p.key.value); member = true; }
+        else if (p && p.type === 'MethodDefinition' && !p.computed) { nm = p.key.name || String(p.key.value); member = true; }
+        else if (p && p.type === 'PropertyDefinition' && p.value === n && !p.computed) { nm = p.key.name; member = true; }
+        else if (n.id) nm = n.id.name;
+      }
+      if (nm) {
+        var unique = nm, k = 2;
+        while (A.taken[unique]) unique = nm + ' (' + (k++) + ')';
+        A.taken[unique] = 1;
+        var f = { id: 'f' + A.fns.length, name: unique, base: nm, member: member, node: n, sc: sc, line: n.loc.start.line + sc.off, end: n.loc.end.line + sc.off };
+        A.fns.push(f); A.fnByNode.set(n, f);
+        if (!member || nm.indexOf('.') >= 0) { if (!A.byName[nm]) A.byName[nm] = f; }
+        if (member) { var s = nm.split('.').pop(); if (!BUILTIN_NAMES[s]) (A.byShort[s] = A.byShort[s] || []).push(f); }
+      }
+    });
+  });
+
+  function addEdge(a, b) { if (a && b && a !== b) A.edges.add(a + '>' + b); }
+  function evNode(label, type) {
+    if (!A.events.has(label)) A.events.set(label, { id: 'e' + A.events.size, label: label, type: type });
+    return A.events.get(label).id;
+  }
+  function targetLabel(o) {
+    if (o.type === 'CallExpression' && o.callee.type === 'MemberExpression' && !o.callee.computed && o.arguments[0] && o.arguments[0].type === 'Literal') {
+      var pn = o.callee.property.name, v = String(o.arguments[0].value);
+      if (pn === 'getElementById') return '#' + v;
+      if (pn === 'querySelector' || pn === 'querySelectorAll') return v;
+    }
+    if (o.type === 'CallExpression' && o.callee.type === 'Identifier' && o.arguments[0] && o.arguments[0].type === 'Literal') return '#' + String(o.arguments[0].value).replace(/^#/, '');
+    return sh(o, 24);
+  }
+  function scanBody(root, owner) {
+    walkP(root, null, function (n) {
+      if (n !== root && A.fnByNode.has(n)) return false;
+      if (n.type === 'CallExpression') {
+        var cal = n.callee;
+        var prop = cal.type === 'MemberExpression' && !cal.computed ? cal.property.name : null;
+        if (prop === 'addEventListener' && n.arguments.length >= 2) {
+          var t0 = n.arguments[0];
+          var evt = t0.type === 'Literal' ? String(t0.value) : sh(t0, 20);
+          var id = evNode(evt + ' on ' + targetLabel(cal.object), evt);
+          var h = n.arguments[1];
+          var hf = A.fnByNode.get(h) || resolve(A, h);
+          if (hf) addEdge(id, hf.id);
+          else if (isFnNode(h)) scanBody(h, id);
+          scanBody(cal.object, owner);
+          return false;
+        }
+        var tf = resolve(A, cal);
+        if (tf) addEdge(owner, tf.id);
+        n.arguments.forEach(function (a) {
+          if (a.type === 'Identifier' || a.type === 'MemberExpression') { var af = resolve(A, a); if (af) addEdge(owner, af.id); }
+        });
+      }
+      if (n.type === 'AssignmentExpression' && n.left.type === 'MemberExpression' && !n.left.computed && /^on[a-z]+$/.test(n.left.property.name)) {
+        var ev = n.left.property.name.slice(2);
+        var eid = evNode(ev + ' on ' + targetLabel(n.left.object), ev);
+        var rf = A.fnByNode.get(n.right) || resolve(A, n.right);
+        if (rf) addEdge(eid, rf.id);
+        else if (isFnNode(n.right)) scanBody(n.right, eid);
+        return false;
+      }
+    });
+  }
+
+  A.scripts.forEach(function (sc) { if (!sc.ast) return; CS = sc; scanBody(sc.ast, 'load'); });
+  A.fns.forEach(function (f) { CS = f.sc; scanBody(f.node, f.id); });
+
+  if (isHtml) {
+    var htmlOnly = text.replace(/<script\b[\s\S]*?<\/script\s*>/gi, '');
+    var ar = /\son([a-z]+)\s*=\s*(["'])([\s\S]*?)\2/gi, am;
+    while ((am = ar.exec(htmlOnly))) {
+      var lt = htmlOnly.lastIndexOf('<', am.index);
+      var tagText = htmlOnly.slice(lt, am.index);
+      var tg = tagText.match(/<([a-z0-9-]+)/i), idm = tagText.match(/\bid\s*=\s*["']?([^"'\s>]+)/i);
+      var where = idm ? '#' + idm[1] : (tg ? '<' + tg[1].toLowerCase() + '>' : 'an element');
+      var nr = /([A-Za-z_$][\w$.]*)\s*\(/g, nm2;
+      while ((nm2 = nr.exec(am[3]))) {
+        var f2 = A.byName[nm2[1]];
+        if (f2) addEdge(evNode(am[1] + ' on ' + where, am[1]), f2.id);
+      }
+    }
+  }
+
+  A.out = {}; A.inn = {};
+  A.edges.forEach(function (e) {
+    var p = e.split('>');
+    (A.out[p[0]] = A.out[p[0]] || []).push(p[1]);
+    (A.inn[p[1]] = A.inn[p[1]] || []).push(p[0]);
+  });
+  A.evById = {};
+  A.events.forEach(function (v) { A.evById[v.id] = v; });
+  return A;
+}
+
+var BUILTIN_NAMES = {};
+'push pop shift unshift splice slice map filter forEach find findIndex some every reduce includes indexOf join split sort reverse concat trim toLowerCase toUpperCase replace replaceAll startsWith endsWith toFixed padStart toString appendChild append prepend remove removeChild insertBefore setAttribute getAttribute focus click scrollIntoView getBoundingClientRect preventDefault stopPropagation then catch finally json text getContext fillRect strokeRect clearRect beginPath closePath moveTo lineTo arc fill stroke fillText drawImage save restore translate rotate scale play pause get set has delete add clear keys values entries addEventListener removeEventListener setItem getItem removeItem querySelector querySelectorAll getElementById createElement log error warn parse stringify floor ceil round random min max abs sqrt now send emit on off open close start stop connect disconnect update render init draw'.split(' ').forEach(function (k) { BUILTIN_NAMES[k] = 1; });
+function resolve(A, c) {
+  if (!c) return null;
+  if (c.type === 'ChainExpression') c = c.expression;
+  if (c.type === 'Identifier') return A.byName[c.name] || null;
+  if (c.type === 'MemberExpression' && !c.computed) {
+    var full = sh(c, 80);
+    if (A.byName[full]) return A.byName[full];
+    var s = A.byShort[c.property.name];
+    if (s && s.length) return s[0];
+  }
+  return null;
+}
+function fnById(id) { return S.A && id && id.charAt(0) === 'f' ? S.A.fns[+id.slice(1)] : null; }
+function nodeLabel(id) {
+  if (id === 'load') return 'when the page first loads';
+  if (id.charAt(0) === 'e') { var e = S.A.evById[id]; return e ? 'the ' + e.label + ' event' : id; }
+  var f = fnById(id); return f ? ref(f) : id;
+}
+
+/* ---------- Plain English ---------- */
+var EVENT_WORDS = { click: 'a tap or click', input: 'typing or changing a field', change: 'a field or setting changes', keydown: 'a key is pressed', keyup: 'a key is let go', submit: 'a form is sent', load: 'something finished loading', DOMContentLoaded: 'the page HTML finished loading', resize: 'the window changes size', scroll: 'the page scrolls', pointerdown: 'a finger or mouse presses down', pointerup: 'a finger or mouse lifts up', pointermove: 'a finger or mouse moves', touchstart: 'a finger touches the screen', touchend: 'a finger leaves the screen', touchmove: 'a finger drags', mousedown: 'the mouse button presses', mouseup: 'the mouse button lifts', mousemove: 'the mouse moves', devicemotion: 'the phone moves', deviceorientation: 'the phone tilts', message: 'a message arrives', ended: 'audio or video finishes', visibilitychange: 'the tab is hidden or shown' };
+function eventWords(e) { return EVENT_WORDS[e] ? 'the "' + e + '" event happens (' + EVENT_WORDS[e] + ')' : 'the "' + e + '" event happens'; }
+
+var KNOWN = {
+  'document.getElementById': function (a) { return 'finds the element on the page with the id ' + a(0); },
+  'document.querySelector': function (a) { return 'finds the first element on the page that matches ' + a(0); },
+  'document.querySelectorAll': function (a) { return 'finds every element on the page that matches ' + a(0); },
+  'document.createElement': function (a) { return 'makes a new ' + a(0) + ' element (it is not on the page until you add it)'; },
+  'localStorage.getItem': function (a) { return 'reads the value saved in browser storage under the name ' + a(0); },
+  'localStorage.setItem': function (a) { return 'saves ' + a(1) + ' into browser storage under the name ' + a(0); },
+  'localStorage.removeItem': function (a) { return 'deletes the value saved in browser storage under the name ' + a(0); },
+  'sessionStorage.getItem': function (a) { return 'reads ' + a(0) + ' from storage that lasts until the tab closes'; },
+  'sessionStorage.setItem': function (a) { return 'saves ' + a(1) + ' under ' + a(0) + ' until the tab closes'; },
+  'JSON.parse': function (a) { return 'turns the JSON text ' + a(0) + ' back into a usable object'; },
+  'JSON.stringify': function (a) { return 'turns ' + a(0) + ' into JSON text so it can be saved or sent'; },
+  'console.log': function (a) { return 'prints ' + a(0) + ' to the developer console (a message for you while debugging)'; },
+  'console.error': function (a) { return 'prints an error message ' + a(0) + ' to the developer console'; },
+  'console.warn': function (a) { return 'prints a warning ' + a(0) + ' to the developer console'; },
+  'Math.random': function () { return 'a random number between 0 and 1'; },
+  'Math.floor': function (a) { return a(0) + ' rounded down to a whole number'; },
+  'Math.ceil': function (a) { return a(0) + ' rounded up to a whole number'; },
+  'Math.round': function (a) { return a(0) + ' rounded to the nearest whole number'; },
+  'Math.abs': function (a) { return 'the size of ' + a(0) + ' with any minus sign removed'; },
+  'Math.min': function (a, args) { return 'the smallest of ' + args.map(function (x) { return sh(x, 20); }).join(', '); },
+  'Math.max': function (a, args) { return 'the biggest of ' + args.map(function (x) { return sh(x, 20); }).join(', '); },
+  'Math.sqrt': function (a) { return 'the square root of ' + a(0); },
+  'Math.sin': function (a) { return 'the sine of the angle ' + a(0) + ' (used for waves and circles)'; },
+  'Math.cos': function (a) { return 'the cosine of the angle ' + a(0) + ' (used for waves and circles)'; },
+  'Math.atan2': function (a) { return 'the angle pointing toward ' + a(1) + ', ' + a(0); },
+  'Math.hypot': function (a, args) { return 'the straight line distance from the values ' + args.map(function (x) { return sh(x, 16); }).join(', '); },
+  'Date.now': function () { return 'the current time, counted in milliseconds'; },
+  'setTimeout': function (a) { return 'schedules ' + a(0) + ' to run once after ' + (a(1) || '0') + ' milliseconds'; },
+  'setInterval': function (a) { return 'schedules ' + a(0) + ' to run again and again every ' + a(1) + ' milliseconds'; },
+  'clearTimeout': function () { return 'cancels a scheduled timer'; },
+  'clearInterval': function () { return 'stops a repeating timer'; },
+  'requestAnimationFrame': function (a) { return 'asks the browser to run ' + a(0) + ' right before it draws the next frame (this is how animations loop)'; },
+  'cancelAnimationFrame': function () { return 'cancels the next animation frame'; },
+  'fetch': function (a) { return 'sends a network request to ' + a(0) + ' and gets back a response'; },
+  'alert': function (a) { return 'pops up a message box showing ' + a(0); },
+  'confirm': function (a) { return 'asks the user a yes or no question: ' + a(0); },
+  'prompt': function (a) { return 'asks the user to type something: ' + a(0); },
+  'parseInt': function (a) { return 'turns ' + a(0) + ' into a whole number'; },
+  'parseFloat': function (a) { return 'turns ' + a(0) + ' into a number that can have decimals'; },
+  'Number': function (a) { return 'turns ' + a(0) + ' into a number'; },
+  'String': function (a) { return 'turns ' + a(0) + ' into text'; },
+  'Boolean': function (a) { return 'turns ' + a(0) + ' into true or false'; },
+  'isNaN': function (a) { return 'checks whether ' + a(0) + ' is not a valid number'; },
+  'Array.isArray': function (a) { return 'checks whether ' + a(0) + ' is a list'; },
+  'Array.from': function (a) { return 'makes a real list out of ' + a(0); },
+  'Object.keys': function (a) { return 'the list of names (keys) inside ' + a(0); },
+  'Object.values': function (a) { return 'the list of values inside ' + a(0); },
+  'Object.entries': function (a) { return 'a list of name and value pairs from ' + a(0); },
+  'Object.assign': function (a) { return 'copies the values from the other objects into ' + a(0); },
+  'Promise.all': function (a) { return 'waits until every one of ' + a(0) + ' has finished'; },
+  'encodeURIComponent': function (a) { return 'makes ' + a(0) + ' safe to put inside a web address'; },
+  'structuredClone': function (a) { return 'makes a full independent copy of ' + a(0); }
+};
+var METH = {
+  addEventListener: function (o, a, args) {
+    var h = args[1], hd = 'the code written right there';
+    if (h) { var hf = S.A.fnByNode.get(h) || resolve(S.A, h); if (hf) hd = 'your function ' + ref(hf); }
+    var e = args[0] && args[0].type === 'Literal' ? String(args[0].value) : a(0);
+    return 'sets up a listener on ' + o + ': every time ' + eventWords(e) + ', it runs ' + hd;
+  },
+  removeEventListener: function (o, a) { return 'stops listening for the ' + a(0) + ' event on ' + o; },
+  push: function (o, a) { return 'adds ' + a(0) + ' to the end of the list ' + o; },
+  pop: function (o) { return 'removes the last item from ' + o + ' and gives it back'; },
+  shift: function (o) { return 'removes the first item from ' + o + ' and gives it back'; },
+  unshift: function (o, a) { return 'adds ' + a(0) + ' to the front of the list ' + o; },
+  splice: function (o) { return 'removes or inserts items inside the list ' + o; },
+  slice: function (o) { return 'a copy of part of ' + o; },
+  map: function (o) { return 'builds a new list by transforming every item in ' + o; },
+  filter: function (o) { return 'builds a new list with only the items in ' + o + ' that pass a test'; },
+  forEach: function (o) { return 'runs some code once for every item in ' + o; },
+  find: function (o) { return 'finds the first item in ' + o + ' that passes a test'; },
+  findIndex: function (o) { return 'finds the position of the first item in ' + o + ' that passes a test'; },
+  some: function (o) { return 'checks whether at least one item in ' + o + ' passes a test'; },
+  every: function (o) { return 'checks whether every item in ' + o + ' passes a test'; },
+  reduce: function (o) { return 'combines every item in ' + o + ' into one single value'; },
+  includes: function (o, a) { return 'checks whether ' + o + ' contains ' + a(0); },
+  indexOf: function (o, a) { return 'the position of ' + a(0) + ' inside ' + o + ' (or -1 if it is not there)'; },
+  join: function (o, a) { return 'glues the items of ' + o + ' into one piece of text' + (a(0) ? ', with ' + a(0) + ' between them' : ''); },
+  split: function (o, a) { return 'cuts ' + o + ' into a list of pieces at every ' + a(0); },
+  sort: function (o) { return 'sorts the list ' + o; },
+  reverse: function (o) { return 'flips the order of ' + o; },
+  concat: function (o, a) { return 'joins ' + o + ' with ' + a(0) + ' into a new list'; },
+  trim: function (o) { return o + ' with the spaces at both ends removed'; },
+  toLowerCase: function (o) { return o + ' in all lowercase letters'; },
+  toUpperCase: function (o) { return o + ' in all capital letters'; },
+  replace: function (o, a) { return o + ' with ' + a(0) + ' swapped for ' + a(1); },
+  replaceAll: function (o, a) { return o + ' with every ' + a(0) + ' swapped for ' + a(1); },
+  startsWith: function (o, a) { return 'checks whether ' + o + ' begins with ' + a(0); },
+  endsWith: function (o, a) { return 'checks whether ' + o + ' ends with ' + a(0); },
+  toFixed: function (o, a) { return o + ' written with ' + a(0) + ' digits after the decimal point'; },
+  padStart: function (o, a) { return o + ' padded at the front to be ' + a(0) + ' characters long'; },
+  toString: function (o) { return o + ' turned into text'; },
+  appendChild: function (o, a) { return 'puts ' + a(0) + ' inside ' + o + ' on the page'; },
+  append: function (o, a) { return 'puts ' + a(0) + ' at the end inside ' + o; },
+  prepend: function (o, a) { return 'puts ' + a(0) + ' at the start inside ' + o; },
+  remove: function (o) { return 'removes ' + o + ' from the page'; },
+  removeChild: function (o, a) { return 'removes ' + a(0) + ' from inside ' + o; },
+  insertBefore: function (o, a) { return 'puts ' + a(0) + ' into ' + o + ' just before ' + a(1); },
+  setAttribute: function (o, a) { return 'sets the ' + a(0) + ' attribute of ' + o + ' to ' + a(1); },
+  getAttribute: function (o, a) { return 'reads the ' + a(0) + ' attribute of ' + o; },
+  focus: function (o) { return 'puts the typing cursor in ' + o; },
+  scrollIntoView: function (o) { return 'scrolls the page so ' + o + ' is visible'; },
+  getBoundingClientRect: function (o) { return 'measures where ' + o + ' sits on screen and how big it is'; },
+  preventDefault: function () { return 'stops the browser from doing its normal action for this event (like reloading the page when a form is sent)'; },
+  stopPropagation: function () { return 'stops this event from also reaching the elements around it'; },
+  then: function (o) { return 'waits for ' + o + ' to finish, then runs the next step with its result'; },
+  catch: function () { return 'if anything before this failed, runs this to handle the error'; },
+  finally: function () { return 'runs this at the end whether things worked or failed'; },
+  json: function (o) { return 'reads the body of the response ' + o + ' as JSON data'; },
+  text: function (o) { return 'reads the body of the response ' + o + ' as plain text'; },
+  getContext: function (o, a) { return 'gets the drawing tool for the canvas ' + o + ' (' + a(0) + ')'; },
+  fillRect: function () { return 'draws a filled rectangle on the canvas'; },
+  strokeRect: function () { return 'draws a rectangle outline on the canvas'; },
+  clearRect: function () { return 'erases a rectangle area of the canvas'; },
+  beginPath: function () { return 'starts a new shape on the canvas'; },
+  closePath: function () { return 'closes the current shape back to its start'; },
+  moveTo: function (o, a) { return 'moves the pen to ' + a(0) + ', ' + a(1) + ' without drawing'; },
+  lineTo: function (o, a) { return 'adds a line to ' + a(0) + ', ' + a(1) + ' in the shape'; },
+  arc: function () { return 'adds a circle or curve to the shape'; },
+  fill: function () { return 'fills the shape in with the current color'; },
+  stroke: function () { return 'draws the outline of the shape'; },
+  fillText: function (o, a) { return 'draws the text ' + a(0) + ' on the canvas'; },
+  drawImage: function (o, a) { return 'draws the picture ' + a(0) + ' on the canvas'; },
+  save: function (o) { return 'remembers the current drawing settings of ' + o; },
+  restore: function (o) { return 'goes back to the drawing settings saved earlier on ' + o; },
+  translate: function () { return 'shifts where the canvas draws from'; },
+  rotate: function () { return 'turns the canvas drawing direction'; },
+  scale: function () { return 'stretches or shrinks the canvas drawing'; },
+  play: function (o) { return 'starts playing ' + o; },
+  pause: function (o) { return 'pauses ' + o; },
+  setItem: function (o, a) { return 'saves ' + a(1) + ' under the name ' + a(0) + ' in ' + o; },
+  getItem: function (o, a) { return 'reads the value saved under ' + a(0) + ' in ' + o; }
+};
+var NEWS = {
+  Date: function (a, args) { return args.length ? 'a date made from ' + a(0) : 'the current date and time'; },
+  Map: function () { return 'a new Map (a lookup table of names to values)'; },
+  Set: function () { return 'a new Set (a list that never holds duplicates)'; },
+  Audio: function (a) { return 'a new audio player' + (a(0) ? ' for ' + a(0) : ''); },
+  Image: function () { return 'a new image'; },
+  Promise: function () { return 'a new promise (a value that will arrive later)'; },
+  Error: function (a) { return 'a new error with the message ' + a(0); },
+  AudioContext: function () { return 'the browser sound engine'; },
+  WebSocket: function (a) { return 'a live two way connection to ' + a(0); },
+  URL: function (a) { return 'a web address object built from ' + a(0); },
+  URLSearchParams: function () { return 'a tool for reading the ?name=value parts of a web address'; },
+  FormData: function () { return 'a bundle of form field values'; },
+  XMLHttpRequest: function () { return 'an older style network request'; },
+  Array: function (a) { return 'a new list with ' + a(0) + ' empty slots'; }
+};
+
+function callPhrase(c) {
+  var cal = c.callee, args = c.arguments;
+  var a = function (i) { return args[i] ? sh(args[i], 32) : ''; };
+  var f = resolve(S.A, cal);
+  if (f) return 'runs your function ' + ref(f) + (args.length ? ' with ' + args.map(function (x) { return sh(x, 24); }).join(', ') : '');
+  var full = sh(cal, 60).replace(/^window\./, '');
+  if (KNOWN[full]) return KNOWN[full](a, args);
+  if (cal.type === 'MemberExpression' && !cal.computed) {
+    var p = cal.property.name, o = sh(cal.object, 32);
+    if (/classList$/.test(o)) {
+      var owner = o.replace(/\.classList$/, '');
+      var cls = { add: 'adds the CSS class ' + a(0) + ' to ' + owner, remove: 'removes the CSS class ' + a(0) + ' from ' + owner, toggle: 'switches the CSS class ' + a(0) + ' on or off for ' + owner, contains: 'checks whether ' + owner + ' has the CSS class ' + a(0) };
+      if (cls[p]) return cls[p];
+    }
+    if (Object.prototype.hasOwnProperty.call(METH, p)) return METH[p](o, a, args);
+  }
+  if (isFnNode(cal)) return 'runs the function written right here immediately';
+  return 'calls ' + full + (args.length ? ' with ' + args.map(function (x) { return sh(x, 24); }).join(', ') : '');
+}
+function newPhrase(c) {
+  var args = c.arguments, a = function (i) { return args[i] ? sh(args[i], 32) : ''; };
+  var nm = sh(c.callee, 40).replace(/^window\./, '');
+  if (NEWS[nm]) return NEWS[nm](a, args);
+  if (/^THREE\./.test(nm)) return 'a new ' + nm.slice(6) + ' from the Three.js 3D library';
+  return 'a new ' + nm + ' object' + (args.length ? ' built from ' + args.map(function (x) { return sh(x, 20); }).join(', ') : '');
+}
+var OPS = { '+': 'added together, or joined if they are text', '-': 'subtracted', '*': 'multiplied', '/': 'divided', '%': 'the remainder after dividing', '**': 'raised to a power', '===': 'true if both sides are exactly equal', '!==': 'true if the sides are different', '==': 'true if both sides are equal', '!=': 'true if the sides are different', '<': 'true if the left side is smaller', '>': 'true if the left side is bigger', '<=': 'true if the left side is smaller or equal', '>=': 'true if the left side is bigger or equal', '&&': 'true only if both sides are true', '||': 'the left side, or the right side if the left is empty or false', '??': 'the left side, or the right side if the left is missing', 'instanceof': 'true if the left side was made from the right side', 'in': 'true if the name exists inside the object' };
+
+function descExpr(e) {
+  if (!e) return 'nothing';
+  switch (e.type) {
+    case 'ChainExpression': return descExpr(e.expression);
+    case 'Literal':
+      if (e.regex) return 'the pattern ' + sh(e, 30);
+      if (typeof e.value === 'string') return 'the text "' + (e.value.length > 30 ? e.value.slice(0, 27) + '...' : e.value) + '"';
+      if (typeof e.value === 'number') return 'the number ' + e.raw;
+      if (typeof e.value === 'boolean') return e.value + ' (a yes or no value)';
+      if (e.value === null) return 'nothing (null)';
+      return sh(e);
+    case 'TemplateLiteral': return 'a text template that drops values into the text';
+    case 'Identifier':
+      if (e.name === 'undefined') return 'nothing (undefined)';
+      if (S.A.byName[e.name]) return 'your function ' + ref(S.A.byName[e.name]);
+      return e.name;
+    case 'ThisExpression': return 'this object';
+    case 'ArrayExpression': return e.elements.length ? 'a list of ' + e.elements.length + ' item' + (e.elements.length === 1 ? '' : 's') : 'an empty list';
+    case 'ObjectExpression':
+      if (!e.properties.length) return 'an empty object';
+      var keys = e.properties.map(function (p) { return p.type === 'SpreadElement' ? '...' + sh(p.argument, 12) : (p.key && (p.key.name || String(p.key.value))) || '?'; });
+      return 'an object holding ' + keys.slice(0, 4).join(', ') + (keys.length > 4 ? ' and more' : '');
+    case 'ArrowFunctionExpression': case 'FunctionExpression':
+      var f = S.A.fnByNode.get(e);
+      if (f) return 'your function ' + ref(f);
+      return 'a small function' + (e.params.length ? ' that takes in ' + e.params.map(function (p) { return sh(p, 16); }).join(', ') : '');
+    case 'CallExpression': return callPhrase(e);
+    case 'NewExpression': return newPhrase(e);
+    case 'AwaitExpression': return 'the result of waiting for this: ' + descExpr(e.argument);
+    case 'MemberExpression':
+      if (!e.computed) {
+        var p = e.property.name, o = sh(e.object, 30);
+        if (p === 'length') return 'how many items are in ' + o;
+        if (p === 'value') return 'what is in the field ' + o;
+        if (p === 'textContent' || p === 'innerText') return 'the text shown in ' + o;
+        if (p === 'checked') return 'whether ' + o + ' is checked';
+        if (o === 'Math' && p === 'PI') return 'pi (about 3.14159)';
+      }
+      return sh(e, 40);
+    case 'BinaryExpression': case 'LogicalExpression':
+      return sh(e, 50) + (OPS[e.operator] ? ' (' + OPS[e.operator] + ')' : '');
+    case 'UnaryExpression':
+      if (e.operator === '!') return 'the opposite of ' + sh(e.argument, 30);
+      if (e.operator === 'typeof') return 'what kind of value ' + sh(e.argument, 30) + ' is';
+      return sh(e, 40);
+    case 'ConditionalExpression':
+      return sh(e.consequent, 24) + ' if ' + sh(e.test, 30) + ' is true, otherwise ' + sh(e.alternate, 24);
+    case 'ClassExpression': return 'a class (a blueprint for objects)';
+    case 'ImportExpression': return 'the module loaded from ' + sh(e.source, 30);
+    default: return sh(e, 40);
+  }
+}
+
+function patternNames(p) {
+  if (!p) return [];
+  if (p.type === 'Identifier') return [p.name];
+  if (p.type === 'AssignmentPattern') return patternNames(p.left);
+  if (p.type === 'RestElement') return patternNames(p.argument);
+  if (p.type === 'ObjectPattern') return [].concat.apply([], p.properties.map(function (q) { return q.type === 'RestElement' ? patternNames(q) : patternNames(q.value); }));
+  if (p.type === 'ArrayPattern') return [].concat.apply([], p.elements.map(patternNames));
+  return [sh(p, 16)];
+}
+function paramName(p) {
+  if (p.type === 'Identifier') return p.name;
+  if (p.type === 'AssignmentPattern') return paramName(p.left) + ' (if not given, it uses ' + sh(p.right, 20) + ')';
+  if (p.type === 'RestElement') return '...' + sh(p.argument, 16) + ' (any number of extra values, gathered into a list)';
+  if (p.type === 'ObjectPattern') return 'an object, pulling out ' + listWords(patternNames(p));
+  if (p.type === 'ArrayPattern') return 'a list, unpacked into ' + listWords(patternNames(p));
+  return sh(p, 20);
+}
+
+function assignPhrase(e) {
+  var L = e.left, R = e.right, op = e.operator;
+  if (op === '=') {
+    if (L.type === 'MemberExpression' && !L.computed) {
+      var p = L.property.name, o = sh(L.object, 30);
+      if (p === 'textContent' || p === 'innerText') return 'Changes the text shown in ' + o + ' to ' + descExpr(R) + '.';
+      if (p === 'innerHTML') return 'Replaces the HTML inside ' + o + ' with ' + descExpr(R) + '. This rebuilds what shows inside that element.';
+      if (p === 'value') return 'Sets what is inside the field ' + o + ' to ' + descExpr(R) + '.';
+      if (p === 'disabled') return 'Turns ' + o + ' ' + (R.type === 'Literal' && R.value === true ? 'off (it cannot be used)' : 'on or off depending on ' + sh(R, 30)) + '.';
+      if (p === 'hidden') return 'Hides or shows ' + o + ' depending on ' + sh(R, 30) + '.';
+      if (/^on[a-z]+$/.test(p)) return 'Sets what happens when ' + eventWords(p.slice(2)) + ' on ' + o + ': it runs ' + descExpr(R) + '.';
+      if (L.object.type === 'MemberExpression' && !L.object.computed && L.object.property.name === 'style') return 'Changes the ' + p + ' style of ' + sh(L.object.object, 30) + ' to ' + descExpr(R) + '.';
+    }
+    if (L.type === 'ObjectPattern' || L.type === 'ArrayPattern') return 'Pulls ' + listWords(patternNames(L)) + ' out of ' + descExpr(R) + '.';
+    return 'Stores ' + descExpr(R) + ' into ' + sh(L, 30) + '.';
+  }
+  var words = { '+=': 'Adds ' + descExpr(R) + ' onto ' + sh(L, 30) + '.', '-=': 'Subtracts ' + descExpr(R) + ' from ' + sh(L, 30) + '.', '*=': 'Multiplies ' + sh(L, 30) + ' by ' + descExpr(R) + '.', '/=': 'Divides ' + sh(L, 30) + ' by ' + descExpr(R) + '.', '||=': 'Fills in ' + sh(L, 30) + ' with ' + descExpr(R) + ' only if it is empty.', '??=': 'Fills in ' + sh(L, 30) + ' with ' + descExpr(R) + ' only if it is missing.' };
+  return words[op] || 'Updates ' + sh(L, 30) + ' using ' + sh(R, 30) + '.';
+}
+
+function exprStmt(x) {
+  if (x.type === 'ChainExpression') x = x.expression;
+  if (x.type === 'AssignmentExpression') return assignPhrase(x);
+  if (x.type === 'UpdateExpression') return (x.operator === '++' ? 'Adds 1 to ' : 'Subtracts 1 from ') + sh(x.argument, 30) + '.';
+  if (x.type === 'CallExpression') return cap(callPhrase(x)) + '.';
+  if (x.type === 'AwaitExpression') return 'Waits for this to finish before moving on: ' + descExpr(x.argument) + '.';
+  if (x.type === 'SequenceExpression') return 'Runs ' + x.expressions.length + ' small steps on one line, left to right.';
+  if (x.type === 'Literal' && x.value === 'use strict') return 'Turns on strict mode, which makes JavaScript catch more mistakes.';
+  if (x.type === 'NewExpression') return 'Creates ' + newPhrase(x) + '.';
+  if (x.type === 'LogicalExpression' && x.operator === '&&') return 'If ' + sh(x.left, 30) + ' is true, it runs ' + sh(x.right, 30) + '. This is a short way to write an if.';
+  return 'Works out ' + sh(x, 40) + '.';
+}
+
+function explainStmt(s) {
+  switch (s.type) {
+    case 'VariableDeclaration':
+      return s.declarations.map(function (d) {
+        var what = s.kind === 'const' ? 'constant' : 'variable';
+        var tail = s.kind === 'const' ? ' (a name that will not be pointed at anything else)' : s.kind === 'let' ? ' (a name that can change later)' : ' (older style, can change later)';
+        if (d.id.type !== 'Identifier') return 'Pulls ' + listWords(patternNames(d.id)) + ' out of ' + descExpr(d.init) + ' into separate ' + what + 's.';
+        if (!d.init) return 'Creates a ' + what + ' named ' + d.id.name + tail + ' with no value yet.';
+        if (isFnNode(d.init)) return 'Creates a function named ' + d.id.name + (d.init.params.length ? ' that takes in ' + listWords(d.init.params.map(paramName)) : '') + '. It runs only when something calls it. Tap ' + ref(S.A.fnByNode.get(d.init) || { id: '', name: d.id.name }) + ' to open it.';
+        return 'Creates a ' + what + ' named ' + d.id.name + tail + ' and sets it to ' + descExpr(d.init) + '.';
+      }).join(' ');
+    case 'ExpressionStatement': return exprStmt(s.expression);
+    case 'ReturnStatement': return s.argument ? 'Sends back ' + descExpr(s.argument) + ' to whatever called this function, and stops the function here.' : 'Stops the function here and goes back to whatever called it.';
+    case 'IfStatement': return 'Checks a condition: is ' + sh(s.test, 60) + ' true?' + (s.test.type === 'BinaryExpression' || s.test.type === 'LogicalExpression' ? ' (' + (OPS[s.test.operator] || '') + ')' : s.test.type === 'UnaryExpression' && s.test.operator === '!' ? ' (the ! means "not", so this asks whether ' + sh(s.test.argument, 30) + ' is empty, false, or missing)' : '') + ' If it is, the steps under it run.' + (s.alternate ? ' If not, the Otherwise steps run.' : '');
+    case 'ForStatement': return 'A counting loop. It starts with ' + (sh(s.init, 30) || 'nothing') + ', keeps repeating while ' + (sh(s.test, 30) || 'forever') + ' is true, and does ' + (sh(s.update, 30) || 'nothing') + ' after each round.';
+    case 'ForOfStatement': return 'A loop that goes through each item in ' + sh(s.right, 30) + ', one at a time, calling the current item ' + listWords(s.left.type === 'VariableDeclaration' ? patternNames(s.left.declarations[0].id) : patternNames(s.left)) + '.';
+    case 'ForInStatement': return 'A loop that goes through each property name in ' + sh(s.right, 30) + ', calling the current name ' + listWords(s.left.type === 'VariableDeclaration' ? patternNames(s.left.declarations[0].id) : patternNames(s.left)) + '.';
+    case 'WhileStatement': return 'A loop that keeps repeating as long as ' + sh(s.test, 40) + ' is true.';
+    case 'DoWhileStatement': return 'A loop that runs once, then keeps repeating as long as ' + sh(s.test, 40) + ' is true.';
+    case 'BreakStatement': return 'Stops the loop (or switch) right now and jumps past it.';
+    case 'ContinueStatement': return 'Skips the rest of this round of the loop and moves on to the next round.';
+    case 'ThrowStatement': return 'Raises an error: ' + descExpr(s.argument) + '. Normal flow stops until a catch block handles it.';
+    case 'TryStatement': return 'Tries the steps below. If any of them throw an error, it jumps to the error handler instead of crashing the app.';
+    case 'SwitchStatement': return 'Looks at the value of ' + sh(s.discriminant, 30) + ' and jumps to the matching case below.';
+    case 'FunctionDeclaration': var f = S.A.fnByNode.get(s); return 'Defines a helper function named ' + (f ? ref(f) : (s.id ? s.id.name : '')) + (s.params.length ? ' that takes in ' + listWords(s.params.map(paramName)) : '') + '. It does not run yet. It runs when something calls it.';
+    case 'ClassDeclaration': return 'Defines a class named ' + (s.id ? s.id.name : '') + ', a blueprint for making objects that share the same functions.';
+    case 'EmptyStatement': return 'An empty step (a stray semicolon). It does nothing.';
+    case 'BlockStatement': return 'A group of steps kept together.';
+    case 'LabeledStatement': return 'Gives the next loop the label ' + s.label.name + ' so break or continue can point at it.';
+    case 'ImportDeclaration': return 'Brings in ' + (s.specifiers.length ? listWords(s.specifiers.map(function (x) { return x.local.name; })) : 'code') + ' from ' + sh(s.source, 40) + '.';
+    case 'ExportNamedDeclaration': case 'ExportDefaultDeclaration': return 'Makes this available to other files. ' + (s.declaration && s.declaration.type ? explainStmt(s.declaration.type.indexOf('Declaration') >= 0 ? s.declaration : { type: 'ExpressionStatement', expression: s.declaration }) : '');
+    default: return sh(s, 50);
+  }
+}
+
+var HEADER = { IfStatement: 1, ForStatement: 1, ForOfStatement: 1, ForInStatement: 1, WhileStatement: 1, DoWhileStatement: 1, TryStatement: 1, SwitchStatement: 1, FunctionDeclaration: 1, ClassDeclaration: 1, BlockStatement: 1, LabeledStatement: 1 };
+function codeOf(node, header) {
+  var t = CS.code.slice(node.start, node.end);
+  var col = node.loc.start.column;
+  var lines = t.split('\n').map(function (l, i) { if (!i) return l; var k = 0; while (k < col && (l[k] === ' ' || l[k] === '\t')) k++; return l.slice(k); });
+  if (header) return lines[0].replace(/\s+$/, '') + (lines.length > 1 ? ' ...' : '');
+  if (lines.length > 4) return lines.slice(0, 3).join('\n') + '\n  ...';
+  return lines.join('\n');
+}
+function unwrap(e) { while (e && (e.type === 'AwaitExpression' || e.type === 'ChainExpression')) e = e.type === 'AwaitExpression' ? e.argument : e.expression; return e; }
+function inlineFns(s) {
+  var e = s.type === 'ExpressionStatement' ? s.expression : s.type === 'VariableDeclaration' && s.declarations.length === 1 ? s.declarations[0].init : s.type === 'ReturnStatement' ? s.argument : null;
+  var out = [];
+  e = unwrap(e);
+  while (e && (e.type === 'CallExpression' || e.type === 'NewExpression')) {
+    e.arguments.slice().reverse().forEach(function (a) { if (isFnNode(a) && a.body.type === 'BlockStatement' && !S.A.fnByNode.has(a)) out.push(a); });
+    e = e.callee && e.callee.type === 'MemberExpression' ? unwrap(e.callee.object) : null;
+  }
+  return out.reverse();
+}
+function stmtRows(list, depth, rows) {
+  list.forEach(function (s) {
+    var inl = inlineFns(s);
+    rows.push({ line: s.loc.start.line + CS.off, code: codeOf(s, !!HEADER[s.type] || inl.length > 0), text: explainStmt(s), depth: depth });
+    var kids = function (n, d) { if (n.type === 'BlockStatement') stmtRows(n.body, d, rows); else stmtRows([n], d, rows); };
+    var lab = function (t, d) { rows.push({ label: t, depth: d }); };
+    switch (s.type) {
+      case 'IfStatement': lab('If true:', depth + 1); kids(s.consequent, depth + 1); if (s.alternate) { lab('Otherwise:', depth + 1); kids(s.alternate, depth + 1); } break;
+      case 'ForStatement': case 'ForOfStatement': case 'ForInStatement': case 'WhileStatement': case 'DoWhileStatement': lab('Each round:', depth + 1); kids(s.body, depth + 1); break;
+      case 'TryStatement':
+        lab('Try:', depth + 1); kids(s.block, depth + 1);
+        if (s.handler) { lab('If an error happens' + (s.handler.param ? ' (the error is called ' + sh(s.handler.param, 16) + ')' : '') + ':', depth + 1); kids(s.handler.body, depth + 1); }
+        if (s.finalizer) { lab('Always, at the end:', depth + 1); kids(s.finalizer, depth + 1); }
+        break;
+      case 'SwitchStatement': s.cases.forEach(function (c) { lab(c.test ? 'When it equals ' + sh(c.test, 30) + ':' : 'If nothing else matched:', depth + 1); stmtRows(c.consequent, depth + 1, rows); }); break;
+      case 'BlockStatement': stmtRows(s.body, depth + 1, rows); break;
+      case 'LabeledStatement': kids(s.body, depth); break;
+      default:
+        inl.forEach(function (f) { lab('Inside the function handed in' + (f.params.length ? ' (it receives ' + f.params.map(function (p) { return sh(p, 16); }).join(', ') + ')' : '') + ':', depth + 1); stmtRows(f.body.body, depth + 1, rows); });
+    }
+  });
+}
+
+var CONCEPTS = {
+  consts: ['const and let', 'const makes a name that will not be pointed at anything else. let makes a name that can change later.'],
+  arrow: ['Arrow function', 'A short way to write a function. (x) => x * 2 takes in x and gives back x times 2.'],
+  template: ['Template literal', 'Text inside backticks. Anything inside ${ } gets dropped into the text.'],
+  awaitk: ['await', 'Pauses this function until a slow task (like a network request) finishes, then hands back the result.'],
+  arraym: ['Array methods', 'Built in tools like map, filter, and forEach that work through every item in a list for you.'],
+  callback: ['Callback', 'A function handed to another function so it can be run later, like the function you give to forEach or addEventListener.'],
+  listener: ['Event listener', 'Code that waits for something to happen, like a tap or a key press, then runs.'],
+  dom: ['The DOM', 'The live model of the page that JavaScript can read and change. Change the DOM and the screen changes.'],
+  storage: ['localStorage', 'A small save spot inside the browser. Values stay there after the page reloads. It only stores text, so objects get turned into JSON first.'],
+  fetchk: ['fetch', 'Asks a server for data over the internet. It gives back a promise, so it is usually used with await or then.'],
+  json: ['JSON', 'A text format for data. JSON.stringify turns data into text. JSON.parse turns it back.'],
+  loop: ['Loop', 'Repeats a set of steps, either a set number of times or once per item.'],
+  ifs: ['if statement', 'Runs steps only when a condition is true. else gives the steps for when it is false.'],
+  ternary: ['Ternary', 'A one line if and else: test ? valueIfTrue : valueIfFalse.'],
+  trycatch: ['try and catch', 'Catches errors so one failure does not crash the whole app.'],
+  destructure: ['Destructuring', 'Pulls values out of an object or list into their own names in one step.'],
+  spread: ['Spread (...)', 'Copies every item out of a list or object into a new one.'],
+  optional: ['Optional chaining (?.)', 'Reads a value only if the thing before it exists. Otherwise it gives undefined instead of an error.'],
+  raf: ['Animation loop', 'requestAnimationFrame runs a function right before the next screen redraw. Calling it again inside that function makes a loop that draws every frame.'],
+  timer: ['Timers', 'setTimeout runs code once after a delay. setInterval runs it again and again.'],
+  promise: ['Promise', 'A value that will arrive later. then runs code when it arrives. catch runs if it fails.'],
+  newk: ['new', 'Builds a fresh object from a class or built in blueprint, like new Date() or new Map().'],
+  classes: ['Class', 'A blueprint for making objects that share the same functions.'],
+  canvas: ['Canvas', 'A drawing surface. You get a 2D drawing tool from it with getContext, then call commands like fillRect.'],
+  asyncfn: ['async function', 'A function that is allowed to use await. It always gives back a promise.']
+};
+function scanFn(root, isTop) {
+  var c = {}, w = {}, returns = false;
+  walkP(root, null, function (n) {
+    switch (n.type) {
+      case 'VariableDeclaration': if (n.kind !== 'var') c.consts = 1; break;
+      case 'ArrowFunctionExpression': if (n !== root) c.arrow = 1; break;
+      case 'TemplateLiteral': c.template = 1; break;
+      case 'AwaitExpression': c.awaitk = 1; break;
+      case 'ForStatement': case 'ForOfStatement': case 'ForInStatement': case 'WhileStatement': case 'DoWhileStatement': c.loop = 1; break;
+      case 'IfStatement': c.ifs = 1; break;
+      case 'ConditionalExpression': c.ternary = 1; break;
+      case 'TryStatement': c.trycatch = 1; break;
+      case 'ObjectPattern': case 'ArrayPattern': c.destructure = 1; break;
+      case 'SpreadElement': c.spread = 1; break;
+      case 'ChainExpression': c.optional = 1; break;
+      case 'ClassDeclaration': case 'ClassExpression': c.classes = 1; break;
+      case 'NewExpression':
+        c.newk = 1;
+        var nn = sh(n.callee, 30);
+        if (nn === 'Promise') c.promise = 1;
+        if (/^(WebSocket|XMLHttpRequest)$/.test(nn)) w.network = 1;
+        if (/^(AudioContext|Audio|webkitAudioContext)$/.test(nn)) w.sound = 1;
+        break;
+      case 'MemberExpression':
+        if (!n.computed) {
+          var o = sh(n.object, 30), p = n.property.name;
+          if (o === 'document' || /^(textContent|innerHTML|innerText|style|classList|appendChild|querySelector|getElementById|value|checked)$/.test(p)) { w.page = 1; c.dom = 1; }
+          if (o === 'localStorage' || o === 'sessionStorage') { w.storage = 1; c.storage = 1; }
+          if (o === 'JSON') c.json = 1;
+          if (o === 'Math' && p === 'random') w.random = 1;
+          if (/^(fillRect|clearRect|beginPath|arc|fill|stroke|lineTo|moveTo|drawImage|fillText|getContext)$/.test(p)) { w.canvas = 1; c.canvas = 1; }
+          if (/^(createOscillator|createGain|play|pause)$/.test(p)) w.sound = 1;
+          if (/^(then|catch)$/.test(p)) c.promise = 1;
+        }
+        break;
+      case 'CallExpression':
+        var cn = n.callee.type === 'Identifier' ? n.callee.name : n.callee.type === 'MemberExpression' && !n.callee.computed ? n.callee.property.name : '';
+        if (cn === 'fetch') { w.network = 1; c.fetchk = 1; }
+        if (cn === 'setTimeout' || cn === 'setInterval') { w.timers = 1; c.timer = 1; }
+        if (cn === 'requestAnimationFrame') { w.timers = 1; c.raf = 1; }
+        if (cn === 'addEventListener') { c.listener = 1; c.callback = 1; w.page = 1; }
+        if (/^(map|filter|forEach|reduce|find|some|every|findIndex)$/.test(cn)) { c.arraym = 1; c.callback = 1; }
+        break;
+    }
+  });
+  if (!isTop) {
+    walkP(root.body, null, function (n) {
+      if (isFnNode(n) || n.type === 'ClassDeclaration' || n.type === 'ClassExpression') return false;
+      if (n.type === 'ReturnStatement' && n.argument) returns = true;
+    });
+    if (root.body.type !== 'BlockStatement') returns = true;
+    if (root.async) c.asyncfn = 1;
+  }
+  return { c: c, w: w, returns: returns };
+}
+var WORKS = { page: 'the page (reading or changing what you see)', storage: 'browser storage (saving things between visits)', network: 'the network (talking to a server)', timers: 'timers (running code later or on a loop)', canvas: 'canvas drawing', sound: 'sound', random: 'random numbers' };
+
+/* ---------- Rendering ---------- */
+function renderFns() {
+  var A = S.A, h = '';
+  if (A.errors.length) h += A.errors.map(function (e) { return '<div class="note">' + esc(e) + '</div>'; }).join('');
+  if (A.external.length) h += '<div class="note">This file also loads outside code that is not explained here: ' + esc(A.external.join(', ')) + '</div>';
+  if (!A.scripts.length) h += '<div class="card meta">This file has no JavaScript inside it.</div>';
+  A.scripts.forEach(function (sc, i) {
+    if (!sc.ast) return;
+    var n = sc.ast.body.filter(function (s) { return s.type !== 'FunctionDeclaration'; }).length;
+    h += '<button class="fn top" data-top="' + i + '"><div class="nm">Top level code' + (A.scripts.length > 1 ? ' (script ' + (i + 1) + ')' : '') + '</div><div class="meta">Runs once, in order, as soon as the page loads. ' + n + ' step' + (n === 1 ? '' : 's') + '.</div></button>';
+  });
+  var fns = A.fns.slice().sort(function (a, b) { return a.line - b.line; });
+  fns.forEach(function (f) {
+    CS = f.sc;
+    var ps = f.node.params.map(function (p) { return patternNames(p).join(', '); }).filter(Boolean);
+    var calls = (A.out[f.id] || []).length, by = (A.inn[f.id] || []).length;
+    h += '<button class="fn" data-fn="' + f.id + '"><div class="nm">' + esc(f.name) + '(' + esc(ps.join(', ')) + ')</div><div class="meta">Lines ' + f.line + ' to ' + f.end + (f.node.async ? ' · async' : '') + ' · calls ' + calls + ' of your functions · used by ' + by + '</div></button>';
+  });
+  if (A.scripts.length && !A.fns.length) h += '<div class="card meta">No named functions in this file. Open the top level code to walk through it.</div>';
+  $('tab-fns').innerHTML = h;
+}
+
+function openFn(f) {
+  S.sel = f.id;
+  CS = f.sc;
+  var info = scanFn(f.node, false);
+  var art = f.node.async ? 'an async ' : (f.node.type === 'ArrowFunctionExpression' ? 'an ' : 'a ');
+  var kind = f.node.type === 'ArrowFunctionExpression' ? 'arrow function' : f.member ? 'function stored on an object' : 'function';
+  var ps = f.node.params.map(paramName);
+  var parts = [f.name + ' is ' + art + kind + ' on lines ' + f.line + ' to ' + f.end + '.', ps.length ? 'It takes in ' + listWords(ps) + '.' : 'It takes in nothing.'];
+  if (f.node.async) parts.push('Because it is async, it can pause at each await while slow work finishes, without freezing the page.');
+  var works = Object.keys(info.w).map(function (k) { return WORKS[k]; });
+  if (works.length) parts.push('It works with ' + listWords(works) + '.');
+  parts.push(info.returns ? 'It gives back a value when it finishes.' : 'It does its job by changing things rather than giving back a value.');
+  var rows = [];
+  var body = f.node.body;
+  if (body.type === 'BlockStatement') stmtRows(body.body, 0, rows);
+  else rows.push({ line: body.loc.start.line + CS.off, code: codeOf(body, false), text: 'Sends back ' + descExpr(body) + ' right away. This is a one line arrow function, so it skips the return keyword.', depth: 0 });
+  renderExplain(f.name + '(' + f.node.params.map(function (p) { return sh(p, 20); }).join(', ') + ')', parts.join(' '), f.id, info.c, rows);
+}
+function openTop(i) {
+  var sc = S.A.scripts[i]; if (!sc || !sc.ast) return;
+  S.sel = 'load'; CS = sc;
+  var info = scanFn(sc.ast, true);
+  var rows = []; stmtRows(sc.ast.body, 0, rows);
+  var works = Object.keys(info.w).map(function (k) { return WORKS[k]; });
+  var text = 'These lines sit outside every function, so the browser runs them once, top to bottom, as soon as it reads this script. Function definitions here do not run yet. They just get set up so other code can call them.' + (works.length ? ' This part works with ' + listWords(works) + '.' : '');
+  renderExplain('Top level code' + (S.A.scripts.length > 1 ? ' (script ' + (i + 1) + ')' : ''), text, 'load', info.c, rows);
+}
+var BURSTS = ['POW!', 'ZAP!', 'BAM!', 'WHAM!', 'KAPOW!', 'BOOM!', 'ZOOM!', 'BLAM!'];
+function renderExplain(title, summary, id, concepts, rows) {
+  var A = S.A;
+  var by = (A.inn[id] || []).map(nodeLabel), calls = (A.out[id] || []).map(nodeLabel);
+  var h = '<div class="card"><div class="burst">' + BURSTS[Math.floor(Math.random() * BURSTS.length)] + '</div><div class="fname">' + esc(title) + '</div><div>' + rich(summary) + '</div>';
+  if (id !== 'load') h += '<div class="links"><span class="meta">Started by: </span>' + (by.length ? rich(listWords(by)) : 'nothing this tool could find in this file (it may be called from another file, or not used)') + '</div>';
+  h += '<div class="links"><span class="meta">Runs these of your functions: </span>' + (calls.length ? rich(listWords(calls)) : 'none') + '</div></div>';
+  var ck = Object.keys(concepts);
+  if (ck.length) {
+    h += '<div class="card"><div class="meta" style="margin-bottom:4px">Ideas used here. Tap one to learn it.</div>' + ck.map(function (k) { return '<details><summary>' + esc(CONCEPTS[k][0]) + '</summary><div style="margin-top:4px">' + esc(CONCEPTS[k][1]) + '</div></details>'; }).join('') + '</div>';
+  }
+  h += '<div class="card"><div class="meta" style="margin-bottom:6px">Step by step. The number on the left is the line in your file.</div>';
+  if (!rows.length) h += '<div>This is empty. It does nothing yet.</div>';
+  rows.forEach(function (r) {
+    var pad = 'margin-left:' + Math.min(r.depth, 6) * 12 + 'px';
+    if (r.label) h += '<div class="lab" style="' + pad + '">' + esc(r.label) + '</div>';
+    else h += '<div class="step' + (r.depth ? ' d' : '') + '" style="' + pad + '"><div class="ln">' + r.line + '</div><div><div class="code">' + esc(r.code) + '</div><div class="say">' + rich(r.text) + '</div></div></div>';
+  });
+  h += '</div>';
+  $('tab-exp').innerHTML = h;
+  showTab('exp');
+  window.scrollTo(0, 0);
+}
+
+function renderMap() {
+  var A = S.A, box = $('mapBox');
+  if (!A) { box.innerHTML = '<div class="meta">Load a file first.</div>'; return; }
+  var nodes = {}, order = [];
+  function add(id, label, kind) { nodes[id] = { id: id, label: label, kind: kind }; order.push(id); }
+  if ((A.out.load || []).length) add('load', 'When the page loads', 'trig');
+  A.events.forEach(function (e) { add(e.id, e.label, 'trig'); });
+  A.fns.forEach(function (f) { add(f.id, f.name, 'fn'); });
+  if (!A.fns.length) { box.innerHTML = '<div class="meta">No functions to map in this file.</div>'; return; }
+  var lvl = {}, q = [];
+  order.forEach(function (id) { if (nodes[id].kind === 'trig') { lvl[id] = 0; q.push(id); } });
+  if (!q.length) A.fns.forEach(function (f) { if (!(A.inn[f.id] || []).length) { lvl[f.id] = 0; q.push(f.id); } });
+  while (q.length) {
+    var cur = q.shift();
+    (A.out[cur] || []).forEach(function (t) { if (lvl[t] === undefined && nodes[t]) { lvl[t] = lvl[cur] + 1; q.push(t); } });
+  }
+  var maxL = 0; Object.keys(lvl).forEach(function (k) { maxL = Math.max(maxL, lvl[k]); });
+  var groups = [];
+  order.forEach(function (id) { var l = lvl[id] === undefined ? maxL + 1 : lvl[id]; (groups[l] = groups[l] || []).push(id); });
+  var W = Math.max(320, box.clientWidth - 24), gap = 10, cols = Math.max(1, Math.floor((W + gap) / (150 + gap)));
+  var nw = (W - (cols - 1) * gap) / cols, nh = 46, y = 4, pos = {}, heads = [];
+  var hasTrig = order.some(function (id) { return nodes[id].kind === 'trig'; });
+  groups.forEach(function (g, l) {
+    if (!g) return;
+    var title = l === maxL + 1 && g.every(function (id) { return lvl[id] === undefined; }) ? 'Not started by anything found in this file' : l === 0 ? (hasTrig ? 'Things that start your code' : 'Starting functions') : l === 1 ? 'Run directly by those' : l + ' steps in';
+    heads.push({ y: y + 14, t: title }); y += 24;
+    g.forEach(function (id, i) { pos[id] = { x: (i % cols) * (nw + gap), y: y + Math.floor(i / cols) * (nh + gap) }; });
+    y += Math.ceil(g.length / cols) * (nh + gap) + 14;
+  });
+  var H = y + 10, sel = S.sel;
+  var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" xmlns="http://www.w3.org/2000/svg"><defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#111"/></marker><marker id="arS" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1e6fff"/></marker></defs>';
+  heads.forEach(function (hd) { s += '<text class="hd" x="0" y="' + hd.y + '" font-size="16" fill="#e63946" stroke="#111" stroke-width=".6">' + esc(hd.t.toUpperCase()) + '</text>'; });
+  A.edges.forEach(function (e) {
+    var p = e.split('>'), a = pos[p[0]], b = pos[p[1]]; if (!a || !b) return;
+    var on = sel && (p[0] === sel || p[1] === sel);
+    var st = on ? 'stroke="#1e6fff" stroke-width="3" opacity="1"' : 'stroke="#111" stroke-width="2" opacity="' + (sel ? 0.15 : 0.5) + '"';
+    var mk = on ? 'url(#arS)' : 'url(#ar)', d;
+    if (b.y > a.y + nh / 2) {
+      var x1 = a.x + nw / 2, y1 = a.y + nh, x2 = b.x + nw / 2, y2 = b.y, my = (y1 + y2) / 2;
+      d = 'M' + x1 + ' ' + y1 + ' C' + x1 + ' ' + my + ' ' + x2 + ' ' + my + ' ' + x2 + ' ' + y2;
+    } else {
+      var sx = a.x + nw, sy = a.y + nh / 2, tx = b.x + nw, ty = b.y + nh / 2, bend = Math.min(W - 2, Math.max(sx, tx) + 26);
+      if (bend <= Math.max(sx, tx)) { sx = a.x; tx = b.x; bend = Math.max(2, Math.min(sx, tx) - 26); }
+      d = 'M' + sx + ' ' + sy + ' C' + bend + ' ' + sy + ' ' + bend + ' ' + ty + ' ' + tx + ' ' + ty;
+      st += ' stroke-dasharray="4 3"';
+    }
+    s += '<path d="' + d + '" fill="none" ' + st + ' marker-end="' + mk + '"/>';
+  });
+  var maxC = Math.max(6, Math.floor((nw - 14) / 7.4));
+  order.forEach(function (id) {
+    var n = nodes[id], p = pos[id]; if (!p) return;
+    var isSel = id === sel, f = fnById(id);
+    var fill = isSel ? '#9fe7ff' : n.kind === 'trig' ? '#ffd60a' : '#ffffff', stroke = '#111';
+    var lab = n.label.length > maxC ? n.label.slice(0, maxC - 3) + '...' : n.label;
+    var sub = f ? 'line ' + f.line : n.kind === 'trig' ? (id === 'load' ? 'top level code' : 'event') : '';
+    var attr = f ? ' data-fn="' + id + '"' : id === 'load' ? ' data-top="0"' : '';
+    s += '<g' + attr + '><rect x="' + (p.x + 4) + '" y="' + (p.y + 4) + '" width="' + (nw - 4) + '" height="' + (nh - 4) + '" fill="#111"/><rect x="' + p.x + '" y="' + p.y + '" width="' + (nw - 4) + '" height="' + (nh - 4) + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + (isSel ? 3.5 : 2.5) + '"/>';
+    s += '<text x="' + (p.x + 8) + '" y="' + (p.y + 19) + '" font-size="14" font-weight="700" fill="#111">' + esc(lab) + '</text>';
+    s += '<text x="' + (p.x + 8) + '" y="' + (p.y + 36) + '" font-size="11" font-weight="700" fill="#3d3d3d">' + esc(sub) + '</text></g>';
+  });
+  s += '</svg>';
+  box.innerHTML = '<div class="meta" style="margin-bottom:8px">Arrows point from what starts something to what it runs. Dashed arrows loop back up. Tap a box to explain it.</div>' + s;
+}
+
+function showTab(t) {
+  S.tab = t;
+  Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) { b.classList.toggle('on', b.getAttribute('data-tab') === t); });
+  ['fns', 'map', 'exp'].forEach(function (k) { $('tab-' + k).classList.toggle('hidden', k !== t); });
+  if (t === 'map') renderMap();
+}
+
+document.addEventListener('click', function (ev) {
+  var tb = ev.target.closest('.tabs button');
+  if (tb) { showTab(tb.getAttribute('data-tab')); return; }
+  var fe = ev.target.closest('[data-fn]');
+  if (fe && S.A) { var f = fnById(fe.getAttribute('data-fn')); if (f) openFn(f); return; }
+  var te = ev.target.closest('[data-top]');
+  if (te && S.A) openTop(+te.getAttribute('data-top'));
+});
+$('loadRepos').addEventListener('click', loadRepos);
+$('user').addEventListener('keydown', function (e) { if (e.key === 'Enter') loadRepos(); });
+$('repo').addEventListener('change', loadFiles);
+$('file').addEventListener('change', loadFile);
+$('pasteToggle').addEventListener('click', function () { $('pasteBox').classList.toggle('hidden'); });
+$('pasteGo').addEventListener('click', function () {
+  var t = $('paste').value;
+  if (!t.trim()) { setStatus('Paste some code first.', true); return; }
+  runAnalysis(t, /<script|<html|<body|<div/i.test(t) ? 'pasted.html' : 'pasted.js');
+});
+var savedUser = store('codelens.user');
+if (savedUser) $('user').value = savedUser;
+</script>
+</body>
+</html>

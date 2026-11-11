@@ -1,0 +1,1247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3ecdd">
+<title>Mind Globe</title>
+<style>
+:root {
+  --paper: #f3ecdd;
+  --paper-2: #ebe1cc;
+  --card: #fbf7ee;
+  --line: #ddd0b6;
+  --ink: #2b2114;
+  --ink-2: #6b5c45;
+  --ink-3: #998a70;
+  --accent: #b55a1c;
+  --accent-soft: #f1dcc8;
+  --ok: #5d8a3c;
+  --warn: #c08a1e;
+  --bad: #a8432f;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Noto Serif", "Book Antiqua", Georgia, serif;
+  --mono: ui-monospace, "SFMono-Regular", "Roboto Mono", "Noto Sans Mono", "DejaVu Sans Mono", Menlo, monospace;
+  --bar: 56px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--paper); color: var(--ink); font-family: var(--mono); -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
+body { overflow: hidden; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { background: none; border: 0; cursor: pointer; }
+
+#bar { position: fixed; top: 0; left: 0; right: 0; height: var(--bar); display: flex; align-items: center; gap: 12px; padding: 0 14px; background: var(--paper); border-bottom: 1px solid var(--line); z-index: 20; }
+#brand { font-family: var(--serif); font-size: 21px; font-weight: 700; white-space: nowrap; }
+#brand i { color: var(--accent); font-weight: 400; }
+#tabs { display: flex; margin-left: auto; border: 1.5px solid var(--accent); border-radius: 7px; overflow: hidden; }
+.tab { padding: 8px 13px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.tab.on { background: var(--accent); color: var(--card); }
+
+.page { position: fixed; top: var(--bar); left: 0; right: 0; bottom: 0; }
+.page[hidden] { display: none; }
+
+#stage { position: absolute; inset: 0; touch-action: none; }
+#stage canvas { display: block; width: 100%; height: 100%; }
+
+#hud { position: absolute; top: 10px; left: 12px; font-size: 10.5px; letter-spacing: .06em; color: var(--ink-2); line-height: 1.75; pointer-events: none; }
+#world-btn { pointer-events: auto; margin-top: 6px; border: 1.5px solid var(--accent); border-radius: 999px; background: var(--card); color: var(--accent); font-size: 11px; letter-spacing: .08em; padding: 6px 12px; min-height: 32px; }
+#sync { display: flex; align-items: center; gap: 6px; }
+#sync .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); }
+#sync.ok .dot { background: var(--ok); }
+#sync.busy .dot { background: var(--warn); }
+#sync.bad .dot { background: var(--bad); }
+
+#zoom { position: absolute; top: 10px; right: 12px; display: flex; flex-direction: column; gap: 8px; }
+.zbtn { width: 42px; height: 42px; border: 1.5px solid var(--accent); border-radius: 8px; background: var(--card); color: var(--accent); font-size: 21px; font-weight: 700; line-height: 1; }
+
+#sheet { position: absolute; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); max-width: 560px; margin: 0 auto; background: var(--card); border: 1.5px solid var(--accent); border-radius: 12px; padding: 14px 15px; box-shadow: 0 8px 28px rgba(70, 45, 10, .14); }
+.s-kicker { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); }
+.s-title { font-family: var(--serif); font-size: 18px; font-style: italic; color: var(--accent); margin-top: 2px; overflow-wrap: anywhere; }
+.s-meta { font-size: 10.5px; color: var(--ink-3); margin-top: 3px; letter-spacing: .03em; }
+.s-text { font-size: 12.5px; line-height: 1.55; color: var(--ink); margin-top: 9px; max-height: 6.2em; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+.s-hint { font-size: 12px; line-height: 1.6; color: var(--ink-2); }
+.s-link { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; font-size: 11px; margin-top: 6px; display: inline-block; text-align: left; }
+.row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.btn { flex: 1; min-height: 42px; padding: 0 14px; border-radius: 7px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; }
+.btn.primary { background: var(--accent); color: var(--card); }
+.btn.ghost { border: 1.5px solid var(--accent); color: var(--accent); background: transparent; }
+.btn.danger { border: 1.5px solid var(--bad); color: var(--bad); }
+.btn.danger.armed { background: var(--bad); color: var(--card); }
+.btn.slim { flex: none; }
+.row.tight .btn { padding: 0 8px; letter-spacing: .07em; }
+.s-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip { font-size: 11px; border: 1px solid var(--line); background: #fffdf8; border-radius: 999px; padding: 5px 10px; color: var(--ink-2); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip b { color: var(--accent); font-weight: 700; margin-right: 4px; }
+#sheet.linking { border-color: var(--ok); }
+#sheet.linking .s-kicker { color: var(--ok); }
+
+.seg { display: flex; border: 1.5px solid var(--line); border-radius: 8px; overflow: hidden; margin-top: 10px; }
+.seg button { flex: 1; padding: 9px 4px; font-size: 11px; color: var(--ink-2); border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: 0; }
+.seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+
+#modal { position: fixed; inset: 0; background: rgba(43, 33, 20, .45); z-index: 50; display: flex; align-items: flex-end; justify-content: center; padding: 12px; }
+#modal[hidden] { display: none; }
+#editor { width: 100%; max-width: 520px; background: var(--card); border: 2px solid var(--accent); border-radius: 14px; padding: 18px; margin-bottom: env(safe-area-inset-bottom); }
+#editor h3 { font-family: var(--serif); font-size: 20px; }
+#ed-sub { font-size: 10.5px; color: var(--ink-3); margin-top: 3px; }
+.lbl { display: block; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); margin-top: 14px; margin-bottom: 6px; }
+#ed-region, #ed-text { width: 100%; border: 1.5px solid var(--line); border-radius: 7px; background: #fffdf8; padding: 10px; outline: none; }
+#ed-region { font-family: var(--serif); font-style: italic; font-size: 16px; color: var(--accent); }
+#ed-text { height: 130px; resize: none; font-size: 14px; line-height: 1.55; }
+#ed-region:focus, #ed-text:focus { border-color: var(--accent); }
+#ed-count { font-size: 10px; color: var(--ink-3); text-align: right; margin-top: 4px; }
+
+#atlas { overflow-y: auto; padding: 18px 14px 40px; -webkit-overflow-scrolling: touch; }
+#atlas-head h2 { font-family: var(--serif); font-size: 24px; }
+#atlas-head p { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-top: 4px; }
+#regions { display: flex; flex-direction: column; gap: 16px; margin-top: 18px; max-width: 680px; }
+.region { border: 1.5px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--card); }
+.region-head { display: flex; align-items: center; gap: 10px; padding: 11px 14px; background: var(--paper-2); }
+.region-name { font-family: var(--serif); font-style: italic; font-size: 17px; color: var(--accent); flex: 1; overflow-wrap: anywhere; }
+.region-count { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); white-space: nowrap; }
+.region-rename { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); border: 1px solid var(--accent); border-radius: 5px; padding: 5px 8px; }
+.region-bar { height: 4px; background: var(--paper-2); }
+.region-bar span { display: block; height: 100%; background: var(--accent); opacity: .55; }
+.card { padding: 12px 14px; border-top: 1px solid var(--line); }
+.card.child { padding-left: 30px; background: #fdf9f1; }
+.card-text { font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.card-meta { font-size: 10px; color: var(--ink-3); margin-top: 6px; letter-spacing: .03em; }
+.card-actions { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+.card-actions .btn { flex: none; min-height: 34px; font-size: 10px; padding: 0 11px; }
+.card-actions select { border: 1.5px solid var(--line); border-radius: 7px; background: #fffdf8; padding: 7px 8px; font-size: 11px; max-width: 170px; }
+.empty { text-align: center; padding: 60px 20px; color: var(--ink-2); }
+.empty .big { font-family: var(--serif); font-style: italic; font-size: 22px; color: var(--accent); margin-bottom: 10px; }
+.empty p { font-size: 12px; line-height: 1.8; }
+
+#toast { position: fixed; left: 50%; top: calc(var(--bar) + 12px); transform: translateX(-50%); background: var(--ink); color: var(--card); font-size: 12px; padding: 9px 14px; border-radius: 8px; z-index: 60; max-width: 90vw; }
+#toast[hidden] { display: none; }
+
+#boot { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--paper); z-index: 100; font-family: var(--serif); font-size: 22px; font-style: italic; color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div id="boot">Charting the waters</div>
+
+<div id="bar">
+  <div id="brand">Mind <i>Globe</i></div>
+  <div id="tabs">
+    <button class="tab on" data-page="globe">Globe</button>
+    <button class="tab" data-page="atlas">Atlas</button>
+  </div>
+</div>
+
+<section id="page-globe" class="page">
+  <div id="stage"></div>
+  <div id="hud">
+    <div id="sync"><span class="dot"></span><span id="sync-text">Loading</span></div>
+    <div id="stats"></div>
+    <button id="world-btn"></button>
+  </div>
+  <div id="zoom">
+    <button class="zbtn" id="zin" aria-label="Zoom in">+</button>
+    <button class="zbtn" id="zout" aria-label="Zoom out">-</button>
+  </div>
+  <div id="sheet"></div>
+</section>
+
+<section id="page-atlas" class="page" hidden>
+  <div id="atlas">
+    <div id="atlas-head">
+      <h2>The Atlas</h2>
+      <p id="atlas-sub"></p>
+    </div>
+    <div id="regions"></div>
+  </div>
+</section>
+
+<div id="modal" hidden>
+  <div id="editor">
+    <h3 id="ed-title">New note</h3>
+    <div id="ed-sub"></div>
+    <label class="lbl" for="ed-region">Region</label>
+    <input id="ed-region" list="region-list" maxlength="60" autocomplete="off">
+    <datalist id="region-list"></datalist>
+    <label class="lbl" for="ed-text">Note</label>
+    <textarea id="ed-text" maxlength="2000"></textarea>
+    <div id="ed-count"></div>
+    <span class="lbl">Size of the idea</span>
+    <div class="seg" id="ed-size"></div>
+    <div class="row">
+      <button class="btn ghost" id="ed-cancel">Cancel</button>
+      <button class="btn primary" id="ed-save">Raise land</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+'use strict';
+
+// ---------- config ----------
+const API = 'https://mind-globe-production.up.railway.app';
+const STORE_KEY = 'mindglobe.v2';
+const R = 2;            // globe radius in scene units
+const SEA = 0.3;        // elevation where land breaks the surface
+const DETAIL = 64;      // icosphere subdivision, higher = finer coastlines
+const D2R = Math.PI / 180;
+const SIZES = {
+  1: { name: 'Thought', rad: 0.075 },
+  2: { name: 'Idea', rad: 0.12 },
+  3: { name: 'Big idea', rad: 0.19 },
+};
+// Elevation to color stops. Lone notes stay sandy, clusters climb to grass, forest, rock, snow.
+const TERRAIN = [
+  [SEA, 0xeadaa8], [0.85, 0xdcc78e], [1.15, 0xa9c46e], [1.6, 0x77a24f],
+  [2.2, 0x557f3e], [2.9, 0x8c7c66], [3.7, 0xa89c88], [4.3, 0xd9d3c8], [4.7, 0xfbf9f4],
+];
+// Longer notes carry more mass: wider land and a taller peak in the middle.
+function massOf(n) { return clamp((n.text || '').length / 240, 0, 2.6); }
+function noteRad(n) { return SIZES[n.size].rad * (1 + massOf(n) * 0.1); }
+function terrainWord(len) {
+  const e = 1 + clamp(len / 240, 0, 2.6) * 1.5;
+  return e < 1.2 ? 'sandy island' : e < 2.3 ? 'green hills' : e < 3.7 ? 'mountain' : 'snow peak';
+}
+const DEEP = new THREE.Color(0x4d82b2);
+const SHALLOW = new THREE.Color(0x9dcbe0);
+
+// ---------- state ----------
+const notes = new Map();             // id -> note
+const pending = { up: new Set(), del: new Set() };
+let sel = null;                      // {kind:'spot',lat,lon} | {kind:'note',id}
+let edit = null;                     // editor state
+let landPct = 0;
+
+// ---------- small helpers ----------
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)) {
+    if (v === false || v == null) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'text') el.textContent = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const k of kids.flat()) {
+    if (k == null || k === false) continue;
+    el.append(k.nodeType ? k : document.createTextNode(String(k)));
+  }
+  return el;
+}
+function uid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+function fmtCoord(lat, lon) {
+  return `${Math.abs(lat).toFixed(1)}°${lat >= 0 ? 'N' : 'S'}  ${Math.abs(lon).toFixed(1)}°${lon >= 0 ? 'E' : 'W'}`;
+}
+function snippet(t, n = 48) { t = (t || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '…' : t; }
+let toastTimer = 0;
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 2600); }
+function armDelete(btn, action) {
+  if (btn.classList.contains('armed')) { action(); return; }
+  btn.classList.add('armed'); btn.textContent = 'Tap again';
+  setTimeout(() => { if (btn.isConnected) { btn.classList.remove('armed'); btn.textContent = 'Delete'; } }, 3000);
+}
+
+// ---------- geo ----------
+function toDir(lat, lon) {
+  const a = lat * D2R, b = lon * D2R;
+  return new THREE.Vector3(Math.cos(a) * Math.sin(b), Math.sin(a), Math.cos(a) * Math.cos(b));
+}
+function toLatLon(v) {
+  return { lat: Math.asin(clamp(v.y, -1, 1)) / D2R, lon: Math.atan2(v.x, v.z) / D2R };
+}
+function angleBetween(a, b) { return Math.acos(clamp(a.dot(b), -1, 1)); }
+
+// ---------- noise for organic coastlines ----------
+function hash3(x, y, z) {
+  let h = (Math.imul(x | 0, 73856093) ^ Math.imul(y | 0, 19349663) ^ Math.imul(z | 0, 83492791)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+function vnoise(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const xf = x - xi, yf = y - yi, zf = z - zi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf), w = zf * zf * (3 - 2 * zf);
+  const c000 = hash3(xi, yi, zi), c100 = hash3(xi + 1, yi, zi), c010 = hash3(xi, yi + 1, zi), c110 = hash3(xi + 1, yi + 1, zi);
+  const c001 = hash3(xi, yi, zi + 1), c101 = hash3(xi + 1, yi, zi + 1), c011 = hash3(xi, yi + 1, zi + 1), c111 = hash3(xi + 1, yi + 1, zi + 1);
+  const x00 = c000 + (c100 - c000) * u, x10 = c010 + (c110 - c010) * u, x01 = c001 + (c101 - c001) * u, x11 = c011 + (c111 - c011) * u;
+  const y0 = x00 + (x10 - x00) * v, y1 = x01 + (x11 - x01) * v;
+  return y0 + (y1 - y0) * w;
+}
+function fbm(x, y, z) {
+  return (vnoise(x * 4, y * 4, z * 4) * 0.6 + vnoise(x * 9 + 17, y * 9 + 3, z * 9 + 11) * 0.3 + vnoise(x * 19 + 5, y * 19 + 29, z * 19 + 7) * 0.1) * 2 - 1;
+}
+
+// ---------- terrain field ----------
+// Each note is a bump of land. A branch also lays a low ridge back to its parent,
+// so branched ideas read as peninsulas and mountain chains instead of loose dots.
+let kernels = [];
+function buildKernels() {
+  const out = [];
+  for (const n of notes.values()) {
+    const rad = noteRad(n);
+    const v = toDir(n.lat, n.lon);
+    out.push({ pt: true, x: v.x, y: v.y, z: v.z, rad, cosMax: Math.cos(rad * 1.4), w: 1, peak: massOf(n) * 1.5 });
+    const p = n.parent && notes.get(n.parent);
+    if (p) {
+      const a = toDir(p.lat, p.lon), b = v;
+      const nrm = new THREE.Vector3().crossVectors(a, b);
+      if (nrm.length() < 1e-6) continue;
+      nrm.normalize();
+      const arc = angleBetween(a, b);
+      const rr = Math.min(rad, noteRad(p)) * 0.55;
+      const mid = a.clone().add(b).normalize();
+      out.push({ pt: false, a, b, n: nrm, arc, mid, rad: rr, cosLim: Math.cos(arc / 2 + rr * 1.4), w: 0.7 });
+    }
+  }
+  return out;
+}
+// ---------- world presets: the ground the notes are raised on ----------
+const WORLDS = { ocean: 'Open ocean', earth: 'Earth', checker: 'Checkerboard' };
+const WORLD_KEY = 'mindglobe.world';
+let world = 'ocean';
+try { const w = localStorage.getItem(WORLD_KEY); if (WORLDS[w]) world = w; } catch (e) {}
+// Earth land mask, 1 degree cells, rasterized from Natural Earth 1:50m land.
+const MASK_W = 360, MASK_H = 180;
+const EARTH = (() => {
+  const raw = atob('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAfwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/P8/AGD//z8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD8//+F/////3/5AAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPAH8H/+//////8HAAAAAAAAADSAAQAAAB8AAAAAAAAAAAAAAAAAAAAAAAAAAPD//wf4//////8BAACAdT8AAAAAAAAAAP4AAAAAAAAAAAAAAAAAAAAAAAB4+Jzn//D//////38AAACAewMAAAAAAAAAAAAfAAAAAAAAAAAAAAAAAAAAAIA4BHAyO0D8/////38AAAAAPAoAAAAAAAAAAAA4AAAAAAAAAAAAAAAAAAAAAFhAmPPVH4D//////z8AAAAAAAAAAAAA4AEAAAD8HwAAAAAAAAAAAAAAAAAAAAD/Az/fDwAA/P////8BAAAAAAAAAADABwAAwP//PwAA4FsAAAAAAAAAAAAAAAQMAAQQAAAA8P////8BAAAAAAAAAABwAAAA+P//FwAAAAAAAAAAAAAAAAAAAP8BxvMxfwAA8P///3cAAAAAAAAAAAAcAIDh//9/3IcLAAcAAAAAAAAAAAAAgN9/xy+8xwEA4P///zcAAAAAAAAAAAAGAJ7i//////8fAD4AAAAA/P///////zgB8J0DAPT/XwAAAOL////////////x/5CBAAAAAADghgD4////AADwTwAAAADwH/D4//8AwP7/fxEAAAAAANgHAAAAgN9/////////////DwAAAAD+//+Bvob/H9SBof8AwP7//w8AAAAAoP8PAAAAD9///////////////48//D8AAAAAAAD08Dcy/AP+fwAAAP//////FwAA/PyFAAECAAAAAAAAAAAAAAAA4P8AAAAAAACAABAQeA7wPwAA+P//////DwAA4A4AADAAAAAAAAAAAAAAAAAAAH4PAAAAAAAAAABg/gPAPwAA/v//////AQBg4AAAAAwAAAAAAAAAAAAAAAAADg8AAAAAAAAAAACo/wPmfwDw/y/A////AByADwAAAAAAAAAAAAAAAAAAAAAAwAD4///////////Pw/gHAP4PAMA/AACA//F//v////////////////////8fAAP4///////////BAGAHAP4HAAADAACw//z///////////////////////9/AID//////////38AQ4AJAPwDAAAAAAD8P/7/////////////////////f/5fAMD//////////z8AwA8AAPgDAAAAAAD+H/z/////////////////////Mf8BAID/7/z//////x8AwD8AAMAAAAAAAAT+P7z+//////////////////9/wG8AAAD8AwD//////x8AwD8IAAAAAAAAAAC+P2D///////////////////91cAAAAACACwD4/////38AwP8eAAAAAAAAgAGcH/T//////////////////wEAOAAAAACADgDw/////38AgP8/AAAAAAAA4AMAX/T//////////////////wAAfgAAAAAwAABA//////8PgP8/AAAAAAAAgAFwHv7/////////////////PwAAfwAAAAAAAABA//////8/gP//AAAAAAAAgAPwAv7/////////////////DwAAPwAAAIAAAAAA/P//////8///AwAAAAAAcAcgcv//////////////////HwAAHwAAAAAAAACA/P//////4///DwAAAAAAPA7o/////////////////////wEADwAAAAAAAAAA8f//////4///DwAAAAAAPD/+/////////////////////wUAAwAAAAAAAAAA8P//////////FwAAAAAAAB///////////////////////wUAAwAAAAAAAAAAkP//////////CAAAAAAAgMD//////////////////////wwAAAAAAAAAAAAAYP////////8xLAAAAAAAAPT//////////////////////wwAAAAAAAAAAAAAAP///////38PfAAAAAAAgP///////////////////////wQAAAAAAAAAAAAAAP3///////8HUAAAAAAAAPz/////////////////////fwQAAAAAAAAAAAAAAP////////+XAAAAAAAAAPz////3/B/+////////////PwgAAAAAAAAAAAAAAP////////9/AAAAAAAAAPj//f9j/A/+////////////HwAAAAAAAAAAAAAAAP////////8MAAAAAAAAAPj/+P8B/Mf/////////////DwQAAAAAAAAAAAAAAP///////z8AAAAAAAAAcPzH4/8B8I//////////////Bx4AAAAAAAAAAAAAAP///////x8AAAAAAAAA+H+gw/8AwA/+//////////9/AAQAAAAAAAAAAAAAAP///////x8AAAAAAAAA+D8Ajv/w4B/8//////////8/AAAAAAAAAAAAAAAAAP///////wMAAAAAAAAA+B8wuA/+/z/+/////////98fAAMAAAAAAAAAAAAAAP///////wMAAAAAAAAA+E8wEIf//x/+/////////2cOAAMAAAAAAAAAAAAAAP7//////wEAAAAAgAAA+A8AEM7//x/8/////////wMOAAMAAAAAAAAAAAAAAPz//////wAAAAAAAAAA+AcABoT//x/8/////////zcYgAEAAAAAAAAAAAAAAPz//////wAAAAAAAAAAQOB/AAA2/////////////x8Y8AEAAAAAAAAAAAAAAPj//////wAAAAAAAAAAQPh/AAAA/////////////w8c/AAAAAAAAAAAAAAAAPj/////fwAAAAAAAAAA4P8/AAAA/////////////w+EGwAAAAAAAAAAAAAAAMD/////HwAAAAAAAAAA8P9/AACA/////////////x/EAwAAAAAAAAAAAAAAAID/////BwAAAAAAAAAA+P//BweA/////////////x+AAAAAAAAAAAAAAAAAAID9////BwAAAAAAAAAA/P//D3/A/////////////x9AAAAAAAAAAAAAAAAAAAD5////BwAAAAAAAAAA/P//f////////////////x8AAAAAAAAAAAAAAAAAAAD2/x8CBgAAAAAAAAAA/P/////v/4///////////z8AAAAAAAAAAAAAAAAAAAD0/wcABgAAAAAAAAAA/v///////4///////////z8AAAAAAAAAAAAAAAAAAADu/wcADgAAAAAAAACA//////8//x/+/////////x8AAAAAAAAAAAAAAAAAAACY/wcADAAAAAAAAADA//////8//z/g/////////w8AAAAAAAAAAAAAAAAAAACQ/wcACAAAAAAAAADg//////9//j+Av////////w8AAAAAAAAAAAAAAAAAAAAQ/wMAAAAAAAAAAADg//////9//n8YgP///////yMAAAAAAAAAAAAAAAAAAABA/gMAAAAAAAAAAADw////////+P9/AP///////xEAAAAAAAAAAAAAAAAAAAAA/AMAPQAAAAAAAADw////////+P//APz/////PxAAAAAAAAAAAAAAAAAAAAAA+AMIYAAAAAAAAAD4////////+f9/AOz/B///BAAAAAAAAAAAAAAAAAAAAAAA/AccgAEAAAAAAADw////////8f9/AOD/B/5/BAAAAAAAAAAAAAAAAQAAAAAA+A8eADgAAAAAAADw////////4f8/AOD/Afw/BgAAAAAAAAAAAAAAAAAAAAAA8J8OAPwAAAAAAADw////////4/8fAOD/APw/AgAAAAAAAAAAAAAAAAAAAAAAgP8PAAAAAAAAAADw////////x/8HAOB/APh/ADAAAAAAAAAAAAAAAAAAAAAAAP4PAAAAAAAAAADw////////h/8BAOA/AMz/ADAAAAAAAAAAAAAAAAAAAAAAAID/AAAAAAAAAAD4////////j/8AAMAPAMD/ARAAAAAAAAAAAAAAAAAAAAAAAAD/AQAAAAAAAAD4////////nx8AAMAPAMD/ATAAAAAAAAAAAAAAAAAAAAAAAAD4AAAAAAAAAAD4////////vwcAAIAPAMD+AdAAAAAAAAAAAAAAAAAAAAAAAADgAAAAAAAAAAD4////////fwACAIAPAID8AQABAAAAAAAAAAAAAAAAAAAAAADAAEgAAAAAAADg////////f0AAAAAPAID4AUADAAAAAAAAAAAAAAAAAAAAAADAAe8TAAAAAADg/////////34AAAAPAEBwAAgAAAAAAAAAAAAAAAAAAAAAAAAAE+9/AAAAAADA/////////38AAAAXAEAgAAQCAAAAAAAAAAAAAAAAAAAAAAAAz///AAAAAACA/////////z8AAAASAMAAAIADAAAAAAAAAAAAAAAAAAAAAAAAyP//AQAAAAAA/////////z8AAAAwAIAAAAAHAAAAAAAAAAAAAAAAAAAAAAAAgP//AwAAAAAA/n///////x8AAAAwAAADAAMDAAAAAAAAAAAAAAAAAAAAAAAAgP//fwAAAAAA/A/+/////x8AAAAAAAgHgAcAAAAAAAAAAAAAAAAAAAAAAAAAgP///wAAAAAAEADk/////w8AAAAAADAGwAcAAAAAAAAAAAAAAAAAAAAAAAAAgP///wEAAAAAAADA/////wcAAAAAAGAG4AEAAAAAAAAAAAAAAAAAAAAAAAAAwP///wEAAAAAAADA/////wMAAAAAAMAM+AMQAAAAAAAAAAAAAAAAAAAAAAAA4P///wMAAAAAAADA/////wAAAAAAAIAL/gMQAAAAAAAAAAAAAAAAAAAAAAAA8P///wEAAAAAAADg////fwAAAAAAAIAH/uMQAAAAAAAAAAAAAAAAAAAAAAAA8P///w8AAAAAAADg////PwAAAAAAAAAX/gNIAQAAAAAAAAAAAAAAAAAAAAAA+P//f3cAAAAAAADg////PwAAAAAAAAAO/DkIAwAAAAAAAAAAAAAAAAAAAAAA+P///3sAAAAAAADA////HwAAAAAAAAB+/DkA8AEAAAAAAAAAAAAAAAAAAAAA+P////8fAAAAAACA////DwAAAAAAAAA8gChE/g8AAAAAAAAAAAAAAAAAAAAA+P////8/AAAAAAAA////BwAAAAAAAAA4AAAA8B8AAAAAAAAAAAAAAAAAAAAA+P//////AQAAAAAA////BwAAAAAAAAAwAAgAxD8NAAAAAAAAAAAAAAAAAAAA8P//////AQAAAAAA////BwAAAAAAAADAAQAAhP+AAAAAAAAAAAAAAAAAAAAA8P//////AQAAAAAA/v//BwAAAAAAAACAHwCAwH8AAAAAAAAAAAAAAAAAAAAA4P//////AQAAAAAA/v//BwAAAAAAAAAAgN8EAMcAAAAAAAAAAAAAAAAAAAAAwP//////AAAAAAAA/v//DwAAAAAAAAAAAAgBAIAFAAAAAAAAAAAAAAAAAAAAwP//////AAAAAAAA/P//DwAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAgP////9/AAAAAAAA/P//DwAAAAAAAAAAAABAAQQgAAAAAAAAAAAAAAAAAAAAgP////8/AAAAAAAA/v//HyAAAAAAAAAAAACAHwQAAAAAgAAAAAAAAAAAAAAAAP////8fAAAAAAAA/v//HzAAAAAAAAAAAADADwwAAAAAAAAAAAAAAAAAAAAAAP////8fAAAAAAAA////HzAAAAAAAAAAAADMDxwAAAAAAAAAAAAAAAAAAAAAAP7///8fAAAAAAAA////HzwAAAAAAAAAAAD/Dx4AAAAAAAAAAAAAAAAAAAAAAPj///8fAAAAAAAA////Dz8AAAAAAAAAAID/vx4AAAiAAAAAQAAAAAAAAAAAAOD///8fAAAAAAAA////Ax8AAAAAAAAAAMD//z4AAAAAAAAAAAAAAAAAAAAAAMD///8PAAAAAAAA////AR8AAAAAAAAAAMD//z8AAAAAAAAAAAAAAAAAAAAAAMD///8PAAAAAAAA/v9/AB8AAAAAAAAAAOD///8AAAAAAAAAAAAAAAAAAAAAAMD///8PAAAAAAAA/v9/AB8gAAAAAAAAAPz///8BAAEAAAAAAAAAAAAAAAAAAMD///8HAAAAAAAA/P9/gA8AAAAAAAAAgP////8BAAIAAAAAAAAAAAAAAAAAAMD///8DAAAAAAAA/P//gA8AAAAAAAAAwP////8DAAAAAAAAAAAAAAAAAAAAAMD//38AAAAAAAAA/P9/AA8AAAAAAAAAwP////8HAAAAAAAAAAAAAAAAAAAAAOD//x8AAAAAAAAA+P9/AAcAAAAAAAAA4P////8PAAAAAAAAAAAAAAAAAAAAAOD//wcAAAAAAAAA+P8fAAIAAAAAAAAAwP////8fAAAAAAAAAAAAAAAAAAAAAOD//wcAAAAAAAAA+P8fAAAAAAAAAAAA4P////8fAAAAAAAAAAAAAAAAAAAAAOD//w8AAAAAAAAA+P8fAAAAAAAAAAAAwP////8/AAAAAAAAAAAAAAAAAAAAAOD//wcAAAAAAAAA8P8PAAAAAAAAAAAAgP////8/AAAAAAAAAAAAAAAAAAAAAOD//wMAAAAAAAAA4P8HAAAAAAAAAAAAgP////8fAAAAAAAAAAAAAAAAAAAAAPD//wMAAAAAAAAA4P8HAAAAAAAAAAAAgP////8fAAAAAAAAAAAAAAAAAAAAAPD//wAAAAAAAAAAwP8DAAAAAAAAAAAAAP////8fAAAAAAAAAAAAAAAAAAAAAOD//wAAAAAAAAAAwP8BAAAAAAAAAAAAAP8D/P8PAAAAAAAAAAAAAAAAAAAAAPD/fQAAAAAAAAAAwH8AAAAAAAAAAAAAAP8A2P8HAAAAAAAAAAAAAAAAAAAAAPD/OwAAAAAAAAAAgAAAAAAAAAAAAAAAAAcA6P8HAAAAAAAAAAAAAAAAAAAAAPj/BwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwP8DAAACAAAAAAAAAAAAAAAAAPj/BwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP8DAAAEAAAAAAAAAAAAAAAAAPz/BwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP8DAAAIAAAAAAAAAAAAAAAAAPz/AwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGgAAAA4AAAAAAAAAAAAAAAAAPg/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAcAAAAAAAAAAAAAAAAAPw/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYAAAAAAAAAAAAAAAAAPwHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOAAAAALAAAAAAAAAAAAAAAAAPgPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOAAAIADAAAAAAAAAAAAAAAAAPgHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAMABAAAAAAAAAAAAAAAAAPgHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHAAAAAAAAAAAAAAAAAAAP4BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHgAAAAAAAAAAAAAAAAAAP4BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADAAAAAAAAAAAAAAAAAAAPwDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP0BAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP4AAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAH4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHwAAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAANADAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAAAAAAAAAAAAAAMAfAAAAAAB/eADGPwAAQAAAAAAAAAAAAAAAAAAAAIADAAAAAAAAAAAAAAAAAOT/AQCA/////////w8AAAAAAAAAAAAAAAAAAAAAAAAWAAAAAAAAAAAAAAAA4P///wP4//////////8HAAAAAAAAAAAAAAAAAAAAALgfAAAAAAAAAAAAAABg8P///wH/////////////DwAAAAAAAAAAAAAAAAAAAGA/AAAAAAAAAAA4fwL+/////+H/////////////XwAAAAAAAAAAAAAAAAAAAPg+AAAAAAAA9/f///////////j//////////////38AAAAAAAAAAAAAAA4AAHh+AAAAAAAA////////////f/7//////////////x8AAAAAAAAAIAAAAP9/WPp/AAAAAADw/////////////////////////////wcAAAAAAAAAEeA3AP////9/AAAAAAD8////////////////////////////fwEAAAAAAID///////////8PAAAAAID+////////////////////////////PwAAAAAAAP7//////////z8AAAAAgP//////////////////////////////fwAAAADAH////////////wMAAAAA/P///////////////////////////////xwAAAAA////////////fAABAPwA/////////////////////////////////wcAAAAe4P///////////zAAAPwBwP//////////////////////////////DwAA////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////');
+  let f = new Float32Array(MASK_W * MASK_H);
+  for (let i = 0; i < f.length; i++) f[i] = (raw.charCodeAt(i >> 3) >> (i & 7)) & 1;
+  for (let pass = 0; pass < 2; pass++) {
+    const g = new Float32Array(f.length);
+    for (let r = 0; r < MASK_H; r++) for (let c = 0; c < MASK_W; c++) {
+      let sum = 0, n = 0;
+      for (let dr = -1; dr <= 1; dr++) {
+        const rr = r + dr;
+        if (rr < 0 || rr >= MASK_H) continue;
+        for (let dc = -1; dc <= 1; dc++) { sum += f[rr * MASK_W + (c + dc + MASK_W) % MASK_W]; n++; }
+      }
+      g[r * MASK_W + c] = sum / n;
+    }
+    f = g;
+  }
+  return f;
+})();
+function earthAt(x, y, z) {
+  const lat = Math.asin(clamp(y, -1, 1)) / D2R, lon = Math.atan2(x, z) / D2R;
+  const fr = clamp(90 - lat - 0.5, 0, MASK_H - 1.001), fc = lon + 180 - 0.5;
+  const r0 = Math.floor(fr), c0 = Math.floor(fc), tr = fr - r0, tc = fc - c0;
+  const r1 = Math.min(r0 + 1, MASK_H - 1), ca = (c0 + MASK_W) % MASK_W, cb = (c0 + 1 + MASK_W) % MASK_W;
+  const top = EARTH[r0 * MASK_W + ca] * (1 - tc) + EARTH[r0 * MASK_W + cb] * tc;
+  const bot = EARTH[r1 * MASK_W + ca] * (1 - tc) + EARTH[r1 * MASK_W + cb] * tc;
+  return top * (1 - tr) + bot * tr;
+}
+// Checkerboard on a cube wrapped onto the sphere: squares stay square near the poles.
+const CHECK_N = 6;
+function checkerAt(x, y, z) {
+  const ax = Math.abs(x), ay = Math.abs(y), az = Math.abs(z);
+  let face, u, v;
+  if (ax >= ay && ax >= az) { face = x > 0 ? 0 : 1; u = z / ax; v = y / ax; }
+  else if (ay >= az) { face = y > 0 ? 2 : 3; u = x / ay; v = z / ay; }
+  else { face = z > 0 ? 4 : 5; u = x / az; v = y / az; }
+  const a = (Math.atan(u) * 4 / Math.PI + 1) / 2 * CHECK_N, b = (Math.atan(v) * 4 / Math.PI + 1) / 2 * CHECK_N;
+  const iu = Math.min(CHECK_N - 1, Math.floor(a)), iv = Math.min(CHECK_N - 1, Math.floor(b));
+  const edge = Math.min(a - iu, iu + 1 - a, b - iv, iv + 1 - b);
+  const land = (iu + iv + face) % 2 === 0;
+  const m = smooth01(edge / 0.07);
+  return land ? 0.1 + 1.2 * m : 0.1 - 0.1 * m;
+}
+function baseAt(x, y, z, nz) {
+  if (world === 'earth') { const m = earthAt(x, y, z); return Math.max(0, SEA + (m - 0.5) * 1.9 + nz * (0.12 + 0.3 * m)); }
+  if (world === 'checker') return checkerAt(x, y, z);
+  return 0;
+}
+function setWorld(w) {
+  world = w;
+  try { localStorage.setItem(WORLD_KEY, w); } catch (e) {}
+  rebuildTerrain();
+  renderSheet();
+  renderAtlas();
+}
+$('world-btn').addEventListener('click', () => {
+  const keys = Object.keys(WORLDS);
+  setWorld(keys[(keys.indexOf(world) + 1) % keys.length]);
+  toast('World: ' + WORLDS[world]);
+});
+
+const _p = new THREE.Vector3(), _c = new THREE.Vector3();
+function elevAt(x, y, z, nz) {
+  let e = baseAt(x, y, z, nz);
+  const warp = 1 + 0.35 * nz;
+  for (const k of kernels) {
+    if (k.pt) {
+      const d = x * k.x + y * k.y + z * k.z;
+      if (d < k.cosMax) continue;
+      const t = Math.acos(d > 1 ? 1 : d) / (k.rad * warp);
+      if (t < 1) { const q = 1 - t * t, q2 = q * q; e += q2 * k.w + k.peak * q2 * q2 * q2; }
+    } else {
+      if (x * k.mid.x + y * k.mid.y + z * k.mid.z < k.cosLim) continue;
+      _p.set(x, y, z);
+      const s = _p.dot(k.n);
+      _c.copy(_p).addScaledVector(k.n, -s);
+      let dist;
+      if (_c.lengthSq() < 1e-9) dist = Math.PI;
+      else {
+        _c.normalize();
+        const along = angleBetween(k.a, _c) + angleBetween(_c, k.b);
+        dist = along <= k.arc + 1e-3 ? Math.abs(Math.asin(clamp(s, -1, 1)))
+                                    : Math.min(angleBetween(_p, k.a), angleBetween(_p, k.b));
+      }
+      const t = dist / (k.rad * warp);
+      if (t < 1) { const q = 1 - t * t; e += q * q * k.w; }
+    }
+  }
+  return e;
+}
+function heightOf(e) { return e < SEA ? 0 : Math.min(e - SEA, 5) * 0.042; }
+const _col = new THREE.Color(), _c2 = new THREE.Color();
+function colorOf(e, nz) {
+  if (e < SEA) {
+    const t = Math.pow(clamp(e / SEA, 0, 1), 1.6);
+    _col.copy(DEEP).lerp(SHALLOW, t);
+    const j = nz * 0.025; _col.r += j; _col.g += j; _col.b += j;
+    return _col;
+  }
+  for (let i = 0; i < TERRAIN.length - 1; i++) {
+    const [e0, c0] = TERRAIN[i], [e1, c1] = TERRAIN[i + 1];
+    if (e <= e1) { _col.setHex(c0).lerp(_c2.setHex(c1), (e - e0) / (e1 - e0)); return _col; }
+  }
+  return _col.setHex(TERRAIN[TERRAIN.length - 1][1]);
+}
+
+// ---------- three.js scene ----------
+const stage = $('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setClearColor(0xf3ecdd, 1);
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
+scene.add(new THREE.AmbientLight(0xfff4e2, 0.28));
+scene.add(new THREE.HemisphereLight(0xfff7e8, 0xb9a47e, 0.62));
+const sun = new THREE.DirectionalLight(0xfff2dc, 0.62);
+sun.position.set(4, 5, 6);
+scene.add(sun);
+
+const globe = new THREE.Group();
+scene.add(globe);
+
+// Shared icosphere: no pole squeeze, no date line seam.
+const base = new THREE.IcosahedronGeometry(1, DETAIL);
+const basePos = base.attributes.position.array;
+const VCOUNT = basePos.length / 3;
+const vmap = new Uint32Array(VCOUNT);
+const ux = [], uy = [], uz = [];
+{
+  const seen = new Map();
+  for (let i = 0; i < VCOUNT; i++) {
+    let x = basePos[i * 3], y = basePos[i * 3 + 1], z = basePos[i * 3 + 2];
+    const l = Math.hypot(x, y, z); x /= l; y /= l; z /= l;
+    const key = Math.round(x * 1e5) + ',' + Math.round(y * 1e5) + ',' + Math.round(z * 1e5);
+    let idx = seen.get(key);
+    if (idx === undefined) { idx = ux.length; seen.set(key, idx); ux.push(x); uy.push(y); uz.push(z); }
+    vmap[i] = idx;
+  }
+}
+base.dispose();
+const U = ux.length;
+const UX = Float32Array.from(ux), UY = Float32Array.from(uy), UZ = Float32Array.from(uz);
+const NZ = new Float32Array(U);
+for (let u = 0; u < U; u++) NZ[u] = fbm(UX[u], UY[u], UZ[u]);
+const E = new Float32Array(U);
+
+const terrainGeo = new THREE.BufferGeometry();
+const posArr = new Float32Array(VCOUNT * 3);
+const colArr = new Float32Array(VCOUNT * 3);
+terrainGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+terrainGeo.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
+const terrain = new THREE.Mesh(terrainGeo, new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, shininess: 6, specular: 0x0c0c0c }));
+globe.add(terrain);
+
+const halo = new THREE.Mesh(
+  new THREE.SphereGeometry(R * 1.07, 48, 48),
+  new THREE.MeshBasicMaterial({ color: 0xbfdcef, transparent: true, opacity: 0.16, side: THREE.BackSide, depthWrite: false })
+);
+scene.add(halo);
+
+// Note markers sit on top of their land.
+const dotGeo = new THREE.BufferGeometry();
+const dots = new THREE.Points(dotGeo, new THREE.PointsMaterial({ color: 0x3b2c18, size: 5, sizeAttenuation: false }));
+globe.add(dots);
+
+// Selection pin.
+const pin = new THREE.Group();
+{
+  const mat = new THREE.MeshPhongMaterial({ color: 0xb55a1c, shininess: 30 });
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.24, 8), mat);
+  stem.position.y = 0.12;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.04, 16, 12), mat);
+  head.position.y = 0.25;
+  pin.add(stem, head);
+  pin.visible = false;
+  globe.add(pin);
+}
+const UP = new THREE.Vector3(0, 1, 0);
+function surfaceRadius(v) { return R + heightOf(elevAt(v.x, v.y, v.z, fbm(v.x, v.y, v.z))); }
+function placePin() {
+  let lat, lon;
+  if (sel && sel.kind === 'spot') ({ lat, lon } = sel);
+  else if (sel && sel.kind === 'note' && notes.get(sel.id)) ({ lat, lon } = notes.get(sel.id));
+  else { pin.visible = false; dirty = true; return; }
+  const v = toDir(lat, lon);
+  pin.position.copy(v).multiplyScalar(surfaceRadius(v));
+  pin.quaternion.setFromUnitVectors(UP, v);
+  pin.visible = true;
+  dirty = true;
+}
+
+// ---------- connections: airstrips and planes ----------
+const air = new THREE.Group();
+globe.add(air);
+const STRIP_LEN = 0.13, STRIP_W = 0.03;
+const stripGeo = new THREE.BoxGeometry(STRIP_W, 0.006, STRIP_LEN);
+const stripeGeo = new THREE.BoxGeometry(0.004, 0.0075, STRIP_LEN * 0.78);
+const stripMat = new THREE.MeshPhongMaterial({ color: 0x4d4741, shininess: 4 });
+const stripeMat = new THREE.MeshBasicMaterial({ color: 0xf7f2e6 });
+const routeMat = new THREE.LineDashedMaterial({ color: 0x6b5c45, dashSize: 0.035, gapSize: 0.03, transparent: true, opacity: 0.5 });
+const planeParts = (() => {
+  const body = new THREE.MeshPhongMaterial({ color: 0xfffaf0, shininess: 40 });
+  const trim = new THREE.MeshPhongMaterial({ color: 0xb55a1c, shininess: 20 });
+  return [
+    [new THREE.BoxGeometry(0.014, 0.014, 0.075), body, 0, 0, 0],
+    [new THREE.BoxGeometry(0.085, 0.003, 0.02), trim, 0, 0, 0.006],
+    [new THREE.BoxGeometry(0.032, 0.003, 0.012), trim, 0, 0.002, -0.031],
+    [new THREE.BoxGeometry(0.003, 0.018, 0.014), body, 0, 0.01, -0.03],
+  ];
+})();
+function makePlane() {
+  const g = new THREE.Group();
+  for (const [geo, mat, x, y, z] of planeParts) { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); g.add(m); }
+  return g;
+}
+const _m4 = new THREE.Matrix4(), _bx = new THREE.Vector3(), _by = new THREE.Vector3(), _bz = new THREE.Vector3();
+function orient(obj, up, fwd) {
+  _by.copy(up).normalize();
+  _bz.copy(fwd).addScaledVector(_by, -_by.dot(fwd));
+  if (_bz.lengthSq() < 1e-12) return;
+  _bz.normalize();
+  _bx.crossVectors(_by, _bz);
+  obj.quaternion.setFromRotationMatrix(_m4.makeBasis(_bx, _by, _bz));
+}
+function tangentToward(a, b) {
+  const t = b.clone().addScaledVector(a, -a.dot(b));
+  if (t.lengthSq() < 1e-10) t.crossVectors(a, Math.abs(a.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : UP);
+  return t.normalize();
+}
+function rotateToward(a, dir, ang) { return a.clone().multiplyScalar(Math.cos(ang)).addScaledVector(dir, Math.sin(ang)).normalize(); }
+function slerpDir(a, b, ang, t, out) {
+  if (ang < 1e-4) return out.copy(a).lerp(b, t).normalize();
+  const s = Math.sin(ang);
+  return out.copy(a).multiplyScalar(Math.sin((1 - t) * ang) / s).addScaledVector(b, Math.sin(t * ang) / s).normalize();
+}
+function smooth01(x) { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); }
+function linkedPairs() {
+  const out = new Map();
+  for (const n of notes.values()) for (const id of n.links) {
+    if (!notes.has(id) || id === n.id) continue;
+    const pair = n.id < id ? [n.id, id] : [id, n.id];
+    out.set(pair.join('|'), pair);
+  }
+  return [...out.values()];
+}
+// Airstrips are placed before the mesh is built so the ground under them can be graded flat.
+let strips = new Map();
+let flights = [];
+function planStrips() {
+  strips = new Map();
+  for (const n of notes.values()) {
+    const targets = n.links.filter(id => notes.has(id)).sort();
+    if (!targets.length) continue;
+    const a = toDir(n.lat, n.lon), tgt = notes.get(targets[0]), tv = toDir(tgt.lat, tgt.lon);
+    const f0 = tangentToward(a, tv);
+    let d = noteRad(n) * 0.5, c = rotateToward(a, f0, d);
+    for (let i = 0; i < 6 && elevAt(c.x, c.y, c.z, fbm(c.x, c.y, c.z)) < SEA + 0.25; i++) { d *= 0.72; c = rotateToward(a, f0, d); }
+    const e = elevAt(c.x, c.y, c.z, fbm(c.x, c.y, c.z));
+    strips.set(n.id, { c, f: tangentToward(c, tv), r: R + heightOf(Math.max(e, SEA + 0.05)) });
+  }
+}
+function gradeStrips(H) {
+  const inner = 0.042, outer = 0.07, cosOuter = Math.cos(outer);
+  for (const s of strips.values()) {
+    const h0 = s.r - R;
+    for (let u = 0; u < U; u++) {
+      if (E[u] < SEA) continue;
+      const d = UX[u] * s.c.x + UY[u] * s.c.y + UZ[u] * s.c.z;
+      if (d < cosOuter) continue;
+      const ang = Math.acos(d > 1 ? 1 : d);
+      const b = ang <= inner ? 1 : 1 - smooth01((ang - inner) / (outer - inner));
+      H[u] += (h0 - H[u]) * b;
+    }
+  }
+}
+function flightPoint(fl, t, out) {
+  slerpDir(fl.A.c, fl.B.c, fl.arc, t, out);
+  const lift = smooth01(t / 0.24) * smooth01((1 - t) / 0.24);
+  return out.multiplyScalar(fl.A.r + (fl.B.r - fl.A.r) * t + 0.012 + lift * fl.cruise);
+}
+function buildAir() {
+  for (const ch of [...air.children]) { air.remove(ch); if (ch.isLine) ch.geometry.dispose(); }
+  flights = [];
+  for (const s of strips.values()) {
+    const m = new THREE.Group();
+    m.add(new THREE.Mesh(stripGeo, stripMat), new THREE.Mesh(stripeGeo, stripeMat));
+    orient(m, s.c, s.f);
+    m.position.copy(s.c).multiplyScalar(s.r + 0.003);
+    air.add(m);
+  }
+  for (const [ia, ib] of linkedPairs()) {
+    const A = strips.get(ia), B = strips.get(ib);
+    if (!A || !B) continue;
+    const arc = angleBetween(A.c, B.c);
+    const fl = { A, B, arc, cruise: 0.08 + Math.min(0.34, arc * 0.4), dur: 3400 + arc * 5600, phase: hash3(ia.length * 31 + ib.charCodeAt(0), ib.length, ia.charCodeAt(0)) * 20000, plane: makePlane() };
+    const pts = [];
+    for (let i = 0; i <= 64; i++) pts.push(flightPoint(fl, i / 64, new THREE.Vector3()));
+    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), routeMat);
+    line.computeLineDistances();
+    air.add(line, fl.plane);
+    flights.push(fl);
+  }
+}
+const _pa = new THREE.Vector3(), _pb = new THREE.Vector3(), _pc = new THREE.Vector3();
+function updatePlanes(now) {
+  const sc = 1.35 * clamp(camDist / fitDist, 0.5, 1);
+  const wait = 1300;
+  for (const fl of flights) {
+    const cyc = fl.dur * 2 + wait * 2;
+    let k = (now + fl.phase) % cyc, t, back = false;
+    if (k < wait) t = 0;
+    else if ((k -= wait) < fl.dur) t = k / fl.dur;
+    else if ((k -= fl.dur) < wait) t = 1;
+    else { t = 1 - (k - wait) / fl.dur; back = true; }
+    const te = 0.5 - 0.5 * Math.cos(Math.PI * t);
+    flightPoint(fl, te, _pa);
+    flightPoint(fl, Math.min(1, te + 0.01), _pb);
+    flightPoint(fl, Math.max(0, te - 0.01), _pc);
+    _pb.sub(_pc);
+    if (back) _pb.negate();
+    fl.plane.position.copy(_pa);
+    orient(fl.plane, _pa, _pb);
+    fl.plane.scale.setScalar(sc);
+  }
+}
+
+const H = new Float32Array(U);
+function rebuildTerrain() {
+  kernels = buildKernels();
+  planStrips();
+  let land = 0;
+  for (let u = 0; u < U; u++) {
+    const e = elevAt(UX[u], UY[u], UZ[u], NZ[u]);
+    E[u] = e;
+    H[u] = heightOf(e);
+    if (e >= SEA) land++;
+  }
+  gradeStrips(H);
+  for (let i = 0; i < VCOUNT; i++) {
+    const u = vmap[i], e = E[u], r = R + H[u], o = i * 3;
+    posArr[o] = UX[u] * r; posArr[o + 1] = UY[u] * r; posArr[o + 2] = UZ[u] * r;
+    const c = colorOf(e, NZ[u]);
+    colArr[o] = c.r; colArr[o + 1] = c.g; colArr[o + 2] = c.b;
+  }
+  terrainGeo.attributes.position.needsUpdate = true;
+  terrainGeo.attributes.color.needsUpdate = true;
+  terrainGeo.computeVertexNormals();
+  terrainGeo.computeBoundingSphere();
+  landPct = land / U * 100;
+
+  const pts = [];
+  for (const n of notes.values()) {
+    const v = toDir(n.lat, n.lon);
+    v.multiplyScalar(surfaceRadius(v) + 0.012);
+    pts.push(v.x, v.y, v.z);
+  }
+  dotGeo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  dotGeo.computeBoundingSphere();
+  buildAir();
+  placePin();
+  renderHud();
+  dirty = true;
+}
+
+// ---------- camera, rotation, input ----------
+let yaw = 0.4, pitch = 0.35;
+const vel = { yaw: 0, pitch: 0 };
+let camDist = 8, camTarget = 8, fitDist = 8, minDist = R + 0.7, maxDist = 12;
+let autoSpin = true, dirty = true, fly = null, sized = false;
+
+function resize() {
+  const w = stage.clientWidth, hgt = stage.clientHeight;
+  if (!w || !hgt) return;
+  renderer.setSize(w, hgt, false);
+  camera.aspect = w / hgt;
+  camera.updateProjectionMatrix();
+  const t = Math.tan(camera.fov / 2 * D2R);
+  fitDist = R * 1.12 / (t * Math.min(1, camera.aspect));
+  maxDist = fitDist * 1.45;
+  if (!sized) { camDist = camTarget = fitDist; sized = true; }
+  camTarget = clamp(camTarget, minDist, maxDist);
+  dirty = true;
+}
+new ResizeObserver(resize).observe(stage);
+
+function zoomBy(f) { camTarget = clamp(camTarget * f, minDist, maxDist); autoSpin = false; }
+$('zin').addEventListener('click', () => zoomBy(0.78));
+$('zout').addEventListener('click', () => zoomBy(1.28));
+
+function defaultSize() {
+  const z = (camDist - minDist) / Math.max(0.01, fitDist - minDist);
+  return z < 0.35 ? 1 : z < 0.8 ? 2 : 3;
+}
+function dragSpeed() { return 0.0042 * clamp((camDist - R) / (fitDist - R), 0.15, 1.3); }
+
+const ptrs = new Map();
+let moved = 0, downAt = 0, pinchD = 0;
+function pinchDist() { const [a, b] = [...ptrs.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; }
+stage.addEventListener('pointerdown', e => {
+  stage.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  autoSpin = false; fly = null;
+  if (ptrs.size === 1) { moved = 0; downAt = performance.now(); vel.yaw = vel.pitch = 0; }
+  else if (ptrs.size === 2) { pinchD = pinchDist(); moved = 999; }
+});
+stage.addEventListener('pointermove', e => {
+  const prev = ptrs.get(e.pointerId);
+  if (!prev) return;
+  const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 1) {
+    moved += Math.abs(dx) + Math.abs(dy);
+    const k = dragSpeed();
+    yaw += dx * k; pitch = clamp(pitch + dy * k, -1.45, 1.45);
+    vel.yaw = dx * k; vel.pitch = dy * k;
+    dirty = true;
+  } else if (ptrs.size === 2) {
+    const d = pinchDist();
+    camTarget = clamp(camTarget * (pinchD / d), minDist, maxDist);
+    pinchD = d;
+  }
+});
+function endPointer(e) {
+  if (!ptrs.has(e.pointerId)) return;
+  const wasSingle = ptrs.size === 1;
+  ptrs.delete(e.pointerId);
+  if (wasSingle && e.type === 'pointerup' && moved < 8 && performance.now() - downAt < 500) {
+    vel.yaw = vel.pitch = 0;
+    handleTap(e.clientX, e.clientY);
+  }
+  if (ptrs.size) vel.yaw = vel.pitch = 0;
+}
+stage.addEventListener('pointerup', endPointer);
+stage.addEventListener('pointercancel', endPointer);
+stage.addEventListener('wheel', e => { e.preventDefault(); zoomBy(1 + clamp(e.deltaY, -100, 100) * 0.0015); }, { passive: false });
+
+const raycaster = new THREE.Raycaster();
+function handleTap(cx, cy) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  const ndc = new THREE.Vector2(((cx - rect.left) / rect.width) * 2 - 1, -((cy - rect.top) / rect.height) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  const hit = raycaster.intersectObject(terrain, false)[0];
+  if (!hit) { select(null); return; }
+  const v = globe.worldToLocal(hit.point.clone()).normalize();
+  let best = null, bestScore = 0;
+  for (const n of notes.values()) {
+    const a = angleBetween(v, toDir(n.lat, n.lon));
+    const reach = noteRad(n) * 0.9;
+    if (a < reach) { const s = 1 - a / reach; if (s > bestScore) { bestScore = s; best = n; } }
+  }
+  if (linking) {
+    if (!best) toast('Tap an island to connect it.');
+    else if (best.id === linking) toast('Pick a different island.');
+    else toggleLink(linking, best.id);
+    return;
+  }
+  if (best) select({ kind: 'note', id: best.id });
+  else { const { lat, lon } = toLatLon(v); select({ kind: 'spot', lat, lon, size: defaultSize() }); }
+}
+
+function flyTo(lat, lon) {
+  let ty = -lon * D2R;
+  while (ty - yaw > Math.PI) ty -= Math.PI * 2;
+  while (ty - yaw < -Math.PI) ty += Math.PI * 2;
+  fly = { y0: yaw, p0: pitch, y1: ty, p1: clamp(lat * D2R, -1.45, 1.45), t0: performance.now(), dur: 800 };
+  autoSpin = false; vel.yaw = vel.pitch = 0;
+}
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (document.hidden || $('page-globe').hidden) return;
+  let moving = flights.length > 0;
+  if (moving) updatePlanes(now);
+  if (fly) {
+    const t = clamp((now - fly.t0) / fly.dur, 0, 1);
+    const s = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    yaw = fly.y0 + (fly.y1 - fly.y0) * s;
+    pitch = fly.p0 + (fly.p1 - fly.p0) * s;
+    if (t >= 1) fly = null;
+    moving = true;
+  } else if (!ptrs.size) {
+    if (Math.abs(vel.yaw) > 1e-5 || Math.abs(vel.pitch) > 1e-5) {
+      yaw += vel.yaw; pitch = clamp(pitch + vel.pitch, -1.45, 1.45);
+      vel.yaw *= 0.93; vel.pitch *= 0.93;
+      moving = true;
+    } else if (autoSpin) { yaw += 0.0015; moving = true; }
+  }
+  if (Math.abs(camDist - camTarget) > 1e-3) { camDist += (camTarget - camDist) * 0.22; moving = true; }
+  if (moving || dirty) {
+    globe.rotation.set(pitch, yaw, 0, 'XYZ');
+    camera.position.set(0, 0, camDist);
+    camera.lookAt(0, 0, 0);
+    renderer.render(scene, camera);
+    dirty = false;
+  }
+}
+
+// ---------- notes ----------
+function normalizeNote(n) {
+  const size = [1, 2, 3].includes(Number(n.size)) ? Number(n.size) : 2;
+  return {
+    id: String(n.id),
+    text: String(n.text || '').slice(0, 2000),
+    region: (String(n.region || '').trim() || 'Unsorted').slice(0, 60),
+    lat: clamp(Number(n.lat), -90, 90),
+    lon: ((Number(n.lon) + 540) % 360) - 180,
+    size,
+    parent: n.parent ? String(n.parent) : null,
+    links: parseLinks(n.links).filter(id => id !== String(n.id)),
+    created: Number(n.created) || Date.now(),
+    updated: Number(n.updated) || Date.now(),
+  };
+}
+function parseLinks(v) {
+  if (typeof v === 'string') { try { v = JSON.parse(v); } catch (e) { v = []; } }
+  if (!Array.isArray(v)) return [];
+  return [...new Set(v.map(String))].slice(0, 60);
+}
+let linking = null;
+function toggleLink(a, b) {
+  const na = notes.get(a), nb = notes.get(b);
+  if (!na || !nb) return;
+  const on = na.links.includes(b);
+  upsertNote({ ...na, links: on ? na.links.filter(x => x !== b) : [...na.links, b] });
+  upsertNote({ ...nb, links: on ? nb.links.filter(x => x !== a) : [...nb.links, a] });
+  toast(on ? 'Flight removed' : 'Flight added');
+  commit([a, b]);
+}
+function regionsList() {
+  const set = new Set();
+  for (const n of notes.values()) set.add(n.region);
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+function childrenOf(id) { return [...notes.values()].filter(n => n.parent === id); }
+
+function commit(changedIds = [], deletedIds = []) {
+  for (const id of changedIds) { pending.del.delete(id); pending.up.add(id); }
+  for (const id of deletedIds) { pending.up.delete(id); pending.del.add(id); }
+  saveLocal();
+  rebuildTerrain();
+  renderSheet();
+  renderAtlas();
+  scheduleFlush(300);
+}
+function upsertNote(n) {
+  const clean = normalizeNote({ ...n, updated: Date.now() });
+  notes.set(clean.id, clean);
+  return clean;
+}
+function deleteNote(id) {
+  if (!notes.has(id)) return;
+  notes.delete(id);
+  const changed = new Set();
+  for (const k of childrenOf(id)) { k.parent = null; changed.add(k.id); }
+  for (const n of notes.values()) if (n.links.includes(id)) { n.links = n.links.filter(x => x !== id); changed.add(n.id); }
+  if (sel && sel.kind === 'note' && sel.id === id) sel = null;
+  if (linking === id) linking = null;
+  commit([...changed], [id]);
+}
+
+// Find open water next to a parent for a new branch.
+function branchSpot(parent, size) {
+  const p = toDir(parent.lat, parent.lon);
+  const ref = Math.abs(p.y) > 0.95 ? new THREE.Vector3(1, 0, 0) : UP;
+  const e1 = new THREE.Vector3().crossVectors(ref, p).normalize();
+  const e2 = new THREE.Vector3().crossVectors(p, e1).normalize();
+  const dist = (noteRad(parent) + SIZES[size].rad) * 0.8;
+  let best = null, bestClear = -1;
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 + 0.3;
+    const dir = e1.clone().multiplyScalar(Math.cos(a)).addScaledVector(e2, Math.sin(a));
+    const q = p.clone().multiplyScalar(Math.cos(dist)).addScaledVector(dir, Math.sin(dist)).normalize();
+    let clear = Infinity;
+    for (const n of notes.values()) if (n.id !== parent.id) clear = Math.min(clear, angleBetween(q, toDir(n.lat, n.lon)));
+    if (clear > bestClear) { bestClear = clear; best = q; }
+  }
+  return toLatLon(best);
+}
+
+// ---------- selection + bottom sheet ----------
+function select(s, opts = {}) {
+  sel = s;
+  placePin();
+  renderSheet();
+  if (opts.fly && s) {
+    const n = s.kind === 'note' ? notes.get(s.id) : s;
+    if (n) flyTo(n.lat, n.lon);
+  }
+}
+function sizeSeg(current, onPick) {
+  return h('div', { class: 'seg' }, [1, 2, 3].map(s =>
+    h('button', { class: s === current ? 'on' : '', text: SIZES[s].name, onclick: () => onPick(s) })));
+}
+function linkChips(n) {
+  const ids = n.links.filter(id => notes.has(id));
+  if (!ids.length) return null;
+  return h('div', { class: 's-links' }, ids.map(id => {
+    const m = notes.get(id);
+    return h('button', { class: 'chip', onclick: () => select({ kind: 'note', id }, { fly: true }) },
+      h('b', { text: 'Flight' }), snippet(m.text, 26));
+  }));
+}
+function renderSheet() {
+  const sheet = $('sheet');
+  sheet.replaceChildren();
+  sheet.classList.toggle('linking', !!linking);
+  if (linking && !notes.get(linking)) linking = null;
+  if (linking) {
+    const src = notes.get(linking);
+    const count = src.links.filter(id => notes.has(id)).length;
+    sheet.append(...[
+      h('div', { class: 's-kicker', text: 'Connecting' }),
+      h('div', { class: 's-title', text: snippet(src.text, 40) }),
+      h('p', { class: 's-hint', style: 'margin-top:6px', text: 'Tap other islands to add a flight. Tap a connected island again to remove it.' }),
+      linkChips(src),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn primary', text: `Done  (${count} flight${count === 1 ? '' : 's'})`, onclick: () => { linking = null; renderSheet(); } })),
+    ].filter(Boolean));
+    return;
+  }
+  if (sel && sel.kind === 'note' && !notes.get(sel.id)) sel = null;
+
+  if (!sel) {
+    sheet.append(
+      h('div', { class: 's-kicker', text: notes.size ? 'Your world' : 'Empty ocean' }),
+      h('p', { class: 's-hint', style: 'margin-top:6px' },
+        notes.size
+          ? 'Tap open water to plant a new note, or tap an island to open one. Drag to turn the world. Pinch to zoom.'
+          : 'Every note raises land. Notes close together pile up into grass, forest and mountains. Tap the ocean to plant your first one.'),
+    );
+    if (!notes.size) sheet.append(h('div', { class: 'row' },
+      h('button', { class: 'btn ghost', text: 'Plant an example island', onclick: plantExample })));
+    return;
+  }
+
+  if (sel.kind === 'spot') {
+    sheet.append(
+      h('div', { class: 's-kicker', text: 'Open water' }),
+      h('div', { class: 's-meta', text: fmtCoord(sel.lat, sel.lon) }),
+      sizeSeg(sel.size, s => { sel.size = s; renderSheet(); }),
+      h('div', { class: 'row' },
+        h('button', { class: 'btn ghost slim', text: 'Cancel', onclick: () => select(null) }),
+        h('button', { class: 'btn primary', text: 'Write note here', onclick: () =>
+          openEditor({ mode: 'new', lat: sel.lat, lon: sel.lon, size: sel.size, region: lastRegion, parent: null }) })),
+    );
+    return;
+  }
+
+  const n = notes.get(sel.id);
+  const parent = n.parent && notes.get(n.parent);
+  const kids = childrenOf(n.id);
+  sheet.append(...[
+    h('div', { class: 's-kicker', text: SIZES[n.size].name }),
+    h('div', { class: 's-title', text: n.region }),
+    h('div', { class: 's-meta', text: fmtCoord(n.lat, n.lon) + `  ·  ${terrainWord(n.text.length)}` + (kids.length ? `  ·  ${kids.length} branch${kids.length === 1 ? '' : 'es'}` : '') }),
+    h('div', { class: 's-text', text: n.text }),
+    parent ? h('button', { class: 's-link', text: 'Branch of: ' + snippet(parent.text), onclick: () => select({ kind: 'note', id: parent.id }, { fly: true }) }) : null,
+    linkChips(n),
+    h('div', { class: 'row tight' },
+      h('button', { class: 'btn primary', text: 'Edit', onclick: () => openEditor({ mode: 'edit', id: n.id, ...n }) }),
+      h('button', { class: 'btn ghost', text: 'Branch', onclick: () => {
+        const size = Math.max(1, n.size - 1);
+        const spot = branchSpot(n, size);
+        openEditor({ mode: 'branch', lat: spot.lat, lon: spot.lon, size, region: n.region, parent: n.id });
+      } }),
+      h('button', { class: 'btn ghost', text: 'Connect', onclick: () => { linking = n.id; renderSheet(); toast('Tap another island'); } }),
+      h('button', { class: 'btn danger slim', text: 'Delete', onclick: e => armDelete(e.currentTarget, () => deleteNote(n.id)) }),
+    ),
+  ].filter(Boolean));
+}
+
+// ---------- editor ----------
+let lastRegion = 'Unsorted';
+function openEditor(state) {
+  edit = { ...state };
+  $('ed-title').textContent = edit.mode === 'edit' ? 'Edit note' : edit.mode === 'branch' ? 'New branch' : 'New note';
+  const parent = edit.parent && notes.get(edit.parent);
+  $('ed-sub').textContent = fmtCoord(edit.lat, edit.lon) + (parent ? '  ·  branching from: ' + snippet(parent.text, 36) : '');
+  $('ed-region').value = edit.region || 'Unsorted';
+  $('ed-text').value = edit.text || '';
+  $('region-list').replaceChildren(...regionsList().map(r => h('option', { value: r })));
+  renderEdSize();
+  updateCount();
+  $('ed-save').textContent = edit.mode === 'edit' ? 'Save' : 'Raise land';
+  $('modal').hidden = false;
+  setTimeout(() => $('ed-text').focus(), 60);
+}
+function renderEdSize() {
+  $('ed-size').replaceChildren(...[1, 2, 3].map(s =>
+    h('button', { class: s === edit.size ? 'on' : '', text: SIZES[s].name, onclick: () => { edit.size = s; renderEdSize(); } })));
+}
+function updateCount() { const n = $('ed-text').value.trim().length; $('ed-count').textContent = `${n} / 2000  ·  builds ${terrainWord(n)}`; }
+function closeEditor() { $('modal').hidden = true; edit = null; }
+$('ed-text').addEventListener('input', updateCount);
+$('ed-cancel').addEventListener('click', closeEditor);
+$('modal').addEventListener('click', e => { if (e.target === $('modal')) closeEditor(); });
+$('ed-save').addEventListener('click', () => {
+  const text = $('ed-text').value.trim();
+  if (!text) { toast('Write something first.'); return; }
+  const region = $('ed-region').value.trim() || 'Unsorted';
+  lastRegion = region;
+  const base = edit.mode === 'edit' ? notes.get(edit.id) : { id: uid(), created: Date.now(), lat: edit.lat, lon: edit.lon, parent: edit.parent || null, links: [] };
+  if (!base) { closeEditor(); return; }
+  const saved = upsertNote({ ...base, text, region, size: edit.size });
+  closeEditor();
+  sel = { kind: 'note', id: saved.id };
+  commit([saved.id]);
+});
+
+// ---------- example island ----------
+function plantExample() {
+  const big = upsertNote({ id: uid(), text: 'A big idea sits at the center. The more you write, the higher the land climbs, so a long note like this one turns into a mountain while a one line thought stays a low sandy island. Branches grow out of it as ridges and peninsulas. Notes that sit close together pile their land on top of each other, climbing from sand into grass, then forest, then bare rock, and with enough words a peak goes white with snow. Connect two islands and each one gets a little airstrip, and a plane starts flying the route between them.', region: 'Example', lat: 18, lon: -20, size: 3 });
+  const ids = [big.id];
+  const branches = [
+    ['First branch of the big idea. Branches lay a ridge back to their parent.', 2],
+    ['Second branch. Stack enough notes together and grass turns to forest.', 2],
+    ['A small detail hanging off the big idea.', 1],
+  ];
+  for (const [text, size] of branches) {
+    const spot = branchSpot(big, size);
+    ids.push(upsertNote({ id: uid(), text, region: 'Example', lat: spot.lat, lon: spot.lon, size, parent: big.id }).id);
+  }
+  const lone = upsertNote({ id: uid(), text: 'A lone thought stays a small sandy island. This one is connected to the big idea, so a plane flies between them.', region: 'Example', lat: -6, lon: 25, size: 1, links: [big.id] });
+  const far = upsertNote({ id: uid(), text: 'Another thought out in open water, also on the flight network.', region: 'Example', lat: 40, lon: 30, size: 2, links: [big.id] });
+  upsertNote({ ...notes.get(big.id), links: [lone.id, far.id] });
+  ids.push(lone.id, far.id);
+  sel = { kind: 'note', id: big.id };
+  commit(ids);
+  flyTo(big.lat, big.lon);
+}
+
+// ---------- atlas ----------
+function renderAtlas() {
+  const box = $('regions');
+  box.replaceChildren();
+  const list = [...notes.values()];
+  $('atlas-sub').textContent = list.length
+    ? `${list.length} note${list.length === 1 ? '' : 's'}  ·  ${regionsList().length} region${regionsList().length === 1 ? '' : 's'}  ·  ${landPct.toFixed(1)}% land`
+    : 'No land yet';
+  if (!list.length) {
+    box.append(h('div', { class: 'empty' },
+      h('div', { class: 'big', text: 'The world is all ocean.' }),
+      h('p', {}, 'Go to the Globe. Tap the water. Write a thought. Watch land rise.')));
+    return;
+  }
+  const groups = new Map();
+  for (const n of list) { if (!groups.has(n.region)) groups.set(n.region, []); groups.get(n.region).push(n); }
+  const weight = arr => arr.reduce((s, n) => s + noteRad(n) ** 2, 0);
+  const total = weight(list) || 1;
+  const regions = [...groups.entries()].sort((a, b) => weight(b[1]) - weight(a[1]));
+  const allRegions = regionsList();
+
+  for (const [region, items] of regions) {
+    // parents first, each followed by its branches in the same region
+    const ordered = [];
+    const inRegion = new Set(items.map(n => n.id));
+    const roots = items.filter(n => !n.parent || !inRegion.has(n.parent)).sort((a, b) => b.size - a.size || a.created - b.created);
+    const walk = (n, depth) => { ordered.push([n, depth]); items.filter(c => c.parent === n.id).sort((a, b) => a.created - b.created).forEach(c => walk(c, depth + 1)); };
+    roots.forEach(r => walk(r, 0));
+
+    box.append(h('div', { class: 'region' },
+      h('div', { class: 'region-head' },
+        h('div', { class: 'region-name', text: region }),
+        h('div', { class: 'region-count', text: `${items.length} note${items.length === 1 ? '' : 's'}` }),
+        h('button', { class: 'region-rename', text: 'Rename', onclick: () => renameRegion(region) })),
+      h('div', { class: 'region-bar' }, h('span', { style: `width:${Math.max(3, weight(items) / total * 100).toFixed(1)}%` })),
+      ordered.map(([n, depth]) => noteCard(n, depth, allRegions)),
+    ));
+  }
+}
+function noteCard(n, depth, allRegions) {
+  const parent = n.parent && notes.get(n.parent);
+  const move = h('select', { 'aria-label': 'Move to region', onchange: e => {
+    const v = e.target.value;
+    e.target.value = '';
+    if (!v) return;
+    let target = v;
+    if (v === '__new__') {
+      const name = (prompt('New region name') || '').trim();
+      if (!name) return;
+      target = name.slice(0, 60);
+    }
+    if (target === n.region) return;
+    upsertNote({ ...n, region: target });
+    commit([n.id]);
+    toast(`Moved to ${target}`);
+  } },
+    h('option', { value: '', text: 'Move to…' }),
+    allRegions.filter(r => r !== n.region).map(r => h('option', { value: r, text: r })),
+    h('option', { value: '__new__', text: 'New region…' }));
+  return h('div', { class: 'card' + (depth ? ' child' : ''), style: depth > 1 ? `padding-left:${14 + depth * 16}px` : null },
+    h('div', { class: 'card-text', text: n.text }),
+    h('div', { class: 'card-meta', text: `${SIZES[n.size].name}  ·  ${terrainWord(n.text.length)}  ·  ${fmtCoord(n.lat, n.lon)}` + (parent ? `  ·  branch of: ${snippet(parent.text, 30)}` : '') }),
+    n.links.some(id => notes.has(id)) ? h('div', { class: 'card-meta', text: 'Flights to: ' + n.links.filter(id => notes.has(id)).map(id => snippet(notes.get(id).text, 24)).join('  /  ') }) : null,
+    h('div', { class: 'card-actions' },
+      h('button', { class: 'btn ghost', text: 'Show', onclick: () => { showPage('globe'); select({ kind: 'note', id: n.id }, { fly: true }); } }),
+      move,
+      h('button', { class: 'btn danger', text: 'Delete', onclick: e => armDelete(e.currentTarget, () => deleteNote(n.id)) })));
+}
+function renameRegion(old) {
+  const name = (prompt('Rename region', old) || '').trim().slice(0, 60);
+  if (!name || name === old) return;
+  const ids = [];
+  for (const n of notes.values()) if (n.region === old) { upsertNote({ ...n, region: name }); ids.push(n.id); }
+  commit(ids);
+}
+
+// ---------- pages ----------
+function showPage(name) {
+  $('page-globe').hidden = name !== 'globe';
+  $('page-atlas').hidden = name !== 'atlas';
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.page === name));
+  if (name === 'atlas') renderAtlas();
+  else { resize(); dirty = true; }
+}
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => showPage(t.dataset.page)));
+
+function renderHud() {
+  $('world-btn').textContent = 'World: ' + WORLDS[world];
+  const n = notes.size, r = regionsList().length;
+  $('stats').textContent = `${n} note${n === 1 ? '' : 's'}  ·  ${r} region${r === 1 ? '' : 's'}  ·  ${landPct.toFixed(1)}% land`;
+}
+
+// ---------- storage + sync ----------
+// The phone keeps a full copy. The server gets every change; if it is down,
+// changes queue up and retry. Notes missing from the server get re-sent.
+function saveLocal() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify({ notes: [...notes.values()], up: [...pending.up], del: [...pending.del] }));
+  } catch (e) { /* storage full or blocked: server copy still works */ }
+}
+function loadLocal() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    for (const n of data.notes || []) { const c = normalizeNote(n); if (isFinite(c.lat) && isFinite(c.lon)) notes.set(c.id, c); }
+    for (const id of data.up || []) pending.up.add(id);
+    for (const id of data.del || []) pending.del.add(id);
+  } catch (e) { /* corrupt cache: start clean, server will refill */ }
+}
+function setSync(kind, text) { $('sync').className = kind; $('sync-text').textContent = text; }
+
+async function req(path, opt = {}) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 10000);
+  try {
+    const res = await fetch(API + path, { ...opt, signal: ctl.signal });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const type = res.headers.get('content-type') || '';
+    return type.includes('json') ? res.json() : null;
+  } finally { clearTimeout(timer); }
+}
+function toWire(n) {
+  return { id: n.id, cell_id: n.id, text: n.text, note: n.text, region: n.region, lat: n.lat, lon: n.lon, size: n.size, parent: n.parent, links: n.links, created_at: n.created, updated_at: n.updated };
+}
+async function pull() {
+  setSync('busy', 'Loading');
+  try {
+    const rows = await req('/notes');
+    if (Array.isArray(rows)) mergeServer(rows);
+    setSync('ok', 'Synced');
+  } catch (e) {
+    setSync('bad', 'Offline, saved on this phone');
+  }
+  scheduleFlush(0);
+}
+function mergeServer(rows) {
+  const seen = new Set();
+  for (const r of rows) {
+    const id = String(r.id ?? r.cell_id ?? '');
+    if (!id) continue;
+    seen.add(id);
+    if (pending.del.has(id)) continue;
+    if (pending.up.has(id) && notes.has(id)) continue;
+    const lat = Number(r.lat), lon = Number(r.lon);
+    if (!isFinite(lat) || !isFinite(lon)) continue;
+    const old = notes.get(id);
+    notes.set(id, normalizeNote({
+      id, lat, lon,
+      text: r.text ?? r.note ?? '',
+      region: r.region,
+      size: r.size ?? old?.size,
+      parent: r.parent !== undefined ? r.parent : old?.parent,
+      links: r.links !== undefined ? r.links : old?.links,
+      created: r.created_at ?? old?.created,
+      updated: r.updated_at ?? old?.updated,
+    }));
+  }
+  for (const id of notes.keys()) if (!seen.has(id)) pending.up.add(id);
+  saveLocal();
+  rebuildTerrain();
+  renderSheet();
+  renderAtlas();
+}
+let flushing = false, flushTimer = 0;
+function scheduleFlush(ms) { clearTimeout(flushTimer); flushTimer = setTimeout(flush, ms); }
+async function flush() {
+  if (flushing) { scheduleFlush(500); return; }
+  if (!pending.up.size && !pending.del.size) return;
+  flushing = true;
+  setSync('busy', 'Saving');
+  let failed = false;
+  for (const id of [...pending.del]) {
+    try { await req('/notes/' + encodeURIComponent(id), { method: 'DELETE' }); pending.del.delete(id); }
+    catch (e) { failed = true; break; }
+  }
+  if (!failed) for (const id of [...pending.up]) {
+    const n = notes.get(id);
+    if (!n) { pending.up.delete(id); continue; }
+    try {
+      await req('/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(toWire(n)) });
+      pending.up.delete(id);
+    } catch (e) { failed = true; break; }
+  }
+  saveLocal();
+  flushing = false;
+  if (failed) { setSync('bad', 'Offline, saved on this phone'); scheduleFlush(30000); }
+  else setSync('ok', 'Synced');
+}
+window.addEventListener('online', () => scheduleFlush(0));
+
+// ---------- boot ----------
+loadLocal();
+resize();
+rebuildTerrain();
+renderSheet();
+renderAtlas();
+$('boot').remove();
+requestAnimationFrame(frame);
+pull();
+</script>
+</body>
+</html>
