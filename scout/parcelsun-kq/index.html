@@ -91,6 +91,8 @@
   .wrap-up { display: inline-block; padding: 8px 12px; border: 2px solid var(--line); border-radius: 8px; font-weight: 700; background: #fff; cursor: pointer; }
   [hidden] { display: none !important; }
   input[type=text] { font: inherit; font-size: 12px; color: var(--ink); background: var(--panel); border: 2px solid var(--line); border-radius: 5px; padding: 4px 8px; width: 100%; }
+  input[type=password] { font: inherit; font-size: 12px; color: var(--ink); background: var(--panel); border: 2px solid var(--line); border-radius: 5px; padding: 4px 8px; width: 100%; }
+  #ftCard button { width: 100%; }
   #ftBanner { background: #e6f0fb; border: 2px solid var(--line); border-radius: 8px; padding: 8px 10px; font-weight: 800; text-align: center; color: #0b4ea2; }
   #skyChart { width: 100%; height: 190px; display: block; border: 2px solid var(--line); border-radius: 6px; background: #f7fbff; }
   #blkList { height: 132px; overflow-y: auto; border: 2px solid var(--line); border-radius: 6px; padding: 4px 8px; }
@@ -128,7 +130,27 @@
 </header>
 
 <main>
-  <div id="ftBanner" hidden></div>
+  <div id="ftBanner">No Field Twin locker loaded</div>
+  <section class="card" id="ftCard">
+    <h2>Field Twin</h2>
+    <div style="height:150px">
+      <div id="ftOut" class="grid">
+        <label class="field full"><span>Field Twin email</span><input type="text" id="ftEmail" autocomplete="username" inputmode="email"></label>
+        <label class="field"><span>Password</span><input type="password" id="ftPass" autocomplete="current-password"></label>
+        <div class="field" style="justify-content:flex-end"><button id="ftSignIn">Sign in</button></div>
+      </div>
+      <div id="ftIn" hidden>
+        <div class="grid">
+          <div class="field"><button id="ftFind">Find the locker I'm at</button></div>
+          <div class="field"><button id="ftSave">Save to Field Twin</button></div>
+          <label class="field full"><span>Saved lockers, nearest first</span><select id="ftPick"></select></label>
+          <div class="field"><button id="ftLoad">Load this locker</button></div>
+          <div class="field"><button id="ftSignOut">Sign out</button></div>
+        </div>
+      </div>
+    </div>
+    <div id="ftMsg" class="sub" style="display:block;height:54px;overflow-y:auto;margin-top:6px">Sign in with your Field Twin account to pull your lockers in here.</div>
+  </section>
   <section class="card" id="view">
     <div class="hud"><span id="hudSun">Sun</span><span id="hudFacing">Facing</span></div>
     <div class="heatkey" id="heatKey"><span id="keyLo">60</span><i></i><span id="keyHi">160 F</span></div>
@@ -401,12 +423,14 @@
     <p>The heat tint inside each section rises toward the top in step with how much hotter that section runs than the air outside, and the console heat fades out across the neighboring modules. This tint is for reading the picture; the numbers in the readouts come from the three air space model.</p>
     <p>Modules around a corner take their sun from the direction they face. The air temperatures in the readouts still treat the bank as one straight run facing the starter's direction.</p>
     <p>Shade blockers are walls, buildings and trees around the locker. Each one is a span of compass bearings, left edge to right edge as you face it from the locker, plus how far up its top edge sits. You can enter the top as an angle, or as a height and a distance and the app works the angle out from the middle of the locker. When the sun sits inside a blocker's span and below its top, the locker gets no direct sun at all, only sky light and ground bounce. The sky chart shows each blocker in gray with the sun path for the chosen day across it, so you can see exactly when the shadow lands and when it lets go. Blocker shade in the whole day card counts the daytime hours the locker spends behind a blocker.</p>
+    <p>The Field Twin card signs in with your Field Twin account. Find the locker I'm at takes your location, finds the closest locker you saved in Field Twin, and loads it at the time right now: its spot, facing, generation, door count, placement and blockers, with blanks filled from your latest locker visit survey there. Change anything, then Save to Field Twin writes it back to that locker's page.</p>
     <p>A locker opened from Field Twin arrives with its name, spot, facing, version, door count, placement and blockers already filled in from the locker page there.</p>
     <p>All of this assumes clear sky. Clouds, dust storms and parked cars are not modeled.</p>
     <div class="center" style="margin-top:12px"><button id="infoClose2">Close</button></div>
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script type="module">
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 
@@ -1463,16 +1487,10 @@ function cleanBlockers(list) {
 }
 BLOCKERS = cleanBlockers(BLOCKERS);
 // Field Twin hands a locker over in the link: #ft= then the locker page as base64 JSON.
-(function ftImport() {
-  const m = /[#&]ft=([^&]+)/.exec(location.hash || '');
-  if (!m) return;
-  let d = null;
-  try {
-    const b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
-    const bin = atob(b64 + '==='.slice((b64.length + 3) % 4));
-    d = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
-  } catch (e) { return; }
+let FT_LOCKER = null;
+function applyLocker(d) {
   if (!d) return;
+  FT_LOCKER = { id: d.id || null, name: d.name || '' };
   if (isFinite(d.lat) && isFinite(d.lon)) { $('lat').value = (+d.lat).toFixed(5); $('lon').value = (+d.lon).toFixed(5); }
   if (isFinite(d.facing) && d.facing !== null) $('facing').value = Math.round(((+d.facing % 360) + 360) % 360);
   if (['v2', 'v3', 'v4', 'v5'].includes(d.gen)) LAYOUT.ver = d.gen;
@@ -1496,8 +1514,17 @@ BLOCKERS = cleanBlockers(BLOCKERS);
   if (typeof d.backWall === 'boolean') $('backWall').checked = d.backWall;
   if (Array.isArray(d.blockers)) { BLOCKERS = cleanBlockers(d.blockers); saveBlockers(); }
   const name = String(d.name || '').trim();
-  $('ftBanner').textContent = 'Simulation of ' + (name ? (/^locker\b/i.test(name) ? name : 'locker ' + name) : 'a Field Twin locker') + (doors ? ', ' + doors + ' doors' : '');
+  $('ftBanner').textContent = 'Simulation of ' + (name ? (/^locker\b/i.test(name) ? name : 'locker ' + name) : 'a Field Twin locker') + ', ' + numberLayout().total + ' doors';
   $('ftBanner').hidden = false;
+}
+(function ftImport() {
+  const m = /[#&]ft=([^&]+)/.exec(location.hash || '');
+  if (!m) return;
+  try {
+    const b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
+    const bin = atob(b64 + '==='.slice((b64.length + 3) % 4));
+    applyLocker(JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)))));
+  } catch (e) {}
 })();
 versionDefaults();
 let S = readState();
@@ -2077,6 +2104,118 @@ $('addQ').addEventListener('click', () => { LAYOUT.mods.push({ type: 'q', turn: 
 renderLayout();
 drawOpenList();
 renderBlockers();
+
+/* ---------------- Field Twin account: find the locker you're at, load it, save tweaks back ---------------- */
+const FT_URL = 'https://zasyjjoypkpvyqdueums.supabase.co';
+const FT_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inphc3lqam95cGtwdnlxZHVldW1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMjk1NjQsImV4cCI6MjEwNjgwNTU2NH0.PZrUvG4qsTpMQeihXbbzaFYUAAJ9YV7FtxLTkcQGFVI';
+let ftSb = null, ftLockers = [], ftHere = null;
+const ftMsg = t => { $('ftMsg').textContent = t; };
+const ftDist = (a, b, c, d) => { const R = 6371000, dl = (c - a) * D2R, dn = (d - b) * D2R; const x = Math.sin(dl / 2) ** 2 + Math.cos(a * D2R) * Math.cos(c * D2R) * Math.sin(dn / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(x)); };
+const ftFar = m => m < 300 ? `${Math.round(m * 3.281)} ft` : `${(m / 1609).toFixed(1)} mi`;
+const ftName = p => p.name || p.address || 'Unnamed locker';
+function ftShow(signed) { $('ftOut').hidden = signed; $('ftIn').hidden = !signed; }
+function ftFillPick() {
+  const list = ftLockers.slice();
+  if (ftHere) list.sort((a, b) => ftDist(ftHere.lat, ftHere.lon, a.lat, a.lon) - ftDist(ftHere.lat, ftHere.lon, b.lat, b.lon));
+  else list.sort((a, b) => ftName(a).localeCompare(ftName(b)));
+  $('ftPick').innerHTML = list.map(p => `<option value="${p.id}">${ftName(p).replace(/[<>&"]/g, '')}${ftHere ? ', ' + ftFar(ftDist(ftHere.lat, ftHere.lon, p.lat, p.lon)) : ''}</option>`).join('');
+  return list;
+}
+async function ftLoadLockers() {
+  const r = await ftSb.from('field_twin_places').select('id,name,address,lat,lon,site,updated_at').eq('kind', 'locker').range(0, 4999);
+  if (r.error) { ftMsg('Could not read your lockers: ' + r.error.message); return false; }
+  ftLockers = r.data || [];
+  ftFillPick();
+  ftMsg(ftLockers.length ? `${ftLockers.length} saved lockers. Tap Find the locker I'm at, or pick one and tap Load this locker.` : 'No saved lockers in Field Twin yet. Save one on its locker page there first.');
+  return true;
+}
+// The latest locker visit survey near a locker fills any site field left blank.
+async function ftSurvey(p) {
+  const r = await ftSb.from('entries').select('ts,questions,answers').eq('category', 'amazon_locker')
+    .gte('lat', p.lat - 0.0008).lte('lat', p.lat + 0.0008).gte('lon', p.lon - 0.0009).lte('lon', p.lon + 0.0009)
+    .order('ts', { ascending: false }).limit(10);
+  const out = {};
+  (r.data || []).forEach(e => (e.questions || []).forEach((q, i) => { const a = (e.answers || [])[i]; const k = typeof q === 'string' ? q : (q && q.text) || ''; if (a && out[k] === undefined) out[k] = a; }));
+  return out;
+}
+function ftFill(site, ans) {
+  const s = Object.assign({}, site);
+  const pick = re => { const k = Object.keys(ans).find(q => re.test(q)); return k ? ans[k] : ''; };
+  const comp = pick(/compartment count/i), scr = pick(/kiosk screen/i), ind = pick(/indoors or outdoors/i), shd = pick(/shaded or exposed/i);
+  if (!s.doors) s.doors = { 'Under 20': 15, '20-50': 35, '50-100': 75, 'Over 100': 110 }[comp] || null;
+  if (!s.gen) s.gen = scr === 'Screen' ? 'v3' : scr === 'Touchpad only' ? 'v4' : null;
+  if (!s.placement) s.placement = ind === 'Indoors' ? 'indoor' : shd === 'Shaded' ? 'full' : (ind === 'Outdoors' || shd === 'Exposed') ? 'none' : null;
+  return s;
+}
+async function ftOpen(p) {
+  ftMsg('Loading ' + ftName(p));
+  const site = ftFill(p.site || {}, await ftSurvey(p));
+  applyLocker({ id: p.id, name: ftName(p), lat: p.lat, lon: p.lon, facing: site.facing, gen: site.gen, doors: site.doors, mods: site.mods,
+    placement: site.placement, awning: site.awning, backWall: !!site.backWall, blockers: site.blockers || [] });
+  if (!Array.isArray(site.blockers) || !site.blockers.length) { BLOCKERS = []; saveBlockers(); }
+  const now = new Date();
+  $('month').value = now.getMonth(); $('day').value = now.getDate(); $('hour').value = (now.getHours() + now.getMinutes() / 60).toFixed(2);
+  versionDefaults();
+  phoneReset();
+  layoutChanged();
+  renderBlockers();
+  recompute(true);
+  const miss = [site.facing === null || site.facing === undefined ? 'facing' : '', site.gen ? '' : 'generation', site.doors ? '' : 'door count', (site.blockers || []).length ? '' : 'shade blockers'].filter(Boolean);
+  ftMsg(`Loaded ${ftName(p)} at the time right now.` + (miss.length ? ' Not measured yet: ' + miss.join(', ') + '. Set them here and tap Save to Field Twin.' : ' Adjust anything and tap Save to Field Twin to keep it.'));
+  window.scrollTo({ top: $('view').offsetTop - 10, behavior: 'smooth' });
+}
+function ftInit() {
+  if (!window.supabase) { ftMsg('Field Twin sign in did not load. Reload the page.'); return; }
+  ftSb = window.supabase.createClient(FT_URL, FT_ANON, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: 'parcelsun-fieldtwin-auth' } });
+  ftSb.auth.getSession().then(r => { if (r.data && r.data.session) { ftShow(true); ftLoadLockers(); } });
+  $('ftSignIn').addEventListener('click', async () => {
+    const email = $('ftEmail').value.trim(), pass = $('ftPass').value;
+    if (!email || !pass) { ftMsg('Type your Field Twin email and password.'); return; }
+    ftMsg('Signing in');
+    const r = await ftSb.auth.signInWithPassword({ email, password: pass });
+    if (r.error) { ftMsg('Field Twin refused that email and password.'); return; }
+    $('ftPass').value = '';
+    ftShow(true);
+    ftLoadLockers();
+  });
+  $('ftSignOut').addEventListener('click', async () => { await ftSb.auth.signOut(); ftLockers = []; $('ftPick').innerHTML = ''; ftShow(false); ftMsg('Signed out.'); });
+  $('ftFind').addEventListener('click', () => {
+    if (!navigator.geolocation) { ftMsg('This phone gives no location here. Pick the locker from the list.'); return; }
+    ftMsg('Getting your location');
+    navigator.geolocation.getCurrentPosition(async pos => {
+      ftHere = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+      if (!ftLockers.length && !(await ftLoadLockers())) return;
+      const list = ftFillPick();
+      if (!list.length) { ftMsg('No saved lockers in Field Twin yet.'); return; }
+      const near = list[0], m = ftDist(ftHere.lat, ftHere.lon, near.lat, near.lon);
+      $('ftPick').value = near.id;
+      if (m <= 300) ftOpen(near);
+      else ftMsg(`Closest saved locker is ${ftName(near)}, ${ftFar(m)} away. Tap Load this locker to open it anyway.`);
+    }, err => ftMsg('Location refused or unavailable. Pick the locker from the list.'), { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+  });
+  $('ftLoad').addEventListener('click', () => { const p = ftLockers.find(x => x.id === $('ftPick').value); if (p) ftOpen(p); });
+  $('ftSave').addEventListener('click', async () => {
+    const id = (FT_LOCKER && FT_LOCKER.id) || $('ftPick').value;
+    const p = ftLockers.find(x => x.id === id);
+    if (!p) { ftMsg('Load a locker from Field Twin first.'); return; }
+    const old = p.site || {};
+    const facing = Math.round(+$('facing').value);
+    const site = Object.assign({}, old, {
+      facing, facingFrom: old.facing === facing ? (old.facingFrom || 'parcelsun') : 'parcelsun',
+      gen: LAYOUT.ver, doors: numberLayout().total, mods: LAYOUT.mods.length,
+      placement: $('shade').value, awning: +$('awning').value || null, backWall: $('backWall').checked,
+      blockers: BLOCKERS.map((b, i) => Object.assign({}, (old.blockers || []).find(o => o.label === b.label) || { id: 'ps-' + Date.now().toString(36) + i }, b)),
+      at: new Date().toISOString()
+    });
+    ftMsg('Saving');
+    const r = await ftSb.from('field_twin_places').update({ site, updated_at: new Date().toISOString() }).eq('id', p.id).select('id');
+    if (r.error || !r.data || !r.data.length) { ftMsg('Field Twin did not take it: ' + (r.error ? r.error.message : 'locker not found on this account')); return; }
+    p.site = site;
+    ftMsg(`Saved ${ftName(p)} to Field Twin. It shows on the locker page there next time it syncs.`);
+  });
+}
+ftInit();
+
 $('blkAdd').addEventListener('click', () => {
   const num = id => { const v = $(id).value.trim(); return v === '' ? null : parseFloat(v); };
   const b = cleanBlockers([{ label: $('blkLabel').value.trim() || 'Blocker ' + (BLOCKERS.length + 1), left: num('blkLeft'), right: num('blkRight'), top: num('blkTop'), heightFt: num('blkH'), distFt: num('blkD') }])[0];
@@ -2088,7 +2227,7 @@ $('blkAdd').addEventListener('click', () => {
 });
 
 document.querySelectorAll('input, select').forEach(el => {
-  if (el.id === 'hour' || el.id === 'heatView' || el.closest('#layoutCard') || el.closest('#blkBox')) return;
+  if (el.id === 'hour' || el.id === 'heatView' || el.closest('#layoutCard') || el.closest('#blkBox') || el.closest('#ftCard')) return;
   el.addEventListener('input', () => {
     if (el.id === 'color') $('absorb').value = PAINT[el.value].a.toFixed(2);
     recompute(el.hasAttribute('data-build') || el.id === 'color');

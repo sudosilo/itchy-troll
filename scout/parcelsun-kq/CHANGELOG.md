@@ -1,5 +1,7 @@
 Parcelsun changelog
 
+2026-11-11, v2026.11.11b. Added the Field Twin card. Sign in with the Field Twin account, tap Find the locker I'm at, and the closest saved locker loads at the time right now with its facing, generation, doors, placement and blockers, blanks filled from the latest locker visit survey. Save to Field Twin writes your adjustments back to that locker.
+
 2026-11-11, v2026.11.11. Added shade blockers. A wall, building or tree is a span of bearings with a top angle, or a height and distance, and the locker gets no direct sun while the sun sits behind it. A sky chart shows the blockers against the day's sun path, and Blocker shade counts the hours. A locker opened from its Field Twin locker page arrives with its name, spot, facing, generation, door count, placement and blockers filled in.
 
 2026-11-10, v2026.11.10. Added a Locker Screen kiosk to Parcelsun. Codes and scans swing a door open on the 3D model, doors can be tapped to open and close, and the tech repair flow opens the matching door. Versions two to five are now set up, with a screen on two and three and a Bluetooth phone pickup on four and five. Added a wrap graphic that stretches a photo across the bank front, or joins several photos side by side.
