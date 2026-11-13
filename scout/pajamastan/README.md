@@ -8,6 +8,6 @@ Live at pajamastan.vercel.app
 
 Checked every morning by Control Troll, an automated test system that loads every app and clicks through its features.
 
-Latest change. 2026-11-07, v2026.11.07. Added a Links tab that includes the badge tool.
+Latest change. 2026-11-11, v2026.11.11. Added a combined creator seal that shows the Pajamastan flag beside a round seal.
 
 Full history is in CHANGELOG.md.
