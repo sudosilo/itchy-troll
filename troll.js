@@ -114,7 +114,10 @@ function butlerPush(dir) {
   for (const channel of ['html5', 'offline']) {
     log(`Uploading channel ${channel} with butler`);
     // No shell here, so odd characters in the username secret cannot break the command.
-    execFileSync('butler', ['push', dir, `${USER}/${SLUG}:${channel}`, '--if-changed'], { stdio: 'inherit' });
+    const args = ['push', dir, `${USER}/${SLUG}:${channel}`, '--if-changed'];
+    // ship.json may name a version, which itch.io then shows on the build
+    if (SHIP.version && SHIP.repo === REPO) args.push('--userversion', String(SHIP.version));
+    execFileSync('butler', args, { stdio: 'inherit' });
   }
 }
 
