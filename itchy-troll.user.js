@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Itchy Troll page filler
 // @namespace    sudosilo-itchy-troll
-// @version      1.5.0
+// @version      1.6.0
 // @description  Fills an itch.io edit page from pages/REPO.json in the itchy-troll repo
 // @match        https://itch.io/game/edit/*
 // @match        https://itch.io/game/new*
@@ -355,7 +355,11 @@
     if (!setAiYes()) missed.push('AI disclosure');
     if (!tick(labelInput(/^Public\b/i), true)) missed.push('Public visibility');
     const imgNotes = [];
-    if (spec.cover || (spec.screenshots && spec.screenshots.length)) {
+    // Images go up only once. A page that already has a cover keeps its images, so tapping again never stacks duplicates.
+    const hasImages = !!buttonByText(/replace cover image|change cover image|remove cover image/i) ||
+      [...document.querySelectorAll('img')].some((i) => /\/(cover|screenshot)/i.test(i.src || '') || /cover|screenshot/i.test((i.closest('[class]') || {}).className || ''));
+    if (hasImages) imgNotes.push('images already on the page, skipped');
+    if (!hasImages && (spec.cover || (spec.screenshots && spec.screenshots.length))) {
       armPicker();
       if (spec.cover) {
         ui.msg.textContent = 'Uploading cover image...';
