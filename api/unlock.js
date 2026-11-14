@@ -5,6 +5,11 @@
 // GET /api/unlock?status                     (setup check)
 
 const API_KEY = process.env.ITCH_API_KEY || '';
+// The owner's own pass. Only the SHA-256 of the code is kept here, so this file can stay public.
+const OWNER_HASH = '9e70c57101d6a7d1faead4a611b3c1b17a736ec698674f207e72afd6e1121562';
+function isOwnerCode(v) {
+  return require('crypto').createHash('sha256').update(String(v)).digest('hex') === OWNER_HASH;
+}
 let gamesCache = { at: 0, games: [] };
 
 async function myGames() {
@@ -54,7 +59,9 @@ module.exports = async (req, res) => {
     const info = { url: game.url, price: priceText(game.min_price) };
     let ok = false;
 
-    if (key) {
+    if (key && isOwnerCode(key)) {
+      ok = true;
+    } else if (key) {
       const r = await fetch(`https://itch.io/api/1/${API_KEY}/game/${game.id}/download_keys?download_key=${encodeURIComponent(key)}`);
       const j = await r.json();
       ok = !!(j.download_key && String(j.download_key.game_id) === String(game.id));

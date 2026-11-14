@@ -25,7 +25,7 @@ const DEFAULT_SETTINGS = {
   supply: 'crate',
   tag: ''
 };
-const VERSION = '2.0.1';
+const VERSION = '2.0.2';
 const DEFAULT_BEST = { score: 0, heightFt: 0, freeHeightFt: 0 };
 const VIEWS = [['follow', 'Follow'], ['cab', 'Cab'], ['orbit', 'Orbit'], ['spotter', 'Spotter']];
 const KEYS = {
@@ -327,7 +327,8 @@ function App() {
     }
     if (!fullVersion() && m === 'timed' && demoLeft() <= 0) {
       let ok = false;
-      try { ok = await window.ItchyUnlock.require(); } catch (e) { ok = false; }
+      // offer, so the player can close the prompt and go back to the menu
+      try { ok = await window.ItchyUnlock.offer(); } catch (e) { ok = false; }
       if (!ok) return;
       gateBought = true;
     }
