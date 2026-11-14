@@ -25,7 +25,7 @@ const DEFAULT_SETTINGS = {
   supply: 'crate',
   tag: ''
 };
-const VERSION = '2.0';
+const VERSION = '2.0.1';
 const DEFAULT_BEST = { score: 0, heightFt: 0, freeHeightFt: 0 };
 const VIEWS = [['follow', 'Follow'], ['cab', 'Cab'], ['orbit', 'Orbit'], ['spotter', 'Spotter']];
 const KEYS = {
@@ -78,9 +78,19 @@ function Board({ rows, highlightId }) {
   );
 }
 
-// Itchy Troll demo gate: three timed rounds free, then the purchase. Free build is the full version.
+// Itchy Troll demo gate: three timed rounds and twelve Free build placements are free, then the purchase.
 // Skipped if the unlock kit is missing.
 const DEMO_ROUNDS = 3;
+const DEMO_DROPS = 12;
+function dropsUsed() {
+  try { return parseInt(window.localStorage.getItem('skyflow.demoDrops') || '0', 10) || 0; } catch (e) { return 0; }
+}
+function dropsLeft() {
+  return Math.max(0, DEMO_DROPS - dropsUsed());
+}
+function dropCount() {
+  try { window.localStorage.setItem('skyflow.demoDrops', String(dropsUsed() + 1)); } catch (e) { /* storage blocked */ }
+}
 let gateBought = false;
 function fullVersion() {
   return gateBought || !window.ItchyUnlock || window.ItchyUnlock.isUnlocked();
@@ -114,6 +124,8 @@ function App() {
   const [popups, setPopups] = useState([]);
   const [count, setCount] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [demoDrops, setDemoDrops] = useState(-1);
+  const toMenuRef = useRef(() => {});
   const [howOpen, setHowOpen] = useState(false);
   const [result, setResult] = useState(null);
   const [board, setBoard] = useState({ state: 'idle', rows: [] });
@@ -179,7 +191,21 @@ function App() {
         if (engineMode === 'attract') return;
         switch (e.type) {
           case 'grab': audio.grab(); break;
-          case 'drop': audio.drop(); break;
+          case 'drop':
+            audio.drop();
+            // the demo counts each piece set down in Free build
+            if (engineMode === 'free' && !fullVersion()) {
+              dropCount();
+              setDemoDrops(dropsLeft());
+              if (dropsLeft() <= 0) {
+                window.setTimeout(async () => {
+                  let ok = false;
+                  try { ok = await window.ItchyUnlock.offer(); } catch (err) { ok = false; }
+                  if (ok) { gateBought = true; setDemoDrops(-1); } else toMenuRef.current();
+                }, 1800);
+              }
+            }
+            break;
           case 'nograb': audio.nograb(); break;
           case 'land': audio.land(e.impact); break;
           case 'bump': audio.bump(); break;
@@ -293,12 +319,19 @@ function App() {
 
   const startGame = async (m) => {
     audioRef.current.start();
-    if (!fullVersion() && (m === 'free' || demoLeft() <= 0)) {
+    if (!fullVersion() && m === 'free' && dropsLeft() <= 0) {
+      let ok = false;
+      try { ok = await window.ItchyUnlock.offer(); } catch (e) { ok = false; }
+      if (!ok) return;
+      gateBought = true;
+    }
+    if (!fullVersion() && m === 'timed' && demoLeft() <= 0) {
       let ok = false;
       try { ok = await window.ItchyUnlock.require(); } catch (e) { ok = false; }
       if (!ok) return;
       gateBought = true;
     }
+    setDemoDrops(fullVersion() ? -1 : dropsLeft());
     if (m === 'timed' && !fullVersion()) demoCount();
     setMode(m);
     setResult(null);
@@ -312,6 +345,7 @@ function App() {
     setScreen('menu');
     loadBoard();
   };
+  toMenuRef.current = toMenu;
 
   const sendScore = () => {
     const t = cleanTag(tag);
@@ -363,7 +397,7 @@ function App() {
                 </button>
                 <button type="button" className="btn" onClick={() => startGame('free')}>
                   <span className="btn-main">Free build</span>
-                  <span className="btn-sub">{fullVersion() ? 'Containers and weld joints, no clock' : 'Full version. Containers and weld joints, no clock'}</span>
+                  <span className="btn-sub">{fullVersion() ? 'Containers and weld joints, no clock' : `Containers and weld joints, ${dropsLeft()} free ${dropsLeft() === 1 ? 'placement' : 'placements'} left`}</span>
                 </button>
                 <div className="menu-row">
                   <button type="button" className="btn btn-small" onClick={() => setHowOpen(true)}>How to play</button>
@@ -443,7 +477,7 @@ function App() {
 
           {!timed && !menuOpen && !result && (
             <div className="supply">
-              <span className="supply-label">Truck brings</span>
+              <span className="supply-label">{demoDrops >= 0 ? `Demo: ${demoDrops} left. Truck brings` : 'Truck brings'}</span>
               <div className="supply-row">
                 {KIND_LIST.map((k) => (
                   <button
