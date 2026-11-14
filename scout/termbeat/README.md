@@ -8,6 +8,6 @@ termbeat.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-11-01, v2026.11.01. Added Matrix, Snow, and Waterfall modes. Added MS-DOS and Mac skins with hidden era easter eggs that answer back. The microphone now releases when you stop it, the address bar stays clean, and your settings are saved.
+Latest change. 2026-11-11, v2026.11.11. Updated the creator seal in the footer to a combined creator seal. It now shows the Pajamastan flag and links to Pajamastan. The page source also notes where the app was exported from.
 
 See CHANGELOG.md for the full history.

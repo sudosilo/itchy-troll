@@ -8,6 +8,6 @@ Live at field-twin-teal.vercel.app.
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-11-12, v2026.11.12. The locker site section now has an oversize module count, so a bank with two tall doors beside one full height door module is passed to Parcelsun the way it stands. Open in Parcelsun now carries the exact bank saved from Parcelsun, slot by slot.
+Latest change. 2026-11-13, v2026.11.13b. Each wireless survey now also goes to WiGLE once a WiGLE account is connected on the Field Twin server through WIGLE_API_NAME and WIGLE_API_TOKEN. Only the radio list, time and phone position are sent.
 
 Full history is in CHANGELOG.md.

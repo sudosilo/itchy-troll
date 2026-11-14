@@ -1,0 +1,3 @@
+raineurysm changelog
+
+2026-11-13, v2026.11.13. Created raineurysm, a rain music toy where rain falls into vessels that play notes. Rain lanes, drums, bass, a storm zone, narrow cups, and tilt and pour were added. It joins the Stompbox Lab band room, with lanes that rain on the band beat, a shared scale, and notes sent out to visualizers. Vessels come in several kinds, including cup, jug, metal pan, plate, singing bowl, wood block, and ladle, and lanes can rain in triplets, quads, and call and response. Touch handling was tightened so cups land under the finger and a slim vessel panel opens on a tap.

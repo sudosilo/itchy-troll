@@ -8,6 +8,6 @@ Live at tractor-tool.vercel.app
 
 Checked every morning by Control Troll, an automated test system that loads every app and clicks through its features.
 
-Latest change. 2026-10-12, v2026.10.12. First release. Tractor toolkit revision B with a footer, a creator seal, and generic app content. Triggered a production build.
+Latest change. 2026-11-11, v2026.11.11. Updated the creator seal in the footer to a combined creator seal. It now shows the Pajamastan flag and links to Pajamastan. The page source also notes where the app was exported from.
 
 Full history is in CHANGELOG.md.

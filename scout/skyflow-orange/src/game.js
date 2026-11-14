@@ -48,6 +48,20 @@ export const RULES = {
 };
 
 const COLORS = [0xd9713a, 0x3aa86b, 0x6a6fd0, 0xd3a03a, 0xb04fb0, 0x4a9fd0];
+const BOX_COLORS = [0xc8553d, 0x2f7fb5, 0x3a9a6a, 0xd9a13a, 0x7d8a96];
+
+// Piece kinds. Sizes are half extents in feet. A container lies along x when
+// it spawns. A joint welds to any piece that sits flush against one of its faces.
+export const KINDS = {
+  crate: { hx: 1, hy: 1, hz: 1, lb: 1100, name: 'Crate' },
+  container: { hx: 3, hy: 1, hz: 1, lb: 2600, name: 'Container' },
+  joint: { hx: 1, hy: 1, hz: 1, lb: 700, name: 'Joint' }
+};
+export const KIND_LIST = ['crate', 'container', 'joint'];
+const SPIN_TIME = 0.28;
+const TUMBLE_TIME = 0.5;
+const WELD_GAP = 0.15;
+const DOCK_GAP = 0.7;
 
 const noop = () => {};
 
@@ -101,6 +115,76 @@ function crateTexture() {
   });
 }
 
+// long side of a shipping container: upright ribs inside a frame
+function ribTexture() {
+  return canvasTexture(256, (g, s) => {
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, s, s);
+    for (let i = 0; i < 24; i++) {
+      const x = 8 + i * ((s - 16) / 24);
+      g.fillStyle = i % 2 ? 'rgba(0,0,0,0.13)' : 'rgba(255,255,255,0.0)';
+      g.fillRect(x, 16, (s - 16) / 24, s - 32);
+    }
+    g.fillStyle = 'rgba(0,0,0,0.30)';
+    g.fillRect(0, 0, s, 16);
+    g.fillRect(0, s - 16, s, 16);
+    g.fillRect(0, 0, 5, s);
+    g.fillRect(s - 5, 0, 5, s);
+  });
+}
+
+// end of a shipping container: two doors with lock bars
+function doorTexture() {
+  return canvasTexture(128, (g, s) => {
+    g.fillStyle = '#ffffff';
+    g.fillRect(0, 0, s, s);
+    g.strokeStyle = 'rgba(0,0,0,0.34)';
+    g.lineWidth = 12;
+    g.strokeRect(6, 6, s - 12, s - 12);
+    g.lineWidth = 5;
+    g.beginPath();
+    g.moveTo(s / 2, 8); g.lineTo(s / 2, s - 8);
+    g.stroke();
+    g.strokeStyle = 'rgba(0,0,0,0.22)';
+    g.lineWidth = 4;
+    [0.3, 0.42, 0.58, 0.7].forEach((f) => {
+      g.beginPath();
+      g.moveTo(s * f, 16); g.lineTo(s * f, s - 16);
+      g.stroke();
+    });
+    g.fillStyle = 'rgba(0,0,0,0.4)';
+    [0.42, 0.58].forEach((f) => g.fillRect(s * f - 7, s * 0.52, 14, 9));
+  });
+}
+
+// face of a joint: steel block with a yellow weld plate and four bolts
+function jointTexture() {
+  return canvasTexture(128, (g, s) => {
+    g.fillStyle = '#39414b';
+    g.fillRect(0, 0, s, s);
+    g.strokeStyle = '#22272e';
+    g.lineWidth = 10;
+    g.strokeRect(5, 5, s - 10, s - 10);
+    g.fillStyle = '#ffcc33';
+    g.beginPath();
+    g.arc(s / 2, s / 2, s * 0.27, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = '#1f2a33';
+    g.lineWidth = 5;
+    g.stroke();
+    g.fillStyle = '#1f2a33';
+    g.beginPath();
+    g.arc(s / 2, s / 2, s * 0.09, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#c9ced6';
+    [[0.17, 0.17], [0.83, 0.17], [0.17, 0.83], [0.83, 0.83]].forEach(([x, y]) => {
+      g.beginPath();
+      g.arc(s * x, s * y, s * 0.055, 0, Math.PI * 2);
+      g.fill();
+    });
+  });
+}
+
 function windowTexture() {
   return canvasTexture(64, (g, s) => {
     g.fillStyle = '#ffffff';
@@ -128,6 +212,10 @@ export function createGame(opts) {
 
   const input = { slewL: false, slewR: false, trolleyIn: false, trolleyOut: false, hoistUp: false, hoistDn: false };
   let grabRequested = false;
+  let turnRequested = false;
+  let flipRequested = false;
+  // Free build lets the player pick what the truck brings. Timed rounds are crates only.
+  let supply = mode === 'free' && KINDS[opts.supply] ? opts.supply : 'crate';
 
   // ---------- scene ----------
   const scene = new THREE.Scene();
@@ -428,34 +516,156 @@ export function createGame(opts) {
   const falling = [];
   const smashing = [];
   const crateGeo = new THREE.BoxGeometry(CARGO, CARGO, CARGO);
+  const containerGeo = new THREE.BoxGeometry(KINDS.container.hx * 2, CARGO, CARGO);
   const crateTex = visual ? crateTexture() : null;
+  const ribTex = visual ? ribTexture() : null;
+  const doorTex = visual ? doorTexture() : null;
+  const jointTex = visual ? jointTexture() : null;
   let colorIdx = 0;
+  let boxColorIdx = 0;
 
-  function spawnCrate() {
-    const color = COLORS[colorIdx % COLORS.length];
-    colorIdx++;
-    const m = mesh(crateGeo, lam({ color, map: crateTex }), true, true);
-    m.position.set(SPAWN.x, SPAWN.y, SPAWN.z);
+  // where a new piece of a kind sits on the truck. A container hangs off the
+  // back of the bed so it stays clear of the cab.
+  function spawnPoint(kind) {
+    const k = KINDS[kind];
+    return { x: kind === 'container' ? BED.cx - 1 : SPAWN.x, y: BED.top + k.hy, z: SPAWN.z };
+  }
+
+  function spawnCrate(kind) {
+    kind = KINDS[kind] ? kind : 'crate';
+    const k = KINDS[kind];
+    let m;
+    if (kind === 'container') {
+      const color = BOX_COLORS[boxColorIdx % BOX_COLORS.length];
+      boxColorIdx++;
+      const side = lam({ color, map: ribTex });
+      const end = lam({ color, map: doorTex });
+      m = mesh(containerGeo, [end, end, side, side, side, side], true, true);
+    } else if (kind === 'joint') {
+      m = mesh(crateGeo, lam({ color: visual ? 0xffffff : 0x39414b, map: jointTex }), true, true);
+    } else {
+      const color = COLORS[colorIdx % COLORS.length];
+      colorIdx++;
+      m = mesh(crateGeo, lam({ color, map: crateTex }), true, true);
+    }
+    const p = spawnPoint(kind);
+    m.position.set(p.x, p.y, p.z);
     m.userData = {
-      weight: CRATE_LB, attached: false, onTruck: true, falling: false, smashing: false,
+      kind, hx: k.hx, hy: k.hy, hz: k.hz, asm: 0, tumble: null, tumbles: 0,
+      weight: k.lb, attached: false, onTruck: true, falling: false, smashing: false,
       dropped: false, clear: true, vx: 0, vy: 0, vz: 0, born: sim.time, smashStart: 0
     };
+    m.userData.solo = [m];
     scene.add(m);
     boxes.push(m);
     emit({ type: 'spawn' });
     return m;
   }
 
-  function startFalling(c) {
-    if (!c.userData.falling) {
-      c.userData.falling = true;
-      falling.push(c);
+  const matsOf = (c) => (Array.isArray(c.material) ? c.material : [c.material]);
+  function setGlow(c, hex) {
+    const ms = matsOf(c);
+    for (let i = 0; i < ms.length; i++) ms[i].emissive.setHex(hex);
+  }
+
+  // ---------- welded assemblies ----------
+  // Pieces welded together share an assembly id and move as one rigid body.
+  // A lone piece is a body of one.
+  const asms = new Map();
+  let asmSeq = 1;
+  const bodyOf = (c) => (c.userData.asm ? asms.get(c.userData.asm) : c.userData.solo);
+
+  function weld(a, b) {
+    const ua = a.userData, ub = b.userData;
+    if (ua.asm && ua.asm === ub.asm) return false;
+    if (ua.asm && ub.asm) {
+      const keep = asms.get(ua.asm), gone = asms.get(ub.asm);
+      asms.delete(ub.asm);
+      for (let i = 0; i < gone.length; i++) { gone[i].userData.asm = ua.asm; keep.push(gone[i]); }
+    } else if (ua.asm) {
+      ub.asm = ua.asm; asms.get(ua.asm).push(b);
+    } else if (ub.asm) {
+      ua.asm = ub.asm; asms.get(ub.asm).push(a);
+    } else {
+      const id = asmSeq++;
+      ua.asm = ub.asm = id;
+      asms.set(id, [a, b]);
+    }
+    return true;
+  }
+
+  // take one piece out of its assembly, for when it is smashed
+  function unweld(c) {
+    const u = c.userData;
+    if (!u.asm) return;
+    const list = asms.get(u.asm);
+    const wasLead = list[0] === c;
+    const i = list.indexOf(c);
+    if (i !== -1) list.splice(i, 1);
+    const id = u.asm;
+    u.asm = 0;
+    if (wasLead && list.length) {
+      const fi = falling.indexOf(c);
+      if (fi !== -1) falling[fi] = list[0];
+      list[0].userData.tumble = u.tumble;
+      u.tumble = null;
+    }
+    if (list.length === 1) { list[0].userData.asm = 0; asms.delete(id); }
+    else if (!list.length) asms.delete(id);
+  }
+
+  function bodyBox(body) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (let i = 0; i < body.length; i++) {
+      const p = body[i].position, u = body[i].userData;
+      if (p.x - u.hx < minX) minX = p.x - u.hx;
+      if (p.x + u.hx > maxX) maxX = p.x + u.hx;
+      if (p.y - u.hy < minY) minY = p.y - u.hy;
+      if (p.y + u.hy > maxY) maxY = p.y + u.hy;
+      if (p.z - u.hz < minZ) minZ = p.z - u.hz;
+      if (p.z + u.hz > maxZ) maxZ = p.z + u.hz;
+    }
+    return { minX, maxX, minY, maxY, minZ, maxZ };
+  }
+  function bodyWeight(body) {
+    let w = 0;
+    for (let i = 0; i < body.length; i++) w += body[i].userData.weight;
+    return w;
+  }
+  function setVel(body, vx, vy, vz) {
+    for (let i = 0; i < body.length; i++) {
+      const u = body[i].userData;
+      u.vx = vx; u.vy = vy; u.vz = vz;
     }
   }
+  function shiftBody(body, dx, dy, dz) {
+    for (let i = 0; i < body.length; i++) {
+      const p = body[i].position;
+      p.x += dx; p.y += dy; p.z += dz;
+    }
+  }
+
+  // The falling list holds one piece per body, its first piece.
+  function startFalling(c) {
+    const body = bodyOf(c);
+    if (body.length === 1) {
+      if (!c.userData.falling) {
+        c.userData.falling = true;
+        falling.push(c);
+      }
+      return;
+    }
+    let listed = false;
+    for (let i = 0; i < body.length; i++) if (falling.indexOf(body[i]) !== -1) listed = true;
+    for (let i = 0; i < body.length; i++) body[i].userData.falling = true;
+    if (!listed) falling.push(body[0]);
+  }
   function stopFalling(c) {
-    if (c.userData.falling) {
-      c.userData.falling = false;
-      const i = falling.indexOf(c);
+    const body = bodyOf(c);
+    for (let k = 0; k < body.length; k++) {
+      const m = body[k];
+      m.userData.falling = false;
+      const i = falling.indexOf(m);
       if (i !== -1) falling.splice(i, 1);
     }
   }
@@ -471,7 +681,12 @@ export function createGame(opts) {
     slack: 0,
     pendulum: 156, damping: 0.985,
     carrying: null,
-    carryOffX: 0, carryOffY: 0, carryOffZ: 0,
+    // other pieces welded to the carried one, each with its offset from it
+    group: [],
+    // a quarter turn or flip in progress on the carried load
+    spin: null,
+    flipBack: null,
+    carryOffX: 0, carryOffY: 0, carryOffZ: 0, carryFloor: 0,
     lastGrab: -10,
     truckEmptySince: null,
     windMph: 0, windAngle: rand() * Math.PI * 2, windVX: 0, windVZ: 0,
@@ -514,10 +729,12 @@ export function createGame(opts) {
   // ---------- support queries ----------
   // Center height a crate would rest at for a given x,z. Only surfaces at or
   // below maxRest count, so a crate never pops up onto something beside it.
-  function supportAt(x, z, self, maxRest) {
-    let y = HALF, box = null, kind = 'ground';
-    if (Math.abs(x - BED.cx) < BED.hx + 0.5 && Math.abs(z - BED.cz) < BED.hz + 0.5) {
-      const r = BED.top + HALF;
+  // A piece of half size hx,hy,hz centered over x,z. skipAsm leaves out the
+  // other pieces of the same welded assembly.
+  function restFor(x, z, hx, hy, hz, self, maxRest, skipAsm) {
+    let y = hy, box = null, kind = 'ground';
+    if (Math.abs(x - BED.cx) < BED.hx + hx - 0.5 && Math.abs(z - BED.cz) < BED.hz + hz - 0.5) {
+      const r = BED.top + hy;
       if (r <= maxRest) { y = r; kind = 'bed'; }
     }
     for (let i = 0; i < boxes.length; i++) {
@@ -525,12 +742,17 @@ export function createGame(opts) {
       if (o === self) continue;
       const u = o.userData;
       if (u.attached || u.smashing || u.falling) continue;
-      if (Math.abs(o.position.x - x) < CARGO && Math.abs(o.position.z - z) < CARGO) {
-        const r = o.position.y + CARGO;
+      if (skipAsm && u.asm === skipAsm) continue;
+      if (Math.abs(o.position.x - x) < u.hx + hx && Math.abs(o.position.z - z) < u.hz + hz) {
+        const r = o.position.y + u.hy + hy;
         if (r > y && r <= maxRest) { y = r; box = o; kind = 'box'; }
       }
     }
     return { y, box, kind };
+  }
+  function supportAt(x, z, self, maxRest) {
+    const u = self.userData;
+    return restFor(x, z, u.hx, u.hy, u.hz, self, maxRest, u.asm);
   }
 
   // Chain of crates under a resting crate, top first. Stops at ground, bed or truck crate.
@@ -544,24 +766,180 @@ export function createGame(opts) {
         break;
       }
       if (s.box.userData.onTruck) { out.rooted = 'truck'; break; }
+      // a welded shape holds itself up, so the chain stops on it
+      if (s.box.userData.asm) { out.rooted = 'asm'; break; }
       out.push(s.box);
+      // a container can span several supports, so its own footing decides whether it stands
+      if (s.box.userData.kind === 'container') { out.rooted = 'container'; break; }
       cur = s.box;
     }
     return out;
   }
 
+  // how far a center sits off the piece under it, where 1 is the edge
+  function offNorm(ox, oz, under) {
+    const u = under.userData;
+    const a = ox / u.hx, b = oz / u.hz;
+    return Math.sqrt(a * a + b * b);
+  }
+
+  // Where a body's weight is carried: the patch of ground, bed or pieces
+  // touching the underside of its lowest pieces, as one bounding rectangle.
+  function footing(body) {
+    const asm = body[0].userData.asm;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, found = false;
+    const add = (x0, x1, z0, z1) => {
+      if (x1 - x0 <= 0.01 || z1 - z0 <= 0.01) return;
+      found = true;
+      if (x0 < minX) minX = x0;
+      if (x1 > maxX) maxX = x1;
+      if (z0 < minZ) minZ = z0;
+      if (z1 > maxZ) maxZ = z1;
+    };
+    for (let i = 0; i < body.length; i++) {
+      const m = body[i], u = m.userData, p = m.position;
+      const bottom = p.y - u.hy;
+      const x0 = p.x - u.hx, x1 = p.x + u.hx, z0 = p.z - u.hz, z1 = p.z + u.hz;
+      if (bottom < 0.12) { add(x0, x1, z0, z1); continue; }
+      if (Math.abs(bottom - BED.top) < 0.12) {
+        add(Math.max(x0, BED.cx - BED.hx), Math.min(x1, BED.cx + BED.hx), Math.max(z0, BED.cz - BED.hz), Math.min(z1, BED.cz + BED.hz));
+      }
+      for (let j = 0; j < boxes.length; j++) {
+        const o = boxes[j], ou = o.userData;
+        if (o === m || ou.attached || ou.smashing || ou.falling) continue;
+        if (asm && ou.asm === asm) continue;
+        if (Math.abs(o.position.y + ou.hy - bottom) > 0.12) continue;
+        add(Math.max(x0, o.position.x - ou.hx), Math.min(x1, o.position.x + ou.hx),
+          Math.max(z0, o.position.z - ou.hz), Math.min(z1, o.position.z + ou.hz));
+      }
+    }
+    return found ? { minX, maxX, minZ, maxZ } : null;
+  }
+  function massCenter(body) {
+    let x = 0, z = 0, w = 0;
+    for (let i = 0; i < body.length; i++) {
+      const u = body[i].userData, k = u.hx * u.hy * u.hz;
+      x += body[i].position.x * k; z += body[i].position.z * k; w += k;
+    }
+    return { x: x / w, z: z / w };
+  }
+  // null when the body stands. Otherwise the direction it leans, as a unit step on one axis.
+  function leanOf(body) {
+    const f = footing(body);
+    if (!f) return null;
+    const c = massCenter(body);
+    const ox = c.x < f.minX ? c.x - f.minX : (c.x > f.maxX ? c.x - f.maxX : 0);
+    const oz = c.z < f.minZ ? c.z - f.minZ : (c.z > f.maxZ ? c.z - f.maxZ : 0);
+    if (Math.abs(ox) < 0.02 && Math.abs(oz) < 0.02) return null;
+    return Math.abs(ox) >= Math.abs(oz) ? { x: Math.sign(ox), z: 0 } : { x: 0, z: Math.sign(oz) };
+  }
+  // a body is tall when it stands well higher than it is wide in the push direction
+  function tallAlong(body, dx, dz) {
+    const b = bodyBox(body);
+    const w = Math.abs(dx) >= Math.abs(dz) ? b.maxX - b.minX : b.maxZ - b.minZ;
+    return (b.maxY - b.minY) > w * 1.6;
+  }
+
+  // ---------- tumbling ----------
+  // A tall piece that is knocked, or a welded shape that lands off balance,
+  // rolls a quarter turn over its bottom edge and then falls where it lies.
+  const AXIS_X = new THREE.Vector3(1, 0, 0);
+  const AXIS_Y = new THREE.Vector3(0, 1, 0);
+  const AXIS_Z = new THREE.Vector3(0, 0, 1);
+  const tq = new THREE.Quaternion();
+  const tv = new THREE.Vector3();
+
+  function swapExtents(u, axis) {
+    let t;
+    if (axis === 'y') { t = u.hx; u.hx = u.hz; u.hz = t; }
+    else if (axis === 'x') { t = u.hy; u.hy = u.hz; u.hz = t; }
+    else { t = u.hx; u.hx = u.hy; u.hy = t; }
+  }
+  const tidy = (v) => Math.round(v * 1000) / 1000;
+
+  function startTumble(body, dx, dz) {
+    const lead = body[0];
+    if (lead.userData.tumble) return;
+    const b = bodyBox(body);
+    const alongX = Math.abs(dx) >= Math.abs(dz);
+    const sgn = (alongX ? dx : dz) >= 0 ? 1 : -1;
+    // It rolls over its outermost edge on the side it falls toward, so no
+    // part of a welded shape can swing down through the ground.
+    const edge = alongX ? (sgn > 0 ? b.maxX : b.minX) : (sgn > 0 ? b.maxZ : b.minZ);
+    lead.userData.tumble = {
+      axis: alongX ? 'z' : 'x',
+      ang: (alongX ? -sgn : sgn) * Math.PI / 2,
+      px: alongX ? edge : 0, py: b.minY, pz: alongX ? 0 : edge,
+      alongX, sgn, t: 0,
+      start: body.map((m) => ({ m, pos: m.position.clone(), quat: m.quaternion.clone() }))
+    };
+    lead.userData.tumbles++;
+    startFalling(lead);
+    setVel(body, 0, 0, 0);
+    emit({ type: 'tumble' });
+  }
+
+  function stepTumble(body) {
+    const lead = body[0];
+    const T = lead.userData.tumble;
+    T.t = Math.min(1, T.t + STEP / TUMBLE_TIME);
+    const done = T.t >= 1;
+    tq.setFromAxisAngle(T.axis === 'z' ? AXIS_Z : AXIS_X, T.ang * (done ? 1 : T.t * T.t));
+    for (let i = 0; i < T.start.length; i++) {
+      const s = T.start[i];
+      if (s.m.userData.smashing) continue;
+      tv.copy(s.pos);
+      if (T.alongX) { tv.x -= T.px; tv.y -= T.py; } else { tv.z -= T.pz; tv.y -= T.py; }
+      tv.applyQuaternion(tq);
+      if (T.alongX) { tv.x += T.px; tv.y += T.py; } else { tv.z += T.pz; tv.y += T.py; }
+      s.m.position.copy(tv);
+      s.m.quaternion.copy(tq).multiply(s.quat);
+      if (done) {
+        s.m.position.set(tidy(tv.x), tidy(tv.y), tidy(tv.z));
+        s.m.quaternion.normalize();
+        swapExtents(s.m.userData, T.axis);
+      }
+    }
+    if (done) {
+      lead.userData.tumble = null;
+      setVel(body, T.alongX ? T.sgn * 1.5 : 0, -3, T.alongX ? 0 : T.sgn * 1.5);
+    }
+  }
+
+  // penalize only matters in a timed round
   function dislodge(c, vx, vy, vz, penalize) {
     const u = c.userData;
+    const body = bodyOf(c);
     if (!u.falling) {
-      if (penalize && scoring() && !u.dropped && c.position.y > HALF + 0.05) {
+      if (penalize && scoring() && !u.dropped && c.position.y > u.hy + 0.05) {
         round.fallen++;
         round.penalty += RULES.fall;
         round.combo = 0;
         emit({ type: 'fall', points: -RULES.fall });
       }
+      // a tall standing body goes over instead of sliding
+      const sp = Math.sqrt(vx * vx + vz * vz);
+      if (sp > 2 && tallAlong(body, vx, vz) && body[0].userData.tumbles < 3) {
+        startTumble(body, vx, vz);
+        return;
+      }
       startFalling(c);
     }
-    u.vx = vx; u.vy = vy; u.vz = vz;
+    if (body[0].userData.tumble) return;
+    if (body.length === 1) { u.vx = vx; u.vy = vy; u.vz = vz; }
+    else setVel(body, vx, vy, vz);
+  }
+
+  // let go of whatever the hook holds, without the drop bookkeeping
+  function releaseCarry() {
+    const c = sim.carrying;
+    if (!c) return;
+    finishSpin();
+    c.userData.attached = false;
+    for (let i = 0; i < sim.group.length; i++) sim.group[i].m.userData.attached = false;
+    sim.group.length = 0;
+    sim.carrying = null;
+    sim.flipBack = null;
   }
 
   function smashCrate(c) {
@@ -569,14 +947,25 @@ export function createGame(opts) {
     if (u.smashing) return;
     u.smashing = true;
     u.smashStart = sim.time;
-    c.material = c.material.clone();
-    c.material.color.setHex(0xff3322);
+    c.material = Array.isArray(c.material) ? c.material.map((m) => m.clone()) : c.material.clone();
+    matsOf(c).forEach((m) => m.color.setHex(0xff3322));
     smashing.push(c);
-    if (sim.carrying === c) {
-      u.attached = false;
-      sim.carrying = null;
+    if (u.attached) {
+      // the rest of a carried assembly falls from the hook
+      const rest = sim.carrying === c ? sim.group.map((g) => g.m) : [sim.carrying].concat(sim.group.map((g) => g.m)).filter((m) => m !== c);
+      releaseCarry();
+      unweld(c);
+      if (rest.length) {
+        setVel(bodyOf(rest[0]), sim.hookVX, 0, sim.hookVZ);
+        startFalling(rest[0]);
+      }
+    } else {
+      // unweld hands the falling list entry to the rest of the assembly
+      unweld(c);
+      u.falling = false;
+      const i = falling.indexOf(c);
+      if (i !== -1) falling.splice(i, 1);
     }
-    stopFalling(c);
     if (scoring()) {
       round.smashed++;
       round.penalty += RULES.smash;
@@ -586,15 +975,15 @@ export function createGame(opts) {
   }
 
   function overlapsCab(c) {
-    const p = c.position;
-    return (p.x + HALF) > CABB.minX && (p.x - HALF) < CABB.maxX &&
-      (p.y + HALF) > CABB.minY && (p.y - HALF) < CABB.maxY &&
-      (p.z + HALF) > CABB.minZ && (p.z - HALF) < CABB.maxZ;
+    const p = c.position, u = c.userData;
+    return (p.x + u.hx) > CABB.minX && (p.x - u.hx) < CABB.maxX &&
+      (p.y + u.hy) > CABB.minY && (p.y - u.hy) < CABB.maxY &&
+      (p.z + u.hz) > CABB.minZ && (p.z - u.hz) < CABB.maxZ;
   }
   function hitsBedSide(c) {
-    const p = c.position;
-    if (p.y - HALF > BED.top - 0.15) return false;
-    return (BED.hx + HALF - Math.abs(p.x - BED.cx)) > 0.1 && (BED.hz + HALF - Math.abs(p.z - BED.cz)) > 0.1;
+    const p = c.position, u = c.userData;
+    if (p.y - u.hy > BED.top - 0.15) return false;
+    return (BED.hx + u.hx - Math.abs(p.x - BED.cx)) > 0.1 && (BED.hz + u.hz - Math.abs(p.z - BED.cz)) > 0.1;
   }
 
   // ---------- grab and drop ----------
@@ -604,9 +993,15 @@ export function createGame(opts) {
       const c = boxes[i];
       const u = c.userData;
       if (u.attached || u.falling || u.smashing) continue;
-      const dx = c.position.x - sim.hookX;
-      const dy = c.position.y - sim.hookY;
-      const dz = c.position.z - sim.hookZ;
+      // distance to the middle line of the piece, so a long container can be
+      // hooked anywhere along its length
+      let dx = c.position.x - sim.hookX;
+      let dy = c.position.y - sim.hookY;
+      let dz = c.position.z - sim.hookZ;
+      const sx = u.hx - HALF, sy = u.hy - HALF, sz = u.hz - HALF;
+      dx = dx > sx ? dx - sx : (dx < -sx ? dx + sx : 0);
+      dy = dy > sy ? dy - sy : (dy < -sy ? dy + sy : 0);
+      dz = dz > sz ? dz - sz : (dz < -sz ? dz + sz : 0);
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (d < bestD) { best = c; bestD = d; }
     }
@@ -620,26 +1015,159 @@ export function createGame(opts) {
     if (sim.carrying) {
       const c = sim.carrying;
       const u = c.userData;
-      u.attached = false;
+      const body = bodyOf(c);
+      releaseCarry();
       u.dropped = true;
-      u.vx = sim.hookVX; u.vy = 0; u.vz = sim.hookVZ;
-      sim.carrying = null;
+      setVel(body, sim.hookVX, 0, sim.hookVZ);
+      body[0].userData.tumbles = 0;
       startFalling(c);
       emit({ type: 'drop' });
     } else {
       const c = findGrabTarget();
       if (!c) { emit({ type: 'nograb' }); return; }
       const u = c.userData;
-      u.attached = true;
-      u.clear = !u.onTruck;
-      u.onTruck = false;
-      u.dropped = false;
+      const body = bodyOf(c);
+      sim.group.length = 0;
+      for (let i = 0; i < body.length; i++) {
+        const m = body[i], mu = m.userData;
+        mu.attached = true;
+        mu.clear = !mu.onTruck;
+        mu.onTruck = false;
+        mu.dropped = false;
+        if (m !== c) sim.group.push({ m, off: m.position.clone().sub(c.position), off0: null, q0: null });
+      }
       sim.carrying = c;
+      sim.spin = null;
+      sim.flipBack = null;
       sim.carryOffX = c.position.x - sim.hookX;
-      sim.carryOffY = c.position.y - (sim.hookY - HOOK_HALF - HALF);
+      sim.carryOffY = c.position.y - (sim.hookY - HOOK_HALF - u.hy);
       sim.carryOffZ = c.position.z - sim.hookZ;
       emit({ type: 'grab' });
     }
+  }
+
+  // ---------- turning and flipping the carried load ----------
+  // Every turn is an exact quarter turn, so a load can never hang or land crooked.
+  function startSpin(axis, ang) {
+    const c = sim.carrying;
+    const u = c.userData;
+    const before = u.hy;
+    sim.spin = { axis, ang, t: 0, q0: c.quaternion.clone() };
+    for (let i = 0; i < sim.group.length; i++) {
+      const g = sim.group[i];
+      g.off0 = g.off.clone();
+      g.q0 = g.m.quaternion.clone();
+      swapExtents(g.m.userData, axis);
+    }
+    swapExtents(u, axis);
+    // keep the load where it hangs while its height under the hook changes
+    sim.carryOffY += u.hy - before;
+  }
+  function stepSpin(finish) {
+    const S = sim.spin;
+    if (!S) return;
+    S.t = finish ? 1 : Math.min(1, S.t + STEP / SPIN_TIME);
+    const done = S.t >= 1;
+    const e = S.t * S.t * (3 - 2 * S.t);
+    tq.setFromAxisAngle(S.axis === 'y' ? AXIS_Y : (S.axis === 'x' ? AXIS_X : AXIS_Z), S.ang * (done ? 1 : e));
+    const c = sim.carrying;
+    c.quaternion.copy(tq).multiply(S.q0);
+    if (done) c.quaternion.normalize();
+    for (let i = 0; i < sim.group.length; i++) {
+      const g = sim.group[i];
+      g.off.copy(g.off0).applyQuaternion(tq);
+      g.m.quaternion.copy(tq).multiply(g.q0);
+      if (done) {
+        g.off.set(tidy(g.off.x), tidy(g.off.y), tidy(g.off.z));
+        g.m.quaternion.normalize();
+      }
+    }
+    if (done) sim.spin = null;
+  }
+  function finishSpin() { if (sim.spin) stepSpin(true); }
+
+  function turnLoad() {
+    if (!sim.carrying || sim.spin || round.phase !== 'playing') return;
+    startSpin('y', Math.PI / 2);
+    // a pending flip back has to follow the load around
+    if (sim.flipBack) sim.flipBack = { axis: sim.flipBack.axis === 'x' ? 'z' : 'x', ang: sim.flipBack.axis === 'x' ? -sim.flipBack.ang : sim.flipBack.ang };
+    emit({ type: 'turn' });
+  }
+  function flipLoad() {
+    if (!sim.carrying || sim.spin || round.phase !== 'playing') return;
+    const u = sim.carrying.userData;
+    if (sim.flipBack) {
+      const f = sim.flipBack;
+      sim.flipBack = null;
+      startSpin(f.axis, f.ang);
+    } else {
+      // stand a load up over its long side, or lay a standing one down
+      const axis = u.hx > u.hz + 0.1 ? 'z' : 'x';
+      const ang = axis === 'z' ? Math.PI / 2 : -Math.PI / 2;
+      startSpin(axis, ang);
+      sim.flipBack = { axis, ang: -ang };
+    }
+    emit({ type: 'flip' });
+  }
+
+  // Lowest height the carried piece's center can sit at, counting everything welded to it.
+  function carryRest() {
+    const c = sim.carrying;
+    const u = c.userData;
+    const cy = sim.hookY - HOOK_HALF - u.hy;
+    const own = restFor(sim.hookX, sim.hookZ, u.hx, u.hy, u.hz, c, cy + 0.3, 0);
+    let y = own.y;
+    for (let i = 0; i < sim.group.length; i++) {
+      const g = sim.group[i], gu = g.m.userData;
+      const s = restFor(sim.hookX + g.off.x, sim.hookZ + g.off.z, gu.hx, gu.hy, gu.hz, g.m, cy + g.off.y + 0.3, 0);
+      if (s.y - g.off.y > y) y = s.y - g.off.y;
+    }
+    return { y, own };
+  }
+
+  // ---------- welding ----------
+  // A joint welds to any piece resting flush against one of its faces. A
+  // piece set down a little short of a joint is drawn in to meet it first.
+  function settledPiece(o) {
+    const u = o.userData;
+    return !(u.attached || u.falling || u.smashing || u.onTruck);
+  }
+  function weldPass(body) {
+    let welds = 0;
+    const members = body.slice();
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 0; i < members.length; i++) {
+        const m = members[i], mu = m.userData;
+        for (let j = 0; j < boxes.length; j++) {
+          const o = boxes[j], ou = o.userData;
+          if (o === m || !settledPiece(o)) continue;
+          if (mu.asm && mu.asm === ou.asm) continue;
+          if (mu.kind !== 'joint' && ou.kind !== 'joint') continue;
+          const gx = Math.abs(m.position.x - o.position.x) - (mu.hx + ou.hx);
+          const gy = Math.abs(m.position.y - o.position.y) - (mu.hy + ou.hy);
+          const gz = Math.abs(m.position.z - o.position.z) - (mu.hz + ou.hz);
+          const lapX = gx < -0.6, lapY = gy < -0.6, lapZ = gz < -0.6;
+          // pass 0 pulls a near miss in flush, sideways only, and squares it up
+          if (pass === 0 && members.length === 1 && lapY) {
+            const cur = bodyOf(m);
+            if (gx > WELD_GAP && gx <= DOCK_GAP && lapZ) {
+              shiftBody(cur, -Math.sign(m.position.x - o.position.x) * gx, 0, 0);
+              if (Math.abs(m.position.z - o.position.z) < 0.6) shiftBody(cur, 0, 0, o.position.z - m.position.z);
+            } else if (gz > WELD_GAP && gz <= DOCK_GAP && lapX) {
+              shiftBody(cur, 0, 0, -Math.sign(m.position.z - o.position.z) * gz);
+              if (Math.abs(m.position.x - o.position.x) < 0.6) shiftBody(cur, o.position.x - m.position.x, 0, 0);
+            }
+            continue;
+          }
+          if (pass === 0) continue;
+          const flush = (Math.abs(gx) <= WELD_GAP && lapY && lapZ) || (Math.abs(gy) <= WELD_GAP && lapX && lapZ) ||
+            (Math.abs(gz) <= WELD_GAP && lapX && lapY);
+          if (flush && weld(m, o)) welds++;
+        }
+      }
+    }
+    if (welds) emit({ type: 'weld', count: bodyOf(body[0]).length });
+    return welds;
   }
 
   // ---------- placement scoring ----------
@@ -647,6 +1175,13 @@ export function createGame(opts) {
     const u = c.userData;
     const wasDropped = u.dropped;
     u.dropped = false;
+    const body = bodyOf(c);
+    body[0].userData.tumbles = 0;
+    if (mode !== 'timed') {
+      for (let i = 0; i < body.length; i++) body[i].userData.dropped = false;
+      weldPass(body);
+    }
+    if (bodyOf(c).length > 1 || u.kind === 'container') return;
     if (!s.box) {
       if (wasDropped && scoring()) emit({ type: 'base' });
       return;
@@ -660,7 +1195,7 @@ export function createGame(opts) {
       const ox = mx - chain[i].position.x;
       const oz = mz - chain[i].position.z;
       const d = Math.sqrt(ox * ox + oz * oz);
-      if (d > HALF) {
+      if (offNorm(ox, oz, chain[i]) > 1) {
         const nx = ox / d, nz = oz / d;
         for (let k = 0; k < i; k++) {
           const b = chain[k];
@@ -750,6 +1285,9 @@ export function createGame(opts) {
     }
 
     if (grabRequested) { grabRequested = false; grabOrDrop(); }
+    if (turnRequested) { turnRequested = false; turnLoad(); }
+    if (flipRequested) { flipRequested = false; flipLoad(); }
+    if (sim.spin) stepSpin(false);
 
     // hook pendulum
     const tx = Math.cos(sim.slew) * sim.trolley;
@@ -772,13 +1310,13 @@ export function createGame(opts) {
       let restY;
       const prevBottom = sim.hookY - HOOK_HALF;
       if (sim.carrying) {
-        const cy = sim.hookY - HOOK_HALF - HALF;
-        const s = supportAt(sim.hookX, sim.hookZ, sim.carrying, cy + 0.3);
-        restY = s.y + HALF + HOOK_HALF;
-        sim.surfaceTop = s.y - HALF;
+        const hy = sim.carrying.userData.hy;
+        const r = carryRest();
+        restY = r.y + hy + HOOK_HALF;
+        sim.carryFloor = r.y;
+        sim.surfaceTop = r.own.y - hy;
       } else {
         let top = 0;
-        const reach = HALF + HOOK_HALF;
         if (Math.abs(sim.hookX - BED.cx) < BED.hx + HOOK_HALF && Math.abs(sim.hookZ - BED.cz) < BED.hz + HOOK_HALF &&
           prevBottom >= BED.top - 0.3) top = BED.top;
         for (let i = 0; i < boxes.length; i++) {
@@ -787,22 +1325,29 @@ export function createGame(opts) {
           if (u.attached || u.smashing) continue;
           const dx = sim.hookX - o.position.x;
           const dz = sim.hookZ - o.position.z;
-          const ox = reach - Math.abs(dx);
-          const oz = reach - Math.abs(dz);
+          const ox = u.hx + HOOK_HALF - Math.abs(dx);
+          const oz = u.hz + HOOK_HALF - Math.abs(dz);
           if (ox <= 0 || oz <= 0) continue;
-          const boxTop = o.position.y + HALF;
+          const boxTop = o.position.y + u.hy;
           if (prevBottom >= boxTop - 0.3) {
             if (boxTop > top) top = boxTop;
-          } else if (!u.falling && sim.hookY + HOOK_HALF > o.position.y - HALF) {
-            // the hook block bumps the side of a crate and stops
+          } else if (!u.falling && sim.hookY + HOOK_HALF > o.position.y - u.hy) {
+            // the hook block bumps the side of a piece and stops. A fast
+            // swing into something tall and standing knocks it over.
             if (ox < oz) {
               const sgn = dx >= 0 ? 1 : -1;
               sim.hookX += sgn * ox;
-              if (sim.hookVX * sgn < 0) sim.hookVX *= -0.2;
+              if (sim.hookVX * sgn < 0) {
+                if (sim.hookVX * sgn < -3.5 && !u.onTruck && tallAlong(bodyOf(o), 1, 0)) { dislodge(o, -sgn * 4, 0, 0, true); emit({ type: 'bump' }); }
+                sim.hookVX *= -0.2;
+              }
             } else {
               const sgn = dz >= 0 ? 1 : -1;
               sim.hookZ += sgn * oz;
-              if (sim.hookVZ * sgn < 0) sim.hookVZ *= -0.2;
+              if (sim.hookVZ * sgn < 0) {
+                if (sim.hookVZ * sgn < -3.5 && !u.onTruck && tallAlong(bodyOf(o), 0, 1)) { dislodge(o, 0, 0, -sgn * 4, true); emit({ type: 'bump' }); }
+                sim.hookVZ *= -0.2;
+              }
             }
           }
         }
@@ -829,76 +1374,116 @@ export function createGame(opts) {
 
     if (sim.carrying) {
       sim.carryOffX *= 0.8; sim.carryOffY *= 0.8; sim.carryOffZ *= 0.8;
-      sim.carrying.position.set(
+      const cp = sim.carrying.position;
+      cp.set(
         sim.hookX + sim.carryOffX,
-        sim.hookY - HOOK_HALF - HALF + sim.carryOffY,
+        sim.hookY - HOOK_HALF - sim.carrying.userData.hy + sim.carryOffY,
         sim.hookZ + sim.carryOffZ
       );
+      // a load that just stood up must not dip through what is under it
+      if (cp.y < sim.carryFloor) { sim.carryOffY += sim.carryFloor - cp.y; cp.y = sim.carryFloor; }
+      for (let i = 0; i < sim.group.length; i++) {
+        const g = sim.group[i];
+        g.m.position.set(cp.x + g.off.x, cp.y + g.off.y, cp.z + g.off.z);
+      }
     }
 
-    // falling, bouncing and sliding crates
+    // falling, bouncing and sliding pieces. A welded assembly falls as one body.
     for (let i = falling.length - 1; i >= 0; i--) {
       const c = falling[i];
       const u = c.userData;
-      const prevY = c.position.y;
+      const body = bodyOf(c);
+      const solo = body.length === 1;
+      if (body[0].userData.tumble) { stepTumble(body); continue; }
       u.vy -= G * STEP;
       u.vx *= AIR_DRAG;
       u.vz *= AIR_DRAG;
-      if (c.position.y > HALF + 0.1) {
+      const low = solo ? c.position.y - u.hy : bodyBox(body).minY;
+      if (low > 0.1) {
         u.vx += sim.windVX * 0.08 * STEP;
         u.vz += sim.windVZ * 0.08 * STEP;
       }
-      c.position.x += u.vx * STEP;
-      c.position.y += u.vy * STEP;
-      c.position.z += u.vz * STEP;
+      if (!solo) setVel(body, u.vx, u.vy, u.vz);
 
-      const s = supportAt(c.position.x, c.position.z, c, Math.max(prevY, c.position.y) + 0.3);
-      if (c.position.y > s.y) continue;
+      // move, then find the piece of the body that reaches a surface first
+      let s = null, pen = -Infinity;
+      for (let k = 0; k < body.length; k++) {
+        const m = body[k];
+        const prevY = m.position.y;
+        m.position.x += u.vx * STEP;
+        m.position.y += u.vy * STEP;
+        m.position.z += u.vz * STEP;
+        const sm = supportAt(m.position.x, m.position.z, m, Math.max(prevY, m.position.y) + 0.3);
+        if (sm.y - m.position.y > pen) { pen = sm.y - m.position.y; s = sm; }
+      }
+      if (pen < 0) continue;
       const impact = -u.vy;
-      c.position.y = s.y;
+      if (solo) c.position.y = s.y;
+      else shiftBody(body, 0, pen, 0);
 
-      if (s.box) {
-        const ox = c.position.x - s.box.position.x;
-        const oz = c.position.z - s.box.position.z;
-        const off = Math.sqrt(ox * ox + oz * oz);
-        if (off > HALF) {
-          // more than half off the crate below, so it tips over the edge
-          const len = Math.max(0.001, off);
-          u.vx = (ox / len) * 2 + u.vx * 0.5;
-          u.vz = (oz / len) * 2 + u.vz * 0.5;
-          u.vy = 0.5;
-          c.position.y = s.y + 0.05;
-          if (u.dropped) {
-            u.dropped = false;
-            if (scoring()) { round.combo = 0; emit({ type: 'miss' }); }
+      if (solo && u.hy <= HALF + 0.01 && u.hx <= HALF + 0.01 && u.hz <= HALF + 0.01) {
+        if (s.box) {
+          const ox = c.position.x - s.box.position.x;
+          const oz = c.position.z - s.box.position.z;
+          const off = Math.sqrt(ox * ox + oz * oz);
+          if (offNorm(ox, oz, s.box) > 1) {
+            // more than half off the piece below, so it tips over the edge
+            const len = Math.max(0.001, off);
+            u.vx = (ox / len) * 2 + u.vx * 0.5;
+            u.vz = (oz / len) * 2 + u.vz * 0.5;
+            u.vy = 0.5;
+            c.position.y = s.y + 0.05;
+            if (u.dropped) {
+              u.dropped = false;
+              if (scoring()) { round.combo = 0; emit({ type: 'miss' }); }
+            }
+            continue;
           }
-          continue;
+        }
+      } else {
+        // containers and welded shapes stand only with their weight over their footing
+        const lean = leanOf(body);
+        if (lean) {
+          const lead = body[0].userData;
+          if ((!solo || tallAlong(body, lean.x, lean.z)) && lead.tumbles < 3) {
+            startTumble(body, lean.x, lean.z);
+            continue;
+          }
+          if (solo || lead.tumbles < 6) {
+            // a lying piece slides off the edge it overhangs
+            lead.tumbles += solo ? 0 : 1;
+            setVel(body, lean.x * 2 + u.vx * 0.5, 0.5, lean.z * 2 + u.vz * 0.5);
+            shiftBody(body, 0, 0.05, 0);
+            if (u.dropped) { u.dropped = false; emit({ type: 'miss' }); }
+            continue;
+          }
         }
       }
 
       if (Math.abs(u.vy) < SETTLE_VY) {
         const h = Math.sqrt(u.vx * u.vx + u.vz * u.vz);
         if (h < SETTLE_H) {
-          u.vx = 0; u.vy = 0; u.vz = 0;
+          setVel(body, 0, 0, 0);
           stopFalling(c);
           onSettle(c, s);
         } else {
-          u.vy = 0;
-          u.vx *= GROUND_FRICTION;
-          u.vz *= GROUND_FRICTION;
+          setVel(body, u.vx * GROUND_FRICTION, 0, u.vz * GROUND_FRICTION);
         }
       } else {
-        u.vy = -u.vy * BOUNCE;
-        u.vx *= FLOOR_FRICTION;
-        u.vz *= FLOOR_FRICTION;
+        setVel(body, u.vx * FLOOR_FRICTION, -u.vy * BOUNCE, u.vz * FLOOR_FRICTION);
         emit({ type: 'land', impact });
       }
     }
 
-    // crate against crate, side to side
+    // piece against piece, side to side
     {
       const hookSpeed = Math.sqrt(sim.hookVX * sim.hookVX + sim.hookVZ * sim.hookVZ);
       const pushSpeed = Math.max(6, hookSpeed * 1.2);
+      const grounded = (c) => bodyBox(bodyOf(c)).minY < 0.05;
+      const nudge = (c, dx, dz) => {
+        const body = bodyOf(c);
+        if (body.length === 1) { c.position.x += dx; c.position.z += dz; } else shiftBody(body, dx, 0, dz);
+      };
       for (let i = 0; i < boxes.length; i++) {
         const a = boxes[i];
         const ua = a.userData;
@@ -908,33 +1493,46 @@ export function createGame(opts) {
           const ub = b.userData;
           if (ub.onTruck || ub.smashing) continue;
           if (ua.attached && ub.attached) continue;
+          if (ua.asm && ua.asm === ub.asm) continue;
           const anyAttached = ua.attached || ub.attached;
           if (!anyAttached && !ua.falling && !ub.falling) continue;
-          if (Math.abs(a.position.y - b.position.y) >= CARGO - 0.1) continue;
-          const size = anyAttached ? CARGO + 0.4 : CARGO;
+          if (Math.abs(a.position.y - b.position.y) >= ua.hy + ub.hy - 0.1) continue;
+          // In free build a load that is eased up against a standing piece stops
+          // there, so pieces can be set side by side. A load moving fast still knocks it.
+          const gentle = anyAttached && mode !== 'timed' && hookSpeed < 3;
+          const pad = anyAttached && !gentle ? 0.4 : 0;
           const ddx = b.position.x - a.position.x;
           const ddz = b.position.z - a.position.z;
-          const ox = size - Math.abs(ddx);
-          const oz = size - Math.abs(ddz);
+          const ox = ua.hx + ub.hx + pad - Math.abs(ddx);
+          const oz = ua.hz + ub.hz + pad - Math.abs(ddz);
           if (ox <= 0 || oz <= 0) continue;
+          // a body rolling over is left alone until it lands
+          if (bodyOf(a)[0].userData.tumble || bodyOf(b)[0].userData.tumble) continue;
           let px = 0, pz = 0;
           if (ox < oz) px = (ddx >= 0 ? 1 : -1) * ox;
           else pz = (ddz >= 0 ? 1 : -1) * oz;
           const len = Math.max(0.001, Math.abs(px) + Math.abs(pz));
           const nx = px / len, nz = pz / len;
+          if (gentle) {
+            const away = ua.attached ? -1 : 1;
+            sim.hookX += away * px; sim.hookZ += away * pz;
+            const vn = (sim.hookVX * nx + sim.hookVZ * nz) * -away;
+            if (vn > 0) { sim.hookVX += away * vn * nx; sim.hookVZ += away * vn * nz; }
+            continue;
+          }
           if (ua.attached) {
-            b.position.x += px; b.position.z += pz;
-            const kick = b.position.y < HALF + 0.05 ? 0 : 0.5;
+            nudge(b, px, pz);
+            const kick = grounded(b) ? 0 : 0.5;
             dislodge(b, nx * pushSpeed, kick, nz * pushSpeed, true);
             emit({ type: 'bump' });
           } else if (ub.attached) {
-            a.position.x -= px; a.position.z -= pz;
-            const kick = a.position.y < HALF + 0.05 ? 0 : 0.5;
+            nudge(a, -px, -pz);
+            const kick = grounded(a) ? 0 : 0.5;
             dislodge(a, -nx * pushSpeed, kick, -nz * pushSpeed, true);
             emit({ type: 'bump' });
           } else {
-            a.position.x -= px * 0.5; a.position.z -= pz * 0.5;
-            b.position.x += px * 0.5; b.position.z += pz * 0.5;
+            nudge(a, -px * 0.5, -pz * 0.5);
+            nudge(b, px * 0.5, pz * 0.5);
             const aVN = ua.vx * nx + ua.vz * nz;
             const bVN = ub.vx * nx + ub.vz * nz;
             const rel = bVN - aVN;
@@ -944,24 +1542,48 @@ export function createGame(opts) {
               ax -= imp * nx; az -= imp * nz;
               bx += imp * nx; bz += imp * nz;
             }
-            if (!ua.falling) dislodge(a, ax, a.position.y < HALF + 0.05 ? 0 : 0.3, az, true);
-            else { ua.vx = ax; ua.vz = az; }
-            if (!ub.falling) dislodge(b, bx, b.position.y < HALF + 0.05 ? 0 : 0.3, bz, true);
-            else { ub.vx = bx; ub.vz = bz; }
+            if (!ua.falling) dislodge(a, ax, grounded(a) ? 0 : 0.3, az, true);
+            else setVel(bodyOf(a), ax, ua.vy, az);
+            if (!ub.falling) dislodge(b, bx, grounded(b) ? 0 : 0.3, bz, true);
+            else setVel(bodyOf(b), bx, ub.vy, bz);
           }
         }
       }
     }
 
-    // a resting crate that lost what was under it starts to fall
+    // a resting body that lost what was under it starts to fall, and a
+    // container or welded shape left hanging off its footing goes too
     for (let i = 0; i < boxes.length; i++) {
       const c = boxes[i];
       const u = c.userData;
       if (u.attached || u.onTruck || u.smashing || u.falling) continue;
-      if (c.position.y <= HALF + 0.05) continue;
-      const s = supportAt(c.position.x, c.position.z, c, c.position.y + 0.3);
-      if (c.position.y > s.y + 0.1) {
-        dislodge(c, (rand() - 0.5) * 0.3, 0, (rand() - 0.5) * 0.3, true);
+      const body = bodyOf(c);
+      if (body.length === 1) {
+        if (c.position.y <= u.hy + 0.05) continue;
+        const s = supportAt(c.position.x, c.position.z, c, c.position.y + 0.3);
+        if (c.position.y > s.y + 0.1) {
+          dislodge(c, (rand() - 0.5) * 0.3, 0, (rand() - 0.5) * 0.3, true);
+          continue;
+        }
+        if (u.kind !== 'container') continue;
+      } else {
+        if (body[0] !== c) continue;
+        if (bodyBox(body).minY <= 0.05) continue;
+        let gap = Infinity;
+        for (let k = 0; k < body.length; k++) {
+          const m = body[k];
+          const s = supportAt(m.position.x, m.position.z, m, m.position.y + 0.3);
+          if (m.position.y - s.y < gap) gap = m.position.y - s.y;
+        }
+        if (gap > 0.1) { dislodge(c, 0, 0, 0, true); continue; }
+      }
+      const lean = leanOf(body);
+      if (!lean) continue;
+      if ((body.length > 1 || tallAlong(body, lean.x, lean.z)) && body[0].userData.tumbles < 3) startTumble(body, lean.x, lean.z);
+      else {
+        shiftBody(body, 0, 0.05, 0);
+        startFalling(c);
+        setVel(body, lean.x * 2, 0.5, lean.z * 2);
       }
     }
 
@@ -971,10 +1593,10 @@ export function createGame(opts) {
       const u = c.userData;
       if (u.onTruck || u.smashing) continue;
       if (!u.clear) {
-        // a crate lifted off the bed cannot be smashed until it has cleared the truck once
+        // a piece lifted off the bed cannot be smashed until it has cleared the truck once
         const p = c.position;
-        if (p.y - HALF > CABB.maxY + 0.2 || p.x + HALF < BED.cx - BED.hx || p.x - HALF > CABB.maxX ||
-          Math.abs(p.z - TRUCK.z) > BED.hz + HALF) u.clear = true;
+        if (p.y - u.hy > CABB.maxY + 0.2 || p.x + u.hx < BED.cx - BED.hx || p.x - u.hx > CABB.maxX ||
+          Math.abs(p.z - TRUCK.z) > BED.hz + u.hz) u.clear = true;
         continue;
       }
       if (overlapsCab(c) || hitsBedSide(c)) smashCrate(c);
@@ -984,7 +1606,7 @@ export function createGame(opts) {
       const t = (sim.time - c.userData.smashStart) / SMASH_TIME;
       if (t >= 1) {
         scene.remove(c);
-        c.material.dispose();
+        matsOf(c).forEach((m) => m.dispose());
         const k = boxes.indexOf(c);
         if (k !== -1) boxes.splice(k, 1);
         smashing.splice(i, 1);
@@ -995,36 +1617,38 @@ export function createGame(opts) {
       }
     }
 
-    // the truck brings a new crate 3 seconds after the last one leaves
+    // the truck brings a new piece 3 seconds after the last one leaves
     if (round.phase === 'playing' || round.phase === 'countdown') {
       let has = false;
       for (let i = 0; i < boxes.length; i++) if (boxes[i].userData.onTruck) { has = true; break; }
       if (has) sim.truckEmptySince = null;
       else if (sim.truckEmptySince === null) sim.truckEmptySince = sim.time;
       else if (sim.time - sim.truckEmptySince >= TRUCK_RESPAWN) {
+        const k = KINDS[supply];
+        const sp = spawnPoint(supply);
         let blocked = false;
         for (let i = 0; i < boxes.length; i++) {
           const c = boxes[i];
           const u = c.userData;
-          if (u.smashing) { if (Math.abs(c.position.x - SPAWN.x) < CARGO && Math.abs(c.position.z - SPAWN.z) < CARGO) blocked = true; continue; }
-          if (Math.abs(c.position.x - SPAWN.x) < CARGO && Math.abs(c.position.z - SPAWN.z) < CARGO &&
-            Math.abs(c.position.y - SPAWN.y) < CARGO) {
+          const over = Math.abs(c.position.x - sp.x) < u.hx + k.hx && Math.abs(c.position.z - sp.z) < u.hz + k.hz;
+          if (u.smashing) { if (over) blocked = true; continue; }
+          if (over && Math.abs(c.position.y - sp.y) < u.hy + k.hy) {
             blocked = true;
             if (!u.attached) smashCrate(c);
           }
         }
-        if (!blocked) { spawnCrate(); sim.truckEmptySince = null; }
+        if (!blocked) { spawnCrate(supply); sim.truckEmptySince = null; }
       }
     }
 
-    // tallest standing crate top, in feet
+    // tallest standing piece top, in feet
     {
       let top = 0;
       for (let i = 0; i < boxes.length; i++) {
         const c = boxes[i];
         const u = c.userData;
         if (u.onTruck || u.attached || u.falling || u.smashing) continue;
-        const t = c.position.y + HALF;
+        const t = c.position.y + u.hy;
         if (t > top) top = t;
       }
       round.heightFt = top;
@@ -1049,9 +1673,9 @@ export function createGame(opts) {
           round.phase = 'settling';
           if (sim.carrying) {
             const c = sim.carrying;
-            c.userData.attached = false;
-            c.userData.vx = sim.hookVX; c.userData.vy = 0; c.userData.vz = sim.hookVZ;
-            sim.carrying = null;
+            const body = bodyOf(c);
+            releaseCarry();
+            setVel(body, sim.hookVX, 0, sim.hookVZ);
             startFalling(c);
           }
           emit({ type: 'buzzer' });
@@ -1201,26 +1825,30 @@ export function createGame(opts) {
     // marker, landing outline and plumb line
     const lift = 0.06;
     if (sim.carrying) {
-      const cy = sim.hookY - HOOK_HALF - HALF;
-      const s = supportAt(sim.hookX, sim.hookZ, sim.carrying, cy + 0.3);
-      const topY = s.y - HALF + lift;
+      const cu = sim.carrying.userData;
+      const cy = sim.hookY - HOOK_HALF - cu.hy;
+      const s = restFor(sim.hookX, sim.hookZ, cu.hx, cu.hy, cu.hz, sim.carrying, cy + 0.3, 0);
+      const topY = s.y - cu.hy + lift;
       marker.visible = false;
       ghost.visible = ghostFill.visible = true;
       ghost.position.set(sim.hookX, topY, sim.hookZ);
       ghostFill.position.set(sim.hookX, topY - 0.01, sim.hookZ);
-      // once the crate is set down the outline widens into a colored rim around it
+      // once the piece is set down the outline widens into a colored rim around it
       const rim = sim.slack > 0 ? 1.14 : 1;
-      ghost.scale.set(rim, 1, rim);
-      ghostFill.scale.set(rim, rim, 1);
+      ghost.scale.set(rim * cu.hx / HALF, 1, rim * cu.hz / HALF);
+      ghostFill.scale.set(rim * cu.hx / HALF, rim * cu.hz / HALF, 1);
       let col = 0xffa000;
       if (s.box && !s.box.userData.onTruck) {
-        const ox = sim.hookX - s.box.position.x, oz = sim.hookZ - s.box.position.z;
-        const off = Math.sqrt(ox * ox + oz * oz);
-        col = off <= RULES.perfectOffset ? 0x17b05b : (off <= RULES.greatOffset ? 0xd6c400 : (off <= HALF ? 0xff8a00 : 0xe5352b));
+        if (cu.kind === 'joint' || s.box.userData.kind === 'joint') col = 0x17b05b;
+        else if (cu.kind === 'crate' && s.box.userData.kind === 'crate' && !sim.group.length) {
+          const ox = sim.hookX - s.box.position.x, oz = sim.hookZ - s.box.position.z;
+          const off = Math.sqrt(ox * ox + oz * oz);
+          col = off <= RULES.perfectOffset ? 0x17b05b : (off <= RULES.greatOffset ? 0xd6c400 : (off <= HALF ? 0xff8a00 : 0xe5352b));
+        }
       }
       ghostMat.color.setHex(col);
       ghostFill.material.color.setHex(col);
-      plumbPos[0] = sim.hookX; plumbPos[1] = cy - HALF; plumbPos[2] = sim.hookZ;
+      plumbPos[0] = sim.hookX; plumbPos[1] = cy - cu.hy; plumbPos[2] = sim.hookZ;
       plumbPos[3] = sim.hookX; plumbPos[4] = topY; plumbPos[5] = sim.hookZ;
     } else {
       marker.visible = round.phase !== 'attract';
@@ -1235,8 +1863,8 @@ export function createGame(opts) {
     plumb.computeLineDistances();
 
     if (lastEmissive !== sim.canGrab) {
-      if (lastEmissive && lastEmissive.material) lastEmissive.material.emissive.setHex(0x000000);
-      if (sim.canGrab) sim.canGrab.material.emissive.setHex(0x3a3a12);
+      if (lastEmissive) bodyOf(lastEmissive).forEach((m) => setGlow(m, 0x000000));
+      if (sim.canGrab) bodyOf(sim.canGrab).forEach((m) => setGlow(m, 0x3a3a12));
       lastEmissive = sim.canGrab;
     }
 
@@ -1337,7 +1965,11 @@ export function createGame(opts) {
       trolley: sim.trolley,
       cable: sim.cable,
       swing: Math.hypot(tx - sim.hookX, tz - sim.hookZ),
-      load: sim.carrying ? sim.carrying.userData.weight : 0,
+      load: sim.carrying ? bodyWeight(bodyOf(sim.carrying)) : 0,
+      carryKind: sim.carrying ? sim.carrying.userData.kind : '',
+      carryCount: sim.carrying ? sim.group.length + 1 : 0,
+      supply,
+      welded: asms.size,
       hookFt: Math.max(0, sim.hookY - HOOK_HALF),
       heightFt: round.heightFt,
       score: liveScore(),
@@ -1382,7 +2014,7 @@ export function createGame(opts) {
     if (hudClock >= 0.1) { hudClock = 0; onHud(hudSnapshot()); }
   }
 
-  spawnCrate();
+  spawnCrate(supply);
   events.length = 0;
   if (visual) {
     updateVisuals(0);
@@ -1394,6 +2026,25 @@ export function createGame(opts) {
     setInput(key, on) { if (key in input) input[key] = !!on; },
     clearInput() { for (const k in input) input[k] = false; },
     grab() { grabRequested = true; },
+    turn() { turnRequested = true; },
+    flip() { flipRequested = true; },
+    // Free build only: choose what the truck brings. A piece still waiting on
+    // the truck is swapped for the new kind right away.
+    setSupply(kind) {
+      if (mode !== 'free' || !KINDS[kind] || kind === supply) return;
+      supply = kind;
+      for (let i = boxes.length - 1; i >= 0; i--) {
+        const c = boxes[i];
+        if (!c.userData.onTruck) continue;
+        if (lastEmissive === c) lastEmissive = null;
+        if (sim.canGrab === c) sim.canGrab = null;
+        scene.remove(c);
+        matsOf(c).forEach((m) => m.dispose());
+        boxes.splice(i, 1);
+      }
+      spawnCrate(kind);
+      sim.truckEmptySince = null;
+    },
     setTrim(t) { trim = Object.assign({}, trim, t); },
     setView(v) { view = v; cam.ready = false; },
     setFreeWind(m) { freeWindMph = m; },
@@ -1401,7 +2052,7 @@ export function createGame(opts) {
     isPaused() { return paused; },
     snapshot: hudSnapshot,
     // test hooks
-    _sim: sim, _round: round, _boxes: boxes, _falling: falling, _step: step, _flush: flush, _spawn: spawnCrate,
+    _sim: sim, _round: round, _boxes: boxes, _falling: falling, _step: step, _flush: flush, _spawn: spawnCrate, _asms: asms,
     dispose() {
       disposed = true;
       cancelAnimationFrame(raf);

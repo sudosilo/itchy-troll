@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>raineurysm</title>
+<style>
+  :root{
+    --ink:#16324f;
+    --blue:#1f6fe5;
+    --blue2:#5aa2ff;
+    --paper:#f4f8fd;
+    --panel:#ffffff;
+    --line:#cfe0f5;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--paper);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);touch-action:none;user-select:none;-webkit-user-select:none}
+  canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+  .fab{position:fixed;top:12px;width:48px;height:48px;border-radius:14px;border:2px solid var(--blue);background:rgba(255,255,255,.92);color:var(--blue);font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center;z-index:20;box-shadow:0 4px 14px rgba(31,111,229,.18)}
+  #burger{left:12px}
+  #tool{right:12px;width:auto;min-width:96px;padding:0 14px;font-size:15px;letter-spacing:.04em}
+  #title{position:fixed;top:22px;left:0;right:0;text-align:center;font-weight:800;letter-spacing:.18em;color:var(--blue);font-size:15px;pointer-events:none;z-index:5;text-transform:lowercase}
+  #scrim{position:fixed;inset:0;background:rgba(22,50,79,.18);z-index:30;display:none}
+  #menu{position:fixed;top:0;left:0;bottom:0;width:min(82vw,330px);background:var(--panel);border-right:3px solid var(--blue);z-index:31;transform:translateX(-105%);transition:transform .22s ease;overflow-y:auto;padding:70px 16px 30px}
+  #menu.open{transform:none}
+  #menu.open + #scrim, #scrim.show{display:block}
+  #close{position:absolute;top:12px;left:12px}
+  details{border:1.5px solid var(--line);border-radius:12px;margin:0 0 12px;background:#fbfdff}
+  summary{padding:14px;font-weight:700;color:var(--blue);list-style:none;cursor:pointer}
+  summary::-webkit-details-marker{display:none}
+  summary::after{content:"\25BE";float:right}
+  details[open] summary::after{content:"\25B4"}
+  .body{padding:0 14px 14px}
+  label{display:block;font-size:14px;margin:12px 0 6px}
+  input[type=range]{width:100%;accent-color:var(--blue)}
+  select{width:100%;padding:10px;border-radius:10px;border:1.5px solid var(--line);font-size:15px;color:var(--ink);background:#fff}
+  .btn{display:block;width:100%;margin:10px 0 0;padding:13px;border-radius:12px;border:2px solid var(--blue);background:#fff;color:var(--blue);font-weight:700;font-size:15px}
+  .btn.solid{background:var(--blue);color:#fff}
+  .help{font-size:14px;line-height:1.5}
+  #start{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:rgba(244,248,253,.82)}
+  #start div{background:#fff;border:3px solid var(--blue);border-radius:20px;padding:26px 28px;text-align:center;max-width:300px;box-shadow:0 10px 30px rgba(31,111,229,.2)}
+  #start h1{margin:0 0 8px;color:var(--blue);letter-spacing:.14em;font-size:24px;text-transform:lowercase}
+  #start p{margin:0;font-size:15px;line-height:1.45}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="title">raineurysm</div>
+<button class="fab" id="burger" aria-label="menu">&#9776;</button>
+<button class="fab" id="tool">PLACE</button>
+
+<div id="menu">
+  <button class="fab" id="close" aria-label="close">&#10005;</button>
+  <details open>
+    <summary>Rain</summary>
+    <div class="body">
+      <label>How much rain</label>
+      <input type="range" id="density" min="10" max="600" value="160">
+      <label>Speed spread (drizzle to downpour)</label>
+      <input type="range" id="speed" min="0" max="100" value="55">
+      <label>Drop size spread</label>
+      <input type="range" id="size" min="0" max="100" value="50">
+      <label>Wind</label>
+      <input type="range" id="wind" min="-100" max="100" value="0">
+      <button class="btn" id="pause">Pause rain</button>
+    </div>
+  </details>
+  <details>
+    <summary>Sound</summary>
+    <div class="body">
+      <label>Scale</label>
+      <select id="scale">
+        <option value="penta">Major pentatonic</option>
+        <option value="mpenta">Minor pentatonic</option>
+        <option value="major">Major</option>
+        <option value="minor">Natural minor</option>
+        <option value="dorian">Dorian</option>
+        <option value="blues">Blues</option>
+        <option value="whole">Whole tone</option>
+        <option value="chrom">Chromatic</option>
+      </select>
+      <label>Root note</label>
+      <select id="root"></select>
+      <label>Volume</label>
+      <input type="range" id="vol" min="0" max="100" value="70">
+      <label>Echo</label>
+      <input type="range" id="echo" min="0" max="100" value="35">
+      <button class="btn" id="mute">Mute</button>
+    </div>
+  </details>
+  <details>
+    <summary>Vessels</summary>
+    <div class="body">
+      <button class="btn" id="row">Add a row of vessels</button>
+      <button class="btn solid" id="all">Catch every drop</button>
+      <button class="btn" id="clear">Clear all vessels</button>
+    </div>
+  </details>
+  <details>
+    <summary>How it works</summary>
+    <div class="body help">
+      Rain falls through everything until a vessel catches it. Each vessel is tuned by where it sits, low notes on the left and high notes on the right. Fast drops ring an octave up with a sharp pluck, slow drops hum soft and long, big drops hit louder. Drop color sets the voice: blue is pure, red is warm, green is hollow, gold is bright.
+      <br><br>
+      The button in the upper right switches what a tap does. PLACE drops a vessel where you tap. MOVE lets you drag a vessel around. ERASE removes a vessel you tap.
+    </div>
+  </details>
+</div>
+<div id="scrim"></div>
+
+<div id="start"><div><h1>raineurysm</h1><p>Tap anywhere to let the rain in. Then tap to set vessels under it and catch the notes.</p></div></div>
+
+<script>
+(() => {
+  const cv = document.getElementById('c');
+  const g = cv.getContext('2d');
+  let W = 0, H = 0, DPR = 1;
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = W * DPR; cv.height = H * DPR;
+    g.setTransform(DPR,0,0,DPR,0,0);
+    vessels.forEach(v => { v.x = Math.min(Math.max(v.x, 20), W - 20); v.y = Math.min(Math.max(v.y, 90), H - 20); v.note = noteFor(v.x); });
+  }
+
+  // ---------- settings ----------
+  const S = { density:160, speed:55, size:50, wind:0, paused:false, vol:.7, echo:.35, muted:false, scale:'penta', root:0 };
+  const SCALES = {
+    penta:[0,2,4,7,9], mpenta:[0,3,5,7,10], major:[0,2,4,5,7,9,11], minor:[0,2,3,5,7,8,10],
+    dorian:[0,2,3,5,7,9,10], blues:[0,3,5,6,7,10], whole:[0,2,4,6,8,10], chrom:[0,1,2,3,4,5,6,7,8,9,10,11]
+  };
+  const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const COLORS = [
+    {c:'#2f7bff', wave:'sine'},
+    {c:'#5ab4ff', wave:'sine'},
+    {c:'#ff5d6c', wave:'triangle'},
+    {c:'#3cc98a', wave:'square'},
+    {c:'#ffb52e', wave:'sawtooth'},
+    {c:'#9b6bff', wave:'triangle'}
+  ];
+
+  // ---------- audio ----------
+  let AC = null, master, comp, delay, fb, wet, dry;
+  let voices = 0;
+  function initAudio(){
+    if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    comp = AC.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.ratio.value = 6; comp.attack.value = .003; comp.release.value = .2;
+    master = AC.createGain(); master.gain.value = S.muted ? 0 : S.vol;
+    dry = AC.createGain(); dry.gain.value = 1;
+    delay = AC.createDelay(1.5); delay.delayTime.value = .27;
+    fb = AC.createGain(); fb.gain.value = .38;
+    wet = AC.createGain(); wet.gain.value = S.echo;
+    const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600;
+    dry.connect(comp);
+    dry.connect(delay); delay.connect(lp); lp.connect(fb); fb.connect(delay); lp.connect(wet); wet.connect(comp);
+    comp.connect(master); master.connect(AC.destination);
+  }
+  function midiHz(m){ return 440 * Math.pow(2, (m - 69) / 12); }
+  function noteFor(x){
+    const sc = SCALES[S.scale];
+    const steps = sc.length * 3 + 1;
+    let i = Math.floor((x / Math.max(W,1)) * steps);
+    i = Math.max(0, Math.min(steps - 1, i));
+    const oct = Math.floor(i / sc.length);
+    return 48 + S.root + oct * 12 + sc[i % sc.length];
+  }
+  function play(midi, drop){
+    if (!AC || voices > 46) return;
+    const t = AC.currentTime;
+    const fast = drop.vy > 720, slow = drop.vy < 330;
+    const m = midi + (fast ? 12 : 0);
+    const f = midiHz(m);
+    const amp = Math.min(.34, .07 + drop.r * .06);
+    const dur = fast ? .35 : slow ? 1.5 : .8;
+    const o = AC.createOscillator();
+    o.type = drop.wave;
+    o.frequency.setValueAtTime(f * (fast ? 1.012 : 1), t);
+    o.frequency.exponentialRampToValueAtTime(f, t + .04);
+    const filt = AC.createBiquadFilter();
+    filt.type = 'lowpass';
+    filt.frequency.setValueAtTime(Math.min(12000, f * (2 + drop.r * 2.2 + (fast ? 4 : 0))), t);
+    filt.frequency.exponentialRampToValueAtTime(Math.max(200, f * 1.2), t + dur);
+    const env = AC.createGain();
+    const atk = slow ? .05 : .004;
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(amp * (drop.wave === 'square' || drop.wave === 'sawtooth' ? .45 : 1), t + atk);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const pan = AC.createStereoPanner ? AC.createStereoPanner() : null;
+    o.connect(filt); filt.connect(env);
+    if (pan){ pan.pan.value = Math.max(-1, Math.min(1, (drop.x / W) * 2 - 1)) * .8; env.connect(pan); pan.connect(dry); }
+    else env.connect(dry);
+    o.start(t); o.stop(t + dur + .05);
+    voices++;
+    o.onended = () => { voices--; o.disconnect(); filt.disconnect(); env.disconnect(); if (pan) pan.disconnect(); };
+  }
+
+  // ---------- rain ----------
+  const drops = [];
+  const splashes = [];
+  let spawnAcc = 0;
+  function spawn(){
+    const sp = S.speed / 100, sz = S.size / 100;
+    const vy = 380 + (Math.random() * 2 - 1) * 300 * sp + (Math.random() < .12 * sp ? 420 * sp : 0);
+    const r = Math.max(.6, 1.6 + (Math.random() * 2 - 1) * 1.4 * sz + (Math.random() < .08 * sz ? 2.2 : 0));
+    const col = COLORS[Math.floor(Math.random() * COLORS.length)];
+    drops.push({ x: Math.random() * (W + 200) - 100, y: -30 - Math.random() * 40, vy: Math.max(140, vy), r, c: col.c, wave: col.wave });
+  }
+
+  // ---------- vessels ----------
+  const vessels = [];
+  const VW = 36, VH = 30;
+  function addVessel(x, y){
+    const v = { x, y, note: noteFor(x), glow: 0, fill: 0, last: 0, col: '#1f6fe5' };
+    vessels.push(v); return v;
+  }
+  function hitVessel(px, py){
+    for (let i = vessels.length - 1; i >= 0; i--){
+      const v = vessels[i];
+      if (px > v.x - VW/2 - 10 && px < v.x + VW/2 + 10 && py > v.y - 16 && py < v.y + VH + 12) return i;
+    }
+    return -1;
+  }
+  function addRow(y){
+    const n = Math.max(6, Math.floor(W / (VW + 8)));
+    const gap = W / n;
+    for (let i = 0; i < n; i++) addVessel(gap * i + gap / 2, y);
+  }
+  function catchAll(){
+    vessels.length = 0;
+    const n = Math.ceil(W / VW);
+    const gap = W / n;
+    for (let i = 0; i < n; i++) addVessel(gap * i + gap / 2, H - VH - 26);
+    for (let i = 0; i < n - 1; i++) addVessel(gap * i + gap, H - VH * 2 - 46);
+  }
+
+  // ---------- input ----------
+  const modes = ['PLACE','MOVE','ERASE'];
+  let mode = 0;
+  const toolBtn = document.getElementById('tool');
+  toolBtn.onclick = () => { mode = (mode + 1) % modes.length; toolBtn.textContent = modes[mode]; };
+  let dragging = null, dragOff = 0;
+  cv.addEventListener('pointerdown', e => {
+    initAudio();
+    const x = e.clientX, y = e.clientY;
+    const hit = hitVessel(x, y);
+    if (modes[mode] === 'PLACE'){
+      if (hit >= 0){ dragging = vessels[hit]; return; }
+      if (y < 80) return;
+      dragging = addVessel(x, Math.min(y, H - 20));
+    } else if (modes[mode] === 'MOVE'){
+      if (hit >= 0) dragging = vessels[hit];
+    } else {
+      if (hit >= 0) vessels.splice(hit, 1);
+    }
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    dragging.x = Math.min(Math.max(e.clientX, 16), W - 16);
+    dragging.y = Math.min(Math.max(e.clientY, 90), H - 20);
+    dragging.note = noteFor(dragging.x);
+  });
+  const endDrag = () => { dragging = null; };
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', endDrag);
+
+  const start = document.getElementById('start');
+  start.addEventListener('pointerdown', () => { initAudio(); start.style.display = 'none'; });
+
+  // ---------- menu ----------
+  const menu = document.getElementById('menu'), scrim = document.getElementById('scrim');
+  const openMenu = () => { menu.classList.add('open'); scrim.classList.add('show'); };
+  const closeMenu = () => { menu.classList.remove('open'); scrim.classList.remove('show'); };
+  document.getElementById('burger').onclick = () => { initAudio(); openMenu(); };
+  document.getElementById('close').onclick = closeMenu;
+  scrim.onclick = closeMenu;
+  const rootSel = document.getElementById('root');
+  NAMES.forEach((n, i) => { const o = document.createElement('option'); o.value = i; o.textContent = n; rootSel.appendChild(o); });
+  const retune = () => vessels.forEach(v => v.note = noteFor(v.x));
+  document.getElementById('density').oninput = e => S.density = +e.target.value;
+  document.getElementById('speed').oninput = e => S.speed = +e.target.value;
+  document.getElementById('size').oninput = e => S.size = +e.target.value;
+  document.getElementById('wind').oninput = e => S.wind = +e.target.value;
+  document.getElementById('scale').onchange = e => { S.scale = e.target.value; retune(); };
+  rootSel.onchange = e => { S.root = +e.target.value; retune(); };
+  document.getElementById('vol').oninput = e => { S.vol = e.target.value / 100; if (master && !S.muted) master.gain.value = S.vol; };
+  document.getElementById('echo').oninput = e => { S.echo = e.target.value / 100; if (wet) wet.gain.value = S.echo; };
+  const muteBtn = document.getElementById('mute');
+  muteBtn.onclick = () => { S.muted = !S.muted; muteBtn.textContent = S.muted ? 'Unmute' : 'Mute'; if (master) master.gain.value = S.muted ? 0 : S.vol; };
+  const pauseBtn = document.getElementById('pause');
+  pauseBtn.onclick = () => { S.paused = !S.paused; pauseBtn.textContent = S.paused ? 'Resume rain' : 'Pause rain'; };
+  document.getElementById('row').onclick = () => { addRow(H - VH - 26 - (vessels.length ? (Math.floor(vessels.length / Math.max(6, Math.floor(W / (VW + 8)))) % 6) * (VH + 22) : 0)); closeMenu(); };
+  document.getElementById('all').onclick = () => { catchAll(); closeMenu(); };
+  document.getElementById('clear').onclick = () => { vessels.length = 0; };
+
+  // ---------- draw ----------
+  function drawVessel(v){
+    const x = v.x, y = v.y, w = VW, h = VH;
+    g.save();
+    if (v.glow > 0){
+      g.shadowColor = v.col; g.shadowBlur = 18 * v.glow;
+    }
+    g.beginPath();
+    g.moveTo(x - w/2, y);
+    g.lineTo(x - w/2 + 5, y + h);
+    g.lineTo(x + w/2 - 5, y + h);
+    g.lineTo(x + w/2, y);
+    g.lineWidth = 2.5;
+    g.strokeStyle = '#1f6fe5';
+    g.fillStyle = 'rgba(255,255,255,.85)';
+    g.fill(); g.stroke();
+    if (v.fill > 0.02){
+      const fh = h * Math.min(.85, v.fill);
+      g.beginPath();
+      const k = (fh / h) * 5;
+      g.moveTo(x - w/2 + 5 - k + 1.5, y + h - fh);
+      g.lineTo(x - w/2 + 6.5, y + h - 1.5);
+      g.lineTo(x + w/2 - 6.5, y + h - 1.5);
+      g.lineTo(x + w/2 - 5 + k - 1.5, y + h - fh);
+      g.closePath();
+      g.globalAlpha = .75;
+      g.fillStyle = v.col; g.fill();
+      g.globalAlpha = 1;
+    }
+    g.shadowBlur = 0;
+    g.fillStyle = '#16324f';
+    g.font = '700 11px system-ui,sans-serif';
+    g.textAlign = 'center';
+    g.fillText(NAMES[v.note % 12], x, y + h + 13);
+    g.restore();
+  }
+
+  let lastT = performance.now();
+  function frame(now){
+    let dt = Math.min(.05, (now - lastT) / 1000); lastT = now;
+    // background
+    const bg = g.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#e6f0fc'); bg.addColorStop(1, '#f7fbff');
+    g.fillStyle = bg; g.fillRect(0, 0, W, H);
+
+    if (!S.paused){
+      spawnAcc += S.density * dt * (W / 400);
+      while (spawnAcc >= 1){ spawn(); spawnAcc--; }
+    }
+    const windX = S.wind * 2.2;
+    const tsec = now / 1000;
+
+    for (let i = drops.length - 1; i >= 0; i--){
+      const d = drops[i];
+      const py = d.y;
+      d.y += d.vy * dt;
+      d.x += windX * dt * (d.vy / 400);
+      let caught = false;
+      for (let j = 0; j < vessels.length; j++){
+        const v = vessels[j];
+        if (py <= v.y && d.y >= v.y && d.x > v.x - VW/2 + 2 && d.x < v.x + VW/2 - 2){
+          caught = true;
+          if (tsec - v.last > .045){ play(v.note, d); v.last = tsec; }
+          v.glow = 1; v.col = d.c; v.fill = Math.min(1, v.fill + .05 + d.r * .015);
+          for (let k = 0; k < 3; k++) splashes.push({ x: d.x, y: v.y, vx: (Math.random()*2-1) * 60, vy: -40 - Math.random() * 70, life: .35, c: d.c });
+          break;
+        }
+      }
+      if (caught || d.y > H + 40){ drops.splice(i, 1); continue; }
+      const len = d.vy * .028 + d.r * 2;
+      g.strokeStyle = d.c;
+      g.globalAlpha = .55 + Math.min(.4, d.r * .1);
+      g.lineWidth = d.r;
+      g.lineCap = 'round';
+      g.beginPath();
+      g.moveTo(d.x - windX * .028 * (d.vy / 400), d.y - len);
+      g.lineTo(d.x, d.y);
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+
+    for (let i = splashes.length - 1; i >= 0; i--){
+      const s = splashes[i];
+      s.life -= dt; if (s.life <= 0){ splashes.splice(i, 1); continue; }
+      s.vy += 400 * dt; s.x += s.vx * dt; s.y += s.vy * dt;
+      g.globalAlpha = s.life / .35;
+      g.fillStyle = s.c;
+      g.beginPath(); g.arc(s.x, s.y, 1.6, 0, Math.PI * 2); g.fill();
+    }
+    g.globalAlpha = 1;
+
+    for (const v of vessels){
+      v.glow = Math.max(0, v.glow - dt * 3);
+      v.fill = Math.max(0, v.fill - dt * .25);
+      drawVessel(v);
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>raineurysm</title>
+<style>
+  :root{ --ink:#16324f; --blue:#1f6fe5; --paper:#f4f8fd; --panel:#ffffff; --line:#cfe0f5; }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--paper);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--ink);touch-action:none;user-select:none;-webkit-user-select:none}
+  canvas{position:fixed;inset:0;width:100vw;height:100vh;display:block}
+  .fab{position:fixed;top:12px;width:48px;height:48px;border-radius:14px;border:2px solid var(--blue);background:rgba(255,255,255,.94);color:var(--blue);font-size:22px;font-weight:700;display:flex;align-items:center;justify-content:center;z-index:20;box-shadow:0 4px 14px rgba(31,111,229,.18)}
+  #burger{left:12px}
+  #tool{right:12px;width:96px;font-size:15px;letter-spacing:.04em}
+  #title{position:fixed;top:22px;left:0;right:0;text-align:center;font-weight:800;letter-spacing:.18em;color:var(--blue);font-size:15px;pointer-events:none;z-index:5}
+  #scrim{position:fixed;inset:0;background:rgba(22,50,79,.18);z-index:30;display:none}
+  #scrim.show{display:block}
+  #menu{position:fixed;top:0;left:0;bottom:0;width:min(82vw,330px);background:var(--panel);border-right:3px solid var(--blue);z-index:31;transform:translateX(-105%);transition:transform .22s ease;overflow-y:auto;padding:70px 16px 30px}
+  #menu.open{transform:none}
+  #close{position:absolute;top:12px;left:12px}
+  details{border:1.5px solid var(--line);border-radius:12px;margin:0 0 12px;background:#fbfdff}
+  summary{padding:14px;font-weight:700;color:var(--blue);list-style:none;cursor:pointer}
+  summary::-webkit-details-marker{display:none}
+  summary::after{content:"\25BE";float:right}
+  details[open] summary::after{content:"\25B4"}
+  .body{padding:0 14px 14px}
+  label{display:block;font-size:14px;margin:12px 0 6px}
+  input[type=range]{width:100%;accent-color:var(--blue)}
+  select{width:100%;padding:10px;border-radius:10px;border:1.5px solid var(--line);font-size:15px;color:var(--ink);background:#fff}
+  .btn{display:block;width:100%;margin:10px 0 0;padding:13px;border-radius:12px;border:2px solid var(--blue);background:#fff;color:var(--blue);font-weight:700;font-size:15px}
+  .btn.solid{background:var(--blue);color:#fff}
+  .help{font-size:14px;line-height:1.5}
+  #start{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:rgba(244,248,253,.82)}
+  #start div{background:#fff;border:3px solid var(--blue);border-radius:20px;padding:26px 28px;text-align:center;max-width:300px;box-shadow:0 10px 30px rgba(31,111,229,.2)}
+  #start h1{margin:0 0 8px;color:var(--blue);letter-spacing:.14em;font-size:24px}
+  #start p{margin:0;font-size:15px;line-height:1.45}
+  #cup{position:fixed;top:70px;right:12px;width:220px;background:rgba(255,255,255,.96);border:2px solid var(--blue);border-radius:16px;padding:10px 12px 12px;z-index:25;box-shadow:0 8px 22px rgba(31,111,229,.2);visibility:hidden}
+  #cup.show{visibility:visible}
+  #cup label{margin:6px 0 2px;font-size:13px;font-weight:600}
+  .noterow{display:flex;align-items:center;gap:8px;margin-top:8px}
+  .noterow button{width:46px;height:40px;border-radius:10px;border:2px solid var(--blue);background:#fff;color:var(--blue);font-size:18px;font-weight:800;flex:none}
+  .noterow span{flex:1;text-align:center;font-weight:800;color:var(--blue);font-size:18px}
+  .cupbtns{display:flex;gap:8px;margin-top:10px}
+  .cupbtns button{flex:1;padding:10px 0;border-radius:10px;border:2px solid var(--blue);background:#fff;color:var(--blue);font-weight:700;font-size:14px}
+  .cupbtns button.solid{background:var(--blue);color:#fff}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="title">raineurysm</div>
+<button class="fab" id="burger" aria-label="menu">&#9776;</button>
+<button class="fab" id="tool">PLACE</button>
+
+<div id="cup">
+  <label>Cup width</label>
+  <input type="range" id="cw" min="6" max="90" value="36">
+  <label>Tilt</label>
+  <input type="range" id="ct" min="-75" max="75" value="0">
+  <div class="noterow"><button id="ndown">&#9664;</button><span id="nlabel">C</span><button id="nup">&#9654;</button></div>
+  <div class="cupbtns"><button id="cflat">Level</button><button id="cdel">Remove</button><button class="solid" id="cdone">Done</button></div>
+</div>
+
+<div id="menu">
+  <button class="fab" id="close" aria-label="close">&#10005;</button>
+  <details open>
+    <summary>Rain</summary>
+    <div class="body">
+      <label>Lane tempo</label>
+      <input type="range" id="bpm" min="50" max="180" value="96">
+      <label>Storm amount (right side)</label>
+      <input type="range" id="density" min="0" max="600" value="160">
+      <label>Storm speed spread</label>
+      <input type="range" id="speed" min="0" max="100" value="55">
+      <label>Storm drop size spread</label>
+      <input type="range" id="size" min="0" max="100" value="50">
+      <label>Storm wind</label>
+      <input type="range" id="wind" min="-100" max="100" value="0">
+      <button class="btn" id="lanesBtn">Hide lanes</button>
+      <button class="btn" id="pause">Pause rain</button>
+    </div>
+  </details>
+  <details>
+    <summary>Sound</summary>
+    <div class="body">
+      <label>Scale</label>
+      <select id="scale">
+        <option value="penta">Major pentatonic</option>
+        <option value="mpenta">Minor pentatonic</option>
+        <option value="major">Major</option>
+        <option value="minor">Natural minor</option>
+        <option value="dorian">Dorian</option>
+        <option value="blues">Blues</option>
+        <option value="whole">Whole tone</option>
+        <option value="chrom">Chromatic</option>
+      </select>
+      <label>Root note</label>
+      <select id="root"></select>
+      <label>Volume</label>
+      <input type="range" id="vol" min="0" max="100" value="70">
+      <label>Drum volume</label>
+      <input type="range" id="dvol" min="0" max="100" value="80">
+      <label>Echo</label>
+      <input type="range" id="echo" min="0" max="100" value="30">
+      <button class="btn" id="mute">Mute</button>
+    </div>
+  </details>
+  <details>
+    <summary>Cups</summary>
+    <div class="body">
+      <label>New cup width</label>
+      <input type="range" id="newcw" min="6" max="90" value="36">
+      <button class="btn" id="row">Add a row of cups</button>
+      <button class="btn solid" id="all">Catch every drop</button>
+      <button class="btn" id="clear">Clear all cups</button>
+    </div>
+  </details>
+  <details>
+    <summary>How it works</summary>
+    <div class="body help">
+      The left side of the screen rains in lanes. Every lane drops one kind of raindrop, same color, same size, same speed, on its own beat. The far right side is the storm, everything mixed together.
+      <br><br>
+      Lane drops: navy blobs are kick drums, grey specks are hi hats, pale grey is the open hat, orange is the snare, pink is the clap, brown is the tom, lime dust is the shaker, teal is the bass line. The blues, red, green, gold and violet lanes are melody.
+      <br><br>
+      Melody cups are tuned by where they sit, low on the left and high on the right, and the arrows in the cup panel shift a cup up or down the scale. Fast drops ring an octave up, slow drops hum, big drops hit harder.
+      <br><br>
+      Tap a cup to select it. Drag it to move it. In the cup panel, shrink the width until it only fits under one lane, and tilt it. Cups hold water. A tilted cup pours from its low lip, and a full cup spills over, so you can stack cups and let one drip into another for a second note.
+      <br><br>
+      The button in the upper right switches what a tap on empty space does. PLACE drops a new cup. MOVE only selects and drags. ERASE removes a cup you tap.
+    </div>
+  </details>
+</div>
+<div id="scrim"></div>
+
+<div id="start"><div><h1>raineurysm</h1><p>Tap anywhere to let the rain in. Lanes on the left, storm on the right. Set cups under it and catch the notes.</p></div></div>
+
+<script>
+(() => {
+  const cv = document.getElementById('c');
+  const g = cv.getContext('2d');
+  let W = 0, H = 0, DPR = 1;
+
+  const S = { bpm:96, density:160, speed:55, size:50, wind:0, paused:false, lanes:true, vol:.7, dvol:.8, echo:.3, muted:false, scale:'penta', root:0, newW:36 };
+  const SCALES = {
+    penta:[0,2,4,7,9], mpenta:[0,3,5,7,10], major:[0,2,4,5,7,9,11], minor:[0,2,3,5,7,8,10],
+    dorian:[0,2,3,5,7,9,10], blues:[0,3,5,6,7,10], whole:[0,2,4,6,8,10], chrom:[0,1,2,3,4,5,6,7,8,9,10,11]
+  };
+  const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const MEL = [
+    {c:'#2f7bff', wave:'sine'}, {c:'#5ab4ff', wave:'sine'}, {c:'#ff5d6c', wave:'triangle'},
+    {c:'#3cc98a', wave:'square'}, {c:'#ffb52e', wave:'sawtooth'}, {c:'#9b6bff', wave:'triangle'}
+  ];
+  const DRUM = {
+    kick:  {c:'#123a8c', r:5,   vy:260},
+    snare: {c:'#ff6b4a', r:3.2, vy:420},
+    hat:   {c:'#7f93a8', r:1,   vy:880},
+    ohat:  {c:'#a9b6c4', r:1.6, vy:640},
+    clap:  {c:'#e04fd0', r:2.6, vy:500},
+    tom:   {c:'#8a5a2b', r:3.6, vy:340},
+    shaker:{c:'#9cc23a', r:.8,  vy:760},
+    bass:  {c:'#0e8a8a', r:3.8, vy:240, wave:'sawtooth'}
+  };
+  const LANES = [
+    {k:'kick',   p:'x...x...x...x...'},
+    {k:'snare',  p:'....x.......x...'},
+    {k:'hat',    p:'x.x.x.x.x.x.x.x.'},
+    {k:'ohat',   p:'..x...x...x...x.'},
+    {k:'clap',   p:'....x..x....x...'},
+    {k:'tom',    p:'......x.x.....x.'},
+    {k:'shaker', p:'xxxxxxxxxxxxxxxx'},
+    {k:'bass',   p:'x..x..x...x.x...'},
+    {k:'mel', c:'#2f7bff', wave:'sine',     r:3,   vy:250, p:'x.......x.......'},
+    {k:'mel', c:'#5ab4ff', wave:'sine',     r:1.4, vy:820, p:'x.x...x.x.x...x.'},
+    {k:'mel', c:'#ff5d6c', wave:'triangle', r:2.2, vy:450, p:'x...x.x.....x...'},
+    {k:'mel', c:'#3cc98a', wave:'square',   r:1.8, vy:560, p:'..x...x...x.x...'},
+    {k:'mel', c:'#ffb52e', wave:'sawtooth', r:1.2, vy:900, p:'x..x..x..x..x...'},
+    {k:'mel', c:'#9b6bff', wave:'triangle', r:3.4, vy:280, p:'x...........x...'}
+  ].map(l => l.k === 'mel' ? l : Object.assign({}, DRUM[l.k], l));
+  const LANE_SPAN = .74;
+  const laneW = () => (W * LANE_SPAN) / LANES.length;
+  const laneX = i => laneW() * (i + .5);
+
+  // ---------- audio ----------
+  let AC = null, master, dry, delay, fb, wet, drumBus, noiseBuf;
+  let voices = 0;
+  function initAudio(){
+    if (AC){ if (AC.state === 'suspended') AC.resume(); return; }
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    const comp = AC.createDynamicsCompressor();
+    comp.threshold.value = -16; comp.ratio.value = 6; comp.attack.value = .003; comp.release.value = .2;
+    master = AC.createGain(); master.gain.value = S.muted ? 0 : S.vol;
+    dry = AC.createGain();
+    drumBus = AC.createGain(); drumBus.gain.value = S.dvol;
+    delay = AC.createDelay(1.5); delay.delayTime.value = 60 / S.bpm * .75;
+    fb = AC.createGain(); fb.gain.value = .36;
+    wet = AC.createGain(); wet.gain.value = S.echo;
+    const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600;
+    dry.connect(comp); dry.connect(delay); delay.connect(lp); lp.connect(fb); fb.connect(delay); lp.connect(wet); wet.connect(comp);
+    drumBus.connect(comp);
+    comp.connect(master); master.connect(AC.destination);
+    noiseBuf = AC.createBuffer(1, AC.sampleRate, AC.sampleRate);
+    const ch = noiseBuf.getChannelData(0);
+    for (let i = 0; i < ch.length; i++) ch[i] = Math.random() * 2 - 1;
+  }
+  const midiHz = m => 440 * Math.pow(2, (m - 69) / 12);
+  function noteFor(x, off){
+    const sc = SCALES[S.scale];
+    const steps = sc.length * 3 + 1;
+    let i = Math.floor((x / Math.max(W,1)) * steps);
+    i = Math.max(0, Math.min(steps - 1, i)) + (off || 0);
+    const oct = Math.floor(i / sc.length);
+    const deg = ((i % sc.length) + sc.length) % sc.length;
+    return Math.max(12, Math.min(108, 48 + S.root + oct * 12 + sc[deg]));
+  }
+  function track(node, dur){ voices++; setTimeout(() => { voices--; try{ node.disconnect(); }catch(e){} }, (dur + .2) * 1000); }
+  function panner(x){
+    if (!AC.createStereoPanner) return null;
+    const p = AC.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, (x / W) * 2 - 1)) * .8; return p;
+  }
+  function noise(t, dur, type, freq, q, amp, out){
+    const s = AC.createBufferSource(); s.buffer = noiseBuf;
+    const f = AC.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const e = AC.createGain();
+    e.gain.setValueAtTime(.0001, t); e.gain.exponentialRampToValueAtTime(amp, t + .002); e.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    s.connect(f); f.connect(e); e.connect(out);
+    s.start(t, Math.random() * .5); s.stop(t + dur + .02);
+    track(e, dur);
+  }
+  function tone(t, f0, f1, dur, type, amp, out, sweep){
+    const o = AC.createOscillator(); o.type = type;
+    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + (sweep || dur * .4));
+    const e = AC.createGain();
+    e.gain.setValueAtTime(.0001, t); e.gain.exponentialRampToValueAtTime(amp, t + .003); e.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    o.connect(e); e.connect(out); o.start(t); o.stop(t + dur + .02);
+    track(e, dur);
+  }
+  function playDrum(kind, drop){
+    const t = AC.currentTime;
+    const p = panner(drop.x); const out = p || drumBus; if (p) p.connect(drumBus);
+    const hard = Math.min(1.3, .75 + drop.vy / 1400);
+    switch (kind){
+      case 'kick': tone(t, 160, 42, .45, 'sine', .9 * hard, out, .12); noise(t, .02, 'lowpass', 1200, .7, .25, out); break;
+      case 'snare': noise(t, .2, 'bandpass', 1900, .8, .55 * hard, out); tone(t, 200, 160, .12, 'triangle', .35, out); break;
+      case 'hat': noise(t, .05, 'highpass', 7500, .7, .3 * hard, out); break;
+      case 'ohat': noise(t, .32, 'highpass', 6800, .7, .26 * hard, out); break;
+      case 'clap': [0, .012, .026].forEach(d => noise(t + d, .1 + d, 'bandpass', 1250, 1.2, .45 * hard, out)); break;
+      case 'tom': tone(t, 240, 110, .32, 'sine', .7 * hard, out, .2); break;
+      case 'shaker': noise(t, .07, 'highpass', 5200, .9, .14 * hard, out); break;
+    }
+    if (p) setTimeout(() => { try{ p.disconnect(); }catch(e){} }, 900);
+  }
+  function playMel(midi, drop){
+    const t = AC.currentTime;
+    const isBass = drop.kind === 'bass';
+    const fast = !isBass && drop.vy > 720, slow = drop.vy < 330;
+    const m = isBass ? midi - 24 : midi + (fast ? 12 : 0);
+    const f = midiHz(m);
+    const amp = isBass ? .3 : Math.min(.34, .07 + drop.r * .06);
+    const dur = isBass ? .55 : fast ? .35 : slow ? 1.5 : .8;
+    const o = AC.createOscillator(); o.type = drop.wave;
+    o.frequency.setValueAtTime(f * (fast ? 1.012 : 1), t); o.frequency.exponentialRampToValueAtTime(f, t + .04);
+    const filt = AC.createBiquadFilter(); filt.type = 'lowpass';
+    filt.frequency.setValueAtTime(Math.min(12000, isBass ? 900 : f * (2 + drop.r * 2.2 + (fast ? 4 : 0))), t);
+    filt.frequency.exponentialRampToValueAtTime(Math.max(120, f * 1.2), t + dur);
+    const env = AC.createGain();
+    const atk = slow && !isBass ? .05 : .004;
+    const soft = (drop.wave === 'square' || drop.wave === 'sawtooth') && !isBass ? .45 : 1;
+    env.gain.setValueAtTime(.0001, t); env.gain.exponentialRampToValueAtTime(amp * soft, t + atk); env.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    const p = panner(drop.x);
+    o.connect(filt); filt.connect(env);
+    if (p){ env.connect(p); p.connect(isBass ? drumBus : dry); } else env.connect(isBass ? drumBus : dry);
+    o.start(t); o.stop(t + dur + .05);
+    voices++;
+    o.onended = () => { voices--; o.disconnect(); filt.disconnect(); env.disconnect(); if (p) p.disconnect(); };
+  }
+  function play(cup, drop){
+    if (!AC || voices > 56) return;
+    if (drop.kind === 'mel' || drop.kind === 'bass') playMel(noteFor(cup.x, cup.off), drop);
+    else playDrum(drop.kind, drop);
+  }
+
+  // ---------- rain ----------
+  const drops = [], splashes = [];
+  let stormAcc = 0, stepAcc = 0, step = 0;
+  function makeDrop(src, x, y, vy){
+    return { x, y, vx:0, vy, ay:0, r:src.r, c:src.c, kind:src.k || src.kind, wave:src.wave || 'sine', src:null, srcT:0 };
+  }
+  function spawnStorm(){
+    const sp = S.speed / 100, sz = S.size / 100;
+    const x0 = W * LANE_SPAN + 6;
+    const x = x0 + Math.random() * (W - x0) + (S.wind < 0 ? Math.random() * 120 : 0) - (S.wind > 0 ? Math.random() * 120 : 0);
+    if (Math.random() < .22){
+      const keys = Object.keys(DRUM);
+      const d = DRUM[keys[Math.floor(Math.random() * keys.length)]];
+      const k = keys.find(n => DRUM[n] === d);
+      const dr = makeDrop(Object.assign({k}, d), x, -20, d.vy * (.8 + Math.random() * .4));
+      dr.storm = true; drops.push(dr); return;
+    }
+    const vy = 380 + (Math.random() * 2 - 1) * 300 * sp + (Math.random() < .12 * sp ? 420 * sp : 0);
+    const r = Math.max(.6, 1.6 + (Math.random() * 2 - 1) * 1.4 * sz + (Math.random() < .08 * sz ? 2.2 : 0));
+    const col = MEL[Math.floor(Math.random() * MEL.length)];
+    const dr = makeDrop({k:'mel', c:col.c, wave:col.wave, r}, x, -30 - Math.random() * 40, Math.max(140, vy));
+    dr.storm = true; drops.push(dr);
+  }
+  function laneStep(){
+    LANES.forEach((l, i) => {
+      if (l.p[step % 16] === 'x') drops.push(makeDrop(l, laneX(i) + (Math.random() - .5) * 1.5, -20, l.vy));
+    });
+    step++;
+  }
+
+  // ---------- cups ----------
+  const cups = [];
+  const CH = 30;
+  function cap(c){ return Math.max(3, Math.round(c.w / 4) + 2); }
+  function addCup(x, y, w){
+    const c = { x, y, w: w || S.newW, a: 0, off: 0, glow: 0, col: '#1f6fe5', last: 0, lastPour: 0, side: 1, water: [] };
+    cups.push(c); return c;
+  }
+  function toLocal(c, px, py){
+    const dx = px - c.x, dy = py - c.y, ca = Math.cos(-c.a), sa = Math.sin(-c.a);
+    return [dx * ca - dy * sa, dx * sa + dy * ca];
+  }
+  function hitCup(px, py){
+    for (let i = cups.length - 1; i >= 0; i--){
+      const c = cups[i];
+      const [lx, ly] = toLocal(c, px, py);
+      const half = Math.max(c.w / 2, 14) + 8;
+      if (lx > -half && lx < half && ly > -18 && ly < CH + 16) return i;
+    }
+    return -1;
+  }
+  function addRow(y){
+    const n = Math.max(6, Math.floor(W / (S.newW + 8)));
+    const gap = W / n;
+    for (let i = 0; i < n; i++) addCup(gap * i + gap / 2, y);
+  }
+  function catchAll(){
+    cups.length = 0; select(null);
+    const w = 36, n = Math.ceil(W / w), gap = W / n;
+    for (let i = 0; i < n; i++) addCup(gap * i + gap / 2, H - CH - 26, w);
+    for (let i = 0; i < n - 1; i++) addCup(gap * i + gap, H - CH * 2 - 46, w);
+  }
+
+  // ---------- cup panel ----------
+  const panel = document.getElementById('cup');
+  const cw = document.getElementById('cw'), ct = document.getElementById('ct'), nlabel = document.getElementById('nlabel');
+  let sel = null;
+  function select(c){
+    sel = c;
+    if (!c){ panel.classList.remove('show'); return; }
+    cw.value = Math.round(c.w); ct.value = Math.round(c.a * 180 / Math.PI);
+    refreshNote(); panel.classList.add('show');
+  }
+  function refreshNote(){
+    if (!sel) return;
+    const m = noteFor(sel.x, sel.off);
+    nlabel.textContent = NAMES[m % 12] + (Math.floor(m / 12) - 1);
+  }
+  cw.oninput = () => { if (sel) sel.w = +cw.value; };
+  ct.oninput = () => { if (sel) sel.a = +ct.value * Math.PI / 180; };
+  document.getElementById('nup').onclick = () => { if (sel){ sel.off++; refreshNote(); } };
+  document.getElementById('ndown').onclick = () => { if (sel){ sel.off--; refreshNote(); } };
+  document.getElementById('cflat').onclick = () => { if (sel){ sel.a = 0; ct.value = 0; } };
+  document.getElementById('cdel').onclick = () => { if (sel){ cups.splice(cups.indexOf(sel), 1); select(null); } };
+  document.getElementById('cdone').onclick = () => select(null);
+
+  // ---------- input ----------
+  const modes = ['PLACE','MOVE','ERASE'];
+  let mode = 0;
+  const toolBtn = document.getElementById('tool');
+  toolBtn.onclick = () => { mode = (mode + 1) % modes.length; toolBtn.textContent = modes[mode]; };
+  let dragging = null, offX = 0, offY = 0;
+  cv.addEventListener('pointerdown', e => {
+    initAudio();
+    const x = e.clientX, y = e.clientY;
+    const hit = hitCup(x, y);
+    if (modes[mode] === 'ERASE'){
+      if (hit >= 0){ if (cups[hit] === sel) select(null); cups.splice(hit, 1); }
+      return;
+    }
+    if (hit >= 0){
+      dragging = cups[hit]; offX = dragging.x - x; offY = dragging.y - y; select(dragging); return;
+    }
+    if (modes[mode] === 'PLACE' && y > 80){
+      select(null);
+      dragging = addCup(x, Math.min(y, H - 20)); offX = 0; offY = 0;
+    } else select(null);
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    dragging.x = Math.min(Math.max(e.clientX + offX, 4), W - 4);
+    dragging.y = Math.min(Math.max(e.clientY + offY, 84), H - 20);
+    if (dragging === sel) refreshNote();
+  });
+  const endDrag = () => { dragging = null; };
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', endDrag);
+  const start = document.getElementById('start');
+  start.addEventListener('pointerdown', () => { initAudio(); start.style.display = 'none'; });
+
+  // ---------- menu ----------
+  const menu = document.getElementById('menu'), scrim = document.getElementById('scrim');
+  const openMenu = () => { menu.classList.add('open'); scrim.classList.add('show'); };
+  const closeMenu = () => { menu.classList.remove('open'); scrim.classList.remove('show'); };
+  document.getElementById('burger').onclick = () => { initAudio(); openMenu(); };
+  document.getElementById('close').onclick = closeMenu;
+  scrim.onclick = closeMenu;
+  const rootSel = document.getElementById('root');
+  NAMES.forEach((n, i) => { const o = document.createElement('option'); o.value = i; o.textContent = n; rootSel.appendChild(o); });
+  const bind = (id, fn, ev) => document.getElementById(id)[ev || 'oninput'] = e => fn(e.target.value);
+  bind('bpm', v => { S.bpm = +v; if (delay) delay.delayTime.value = 60 / S.bpm * .75; });
+  bind('density', v => S.density = +v);
+  bind('speed', v => S.speed = +v);
+  bind('size', v => S.size = +v);
+  bind('wind', v => S.wind = +v);
+  bind('newcw', v => S.newW = +v);
+  bind('scale', v => { S.scale = v; refreshNote(); }, 'onchange');
+  bind('root', v => { S.root = +v; refreshNote(); }, 'onchange');
+  bind('vol', v => { S.vol = v / 100; if (master && !S.muted) master.gain.value = S.vol; });
+  bind('dvol', v => { S.dvol = v / 100; if (drumBus) drumBus.gain.value = S.dvol; });
+  bind('echo', v => { S.echo = v / 100; if (wet) wet.gain.value = S.echo; });
+  const toggle = (id, key, on, off, after) => {
+    const b = document.getElementById(id);
+    b.onclick = () => { S[key] = !S[key]; b.textContent = S[key] ? on : off; if (after) after(); };
+  };
+  toggle('mute', 'muted', 'Unmute', 'Mute', () => { if (master) master.gain.value = S.muted ? 0 : S.vol; });
+  toggle('pause', 'paused', 'Resume rain', 'Pause rain');
+  toggle('lanesBtn', 'lanes', 'Hide lanes', 'Show lanes');
+  document.getElementById('row').onclick = () => {
+    const per = Math.max(6, Math.floor(W / (S.newW + 8)));
+    addRow(H - CH - 26 - (Math.floor(cups.length / per) % 6) * (CH + 22)); closeMenu();
+  };
+  document.getElementById('all').onclick = () => { catchAll(); closeMenu(); };
+  document.getElementById('clear').onclick = () => { cups.length = 0; select(null); };
+
+  // ---------- draw ----------
+  function cupPath(c){
+    const hw = c.w / 2, inset = Math.min(5, c.w * .18);
+    g.beginPath();
+    g.moveTo(-hw, 0); g.lineTo(-hw + inset, CH); g.lineTo(hw - inset, CH); g.lineTo(hw, 0);
+  }
+  function drawCup(c){
+    g.save();
+    g.translate(c.x, c.y); g.rotate(c.a);
+    if (c.glow > 0){ g.shadowColor = c.col; g.shadowBlur = 18 * c.glow; }
+    cupPath(c);
+    g.fillStyle = 'rgba(255,255,255,.88)'; g.fill();
+    g.shadowBlur = 0;
+    const ratio = Math.min(1, c.water.length / cap(c));
+    if (ratio > 0){
+      g.save();
+      cupPath(c); g.closePath(); g.clip();
+      g.rotate(-c.a);
+      const level = Math.cos(c.a) * CH * (1 - ratio * .95);
+      g.globalAlpha = .7; g.fillStyle = c.water[c.water.length - 1].c;
+      g.fillRect(-200, level - Math.sin(Math.abs(c.a)) * 0, 400, 400);
+      g.restore();
+    }
+    cupPath(c);
+    g.lineWidth = c === sel ? 3.5 : 2.5;
+    g.strokeStyle = c === sel ? '#0b3fa0' : '#1f6fe5';
+    g.stroke();
+    if (c === sel){
+      g.setLineDash([4, 4]); g.strokeStyle = 'rgba(31,111,229,.5)'; g.lineWidth = 1.5;
+      g.strokeRect(-c.w / 2 - 6, -8, c.w + 12, CH + 16); g.setLineDash([]);
+    }
+    g.restore();
+    const m = noteFor(c.x, c.off);
+    g.fillStyle = '#16324f'; g.font = '700 11px system-ui,sans-serif'; g.textAlign = 'center';
+    g.fillText(NAMES[m % 12], c.x, c.y + CH + 13);
+  }
+  function drawLaneGuides(){
+    const lw = laneW();
+    LANES.forEach((l, i) => {
+      const x = laneX(i);
+      g.fillStyle = l.c; g.globalAlpha = .07;
+      g.fillRect(x - lw / 2 + 1, 70, lw - 2, H);
+      g.globalAlpha = 1;
+      g.beginPath(); g.arc(x, 76, Math.max(3, Math.min(lw * .32, l.r + 2)), 0, Math.PI * 2);
+      g.fillStyle = l.c; g.fill();
+      g.lineWidth = 1.2; g.strokeStyle = '#1f6fe5'; g.stroke();
+    });
+    g.fillStyle = 'rgba(31,111,229,.08)';
+    g.fillRect(W * LANE_SPAN + 2, 70, 2, H);
+  }
+
+  let lastT = performance.now();
+  function frame(now){
+    const dt = Math.min(.05, (now - lastT) / 1000); lastT = now;
+    const tsec = now / 1000;
+    const bg = g.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, '#e6f0fc'); bg.addColorStop(1, '#f7fbff');
+    g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    drawLaneGuides();
+
+    if (!S.paused){
+      stormAcc += S.density * dt * ((W * (1 - LANE_SPAN)) / 120);
+      while (stormAcc >= 1){ spawnStorm(); stormAcc--; }
+      if (S.lanes){
+        stepAcc += dt;
+        const sd = 60 / S.bpm / 4;
+        while (stepAcc >= sd){ laneStep(); stepAcc -= sd; }
+      }
+    }
+
+    // pouring and spilling
+    for (const c of cups){
+      const tilt = Math.abs(c.a);
+      const eff = Math.floor(cap(c) * Math.max(0, 1 - tilt / (80 * Math.PI / 180)));
+      if (c.water.length > eff && tsec - c.lastPour > .085){
+        c.lastPour = tsec;
+        let side;
+        if (tilt < .05){ c.side = -c.side; side = c.side; } else side = c.a > 0 ? 1 : -1;
+        const lx = c.x + Math.cos(c.a) * side * c.w / 2, ly = c.y + Math.sin(c.a) * side * c.w / 2;
+        const w = c.water.shift();
+        drops.push({ x: lx + side * 2, y: ly, vx: side * (20 + tilt * 40), vy: 30, ay: 980, r: w.r, c: w.c, kind: w.kind, wave: w.wave, src: c, srcT: tsec });
+      }
+    }
+
+    const windX = S.wind * 2.2;
+    for (let i = drops.length - 1; i >= 0; i--){
+      const d = drops[i];
+      const px = d.x, py = d.y;
+      d.vy += d.ay * dt;
+      d.y += d.vy * dt;
+      d.x += (d.vx + (d.storm ? windX * (d.vy / 400) : 0)) * dt;
+      let caught = false;
+      for (let j = 0; j < cups.length; j++){
+        const c = cups[j];
+        if (d.src === c && tsec - d.srcT < .5) continue;
+        const [ax, ay] = toLocal(c, px, py), [bx, by] = toLocal(c, d.x, d.y);
+        if (ay <= 0 && by > 0){
+          const tt = ay / (ay - by), cx = ax + (bx - ax) * tt;
+          if (Math.abs(cx) < c.w / 2 - .5){
+            caught = true;
+            if (tsec - c.last > .035){ play(c, d); c.last = tsec; }
+            c.glow = 1; c.col = d.c;
+            if (c.water.length < cap(c) * 2) c.water.push({ c: d.c, r: d.r, kind: d.kind, wave: d.wave });
+            for (let k = 0; k < 3; k++) splashes.push({ x: d.x, y: d.y, vx: (Math.random() * 2 - 1) * 60, vy: -40 - Math.random() * 70, life: .35, c: d.c });
+            break;
+          }
+        }
+      }
+      if (caught || d.y > H + 40 || d.x < -150 || d.x > W + 150){ drops.splice(i, 1); continue; }
+      g.strokeStyle = d.c; g.fillStyle = d.c;
+      g.globalAlpha = .6 + Math.min(.35, d.r * .1);
+      if (d.r >= 3.5){
+        g.beginPath(); g.arc(d.x, d.y, d.r, 0, Math.PI * 2); g.fill();
+        g.lineWidth = d.r * .6; g.lineCap = 'round';
+        g.beginPath(); g.moveTo(d.x, d.y - d.r - d.vy * .02); g.lineTo(d.x, d.y - d.r * .5); g.stroke();
+      } else {
+        const len = d.vy * .028 + d.r * 2;
+        const sx = d.storm ? windX * .028 * (d.vy / 400) : d.vx * .028;
+        g.lineWidth = d.r; g.lineCap = 'round';
+        g.beginPath(); g.moveTo(d.x - sx, d.y - len); g.lineTo(d.x, d.y); g.stroke();
+      }
+    }
+    g.globalAlpha = 1;
+
+    for (let i = splashes.length - 1; i >= 0; i--){
+      const s = splashes[i];
+      s.life -= dt; if (s.life <= 0){ splashes.splice(i, 1); continue; }
+      s.vy += 400 * dt; s.x += s.vx * dt; s.y += s.vy * dt;
+      g.globalAlpha = s.life / .35; g.fillStyle = s.c;
+      g.beginPath(); g.arc(s.x, s.y, 1.6, 0, Math.PI * 2); g.fill();
+    }
+    g.globalAlpha = 1;
+
+    for (const c of cups){ c.glow = Math.max(0, c.glow - dt * 3); drawCup(c); }
+    requestAnimationFrame(frame);
+  }
+
+  function resize(){
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = W * DPR; cv.height = H * DPR;
+    g.setTransform(DPR, 0, 0, DPR, 0, 0);
+    cups.forEach(c => { c.x = Math.min(Math.max(c.x, 4), W - 4); c.y = Math.min(Math.max(c.y, 84), H - 20); });
+  }
+  window.addEventListener('resize', resize);
+  resize();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
