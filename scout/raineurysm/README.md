@@ -8,6 +8,6 @@ Live at raineurysm.vercel.app
 
 This app is checked every morning by Control Troll, an automated test system that loads every app and clicks through its features.
 
-Latest change. 2026-11-13, v2026.11.13. Created raineurysm, a rain music toy where rain falls into vessels that play notes. Rain lanes, drums, bass, a storm zone, narrow cups, and tilt and pour were added. It joins the Stompbox Lab band room, with lanes that rain on the band beat, a shared scale, and notes sent out to visualizers. Vessels come in several kinds, including cup, jug, metal pan, plate, singing bowl, wood block, and ladle, and lanes can rain in triplets, quads, and call and response. Touch handling was tightened so cups land under the finger and a slim vessel panel opens on a tap.
+Latest change. 2026-11-14, v2026.11.14. Added a music machine mode beside simple mode, with troughs, funnels, faucets, sprinklers, dripping vessels, a lane pattern editor, a weather song, thunder, recording, and undo. Added a puzzle mode with five color mixing levels where vessels pour one blended flavor of water. Tapping a goal jar now dumps it out, and a new version prompt keeps an open tab from running old code.
 
 Full history is in CHANGELOG.md.

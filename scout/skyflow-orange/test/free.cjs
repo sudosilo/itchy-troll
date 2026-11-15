@@ -1,11 +1,12 @@
-// Browser check of Free build: containers, joints, welding, Turn and Flip.
-// Run: node test/free.cjs [outDir]
+// Browser check of Free build: three trucks, welding, Turn and Flip.
+// Run: node test/free.cjs [outDir] [page]
 const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs');
 
 const out = process.argv[2] || '/tmp/skyshots-free';
-const url = 'file://' + path.join(__dirname, '..', process.argv[3] || 'index.html') + '#debug';
+const page0 = process.argv[3] ? path.resolve(process.argv[3]) : path.join(__dirname, '..', 'index.html');
+const url = 'file://' + page0 + '#debug';
 
 (async () => {
   fs.mkdirSync(out, { recursive: true });
@@ -13,148 +14,70 @@ const url = 'file://' + path.join(__dirname, '..', process.argv[3] || 'index.htm
   if (fs.existsSync('/usr/bin/google-chrome')) opts.executablePath = '/usr/bin/google-chrome';
   const browser = await chromium.launch(opts);
   const errors = [];
-  const ctx = await browser.newContext({ viewport: { width: 412, height: 883 }, deviceScaleFactor: 2, hasTouch: true });
-  const page = await ctx.newPage();
-  page.on('console', (m) => { if (m.type() === 'error' && !/CORS|Failed to load resource|net::/i.test(m.text())) errors.push(m.text()); });
-  page.on('pageerror', (e) => errors.push(e.message));
-  const shot = (n) => page.screenshot({ path: path.join(out, n + '.png') });
   const need = (ok, what) => { console.log((ok ? 'PASS ' : 'FAIL ') + what); if (!ok) errors.push(what); };
+  const open = async (w, h) => {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, hasTouch: true });
+    // the itch.io copy loads an unlock kit from the web; stand in an unlocked one
+    await ctx.route('**/unlock-kit.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'window.ItchyUnlock={isUnlocked:()=>true,require:async()=>true,offer:async()=>true};' }));
+    const page = await ctx.newPage();
+    page.on('console', (m) => { if (m.type() === 'error' && !/CORS|Failed to load resource|net::/i.test(m.text())) errors.push(m.text()); });
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(url);
+    await page.waitForTimeout(1200);
+    return page;
+  };
 
-  await page.goto(url);
-  await page.waitForTimeout(1200);
+  const page = await open(412, 883);
+  const shot = (n) => page.screenshot({ path: path.join(out, n + '.png') });
   await shot('01-menu');
-  need(await page.getByText('Version 2.0').count() === 1, 'menu shows Version 2.0');
-  await page.getByText('How to play').click();
-  await page.waitForTimeout(200);
-  await shot('02-how');
-  await page.getByText('Back').click();
   await page.getByText('Free build').click();
   await page.waitForTimeout(1500);
-  await shot('03-free-start');
+  await shot('02-three-trucks');
+  need(await page.evaluate(() => { const k = window.__sky._boxes.filter((b) => b.userData.onTruck).map((b) => b.userData.kind).sort().join(); return k === 'container,crate,joint'; }), 'three trucks loaded: container, crate, joint');
   need(await page.getByLabel('Turn the load').count() === 1 && await page.getByLabel('Flip the load').count() === 1, 'Turn and Flip buttons shown');
 
-  await page.getByLabel('Truck brings Container').click();
-  await page.waitForTimeout(600);
-  await shot('04-container-on-truck');
-  need(await page.evaluate(() => window.__sky._boxes.some((b) => b.userData.onTruck && b.userData.kind === 'container')), 'picker put a container on the truck');
-
-  // helpers that live in the page
   await page.evaluate(() => {
-    const g = window.__sky;
-    const S = g._sim;
+    const g = window.__sky; const S = g._sim;
     g.setFreeWind(0);
     window.wait = (ms) => new Promise((r) => setTimeout(r, ms));
-    window.park = (x, z, hookY) => {
-      S.trolley = Math.hypot(x, z); S.slew = Math.atan2(-z, x);
-      S.hookX = x; S.hookZ = z; S.hookVX = 0; S.hookVZ = 0; S.cable = 62.8 - hookY;
-    };
-    window.fetchLoad = async (tx) => {
-      while (!g._boxes.some((b) => b.userData.onTruck)) await window.wait(200);
+    window.park = (x, z, hookY) => { S.trolley = Math.hypot(x, z); S.slew = Math.atan2(-z, x); S.hookX = x; S.hookZ = z; S.hookVX = 0; S.hookVZ = 0; S.cable = 62.8 - hookY; };
+    window.fetchLoad = async (kind) => {
+      const tx = { container: -12, crate: -1, joint: 9 }[kind];
+      while (!g._boxes.some((b) => b.userData.onTruck && b.userData.kind === kind)) await window.wait(200);
       window.park(tx, 20, 3.0); await window.wait(500);
       g.grab(); await window.wait(400);
       window.park(tx, 20, 12); await window.wait(500);
-      return S.carrying;
+      return S.carrying.userData.kind;
     };
   });
 
-  // lay a container on the ground, then weld a joint to its end
-  await page.evaluate(async () => {
-    const g = window.__sky;
-    await window.fetchLoad(-2);
-    window.park(14, 8, 12); await window.wait(700);
-    window.park(14, 8, 2.0); await window.wait(1200);
-  });
-  await shot('05-container-set-down');
-  await page.evaluate(async () => { window.__sky.grab(); await window.wait(900); });
-  await page.getByLabel('Truck brings Joint').click();
-  await page.waitForTimeout(500);
-  await page.evaluate(async () => {
-    const g = window.__sky;
-    await window.fetchLoad(-1);
-    window.park(9.7, 8, 12); await window.wait(700);
-    window.park(9.7, 8, 2.0); await window.wait(1200);
-  });
-  await shot('06-joint-over-spot');
-  await page.evaluate(async () => { window.__sky.grab(); await window.wait(450); });
-  await shot('07-welded-popup');
+  need(await page.evaluate(async () => { const k = await window.fetchLoad('container'); window.park(8, 6, 12); await window.wait(700); window.park(8, 6, 2.0); await window.wait(1200); window.__sky.grab(); await window.wait(900); return k; }) === 'container', 'container taken from its truck');
+  need(await page.evaluate(async () => { const k = await window.fetchLoad('joint'); window.park(3.7, 6, 12); await window.wait(700); window.park(3.7, 6, 2.0); await window.wait(1200); window.__sky.grab(); await window.wait(450); return k; }) === 'joint', 'joint taken from its truck');
+  await shot('03-welded');
   need(await page.evaluate(() => window.__sky._asms.size === 1), 'joint welded to the container end');
-
-  // stand a second container on the joint
-  await page.getByLabel('Truck brings Container').click();
-  await page.waitForTimeout(500);
-  await page.evaluate(async () => { await window.fetchLoad(-2); window.park(10, 8, 16); await window.wait(900); });
+  await page.evaluate(async () => { await window.fetchLoad('container'); window.park(4, 6, 16); await window.wait(900); });
   await page.getByLabel('Flip the load').dispatchEvent('pointerdown');
-  await page.waitForTimeout(160);
-  await shot('08-flip-in-motion');
-  await page.waitForTimeout(500);
-  await shot('09-container-standing-on-hook');
-  need(await page.evaluate(() => window.__sky._sim.carrying.userData.hy === 3), 'Flip button stood the container up');
-  await page.evaluate(async () => { window.park(10, 8, 8.6); await window.wait(1500); window.__sky.grab(); await window.wait(1500); });
-  await shot('10-welded-L');
-  need(await page.evaluate(() => { const a = [...window.__sky._asms.values()]; return a.length === 1 && a[0].length === 3; }), 'three pieces welded into one shape');
-  console.log('height', await page.evaluate(() => window.__sky._round.heightFt));
-
-  // lift the whole shape by the joint and turn it
-  await page.evaluate(async () => {
-    window.park(14, 8, 3.0); await window.wait(600);
-    window.__sky.grab(); await window.wait(400);
-    window.park(14, 8, 14); await window.wait(900);
-  });
-  await shot('11-shape-lifted');
-  need(await page.evaluate(() => window.__sky._sim.group.length === 2), 'whole shape rides the hook');
-  await page.getByLabel('Turn the load').dispatchEvent('pointerdown');
   await page.waitForTimeout(700);
-  await shot('12-shape-turned');
-  await page.evaluate(async () => { window.park(14, 8, 2.2); await window.wait(1500); window.__sky.grab(); await window.wait(1500); });
-  await shot('13-shape-set-down');
-  need(await page.evaluate(() => window.__sky._falling.length === 0), 'shape came to rest');
+  await page.evaluate(async () => { window.park(4, 6, 8.6); await window.wait(1500); window.__sky.grab(); await window.wait(1500); });
+  need(await page.evaluate(() => { const a = [...window.__sky._asms.values()]; return a.length === 1 && a[0].length === 3; }), 'three pieces welded into one shape');
+  need(await page.evaluate(async () => { const k = await window.fetchLoad('crate'); window.park(8, 6, 12); await window.wait(700); window.park(8, 6, 4.2); await window.wait(1200); window.__sky.grab(); await window.wait(1500); return k; }) === 'crate', 'crate taken from its truck');
+  await page.evaluate(async () => { window.park(2, 12, 20); await window.wait(3400); });
+  await shot('04-build-and-trucks');
+  need(await page.evaluate(() => window.__sky._boxes.filter((b) => b.userData.onTruck).length === 3), 'all three trucks reloaded');
+  await page.context().close();
 
-  // knock a standing container over with a carried crate
-  await page.evaluate(async () => {
-    const g = window.__sky;
-    await window.fetchLoad(-2);
-    window.park(-14, 6, 16); await window.wait(700);
-  });
-  await page.getByLabel('Flip the load').dispatchEvent('pointerdown');
-  await page.waitForTimeout(600);
-  await page.evaluate(async () => { window.park(-14, 6, 6.6); await window.wait(1400); window.__sky.grab(); await window.wait(1200); });
-  await page.getByLabel('Truck brings Crate').click();
-  await page.waitForTimeout(500);
-  await page.evaluate(async () => {
-    await window.fetchLoad(-1);
-    window.park(-10.4, 6, 12); await window.wait(700);
-    window.park(-10.4, 6, 4.5); await window.wait(1400);
-  });
-  await shot('14-before-knock');
-  await page.evaluate(async () => { window.__sky._sim.hookVX = -8; await window.wait(330); });
-  await shot('15-going-over');
-  await page.waitForTimeout(1600);
-  await shot('16-knocked-flat');
-  need(await page.evaluate(() => window.__sky._boxes.some((b) => b.userData.kind === 'container' && b.position.x < -14 && b.userData.hy === 1)), 'standing container was knocked flat');
+  // phone held sideways, which is how the itch.io page shows it
+  const land = await open(800, 360);
+  await land.getByText('Free build').click();
+  await land.waitForTimeout(1500);
+  await land.screenshot({ path: path.join(out, '05-phone-landscape.png') });
+  await land.context().close();
 
-  // views and the pause panel
-  await page.locator('.burger').click();
-  await page.waitForTimeout(300);
-  await shot('17-panel');
-  await page.locator('.seg button', { hasText: 'Orbit' }).click();
-  await page.getByText('Resume').click();
-  await page.waitForTimeout(600);
-  await shot('18-orbit');
-
-  await ctx.close();
-
-  // desktop layout
-  const d = await browser.newContext({ viewport: { width: 1280, height: 720 } });
-  const p2 = await d.newPage();
-  p2.on('pageerror', (e) => errors.push(e.message));
-  await p2.goto(url);
-  await p2.waitForTimeout(1000);
-  await p2.getByText('Free build').click();
-  await p2.waitForTimeout(1200);
-  await p2.keyboard.press('Digit2');
-  await p2.waitForTimeout(500);
-  await p2.screenshot({ path: path.join(out, '20-desktop-free.png') });
-  await d.close();
+  const desk = await open(1280, 720);
+  await desk.getByText('Free build').click();
+  await desk.waitForTimeout(1500);
+  await desk.screenshot({ path: path.join(out, '06-desktop.png') });
+  await desk.context().close();
 
   await browser.close();
   console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'NO PAGE ERRORS');

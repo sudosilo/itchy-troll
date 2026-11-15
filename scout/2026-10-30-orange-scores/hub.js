@@ -12,6 +12,14 @@
     if (s < 86400) return Math.round(s / 3600) + 'h ago';
     return Math.round(s / 86400) + 'd ago';
   }
+  // flagsTime scores pack checkpoints and time: flags*100000 + (99999 - tenths of a second)
+  function show(score, fmt) {
+    if (fmt === 'flagsTime') {
+      var f = Math.floor(score / 100000), t = 99999 - (score % 100000), m = Math.floor(t / 600), sec = ((t % 600) / 10).toFixed(1);
+      return f + (f === 1 ? ' flag ' : ' flags ') + m + ':' + (sec < 10 ? '0' : '') + sec;
+    }
+    return score.toLocaleString();
+  }
   function fill(box, nodes, emptyText) {
     box.replaceChildren();
     if (!nodes.length) { box.appendChild(el('p', 'empty', emptyText)); return; }
@@ -27,7 +35,7 @@
         row.appendChild(el('span', 'game', g.name));
         if (g.top) {
           row.appendChild(el('span', 'tag', g.top.tag));
-          row.appendChild(el('span', 'score', g.top.score.toLocaleString()));
+          row.appendChild(el('span', 'score', show(g.top.score, g.fmt)));
         } else {
           row.appendChild(el('span', 'score dim', 'no scores yet'));
         }
@@ -45,7 +53,7 @@
         row.appendChild(el('span', 'tag', a.tag));
         row.appendChild(el('span', 'game', a.name));
         if (a.domain) row.appendChild(Scores.linkEl(a));
-        row.appendChild(el('span', 'score', a.score.toLocaleString()));
+        row.appendChild(el('span', 'score', show(a.score, a.fmt)));
         row.appendChild(el('span', 'dim', ago(a.ts)));
         return row;
       }), 'No plays yet');

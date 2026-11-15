@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createGame, RULES, ROUND_SECONDS, KINDS, KIND_LIST } from './game.js';
+import { createGame, RULES, ROUND_SECONDS } from './game.js';
 import { createAudio } from './audio.js';
 import { fetchBoard, submitScore, cleanTag, errorText } from './scores.js';
 
@@ -22,10 +22,9 @@ const DEFAULT_SETTINGS = {
   sound: true,
   gauges: true,
   freeWind: 8,
-  supply: 'crate',
   tag: ''
 };
-const VERSION = '2.0';
+const VERSION = '2.1';
 const DEFAULT_BEST = { score: 0, heightFt: 0, freeHeightFt: 0 };
 const VIEWS = [['follow', 'Follow'], ['cab', 'Cab'], ['orbit', 'Orbit'], ['spotter', 'Spotter']];
 const KEYS = {
@@ -147,7 +146,6 @@ function App() {
       trim: s.trim,
       view: s.view,
       freeWind: s.freeWind,
-      supply: s.supply,
       onHud: (h) => {
         setHud(h);
         if (engineMode !== 'attract') audio.ambient(h.moving, h.windMph, engine.isPaused() || h.phase === 'done');
@@ -220,7 +218,6 @@ function App() {
   useEffect(() => { if (engineRef.current) engineRef.current.setTrim(settings.trim); }, [settings.trim]);
   useEffect(() => { if (engineRef.current) engineRef.current.setView(settings.view); }, [settings.view]);
   useEffect(() => { if (engineRef.current) engineRef.current.setFreeWind(settings.freeWind); }, [settings.freeWind]);
-  useEffect(() => { if (engineRef.current) engineRef.current.setSupply(settings.supply); }, [settings.supply]);
   useEffect(() => { audioRef.current.setEnabled(settings.sound); }, [settings.sound]);
 
   // the side menu pauses the game
@@ -252,7 +249,6 @@ function App() {
       if (e.code === 'Space') { eng.grab(); e.preventDefault(); }
       else if (e.code === 'KeyR') eng.turn();
       else if (e.code === 'KeyF') eng.flip();
-      else if (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3') saveSettings({ supply: KIND_LIST[parseInt(e.code.slice(5), 10) - 1] });
       else if (e.code === 'KeyC') {
         const i = VIEWS.findIndex((v) => v[0] === settingsRef.current.view);
         saveSettings({ view: VIEWS[(i + 1) % VIEWS.length][0] });
@@ -327,8 +323,8 @@ function App() {
                 <p>Lower the hook onto the crate on the truck and press Grab. Carry it to open ground, set it down, and press Drop. The truck brings a new crate three seconds later.</p>
                 <p>Stack crates on top of each other. The outline under a carried crate turns green when it is lined up. Wind pushes the load and grows through the round.</p>
                 <p>You score {RULES.perFoot} points for each foot of tower still standing when time runs out, plus a bonus for every well centered crate. Crates that hit the truck or fall off the tower cost points.</p>
-                <p>Free build has no clock and adds containers and weld joints. Pick what the truck brings at the top of the screen. Turn and Flip swing the load a quarter turn, so a container can lie either way or stand on end. Any piece set flush against a joint is welded to it, and a welded shape lifts, turns and falls as one. Tall pieces go over when you knock them.</p>
-                <p className="keys">Keyboard: A and D slew, W and S move the trolley, up and down arrows hoist, Space grabs and drops, R turns the load, F flips it, 1 2 3 pick the truck load, C changes the camera, P pauses. Drag the scene to turn the camera. Pinch or scroll to zoom.</p>
+                <p>Free build has no clock and three trucks: one brings crates, one brings containers, one brings weld joints. Each truck brings a new piece after you take one. Turn and Flip swing the load a quarter turn, so a container can lie either way or stand on end. Any piece set flush against a joint is welded to it, and a welded shape lifts, turns and falls as one. Tall pieces go over when you knock them.</p>
+                <p className="keys">Keyboard: A and D slew, W and S move the trolley, up and down arrows hoist, Space grabs and drops, R turns the load, F flips it, C changes the camera, P pauses. Drag the scene to turn the camera. Pinch or scroll to zoom.</p>
                 <button type="button" className="btn" onClick={() => setHowOpen(false)}>Back</button>
               </section>
             ) : (
@@ -339,7 +335,7 @@ function App() {
                 </button>
                 <button type="button" className="btn" onClick={() => startGame('free')}>
                   <span className="btn-main">Free build</span>
-                  <span className="btn-sub">Containers and weld joints, no clock</span>
+                  <span className="btn-sub">Three trucks: crates, containers, weld joints</span>
                 </button>
                 <div className="menu-row">
                   <button type="button" className="btn btn-small" onClick={() => setHowOpen(true)}>How to play</button>
@@ -415,24 +411,6 @@ function App() {
               <div><dt>Swing</dt><dd>{hud.swing.toFixed(1)} ft</dd></div>
               <div><dt>Load</dt><dd>{num(hud.load)} lb</dd></div>
             </dl>
-          )}
-
-          {!timed && !menuOpen && !result && (
-            <div className="supply">
-              <span className="supply-label">Truck brings</span>
-              <div className="supply-row">
-                {KIND_LIST.map((k) => (
-                  <button
-                    key={k} type="button" aria-label={'Truck brings ' + KINDS[k].name}
-                    className={settings.supply === k ? 'is-on' : ''}
-                    onClick={() => saveSettings({ supply: k })}
-                  >
-                    <span className={'pc pc-' + k} aria-hidden="true" />
-                    <span>{KINDS[k].name}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
           )}
 
           <div className="popups" aria-live="polite">

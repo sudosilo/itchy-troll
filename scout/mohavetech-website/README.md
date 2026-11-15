@@ -8,6 +8,6 @@ Live at mohavetech-website.vercel.app.
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-11-11, v2026.11.11. Added a dark mode for the modern look with a menu switch. Stars now run behind the links, and the panels are see through. The retro look got stars too. Deploy dates were synced.
+Latest change. 2026-11-14, v2026.11.14. Deploy dates were synced.
 
 Full history is in CHANGELOG.md.

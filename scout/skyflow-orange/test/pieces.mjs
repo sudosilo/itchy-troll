@@ -43,20 +43,20 @@ function square(c) {
 }
 const ext = (c) => [c.userData.hx, c.userData.hy, c.userData.hz].join(',');
 
-// 1. the truck brings what the player picks
+// 1. three trucks, one per kind
 {
   const g = mk();
   g.run(0.5);
-  check('starts with a crate', g._boxes[0].userData.kind === 'crate');
-  g.setSupply('container'); g.run(0.2);
-  const c = g._boxes.find((b) => b.userData.onTruck);
-  check('truck load swapped to a container', g._boxes.length === 1 && c.userData.kind === 'container' && ext(c) === '3,1,1');
-  check('container clear of the cab', c.position.x + 3 < 1.25, 'x=' + c.position.x);
-  g.park(-2, 20, 3.0); g.run(0.5);
+  const on = (k) => g._boxes.filter((b) => b.userData.onTruck && b.userData.kind === k);
+  check('three trucks start loaded', g._boxes.length === 3 && on('crate').length === 1 && on('container').length === 1 && on('joint').length === 1);
+  const c = on('container')[0];
+  check('container sits on the long flatbed, clear of the cab', ext(c) === '3,1,1' && c.position.x + 3 < -8.75 && c.position.x === -12, 'x=' + c.position.x);
+  check('crate and joint trucks sit either side', on('crate')[0].position.x === -1 && on('joint')[0].position.x === 9);
+  g.park(-12, 20, 3.0); g.run(0.5);
   check('hook rests on the container', Math.abs(g._sim.hookY - 3.65) < 0.05, 'hookY=' + g._sim.hookY.toFixed(2));
   g.grab(); g.run(0.3);
   check('container grabbed', g._sim.carrying === c);
-  g.park(-2, 20, 12); g.run(1.5);
+  g.park(-12, 20, 12); g.run(1.5);
   check('container not smashed leaving the truck', g._boxes.indexOf(c) !== -1 && !c.userData.smashing);
   g.park(12, 8, 12); g.run(2);
   g.turn(); g.run(0.5);
@@ -68,17 +68,26 @@ const ext = (c) => [c.userData.hx, c.userData.hy, c.userData.hz].join(',');
   g.grab(); g.run(2);
   check('stands after release, 6 ft tall', !g._sim.carrying && g._falling.length === 0 && Math.abs(g._round.heightFt - 6) < 0.02, 'h=' + g._round.heightFt);
   g.run(3.2);
-  check('truck brings another container', g._boxes.filter((b) => b.userData.onTruck && b.userData.kind === 'container').length === 1);
+  check('container truck brings another, other trucks untouched', on('container').length === 1 && on('crate').length === 1 && on('joint').length === 1 && g._boxes.length === 4);
+  // take a joint and a crate too
+  g.park(9, 20, 3.0); g.run(0.5); g.grab(); g.run(0.3);
+  check('joint grabbed from its truck', g._sim.carrying && g._sim.carrying.userData.kind === 'joint');
+  g.park(9, 20, 12); g.run(1); g.park(4, 6, 12); g.run(1.5); g.park(4, 6, 2.2); g.run(2); g.grab(); g.run(1.5);
+  g.park(-1, 20, 3.0); g.run(0.5); g.grab(); g.run(0.3);
+  check('crate grabbed from its truck', g._sim.carrying && g._sim.carrying.userData.kind === 'crate');
+  g.park(-1, 20, 12); g.run(1); g.park(4, 6, 12); g.run(1.5); g.park(4, 6, 4.4); g.run(2); g.grab(); g.run(2);
+  check('crate set on the joint welded', g._asms.size === 1);
+  g.run(3.5);
+  check('every truck reloaded', on('container').length === 1 && on('crate').length === 1 && on('joint').length === 1);
 }
 
 // 2. flip twice returns to the start, and a drop in the middle of a turn lands square
 {
   const g = mk();
   g.run(0.3);
-  g.setSupply('container'); g.run(0.2);
-  g.park(-2, 20, 3.7); g.run(0.5); g.grab(); g.run(0.3);
+  g.park(-12, 20, 3.0); g.run(0.5); g.grab(); g.run(0.3);
   const c = g._sim.carrying;
-  g.park(-2, 20, 14); g.run(1.5);
+  g.park(-12, 20, 14); g.run(1.5);
   g.park(14, 4, 14); g.run(2);
   g.flip(); g.run(0.5); g.flip(); g.run(0.5);
   check('flip then flip back', ext(c) === '3,1,1' && square(c), ext(c));
@@ -151,7 +160,7 @@ const ext = (c) => [c.userData.hx, c.userData.hy, c.userData.hz].join(',');
   c.rotation.z = Math.PI / 2; c.userData.hx = 1; c.userData.hy = 3; c.position.y = 3;
   g.run(0.5);
   check('standing container stays up', c.userData.hy === 3 && g._falling.length === 0);
-  g.park(-1, 20, 3.7); g.run(0.3); g.grab(); g.run(0.2);
+  g.park(-1, 20, 3.0); g.run(0.3); g.grab(); g.run(0.2);
   g.park(-1, 20, 9); g.run(0.6);
   g.park(13.4, 10, 9); g.run(2);
   g.park(13.4, 10, 3.5); g.run(2);
@@ -193,13 +202,12 @@ const ext = (c) => [c.userData.hx, c.userData.hy, c.userData.hz].join(',');
     'j ' + j.position.y.toFixed(2) + ' c ' + c.position.y.toFixed(2) + ' ' + ext(c));
 }
 
-// 9. timed rounds only ever bring crates
+// 9. a timed round has the one crate truck
 {
   const ev = [];
-  const g = createGame({ mode: 'timed', onEvent: (e) => ev.push(e), supply: 'container' });
-  g.setSupply('joint');
+  const g = createGame({ mode: 'timed', onEvent: (e) => ev.push(e) });
   for (let i = 0; i < 300; i++) g._step();
-  check('timed round is crates only', g._boxes.every((b) => b.userData.kind === 'crate') && g.snapshot().supply === 'crate');
+  check('timed round is crates only, one truck', g._boxes.length === 1 && g._boxes[0].userData.kind === 'crate' && g._boxes[0].position.x === -1);
 }
 
 // 10. random play: nothing may break, hang in the air forever or end up crooked
@@ -219,9 +227,8 @@ const ext = (c) => [c.userData.hx, c.userData.hy, c.userData.hz].join(',');
         if (a < 0.2) g.grab();
         else if (a < 0.3) g.turn();
         else if (a < 0.4) g.flip();
-        else if (a < 0.47) g.setSupply(['crate', 'container', 'joint'][Math.floor(rnd() * 3)]);
         // now and then put the hook right on the truck load or over the build
-        if (rnd() < 0.08) { const S = g._sim; if (!S.carrying) g.park(-1.5, 20, 3.6); else g.park(8 + rnd() * 8, -6 + rnd() * 12, 3 + rnd() * 14); }
+        if (rnd() < 0.08) { const S = g._sim; if (!S.carrying) g.park([-12, -1, 9][Math.floor(rnd() * 3)], 20, 3.0); else g.park(8 + rnd() * 8, -6 + rnd() * 12, 3 + rnd() * 14); }
       }
       g._step(); g._flush();
       for (const b of g._boxes) {

@@ -8,6 +8,6 @@ Live at skyflow-orange.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-11-10, v2026.11.10. Created Sky Flow, a crane game where you stack crates as high as they will stand before the clock runs out. Added timed rounds, scoring, sound, and a leaderboard.
+Latest change. 2026-11-14, v2026.11.14. Sky Flow 2.1 added three trucks in Free build.
 
 Full history is in CHANGELOG.md.

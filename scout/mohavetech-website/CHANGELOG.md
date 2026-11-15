@@ -1,5 +1,7 @@
 App Index changelog
 
+2026-11-14, v2026.11.14. Deploy dates were synced.
+
 2026-11-11, v2026.11.11. Added a dark mode for the modern look with a menu switch. Stars now run behind the links, and the panels are see through. The retro look got stars too. Deploy dates were synced.
 
 2026-11-10, v2026.11.10. Added a retro look for the hub with a menu switch back to the classic look. The retro look became the default, and then a modern look with moving stars replaced it as the default. Sync now adds new apps to Unsorted and drops deleted ones. Fixed sync so it no longer renames apps whose name starts with their old date.

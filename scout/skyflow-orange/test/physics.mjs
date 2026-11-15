@@ -29,7 +29,7 @@ function mk(mode, seed) {
 {
   const g = mk('free');
   g.run(0.5);
-  check('one crate on truck', g._boxes.length === 1 && g._boxes[0].userData.onTruck);
+  check('one crate on truck', g._boxes.filter((b) => b.userData.kind === 'crate').length === 1 && g._boxes[0].userData.onTruck);
   g.park(-1, 20, 3.0);
   g.run(0.5);
   check('hook rests on truck crate', Math.abs(g._sim.hookY - (3.25 + 0.4)) < 0.05, 'hookY=' + g._sim.hookY.toFixed(2));
@@ -45,7 +45,7 @@ function mk(mode, seed) {
   check('released and settled', !g._sim.carrying && g._falling.length === 0);
   check('height 2 ft', Math.abs(g._round.heightFt - 2) < 0.01, 'h=' + g._round.heightFt);
   g.run(3.2);
-  check('truck respawned', g._boxes.filter((b) => b.userData.onTruck).length === 1);
+  check('truck respawned', g._boxes.filter((b) => b.userData.onTruck && b.userData.kind === 'crate').length === 1);
 }
 
 // helper: place a crate by teleporting it above a spot and dropping it as a player drop

@@ -1,6 +1,10 @@
 Agent Test Bed changelog
 
-2026-11-13, v2026.11.13. The agent turn was played and merged into the city.
+2026-11-15, v2026.11.15. The agent turn was played and merged into the city.
+
+2026-11-14, v2026.11.14. The agent, steward, and grok turns for the day were played and merged into the city. The viewer now builds labels only near the camera so phones stop running out of memory.
+
+2026-11-13, v2026.11.13. The grok, steward, and two agent turns for the day were played and merged into the city.
 
 2026-11-12, v2026.11.12. The grok turn was played and merged into the city.
 

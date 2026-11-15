@@ -12,14 +12,16 @@ const STEP = 1 / 60;
 export const ROUND_SECONDS = 180;
 const CRATE_LB = 1100;
 
-const TRUCK = { x: 0, z: 20 };
-const BED = { cx: TRUCK.x - 1, cz: TRUCK.z, hx: 2, hz: 1.4, top: 1.25 };
-const CABB = {
-  minX: TRUCK.x + 1.25, maxX: TRUCK.x + 3.75,
-  minY: 0.5, maxY: 2.7,
-  minZ: TRUCK.z - 1.25, maxZ: TRUCK.z + 1.25
-};
-const SPAWN = { x: BED.cx, y: BED.top + HALF, z: BED.cz };
+// One truck per kind of load. A timed round has the crate truck alone. Free
+// build parks three side by side: containers on a long flatbed, crates, joints.
+function makeTruck(x, z, kind, cabColor) {
+  const long = kind === 'container';
+  return {
+    x, z, kind, long, cabColor, emptySince: null,
+    bed: { cx: x - (long ? 2 : 1), cz: z, hx: long ? 3 : 2, hz: 1.4, top: 1.25 },
+    cab: { minX: x + 1.25, maxX: x + 3.75, minY: 0.5, maxY: 2.7, minZ: z - 1.25, maxZ: z + 1.25 }
+  };
+}
 const TRUCK_RESPAWN = 3;
 const SMASH_TIME = 0.35;
 
@@ -215,7 +217,9 @@ export function createGame(opts) {
   let turnRequested = false;
   let flipRequested = false;
   // Free build lets the player pick what the truck brings. Timed rounds are crates only.
-  let supply = mode === 'free' && KINDS[opts.supply] ? opts.supply : 'crate';
+  const trucks = mode === 'free'
+    ? [makeTruck(0, 20, 'crate', 0x2f6fb5), makeTruck(-10, 20, 'container', 0xc8553d), makeTruck(10, 20, 'joint', 0x3a9a6a)]
+    : [makeTruck(0, 20, 'crate', 0x2f6fb5)];
 
   // ---------- scene ----------
   const scene = new THREE.Scene();
@@ -470,12 +474,12 @@ export function createGame(opts) {
   plumb.frustumCulled = false;
   scene.add(plumb);
 
-  // ---------- truck ----------
-  {
+  // ---------- trucks ----------
+  trucks.forEach((T) => {
     const truck = new THREE.Group();
-    truck.position.set(TRUCK.x, 0, TRUCK.z);
+    truck.position.set(T.x, 0, T.z);
     scene.add(truck);
-    const cabM = mesh(new THREE.BoxGeometry(2.5, 2.2, 2.5), lam({ color: 0x2f6fb5 }), true, true);
+    const cabM = mesh(new THREE.BoxGeometry(2.5, 2.2, 2.5), lam({ color: T.cabColor }), true, true);
     cabM.position.set(2.5, 1.6, 0);
     truck.add(cabM);
     const glassM = lam({ color: 0xbfe3f5 });
@@ -483,19 +487,23 @@ export function createGame(opts) {
     const sideA = mesh(new THREE.BoxGeometry(1.3, 0.8, 0.06), glassM); sideA.position.set(2.8, 2.05, 1.26); truck.add(sideA);
     const sideB = sideA.clone(); sideB.position.z = -1.26; truck.add(sideB);
     const bumper = mesh(new THREE.BoxGeometry(0.2, 0.35, 2.6), lam({ color: 0x33373c })); bumper.position.set(3.8, 0.7, 0); truck.add(bumper);
-    const bed = mesh(new THREE.BoxGeometry(4, 0.3, 2.8), lam({ color: 0x6d7074 }), true, true);
-    bed.position.set(-1, 1.1, 0);
+    const bed = mesh(new THREE.BoxGeometry(T.bed.hx * 2, 0.3, 2.8), lam({ color: 0x6d7074 }), true, true);
+    bed.position.set(T.bed.cx - T.x, 1.1, 0);
     truck.add(bed);
-    const frameM = mesh(new THREE.BoxGeometry(5.6, 0.3, 1.2), lam({ color: 0x3a3d41 }), true); frameM.position.set(-0.2, 0.8, 0); truck.add(frameM);
+    const fl = T.long ? 7.6 : 5.6;
+    const frameM = mesh(new THREE.BoxGeometry(fl, 0.3, 1.2), lam({ color: 0x3a3d41 }), true); frameM.position.set(2.6 - fl / 2, 0.8, 0); truck.add(frameM);
     const wheelG = new THREE.CylinderGeometry(0.5, 0.5, 0.4, 16);
     const wheelM = lam({ color: 0x1e1e1e });
-    [[2.5, 0.5, 1.4], [2.5, 0.5, -1.4], [-1.5, 0.5, 1.4], [-1.5, 0.5, -1.4]].forEach(([x, y, z]) => {
+    const rear = T.long ? [-2.2, -3.6] : [-1.5];
+    const spots = [[2.5, 1.4], [2.5, -1.4]];
+    rear.forEach((x) => { spots.push([x, 1.4]); spots.push([x, -1.4]); });
+    spots.forEach(([x, z]) => {
       const w = mesh(wheelG, wheelM, true);
       w.rotation.x = Math.PI / 2;
-      w.position.set(x, y, z);
+      w.position.set(x, 0.5, z);
       truck.add(w);
     });
-  }
+  });
 
   // wind sock near the truck
   const sock = new THREE.Group();
@@ -524,15 +532,20 @@ export function createGame(opts) {
   let colorIdx = 0;
   let boxColorIdx = 0;
 
-  // where a new piece of a kind sits on the truck. A container hangs off the
-  // back of the bed so it stays clear of the cab.
-  function spawnPoint(kind) {
-    const k = KINDS[kind];
-    return { x: kind === 'container' ? BED.cx - 1 : SPAWN.x, y: BED.top + k.hy, z: SPAWN.z };
+  // where a new piece sits on its truck
+  function spawnPoint(ti) {
+    const T = trucks[ti];
+    return { x: T.bed.cx, y: T.bed.top + KINDS[T.kind].hy, z: T.bed.cz };
+  }
+  function truckFor(kind) {
+    for (let i = 0; i < trucks.length; i++) if (trucks[i].kind === kind) return i;
+    return 0;
   }
 
-  function spawnCrate(kind) {
+  // ti is the truck the piece arrives on. Left out, it is the truck that carries that kind.
+  function spawnCrate(kind, ti) {
     kind = KINDS[kind] ? kind : 'crate';
+    if (ti == null) ti = truckFor(kind);
     const k = KINDS[kind];
     let m;
     if (kind === 'container') {
@@ -548,10 +561,11 @@ export function createGame(opts) {
       colorIdx++;
       m = mesh(crateGeo, lam({ color, map: crateTex }), true, true);
     }
-    const p = spawnPoint(kind);
+    const p = spawnPoint(ti);
+    p.y = trucks[ti].bed.top + k.hy;
     m.position.set(p.x, p.y, p.z);
     m.userData = {
-      kind, hx: k.hx, hy: k.hy, hz: k.hz, asm: 0, tumble: null, tumbles: 0,
+      kind, truck: ti, hx: k.hx, hy: k.hy, hz: k.hz, asm: 0, tumble: null, tumbles: 0,
       weight: k.lb, attached: false, onTruck: true, falling: false, smashing: false,
       dropped: false, clear: true, vx: 0, vy: 0, vz: 0, born: sim.time, smashStart: 0
     };
@@ -688,7 +702,6 @@ export function createGame(opts) {
     flipBack: null,
     carryOffX: 0, carryOffY: 0, carryOffZ: 0, carryFloor: 0,
     lastGrab: -10,
-    truckEmptySince: null,
     windMph: 0, windAngle: rand() * Math.PI * 2, windVX: 0, windVZ: 0,
     windP1: rand() * 6, windP2: rand() * 6, windP3: rand() * 6,
     canGrab: null,
@@ -733,9 +746,12 @@ export function createGame(opts) {
   // other pieces of the same welded assembly.
   function restFor(x, z, hx, hy, hz, self, maxRest, skipAsm) {
     let y = hy, box = null, kind = 'ground';
-    if (Math.abs(x - BED.cx) < BED.hx + hx - 0.5 && Math.abs(z - BED.cz) < BED.hz + hz - 0.5) {
-      const r = BED.top + hy;
-      if (r <= maxRest) { y = r; kind = 'bed'; }
+    for (let t = 0; t < trucks.length; t++) {
+      const B = trucks[t].bed;
+      if (Math.abs(x - B.cx) < B.hx + hx - 0.5 && Math.abs(z - B.cz) < B.hz + hz - 0.5) {
+        const r = B.top + hy;
+        if (r > y && r <= maxRest) { y = r; kind = 'bed'; }
+      }
     }
     for (let i = 0; i < boxes.length; i++) {
       const o = boxes[i];
@@ -801,8 +817,11 @@ export function createGame(opts) {
       const bottom = p.y - u.hy;
       const x0 = p.x - u.hx, x1 = p.x + u.hx, z0 = p.z - u.hz, z1 = p.z + u.hz;
       if (bottom < 0.12) { add(x0, x1, z0, z1); continue; }
-      if (Math.abs(bottom - BED.top) < 0.12) {
-        add(Math.max(x0, BED.cx - BED.hx), Math.min(x1, BED.cx + BED.hx), Math.max(z0, BED.cz - BED.hz), Math.min(z1, BED.cz + BED.hz));
+      for (let t = 0; t < trucks.length; t++) {
+        const B = trucks[t].bed;
+        if (Math.abs(bottom - B.top) < 0.12) {
+          add(Math.max(x0, B.cx - B.hx), Math.min(x1, B.cx + B.hx), Math.max(z0, B.cz - B.hz), Math.min(z1, B.cz + B.hz));
+        }
       }
       for (let j = 0; j < boxes.length; j++) {
         const o = boxes[j], ou = o.userData;
@@ -822,6 +841,18 @@ export function createGame(opts) {
       x += body[i].position.x * k; z += body[i].position.z * k; w += k;
     }
     return { x: x / w, z: z / w };
+  }
+  // true when a lone piece rests across two or more pieces and its weight sits between them
+  function bridges(c) {
+    const u = c.userData, p = c.position, bottom = p.y - u.hy;
+    let n = 0;
+    for (let j = 0; j < boxes.length; j++) {
+      const o = boxes[j], ou = o.userData;
+      if (o === c || ou.attached || ou.smashing || ou.falling) continue;
+      if (Math.abs(o.position.y + ou.hy - bottom) > 0.12) continue;
+      if (Math.abs(o.position.x - p.x) < ou.hx + u.hx - 0.01 && Math.abs(o.position.z - p.z) < ou.hz + u.hz - 0.01) n++;
+    }
+    return n >= 2 && !leanOf(c.userData.solo);
   }
   // null when the body stands. Otherwise the direction it leans, as a unit step on one axis.
   function leanOf(body) {
@@ -976,14 +1007,22 @@ export function createGame(opts) {
 
   function overlapsCab(c) {
     const p = c.position, u = c.userData;
-    return (p.x + u.hx) > CABB.minX && (p.x - u.hx) < CABB.maxX &&
-      (p.y + u.hy) > CABB.minY && (p.y - u.hy) < CABB.maxY &&
-      (p.z + u.hz) > CABB.minZ && (p.z - u.hz) < CABB.maxZ;
+    for (let t = 0; t < trucks.length; t++) {
+      const C = trucks[t].cab;
+      if ((p.x + u.hx) > C.minX && (p.x - u.hx) < C.maxX &&
+        (p.y + u.hy) > C.minY && (p.y - u.hy) < C.maxY &&
+        (p.z + u.hz) > C.minZ && (p.z - u.hz) < C.maxZ) return true;
+    }
+    return false;
   }
   function hitsBedSide(c) {
     const p = c.position, u = c.userData;
-    if (p.y - u.hy > BED.top - 0.15) return false;
-    return (BED.hx + u.hx - Math.abs(p.x - BED.cx)) > 0.1 && (BED.hz + u.hz - Math.abs(p.z - BED.cz)) > 0.1;
+    for (let t = 0; t < trucks.length; t++) {
+      const B = trucks[t].bed;
+      if (p.y - u.hy > B.top - 0.15) continue;
+      if ((B.hx + u.hx - Math.abs(p.x - B.cx)) > 0.1 && (B.hz + u.hz - Math.abs(p.z - B.cz)) > 0.1) return true;
+    }
+    return false;
   }
 
   // ---------- grab and drop ----------
@@ -1182,6 +1221,7 @@ export function createGame(opts) {
       weldPass(body);
     }
     if (bodyOf(c).length > 1 || u.kind === 'container') return;
+    if (s.box && bridges(c)) return;
     if (!s.box) {
       if (wasDropped && scoring()) emit({ type: 'base' });
       return;
@@ -1317,8 +1357,11 @@ export function createGame(opts) {
         sim.surfaceTop = r.own.y - hy;
       } else {
         let top = 0;
-        if (Math.abs(sim.hookX - BED.cx) < BED.hx + HOOK_HALF && Math.abs(sim.hookZ - BED.cz) < BED.hz + HOOK_HALF &&
-          prevBottom >= BED.top - 0.3) top = BED.top;
+        for (let t = 0; t < trucks.length; t++) {
+          const B = trucks[t].bed;
+          if (Math.abs(sim.hookX - B.cx) < B.hx + HOOK_HALF && Math.abs(sim.hookZ - B.cz) < B.hz + HOOK_HALF &&
+            prevBottom >= B.top - 0.3) top = B.top;
+        }
         for (let i = 0; i < boxes.length; i++) {
           const o = boxes[i];
           const u = o.userData;
@@ -1426,7 +1469,7 @@ export function createGame(opts) {
           const ox = c.position.x - s.box.position.x;
           const oz = c.position.z - s.box.position.z;
           const off = Math.sqrt(ox * ox + oz * oz);
-          if (offNorm(ox, oz, s.box) > 1) {
+          if (offNorm(ox, oz, s.box) > 1 && !bridges(c)) {
             // more than half off the piece below, so it tips over the edge
             const len = Math.max(0.001, off);
             u.vx = (ox / len) * 2 + u.vx * 0.5;
@@ -1595,8 +1638,9 @@ export function createGame(opts) {
       if (!u.clear) {
         // a piece lifted off the bed cannot be smashed until it has cleared the truck once
         const p = c.position;
-        if (p.y - u.hy > CABB.maxY + 0.2 || p.x + u.hx < BED.cx - BED.hx || p.x - u.hx > CABB.maxX ||
-          Math.abs(p.z - TRUCK.z) > BED.hz + u.hz) u.clear = true;
+        const T = trucks[u.truck] || trucks[0];
+        if (p.y - u.hy > T.cab.maxY + 0.2 || p.x + u.hx < T.bed.cx - T.bed.hx || p.x - u.hx > T.cab.maxX ||
+          Math.abs(p.z - T.z) > T.bed.hz + u.hz) u.clear = true;
         continue;
       }
       if (overlapsCab(c) || hitsBedSide(c)) smashCrate(c);
@@ -1617,15 +1661,17 @@ export function createGame(opts) {
       }
     }
 
-    // the truck brings a new piece 3 seconds after the last one leaves
+    // each truck brings a new piece 3 seconds after its last one leaves
     if (round.phase === 'playing' || round.phase === 'countdown') {
-      let has = false;
-      for (let i = 0; i < boxes.length; i++) if (boxes[i].userData.onTruck) { has = true; break; }
-      if (has) sim.truckEmptySince = null;
-      else if (sim.truckEmptySince === null) sim.truckEmptySince = sim.time;
-      else if (sim.time - sim.truckEmptySince >= TRUCK_RESPAWN) {
-        const k = KINDS[supply];
-        const sp = spawnPoint(supply);
+      for (let t = 0; t < trucks.length; t++) {
+        const T = trucks[t];
+        let has = false;
+        for (let i = 0; i < boxes.length; i++) if (boxes[i].userData.onTruck && boxes[i].userData.truck === t) { has = true; break; }
+        if (has) { T.emptySince = null; continue; }
+        if (T.emptySince === null) { T.emptySince = sim.time; continue; }
+        if (sim.time - T.emptySince < TRUCK_RESPAWN) continue;
+        const k = KINDS[T.kind];
+        const sp = spawnPoint(t);
         let blocked = false;
         for (let i = 0; i < boxes.length; i++) {
           const c = boxes[i];
@@ -1637,7 +1683,7 @@ export function createGame(opts) {
             if (!u.attached) smashCrate(c);
           }
         }
-        if (!blocked) { spawnCrate(supply); sim.truckEmptySince = null; }
+        if (!blocked) { spawnCrate(T.kind, t); T.emptySince = null; }
       }
     }
 
@@ -1968,7 +2014,6 @@ export function createGame(opts) {
       load: sim.carrying ? bodyWeight(bodyOf(sim.carrying)) : 0,
       carryKind: sim.carrying ? sim.carrying.userData.kind : '',
       carryCount: sim.carrying ? sim.group.length + 1 : 0,
-      supply,
       welded: asms.size,
       hookFt: Math.max(0, sim.hookY - HOOK_HALF),
       heightFt: round.heightFt,
@@ -2014,7 +2059,7 @@ export function createGame(opts) {
     if (hudClock >= 0.1) { hudClock = 0; onHud(hudSnapshot()); }
   }
 
-  spawnCrate(supply);
+  trucks.forEach((T, i) => spawnCrate(T.kind, i));
   events.length = 0;
   if (visual) {
     updateVisuals(0);
@@ -2028,23 +2073,6 @@ export function createGame(opts) {
     grab() { grabRequested = true; },
     turn() { turnRequested = true; },
     flip() { flipRequested = true; },
-    // Free build only: choose what the truck brings. A piece still waiting on
-    // the truck is swapped for the new kind right away.
-    setSupply(kind) {
-      if (mode !== 'free' || !KINDS[kind] || kind === supply) return;
-      supply = kind;
-      for (let i = boxes.length - 1; i >= 0; i--) {
-        const c = boxes[i];
-        if (!c.userData.onTruck) continue;
-        if (lastEmissive === c) lastEmissive = null;
-        if (sim.canGrab === c) sim.canGrab = null;
-        scene.remove(c);
-        matsOf(c).forEach((m) => m.dispose());
-        boxes.splice(i, 1);
-      }
-      spawnCrate(kind);
-      sim.truckEmptySince = null;
-    },
     setTrim(t) { trim = Object.assign({}, trim, t); },
     setView(v) { view = v; cam.ready = false; },
     setFreeWind(m) { freeWindMph = m; },

@@ -20,7 +20,7 @@ module.exports = async function (req, res) {
     raw.forEach(function (s) {
       try {
         const a = JSON.parse(s);
-        items.push({ id: a.id, game: a.game, name: (L.GAMES[a.game] || {}).name || a.game, tag: a.tag, link: a.link || '', domain: a.domain || '', score: a.score, ts: a.ts });
+        items.push({ id: a.id, game: a.game, name: (L.GAMES[a.game] || {}).name || a.game, fmt: (L.GAMES[a.game] || {}).fmt || '', tag: a.tag, link: a.link || '', domain: a.domain || '', score: a.score, ts: a.ts });
       } catch (e) {}
     });
     L.send(res, 200, { ok: true, activity: items });

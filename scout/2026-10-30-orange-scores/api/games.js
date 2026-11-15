@@ -13,7 +13,7 @@ module.exports = async function (req, res) {
     let j = 0;
     const games = slugs.map(function (s, i) {
       const g = L.GAMES[s];
-      const out = { game: s, name: g.name, max: g.max, top: null };
+      const out = { game: s, name: g.name, max: g.max, fmt: g.fmt || '', top: null };
       if (ids[i]) {
         out.top = { tag: tags[j] || '', score: Number(tops[i][1]) };
         j++;
