@@ -656,13 +656,14 @@
   #hzDays, #hzYears, #hzArea { display: block; box-sizing: border-box; max-width: calc(100% - 28px); width: calc(100% - 28px); margin: 0 14px 6px 14px; }
   .hz-pop b { color: var(--accent); }
   .here-btn { display: flex !important; align-items: center; justify-content: center; color: var(--accent) !important; }
-  #sideMenu button.tg, #sideMenu #settingsBtn { position: relative; padding-right: 72px; }
+  #sideMenu button.tg, #sideMenu #settingsBtn, #sideMenu #legendBtn { position: relative; padding-right: 72px; }
   .tg-sw { position: absolute; right: 14px; top: 50%; width: 46px; height: 26px; margin-top: -13px; border: 2px solid var(--edge); border-radius: 14px; background: var(--panel); box-sizing: border-box; }
   .tg-sw::after { content: ''; position: absolute; left: 2px; top: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--text); }
   button.tg[aria-pressed="true"] .tg-sw { background: var(--accent); border-color: var(--accent); }
   button.tg[aria-pressed="true"] .tg-sw::after { left: 22px; background: var(--panel); }
   .chev { position: absolute; right: 22px; top: 50%; width: 10px; height: 10px; margin-top: -8px; border-right: 3px solid var(--edge); border-bottom: 3px solid var(--edge); transform: rotate(45deg); }
-  #settingsBtn[aria-expanded="true"] .chev { transform: rotate(-135deg); margin-top: -3px; }
+  #settingsBtn[aria-expanded="true"] .chev, #legendBtn[aria-expanded="true"] .chev { transform: rotate(-135deg); margin-top: -3px; }
+  #legendRows { background: var(--tint); padding: 4px 0 8px 0; border-bottom: 1px solid var(--line); }
   #settingsBox { background: var(--tint); padding: 4px 0 8px 0; border-bottom: 1px solid var(--line); }
   #settingsBox button.secondary { background: var(--tint); }
   .ext-row { display: flex; flex-direction: column; gap: 10px; padding: 6px 14px 12px 14px; }
@@ -835,6 +836,24 @@
   :root[data-theme=night] .leaflet-control-attribution { background: rgba(20, 28, 39, 0.75) !important; color: var(--text-dim) !important; }
   :root[data-theme=night] .leaflet-control-attribution a { color: var(--accent) !important; }
   #menuOverlay { background: var(--shade); }
+
+  /* RTSS and RDSS open in place over the map, so a form underneath is kept as it was */
+  #surveyView { position: absolute; top: calc(var(--head-h) + var(--tabs-h)); left: 0; right: 0; bottom: 0; z-index: 1050; display: none; flex-direction: column; background: var(--bg); }
+  #surveyView.open { display: flex; }
+  #surveyView .sv-bar { display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--panel); border-bottom: 2px solid var(--edge); flex: 0 0 auto; }
+  #surveyView .sv-bar button { width: auto; min-height: 40px; padding: 6px 12px; font-size: 14px; }
+  #surveyView .sv-bar span { flex: 1; min-width: 0; font-size: 13px; font-weight: 800; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #surveyView .sv-bar .sv-app { padding: 6px 10px; }
+  #surveyView .sv-bar .sv-app.on { background: var(--accent); color: var(--panel); border-color: var(--accent); }
+  #surveyView .sv-frame { flex: 1; min-height: 0; }
+  #camView { position: absolute; top: calc(var(--head-h) + var(--tabs-h)); left: 0; right: 0; bottom: 0; background: var(--tint); z-index: 1006; display: none; }
+  #camView.open { display: block; }
+  #camView iframe { width: 100%; height: 100%; border: 0; display: block; }
+  #twinTabs button { padding: 0 2px; font-size: 13px; }
+  #surveyView iframe { width: 100%; height: 100%; border: 0; display: block; background: #ffffff; }
+  body.pip #surveyView { display: none !important; }
+  .ftx-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0 4px 0; }
+  .ftx-row button { min-height: 44px; }
 </style>
 </head>
 <body>
@@ -854,6 +873,7 @@
   <button id="tabRoads">Roads</button>
 </div>
 <div id="violetView"></div>
+<div id="surveyView"><div class="sv-bar"><button class="secondary" id="svBack">Back to Field Twin</button><button class="secondary sv-app" id="svRtss">RTSS</button><button class="secondary sv-app" id="svRdss">RDSS</button><span id="svTitle"></span></div><div class="sv-frame"></div></div>
 
 <div id="actionBar">
   <div class="radar" id="radar">
@@ -863,10 +883,12 @@
   <button id="goDockBtn">Go</button>
   <button id="updateBtn">Log</button>
   <button id="receiptDockBtn">Receipt</button>
+  <button id="ticketDockBtn">Tickets</button>
 </div>
 
 <div id="map"></div>
 <input type="file" id="receiptFile" accept="image/*" capture="environment">
+<input type="file" id="ticketFile" accept="image/*" capture="environment" style="display:none;">
 
 <div id="menuOverlay"></div>
 <div id="sideMenu">
@@ -874,6 +896,7 @@
   <button class="secondary" id="nightBtn">Night look, automatic</button>
   <h3>Capture</h3>
   <button class="secondary" id="receiptBtn">Receipt</button>
+  <button class="secondary" id="ticketsBtn">Tickets</button>
   <button class="secondary tg" id="milesToggleBtn" aria-pressed="false"><span>Odometer</span><i class="tg-sw" aria-hidden="true"></i></button>
   <button class="secondary tg" id="hereToggleBtn" aria-pressed="false"><span>Location</span><i class="tg-sw" aria-hidden="true"></i></button>
   <button class="secondary tg native-only" id="autoTrackBtn" aria-pressed="false" hidden><span>Auto track</span><i class="tg-sw" aria-hidden="true"></i></button>
@@ -906,7 +929,7 @@
   <h3>Traffic cameras</h3>
   <button class="secondary" id="camerasBtn">Cameras</button>
   <h3>Other apps</h3>
-  <div class="ext-row"><button class="ext" id="openCqBtn">Field Twin Glaucous</button><button class="ext" id="openVioletBtn">Field Twin Violet</button></div>
+  <div class="ext-row"><button class="ext" id="openCqBtn">Field Twin Glaucous</button><button class="ext" id="openVioletBtn">Field Twin Violet</button><button class="ext" id="openRtssBtn">RTSS, technology site survey</button><button class="ext" id="openRdssBtn">RDSS, design and setup survey</button></div>
   <h3>Your data</h3>
   <button class="secondary" id="accountBtn">Account and profile</button>
   <button class="secondary" id="exportBtn">Export</button>
@@ -937,8 +960,8 @@
     <button class="secondary" id="camKeyBtn">Service address</button>
     <button class="secondary" id="checkBtn">Service check</button>
   </div>
-  <h3>Color key</h3>
-  <div id="legendRows"></div>
+  <button class="secondary" id="legendBtn" aria-expanded="false"><span>Color key</span><i class="chev" aria-hidden="true"></i></button>
+  <div id="legendRows" hidden></div>
 </div>
 
 <div id="mapFilterBar"><span id="mapFilterText"></span><button class="secondary" id="mapFilterClear" style="padding:8px 10px;font-size:11px;">Show all</button></div>
@@ -2701,6 +2724,7 @@ function showForm(entry) {
   const label = catWords ? catWords.charAt(0).toUpperCase() + catWords.slice(1) : 'Log entry';
   let html = '<h2>' + label + '</h2>';
   html += '<div class="meta-line">' + entry.addressLabel + '</div>';
+  html += '<div id="ftxHere"></div>';
   html += '<div class="question">Stop type, changes the form below</div>';
   html += '<input type="text" id="typeSearch" placeholder="Search types" autocomplete="off" style="margin-bottom:6px;">';
   html += '<div class="icon-picker" id="iconPicker">';
@@ -2743,6 +2767,7 @@ function showForm(entry) {
   html += '</div>';
   panel.innerHTML = html;
   panel.scrollTop = 0;
+  if (typeof ftxHereRow === 'function') ftxHereRow(document.getElementById('ftxHere'), entry);
   panel.classList.add('open');
 
   const typeSearch = document.getElementById('typeSearch');
@@ -3143,7 +3168,9 @@ async function serviceCheck() {
   try {
     const r = await fetch(base + '/health');
     const j = await r.json();
-    row('health', 'status ' + r.status + ', vision key ' + (j.keyConfigured ? 'set' : 'MISSING') + ', redis ' + j.redis);
+    row('health', 'status ' + r.status + ', vision key ' + (j.visionKey === undefined ? 'unknown, old build' : (j.visionKey ? 'set' : 'MISSING')) + ', camera key ' + (j.keyConfigured ? 'set' : 'missing') + ', redis ' + j.redis);
+    if (j.visionLast && j.visionLast.error) row('last reader call', j.visionLast.model + ', ' + j.visionLast.error);
+    else if (j.visionLast && j.visionLast.model) row('last reader call', j.visionLast.model + ', ok');
   } catch (e) {
     row('health', 'unreachable, ' + e.message);
   }
@@ -4982,8 +5009,14 @@ function showInfo() {
   html += '<div>Every kind of place has its own drawn sign: a colored shape with a white picture, the same on every phone. The shape tells the group, such as octagons for food, squares for services and diamonds for work sites, and the picture tells the kind.</div>';
   html += '<div class="question">Floating window</div>';
   html += '<div>In the phone app, leaving Field Twin while a route is running shrinks it into a small floating window over your other apps. Only the map and the next turn show, centered on you, and the page keeps running so the route and your position stay live. Open Field Twin again and it goes back to full size.</div>';
+  html += '<div class="question">Tickets</div>';
+  html += '<div>Tickets brings in work tickets from a photo of the work phone screen. Scan ticket screen reads the ticket number, site, priority and SLA due time, then shows a check screen to fix anything misread and pick the locker. Names, phone numbers and customer details are left out by the reader and the photo is not kept. Each open ticket shows on the map as a round countdown ring, green with time to spare, then yellow, orange, and red once late. Slack is the time left to the SLA minus the drive there. Best next plays the day forward and picks the first stop that wins the most SLAs. When two tickets are about the same drive away, the fork card scores each way so the better side is plain. Closing a ticket inside SLA earns one hundred points plus a bonus for time to spare.</div>';
   html += '<div class="question">Lockers</div>';
   html += '<div>Every stop logged as a parcel locker becomes a locker, named from its notes when a name is in there, such as locker Lasso. Any entry can become one with Make locker. Lockers in the menu lists them all with a search box, and each locker has its own page with its name, address, every stop logged there, all its photos, Go here, and Add photo of this locker. Add lockers from open map data finds Amazon lockers in free open map data within about a hundred miles and adds the ones you do not have. The All lockers switch loads every locker anyone on Field Twin has mapped into your list, shares the name, spot and address of yours back, and shows every locker as a pin. It works even for a coworker on his own account. Only the locker itself is shared: never who added it, when, or your stops and visits.</div>';
+  html += '<div class="question">Sites, RTSS and RDSS</div>';
+  html += '<div>The Sites tab lists every survey site on the survey server, nearest first, with a search box. Each site shows its RTSS and RDSS progress and its pin on the map. RTSS is the technology site survey and RDSS is the design and setup survey, and both open inside Field Twin from a site on the Sites tab, from Other apps in the menu, or from the Survey site row on a log form or an entry. They open over the map, and the bar at the top holds Back to Field Twin plus RTSS and RDSS buttons that switch between the two surveys on the same site. A form you were filling stays as it was underneath, and the menu still opens on top. When no survey site is near the stop, Start an RTSS and RDSS site here makes one on the survey server from the map address. Opened from Field Twin, the survey fills its blank name, address, city, state and location from the stop and never changes anything already answered. RTSS also lists your Field Twin stops at that site in a From Field Twin card, and a stop goes into the RTSS visit log only when you tap Add to visit log. RTSS and RDSS use this same Field Twin account. Opened from Field Twin they are signed in already, and opened on their own you sign in from their menu with the same email and password. The survey server marks every save with the account that made it. It is still open to anyone with a link, so your stops, dates and notes stay off it unless you add them.</div>';
+  html += '<div class="question">Dash cam</div>';
+  html += '<div>The Dash cam tab opens Field Twin Viridian inside Field Twin. It runs the camera, motion sensors and location together, reads plates, shows the reader status including while parked, and keeps plate sightings with a best photo and a page for each plate. The camera runs only while the Dash cam tab is open, and moving to another tab turns it off.</div>';
   html += '<div class="question">Wireless survey</div>';
   html += '<div>Each locker page has a Wireless survey section. Stand at the locker and tap Scan Wi-Fi and Bluetooth. In about ten seconds the phone app lists every Wi-Fi network and every Bluetooth device it can hear there, strongest first, with the band, channel and signal strength of each. The summary line says how crowded the 2.4 band is, which is the band Bluetooth lockers use, and how the Wi-Fi networks spread across its low, middle and high channels. The latest scan stays on the locker with a short history of earlier ones, syncs to your other phones, and is never shared on the team list. When a WiGLE account is connected on the Field Twin server, each scan also goes up to that account as a small WiGLE file holding the radio list, the time and where the phone stood, and nothing about the locker. The scan only listens. It runs in the phone app, because a web browser is not allowed to list Wi-Fi networks.</div>';
   html += '<div class="question">Locker site for Parcelsun</div>';
@@ -5007,11 +5040,11 @@ function showInfo() {
   html += '<div class="question">Entries</div>';
   html += '<div>Tap a sign to open it. Edit changes anything, Delete is on the Edit screen, and the four arrows button moves the pin.</div>';
   html += '<div class="question">Menu</div>';
-  html += '<div>Search, Day log, History, Spend and Mileage look back over your entries. Cameras shows Nevada highway cameras. Lockers holds the All lockers switch and the locker list. Quality and Heat map draw road roughness and how often you travel a road. Crashes, Construction and Crash history show road hazards, and Settings picks how far back and how wide an area. Switches stay the way you leave them.</div>';
+  html += '<div>Search, Day log, History, Spend and Mileage look back over your entries. Cameras shows Nevada highway cameras. Lockers holds the All lockers switch and the locker list. Color key opens the list of place signs. Quality and Heat map draw road roughness and how often you travel a road. Crashes, Construction and Crash history show road hazards, and Settings picks how far back and how wide an area. Switches stay the way you leave them.</div>';
   html += '<div class="question">Road hazards</div>';
   html += '<div>Crashes and construction come from the Nevada and Arizona road departments, saved every few minutes by the Field Twin server, so history builds from the day collection started. Crash history is fatal crashes from federal records, which run about a year behind.</div>';
   html += '<div class="question">Your account and the other apps</div>';
-  html += '<div>Field Twin Violet (Inventory) and Field Twin Glaucous (Roads, first built as Chassisquiver) are separate apps that feed this map. The tabs under the title move between all three, and the same tabs sit at the top of the other two. Field Twin and Field Twin Violet share one Supabase project and one account, the same email and password, not any outside sign in service. Field Twin Glaucous runs on its own Supabase project with its own account, and this map reads the road runs shared there. The blue buttons under Other apps open the other two in a new page.</div>';
+  html += '<div>Field Twin Violet (Inventory) and Field Twin Glaucous (Roads, first built as Chassisquiver) are separate apps that feed this map. The tabs under the title move between Field map, Inventory, Roads, Sites and Dash cam, and the same first three tabs sit at the top of Violet and Glaucous. Field Twin and Field Twin Violet share one Supabase project and one account, the same email and password, not any outside sign in service. Field Twin Glaucous runs on its own Supabase project with its own account, and this map reads the road runs shared there. The buttons under Other apps open Glaucous, Violet, RTSS and RDSS.</div>';
   html += '<div class="question">Timeline</div>';
   html += '<div>New in version 1.0.12. Timeline in the menu splits a day into half hour blocks. Each block says how many reports came in and from which phones, then sums up what happened: where you were parked and for how long, how far you drove, odometer readings, receipts and anything you logged. When two or three phones park at the same spot at the same time, the stop is kept once and lists every phone that saw it, so extra phones back each other up instead of piling up copies. Tap a line to open that entry.</div>';
   html += '<div class="question">Battery saving with the motion sensor</div>';
@@ -5270,6 +5303,7 @@ function showEntry(entry, fromHistory) {
   }
   html += '<div class="meta-line">' + new Date(entry.timestamp).toLocaleString() + '</div>';
   html += '<div class="meta-line">' + entry.addressLabel + '</div>';
+  html += '<div id="ftxHere"></div>';
   if (entry.photo) {
     html += '<img src="' + entry.photo + '" style="max-width:100%;margin-top:8px;">';
   } else if (entry.photoPath) {
@@ -5325,6 +5359,7 @@ function showEntry(entry, fromHistory) {
   const lpb = document.getElementById('lockerPageBtn');
   if (lpb) lpb.addEventListener('click', () => showLocker(lockerHere || ftpMakeLocker(entry)));
   panel.scrollTop = 0;
+  if (typeof ftxHereRow === 'function') ftxHereRow(document.getElementById('ftxHere'), entry);
   panel.classList.add('open');
   if (!entry.photo && entry.photoPath) {
     cloudPhotoUrl(entry.photoPath).then(u => {
@@ -5494,6 +5529,11 @@ async function init() {
     const box = document.getElementById('settingsBox');
     box.hidden = !box.hidden;
     document.getElementById('settingsBtn').setAttribute('aria-expanded', box.hidden ? 'false' : 'true');
+  });
+  document.getElementById('legendBtn').addEventListener('click', () => {
+    const box = document.getElementById('legendRows');
+    box.hidden = !box.hidden;
+    document.getElementById('legendBtn').setAttribute('aria-expanded', box.hidden ? 'false' : 'true');
   });
   initHere();
   initRoadButtons();
@@ -7523,16 +7563,62 @@ setTimeout(() => { setToggle('fieldChatBtn', fcAlerts); if (fcAlerts) fcStart();
   navStart = async function (dest) { ftpBump(dest, 'searches'); return start(dest); };
   navEnd = function (note) { if (note === 'Arrived.' && navState) ftpBump(navState.dest, 'arrivals'); return end(note); };
   const pull = cloudPull;
-  cloudPull = async function () { const r = await pull.apply(this, arguments); await ftpPull(); ftpSeedLockers(); await ftphPull(); return r; };
+  cloudPull = async function () { const r = await pull.apply(this, arguments); await ftpPull(); ftpSeedLockers(); await ftpDedupe(); await ftphPull(); return r; };
 })();
 setTimeout(ftpSeedLockers, 2500);
+
+// Merges duplicate lockers: the same name in any letter case within a mile, or any two lockers within sixty meters.
+// The kept locker takes the name, site details, visit counts and photos of the ones folded into it.
+function ftpNorm(n) { return String(n || '').toLowerCase().replace(/^locker\s+/, '').replace(/[^a-z0-9]/g, ''); }
+async function ftpDedupe() {
+  const lockers = ftPlaces.filter(p => p.kind === 'locker');
+  const gone = new Set();
+  const rank = p => (p.nameSet ? 4 : 0) + (p.site ? 2 : 0) + (p.name ? 1 : 0) + (p.arrivals || 0) / 1000;
+  const keptChanged = new Set();
+  for (let i = 0; i < lockers.length; i++) {
+    const a = lockers[i];
+    if (gone.has(a.id)) continue;
+    for (let j = i + 1; j < lockers.length; j++) {
+      const b = lockers[j];
+      if (gone.has(b.id)) continue;
+      const d = ftpDist(a.lat, a.lon, b.lat, b.lon);
+      const na = ftpNorm(a.name), nb = ftpNorm(b.name);
+      if (!((na && na === nb && d <= 1600) || d <= 60)) continue;
+      const keep = rank(b) > rank(a) ? b : a, drop = keep === a ? b : a;
+      if (!keep.name && drop.name) keep.name = drop.name;
+      if (!keep.address && drop.address) keep.address = drop.address;
+      if (!keep.site && drop.site) keep.site = drop.site;
+      if (drop.notes && String(keep.notes || '').indexOf(drop.notes) === -1) keep.notes = [keep.notes, drop.notes].filter(Boolean).join(' ');
+      keep.arrivals = (keep.arrivals || 0) + (drop.arrivals || 0);
+      keep.searches = (keep.searches || 0) + (drop.searches || 0);
+      if (String(drop.last_at || '') > String(keep.last_at || '')) keep.last_at = drop.last_at;
+      if (typeof ftPhotos !== 'undefined') ftPhotos.forEach(ph => { if (ph.place_id === drop.id) ph.place_id = keep.id; });
+      if (typeof ftTickets !== 'undefined') ftTickets.forEach(t => { if (t.place_id === drop.id) t.place_id = keep.id; });
+      gone.add(drop.id);
+      keptChanged.add(keep);
+      if (drop === a) break;
+    }
+  }
+  if (!gone.size) return 0;
+  ftPlaces = ftPlaces.filter(p => !gone.has(p.id));
+  ftpSaveLocal();
+  if (typeof cloudReady === 'function' && cloudReady()) {
+    try { await sb.from('field_twin_photos').update({ place_id: null }).in('place_id', Array.from(gone)); } catch (e) {}
+    try { await sb.from('field_twin_places').delete().in('id', Array.from(gone)); } catch (e) {}
+  }
+  for (const p of keptChanged) await ftpPush(p);
+  if (typeof ftLockerPins === 'function') ftLockerPins();
+  return gone.size;
+}
 
 function ftpStopsAt(p) {
   return entries.filter(e => hasPos(e) && ftpDist(p.lat, p.lon, e.lat, e.lon) <= 80 && e.category !== 'odometer' && e.category !== 'mileday')
     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 }
-function showLockers() {
+async function showLockers() {
   ftpSeedLockers();
+  const merged = await ftpDedupe();
+  if (merged) setStatus('merged ' + merged + ' duplicate ' + (merged === 1 ? 'locker' : 'lockers'));
   const panel = document.getElementById('panel');
   const list = ftPlaces.filter(p => p.kind === 'locker');
   let html = '<h2>Lockers</h2><div class="meta-line">Lockers you logged, plus any loaded from the team list or open map data. Tap one to name it and see its visits and photos.</div>';
@@ -8002,6 +8088,870 @@ window.addEventListener('message', ev => { if (ev.data && ev.data.ftNightAsk) ni
 nightApply();
 setInterval(nightApply, 60000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') nightApply(); });
+</script>
+<script>
+// Sites: places surveyed with RTSS and RDSS. The surveys live on the RIE API, the pin, visits and photos live here.
+// A Field Twin place is tied to a survey site by site.rie on the place, so everything about one place collects in one spot.
+const RIE_API = 'https://rie-api-production.up.railway.app';
+const RTSS_SITE = 'https://rtss-sigma.vercel.app/';
+const RDSS_SITE = 'https://ghost-kitchen-builder.vercel.app/';
+let ftxSites = [];
+let ftxLayer = null;
+try { ftxSites = JSON.parse(localStorage.getItem('ftxSites') || '[]') || []; } catch (e) { ftxSites = []; }
+
+async function ftxApi(path, method, body) {
+  const opts = { method: method || 'GET', headers: { 'Content-Type': 'application/json' } };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const tok = await ftxToken();
+  if (tok) opts.headers.Authorization = 'Bearer ' + tok.token;
+  const res = await fetch(RIE_API + path, opts);
+  if (!res.ok) throw new Error('API ' + res.status);
+  return res.json();
+}
+async function ftxLoad() {
+  try {
+    const rows = await ftxApi('/sites');
+    ftxSites = rows.map(r => ({ id: r.id, name: r.name, profile: r.profile || {}, updated_at: r.updated_at }));
+    try { localStorage.setItem('ftxSites', JSON.stringify(ftxSites)); } catch (e) {}
+    return true;
+  } catch (e) { return false; }
+}
+function ftxPlace(id) { return ftPlaces.find(p => p.site && p.site.rie === id); }
+function ftxNum(v) { const n = parseFloat(v); return isFinite(n) ? n : null; }
+function ftxCount(obj, test) { return Object.keys(obj || {}).filter(k => test(k, obj[k])).length; }
+function ftxSet(v) { return !(v === undefined || v === null || v === '' || v === false || (Array.isArray(v) && !v.length)); }
+function ftxWhen(t) { const d = new Date(typeof t === 'number' && t < 1e11 ? t * 1000 : t); return isNaN(d) ? '' : d.toLocaleDateString(); }
+
+// One pin per tied place, drawn on its own layer so it never mixes with lockers.
+function ftxPins() {
+  if (typeof map === 'undefined' || !map) return;
+  if (ftxLayer) { map.removeLayer(ftxLayer); ftxLayer = null; }
+  ftxLayer = L.layerGroup();
+  ftPlaces.filter(p => p.site && p.site.rie && isFinite(p.lat) && isFinite(p.lon)).forEach(p => {
+    const icon = L.divIcon({ className: '', iconSize: [26, 26], iconAnchor: [13, 13],
+      html: '<div style="width:22px;height:22px;background:#d9610f;border:2px solid #ffffff;box-shadow:0 0 0 2px #0a1b2e;border-radius:4px;color:#fff;font:800 12px/22px sans-serif;text-align:center;">S</div>' });
+    L.marker([p.lat, p.lon], { icon: icon, title: p.name || 'Site' }).on('click', () => showSite(p.site.rie)).addTo(ftxLayer);
+  });
+  ftxLayer.addTo(map);
+}
+
+function ftxOpenPanel(html) {
+  const panel = document.getElementById('panel');
+  panel.innerHTML = html;
+  panel.scrollTop = 0;
+  panel.classList.add('open');
+  return panel;
+}
+
+async function showSites() {
+  const draw = () => {
+    const me = mySpot();
+    const rows = ftxSites.map(s => {
+      const p = ftxPlace(s.id);
+      const d = p && me ? ftpDist(me.lat, me.lon, p.lat, p.lon) / 1609.34 : null;
+      return { s, p, d };
+    });
+    rows.sort((a, b) => (a.d === null ? 1e9 : a.d) - (b.d === null ? 1e9 : b.d) || String(a.s.name).localeCompare(String(b.s.name)));
+    const q = (document.getElementById('ftxFind') || {}).value || '';
+    const want = q.toLowerCase().trim();
+    const shown = rows.filter(r => !want || (r.s.name + ' ' + (r.s.profile.address || '') + ' ' + (r.s.profile.city || '')).toLowerCase().indexOf(want) !== -1);
+    const box = document.getElementById('ftxRows');
+    if (!box) return;
+    box.innerHTML = shown.length ? '<div class="meta-line">' + shown.length + (shown.length === 1 ? ' site' : ' sites') + ', nearest first</div>' + shown.map(r =>
+      '<div class="mi-row" data-sx="' + escapeHtml(r.s.id) + '"><b style="color:var(--accent);">' + escapeHtml(r.s.name) + '</b><br><span class="meta-line">' +
+      escapeHtml([r.s.profile.address, r.s.profile.city].filter(Boolean).join(', ') || 'No address yet') + ', ' +
+      (r.p ? (r.d === null ? 'pinned' : r.d.toFixed(1) + ' mi away') : 'not pinned') + '</span></div>').join('')
+      : '<div class="meta-line">No sites yet. Start one here, or create one in RTSS or RDSS.</div>';
+    box.querySelectorAll('[data-sx]').forEach(el => el.addEventListener('click', () => showSite(el.getAttribute('data-sx'))));
+  };
+  let html = '<h2>Sites</h2><div class="meta-line">Every place surveyed in RTSS and RDSS. Pin one to the map and its visits and photos collect here over time.</div>';
+  html += '<input type="text" id="ftxFind" autocomplete="off" placeholder="Site name or street">';
+  html += '<button id="ftxNew" style="width:100%;margin:6px 0;">Start a site here</button>';
+  html += '<div id="ftxRows"><div class="meta-line">Loading sites.</div></div>';
+  html += '<div class="panel-actions"><button class="secondary" id="ftxClose">Close</button></div>';
+  ftxOpenPanel(html);
+  document.getElementById('ftxClose').addEventListener('click', closePanel);
+  document.getElementById('ftxFind').addEventListener('input', draw);
+  document.getElementById('ftxNew').addEventListener('click', ftxNewHere);
+  if (ftxSites.length) draw();
+  const ok = await ftxLoad();
+  if (!ok && !ftxSites.length) { const b = document.getElementById('ftxRows'); if (b) b.innerHTML = '<div class="meta-line">The survey server did not answer. Try again in a minute.</div>'; return; }
+  draw();
+  ftxPins();
+}
+
+async function ftxHere() {
+  const me = mySpot();
+  if (me) return me;
+  return await new Promise(res => {
+    if (!navigator.geolocation) return res(null);
+    navigator.geolocation.getCurrentPosition(p => res({ lat: p.coords.latitude, lon: p.coords.longitude }), () => res(null), { enableHighAccuracy: true, timeout: 15000 });
+  });
+}
+
+// Tie a place on the map to a survey site, reusing a place already at that spot.
+function ftxTie(id, name, lat, lon) {
+  let p = ftxPlace(id);
+  if (!p) {
+    const near = ftpNear(lat, lon, 40);
+    p = near && !(near.site && near.site.rie) ? near : null;
+  }
+  if (!p) { p = { id: ftpId(), kind: 'site', name: name || '', lat, lon, address: '', notes: '', arrivals: 0, searches: 0 }; ftPlaces.push(p); }
+  if (!p.site || typeof p.site !== 'object') p.site = {};
+  p.site.rie = id;
+  p.lat = lat; p.lon = lon;
+  if (!p.name) p.name = name || '';
+  ftpPush(p);
+  ftxPins();
+  return p;
+}
+
+async function ftxNewHere() {
+  const name = (prompt('Name for the new site') || '').trim();
+  if (!name) return;
+  const me = await ftxHere();
+  if (!me) { setStatus('no location yet, turn on Location and try again'); return; }
+  const id = 'site-' + Date.now().toString(36);
+  try {
+    await ftxApi('/sites', 'POST', { id, name });
+    ftxSites.unshift({ id, name, profile: {}, updated_at: Date.now() / 1000 });
+    ftxTie(id, name, me.lat, me.lon);
+    setStatus('site started');
+    showSite(id);
+  } catch (e) { setStatus('the survey server did not answer'); }
+}
+
+async function showSite(id) {
+  let s = ftxSites.find(x => x.id === id);
+  if (!s) { await ftxLoad(); s = ftxSites.find(x => x.id === id); }
+  if (!s) { setStatus('that site was not found'); return; }
+  const p = ftxPlace(id);
+  const P = s.profile || {};
+  let html = '<h2 style="text-transform:none;">' + escapeHtml(s.name) + '</h2>';
+  html += '<div class="meta-line">' + escapeHtml([P.business_name && P.business_name !== s.name ? P.business_name : '', P.address, P.city, P.state].filter(Boolean).join(', ') || 'No address yet') + '</div>';
+  html += '<div class="meta-line">' + (p ? 'Pinned at ' + p.lat.toFixed(5) + ', ' + p.lon.toFixed(5) : 'Not pinned to the map yet') + '</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0;">';
+  html += '<button id="ftxRtss">Open RTSS</button><button id="ftxRdss">Open RDSS</button>';
+  html += '<button class="secondary" id="ftxPin">' + (p ? 'Move pin here' : 'Pin here') + '</button>';
+  html += '<button class="secondary" id="ftxGo"' + (p ? '' : ' disabled') + '>Go here</button></div>';
+  html += '<div id="ftxSurvey"><div class="meta-line">Reading the surveys.</div></div>';
+  if (p) {
+    html += '<div class="question">Place notes</div><textarea id="ftxNotes" rows="3" placeholder="Gate code, who to ask for, where to park">' + escapeHtml(p.notes || '') + '</textarea>';
+    html += '<button class="secondary" id="ftxNotesSave" style="width:100%;margin:6px 0;">Save notes</button>';
+    const extra = ftphAt(p);
+    html += '<button class="secondary" id="ftxPhoto" style="width:100%;margin:6px 0;">Add photo of this site</button>';
+    html += extra.length ? ftphGridHtml(extra, 'Photos, newest first') : '<div class="meta-line">No photos here yet.</div>';
+    const stops = ftpStopsAt(p);
+    html += '<div class="question">Field Twin stops here</div>';
+    html += stops.length ? stops.slice(0, 40).map(e => {
+      const note = ftpNoteTexts(e).join(' ').slice(0, 140);
+      return '<div class="mi-row" data-st="' + e.id + '"><b>' + new Date(e.timestamp).toLocaleDateString() + '</b> ' + escapeHtml((CATEGORIES[e.category] || {}).label || '') + (note ? '<br><span class="meta-line">' + escapeHtml(note) + '</span>' : '') + '</div>';
+    }).join('') : '<div class="meta-line">Nothing logged here yet.</div>';
+  }
+  html += '<div class="panel-actions"><button class="secondary" id="ftxBack">All sites</button><button class="secondary" id="ftxClose2">Close</button></div>';
+  const panel = ftxOpenPanel(html);
+  if (p) ftphFill(panel);
+  const link = base => base + '?site=' + encodeURIComponent(id);
+  document.getElementById('ftxRtss').addEventListener('click', () => ftxOpenApp('rtss', id));
+  document.getElementById('ftxRdss').addEventListener('click', () => ftxOpenApp('rdss', id));
+  document.getElementById('ftxBack').addEventListener('click', showSites);
+  document.getElementById('ftxClose2').addEventListener('click', closePanel);
+  document.getElementById('ftxPin').addEventListener('click', async () => {
+    const me = await ftxHere();
+    if (!me) { setStatus('no location yet, turn on Location and try again'); return; }
+    const q = ftxTie(id, s.name, me.lat, me.lon);
+    if (map) map.setView([q.lat, q.lon], Math.max(map.getZoom(), 16));
+    setStatus('site pinned');
+    showSite(id);
+  });
+  if (p) {
+    document.getElementById('ftxGo').addEventListener('click', () => navStart({ lat: p.lat, lon: p.lon, name: s.name, label: P.address || '', placeId: p.id }));
+    document.getElementById('ftxNotesSave').addEventListener('click', () => { p.notes = document.getElementById('ftxNotes').value.trim(); ftpPush(p); setStatus('site notes saved'); });
+    document.getElementById('ftxPhoto').addEventListener('click', () => ftphPick(async d => { await ftphAdd(d, { place_id: p.id, lat: p.lat, lon: p.lon }); showSite(id); }));
+    panel.querySelectorAll('[data-st]').forEach(el => el.addEventListener('click', () => { const e = entries.find(x => x.id === el.getAttribute('data-st')); if (e) showEntry(e); }));
+  }
+  ftxSurveyBox(id, p, s);
+}
+
+// What RTSS and RDSS hold for this site, read fresh each time.
+async function ftxSurveyBox(id, p, s) {
+  const [tech, design] = await Promise.all([ftxApi('/sites/' + id + '/survey').catch(() => null), ftxApi('/sites/' + id + '/design').catch(() => null)]);
+  const box = document.getElementById('ftxSurvey');
+  if (!box) return;
+  let h = '';
+  if (tech && tech._rtss === 3) {
+    const f = tech.f || {};
+    const L = tech.l || {};
+    const answered = ftxCount(f, (k, v) => ftxSet(v));
+    const dt = tech.dt && Array.isArray(tech.dt.items) ? tech.dt.items.length : 0;
+    h += '<div class="question">RTSS, technology survey</div>';
+    h += '<div class="meta-line">' + answered + ' answers, ' + (L.registers || []).length + ' terminals, ' + (L.kds || []).length + ' kitchen screens' + (dt ? ', drive-thru model with ' + dt + ' parts' : '') + '</div>';
+    if (tech.updatedAt) h += '<div class="meta-line">Last changed ' + ftxWhen(tech.updatedAt) + '</div>';
+    const visits = (L.visits || []).slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    if (visits.length) h += '<div class="question">Visit log</div>' + visits.slice(0, 20).map(v => '<div class="mi-row"><b>' + escapeHtml(v.date || 'No date') + '</b> ' + escapeHtml(v.role || '') + (v.notes ? '<br><span class="meta-line">' + escapeHtml(String(v.notes).slice(0, 200)) + '</span>' : '') + '</div>').join('');
+    // a pin set in RTSS fills in a place here that has none
+    const la = ftxNum(f['site.lat']), lo = ftxNum(f['site.lon']);
+    if (!p && la !== null && lo !== null) { ftxTie(id, s.name, la, lo); setStatus('pinned from the RTSS location'); setTimeout(() => showSite(id), 300); return; }
+  } else if (tech && tech._rtss === 2) {
+    h += '<div class="question">RTSS, technology survey</div><div class="meta-line">Saved on the old RTSS page. Open it in RTSS once to carry it over.</div>';
+  } else {
+    h += '<div class="question">RTSS, technology survey</div><div class="meta-line">Not started.</div>';
+  }
+  if (design && design._rdss === 3) {
+    const f = design.f || {};
+    const b = ftxCount(f, (k, v) => k.charAt(0) === 'b' && ftxSet(v));
+    const sv = ftxCount(f, (k, v) => k.charAt(0) === 's' && ftxSet(v));
+    h += '<div class="question">RDSS, design and setup survey</div><div class="meta-line">' + b + ' build answers, ' + sv + ' survey answers' + (design.updatedAt ? ', last changed ' + ftxWhen(design.updatedAt) : '') + '</div>';
+    if (f['sOpps.gaps']) h += '<div class="meta-line">Gaps: ' + escapeHtml(String(f['sOpps.gaps']).slice(0, 200)) + '</div>';
+    const la = ftxNum(f['sId.lat']), lo = ftxNum(f['sId.lon']);
+    if (!p && la !== null && lo !== null) { ftxTie(id, s.name, la, lo); setStatus('pinned from the RDSS location'); setTimeout(() => showSite(id), 300); return; }
+  } else if (design && design._rdss === 2) {
+    h += '<div class="question">RDSS, design and setup survey</div><div class="meta-line">Saved on the old RDSS page. Open it in RDSS once to carry it over.</div>';
+  } else {
+    h += '<div class="question">RDSS, design and setup survey</div><div class="meta-line">Not started.</div>';
+  }
+  if (!tech && !design) h = '<div class="meta-line">The survey server did not answer. Pin, notes and photos still work.</div>';
+  box.innerHTML = h;
+}
+
+(function () {
+  const tabs = document.getElementById('twinTabs');
+  const btn = document.createElement('button');
+  btn.id = 'tabSites';
+  btn.textContent = 'Sites';
+  tabs.appendChild(btn);
+  btn.addEventListener('click', showSites);
+  setTimeout(ftxPins, 3000);
+  // RTSS and RDSS link here with ?rie=site-id
+  let want = '';
+  try { want = new URLSearchParams(location.search).get('rie') || ''; } catch (e) {}
+  if (want) setTimeout(() => showSite(want), 1500);
+})();
+
+// ---- RTSS and RDSS inside Field Twin ----
+// A survey opens in a window over the map, so whatever form is open underneath stays as it was, and Back returns
+// to it. The survey page asks Field Twin what it knows about its site and fills only the questions still blank:
+// name, address, city, state and the location. Field Twin stops at the site are offered there too, one tap each to
+// add to the RTSS visit log, so nothing about where you have been is sent unless you choose it.
+const FTX_APPS = { rtss: { url: RTSS_SITE, name: 'RTSS' }, rdss: { url: RDSS_SITE, name: 'RDSS' } };
+let ftxOpenSite = '';
+function ftxOpenApp(app, siteId) {
+  const a = FTX_APPS[app];
+  const view = document.getElementById('surveyView');
+  const box = view.querySelector('.sv-frame');
+  const s = ftxSites.find(x => x.id === siteId);
+  ftxOpenSite = siteId || '';
+  box.innerHTML = '';
+  const f = document.createElement('iframe');
+  f.src = a.url + '?ft=1' + (siteId ? '&site=' + encodeURIComponent(siteId) : '');
+  f.title = a.name;
+  f.allow = 'camera; geolocation; clipboard-write';
+  box.appendChild(f);
+  document.getElementById('svTitle').textContent = s ? s.name : '';
+  document.getElementById('svRtss').classList.toggle('on', app === 'rtss');
+  document.getElementById('svRdss').classList.toggle('on', app === 'rdss');
+  view.classList.add('open');
+  const ov = document.getElementById('menuOverlay');
+  if (ov && document.getElementById('sideMenu').classList.contains('open')) ov.click();
+}
+function ftxCloseApp() {
+  const view = document.getElementById('surveyView');
+  view.classList.remove('open');
+  view.querySelector('.sv-frame').innerHTML = '';
+  ftxOpenSite = '';
+  // what was filled in there may have changed the site, so a site page underneath is read again
+  ftxLoad().then(() => { ftxPins(); });
+}
+document.getElementById('svBack').addEventListener('click', ftxCloseApp);
+// Switch between RTSS and RDSS on the same site without going back to the map
+document.getElementById('svRtss').addEventListener('click', () => ftxOpenApp('rtss', ftxOpenSite));
+document.getElementById('svRdss').addEventListener('click', () => ftxOpenApp('rdss', ftxOpenSite));
+
+// ---- Dash cam tab: Field Twin Viridian, the camera, motion and plate reader app, opened in place ----
+// The camera runs only while this tab is open. Leaving the tab closes the page, which turns the camera off.
+const VIRIDIAN_SITE = 'https://field-twin-viridian.vercel.app/';
+(function () {
+  const tabs = document.getElementById('twinTabs');
+  const btn = document.createElement('button');
+  btn.id = 'tabCam';
+  btn.textContent = 'Dash cam';
+  tabs.appendChild(btn);
+  const view = document.createElement('div');
+  view.id = 'camView';
+  document.getElementById('violetView').after(view);
+  function close() {
+    if (!view.classList.contains('open')) return;
+    view.classList.remove('open');
+    view.innerHTML = '';
+    btn.classList.remove('on');
+    if (!tabs.querySelector('button.on')) {
+      const inv = document.getElementById('violetView').classList.contains('open');
+      document.getElementById(inv ? 'tabViolet' : 'tabTeal').classList.add('on');
+    }
+  }
+  btn.addEventListener('click', () => {
+    if (view.classList.contains('open')) return;
+    const f = document.createElement('iframe');
+    f.src = VIRIDIAN_SITE;
+    f.title = 'Field Twin Viridian dash cam';
+    f.allow = 'camera; microphone; geolocation; accelerometer; gyroscope; magnetometer; clipboard-write';
+    view.appendChild(f);
+    view.classList.add('open');
+    tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
+  });
+  ['tabTeal', 'tabViolet', 'tabRoads', 'tabSites'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) b.addEventListener('click', close);
+  });
+})();
+
+// The survey site at or near a spot: a place tied to a site within 80 meters.
+function ftxSiteNear(lat, lon) {
+  if (!isFinite(lat) || !isFinite(lon)) return null;
+  let best = null, bd = 80;
+  ftPlaces.forEach(p => {
+    if (!p.site || !p.site.rie || !isFinite(p.lat)) return;
+    const d = ftpDist(lat, lon, p.lat, p.lon);
+    if (d <= bd) { bd = d; best = p; }
+  });
+  return best;
+}
+
+// Street, city and state out of a Field Twin address line, as well as it can be read.
+const FTX_STATES = { nevada: 'NV', arizona: 'AZ', california: 'CA', utah: 'UT', texas: 'TX', 'new mexico': 'NM', colorado: 'CO', oregon: 'OR', washington: 'WA' };
+function ftxSplitAddress(label) {
+  const parts = String(label || '').split(',').map(x => x.trim()).filter(Boolean).filter(x => !/^(unresolved address|location not captured)$/i.test(x));
+  let state = '';
+  const out = [];
+  parts.forEach(x => {
+    const st = FTX_STATES[x.toLowerCase()] || (/^[A-Z]{2}( \d{5})?$/.test(x) ? x.slice(0, 2) : '');
+    if (st) state = st; else if (!/^\d{5}$/.test(x) && !/united states/i.test(x)) out.push(x);
+  });
+  return { street: out[0] || '', city: out.length > 1 ? out[out.length - 1] : '', state };
+}
+
+// What Field Twin knows about a site, for the survey page.
+function ftxContext(siteId) {
+  const s = ftxSites.find(x => x.id === siteId);
+  const p = ftxPlace(siteId);
+  if (!p) return { site: siteId };
+  const stops = ftpStopsAt(p);
+  const addrEntry = stops.find(e => e.addressLabel && !/unresolved|not captured/.test(e.addressLabel));
+  const a = ftxSplitAddress(p.address || (addrEntry ? addrEntry.addressLabel : ''));
+  const P = (s && s.profile) || {};
+  if (P.address) a.street = P.address;
+  if (P.city) a.city = P.city;
+  if (P.state) a.state = P.state;
+  const day = t => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  return {
+    site: siteId,
+    business: p.name || (s ? s.name : ''),
+    address: a.street, city: a.city, state: a.state,
+    lat: Math.round(p.lat * 1e6) / 1e6, lon: Math.round(p.lon * 1e6) / 1e6,
+    stops: stops.slice(0, 40).map(e => ({
+      id: e.id, date: day(e.timestamp),
+      role: e.category === 'amazon_locker' ? 'Service call' : 'Other',
+      kind: (CATEGORIES[e.category] || {}).label || '',
+      notes: ftpNoteTexts(e).join(' ').slice(0, 400)
+    }))
+  };
+}
+// The Field Twin account, handed to RTSS and RDSS so they never ask for a separate sign in.
+// Only the short lived access key goes over, never the refresh key, and only to the RTSS or RDSS address.
+async function ftxToken() {
+  if (!sb) return null;
+  try {
+    const r = await sb.auth.getSession();
+    const ses = r.data && r.data.session;
+    return ses ? { token: ses.access_token, email: ses.user.email || '', expires: ses.expires_at || 0 } : null;
+  } catch (e) { return null; }
+}
+window.addEventListener('message', async ev => {
+  const f = document.querySelector('#surveyView iframe');
+  if (!f || ev.source !== f.contentWindow || !ev.data || !ev.data.rieAuthAsk) return;
+  let origin = '';
+  try { origin = new URL(f.src).origin; } catch (e) { return; }
+  if (![RTSS_SITE, RDSS_SITE].some(u => new URL(u).origin === origin)) return;
+  const tok = await ftxToken();
+  try { f.contentWindow.postMessage({ rieAuth: tok || { token: '', email: '' } }, origin); } catch (e) {}
+});
+window.addEventListener('message', ev => {
+  const f = document.querySelector('#surveyView iframe');
+  if (!f || ev.source !== f.contentWindow || !ev.data || !ev.data.rieReady) return;
+  const id = String(ev.data.rieReady.site || '');
+  if (!id) return;
+  try { f.contentWindow.postMessage({ rieContext: ftxContext(id) }, '*'); } catch (e) {}
+});
+
+// The survey row on a log form or an entry: open the site here, or make this spot a survey site.
+function ftxHereRow(box, entry) {
+  if (!box || !entry) return;
+  const lat = entry.lat, lon = entry.lon;
+  const draw = () => {
+    const p = ftxSiteNear(lat, lon);
+    if (p) {
+      const s = ftxSites.find(x => x.id === p.site.rie);
+      box.innerHTML = '<div class="question">Survey site, ' + escapeHtml(s ? s.name : (p.name || 'here')) + '</div>' +
+        '<div class="ftx-row"><button class="secondary" data-fx="rtss">Open RTSS</button><button class="secondary" data-fx="rdss">Open RDSS</button></div>';
+      box.querySelectorAll('[data-fx]').forEach(b => b.addEventListener('click', () => ftxOpenApp(b.getAttribute('data-fx'), p.site.rie)));
+    } else if (isFinite(lat) && isFinite(lon)) {
+      box.innerHTML = '<button class="secondary" id="ftxMake" style="width:100%;margin:8px 0 4px 0;">Start an RTSS and RDSS site here</button>';
+      document.getElementById('ftxMake').addEventListener('click', () => ftxMakeAt(entry));
+    } else box.innerHTML = '';
+  };
+  draw();
+}
+
+// Start a survey site at a stop: named from the stop, address sent to the shared site profile, pinned here.
+// Street, city and state for a spot from the open map address lookup, with the business name when the map has one.
+async function ftxLookup(lat, lon) {
+  try {
+    const g = await reverseGeocode(lat, lon);
+    const a = g.address || {};
+    const iso = String(a['ISO3166-2-lvl4'] || '');
+    return {
+      street: [a.house_number, a.road].filter(Boolean).join(' '),
+      city: a.city || a.town || a.village || a.hamlet || '',
+      state: iso.indexOf('US-') === 0 ? iso.slice(3) : (FTX_STATES[String(a.state || '').toLowerCase()] || ''),
+      business: (g.namedetails && g.namedetails.name) || g.name || ''
+    };
+  } catch (e) { return null; }
+}
+async function ftxMakeAt(entry) {
+  const looked = await ftxLookup(entry.lat, entry.lon);
+  const a = looked && (looked.street || looked.city) ? looked : ftxSplitAddress(entry.addressLabel);
+  const guess = (looked && looked.business) || a.street || '';
+  const name = (prompt('Name for this site, like the store name', guess) || '').trim();
+  if (!name) return;
+  const id = 'site-' + Date.now().toString(36);
+  try {
+    await ftxApi('/sites', 'POST', { id, name, address: a.street });
+    const prof = { business_name: name };
+    if (a.street) prof.address = a.street;
+    if (a.city) prof.city = a.city;
+    if (a.state) prof.state = a.state;
+    await ftxApi('/sites/' + id + '/profile', 'PATCH', prof).catch(() => null);
+    ftxSites.unshift({ id, name, profile: prof, updated_at: Date.now() / 1000 });
+    try { localStorage.setItem('ftxSites', JSON.stringify(ftxSites)); } catch (e) {}
+    const p = ftxTie(id, name, entry.lat, entry.lon);
+    const line = [a.street, a.city, a.state].filter(Boolean).join(', ');
+    if (line) { p.address = line; ftpPush(p); }
+    setStatus('survey site started');
+    ftxHereRow(document.getElementById('ftxHere'), entry);
+  } catch (e) { setStatus('the survey server did not answer'); }
+}
+
+// Menu links: open each survey on the site you are standing at, or on its own list when there is none.
+(function () {
+  const near = () => { const me = mySpot(); const p = me ? ftxSiteNear(me.lat, me.lon) : null; return p ? p.site.rie : ''; };
+  document.getElementById('openRtssBtn').addEventListener('click', () => ftxOpenApp('rtss', near()));
+  document.getElementById('openRdssBtn').addEventListener('click', () => ftxOpenApp('rdss', near()));
+  if (!ftxSites.length) ftxLoad();
+})();
+</script>
+<script>
+// Tickets: work tickets brought in from a photo of the work phone screen. Each ticket gets a countdown to its SLA
+// deadline. Slack is the time left minus the drive there. The lowest slack you can still make is the best next stop,
+// and when two directions are close in drive time the fork card scores each way so the better side wins.
+let ftTickets = [];
+try { ftTickets = JSON.parse(localStorage.getItem('ftTickets') || '[]') || []; } catch (e) { ftTickets = []; }
+let ftkLayer = null, ftkDrive = {}, ftkDriveAt = 0, ftkPending = [];
+const FTK_ONSITE_KEY = 'ftkOnsiteMin';
+function ftkOnsite() { try { return Number(localStorage.getItem(FTK_ONSITE_KEY)) || 45; } catch (e) { return 45; } }
+function ftkSaveLocal() { try { localStorage.setItem('ftTickets', JSON.stringify(ftTickets)); } catch (e) {} }
+function ftkOpen() { return ftTickets.filter(t => t.status === 'open'); }
+function ftkRow(t) {
+  return { id: t.id, ticket: t.ticket || '', site: t.site || '', address: t.address || '', place_id: t.place_id || null,
+    lat: t.lat, lon: t.lon, priority: t.priority || '', summary: t.summary || '', opened_at: t.opened_at || null,
+    due_at: t.due_at, status: t.status, closed_at: t.closed_at || null, made_sla: t.made_sla === undefined ? null : t.made_sla,
+    points: t.points || 0, updated_at: t.updated_at };
+}
+async function ftkPush(t) {
+  t.updated_at = new Date().toISOString();
+  ftkSaveLocal();
+  if (typeof cloudReady !== 'function' || !cloudReady()) { t.dirty = true; ftkSaveLocal(); return; }
+  try { const r = await sb.from('field_twin_tickets').upsert(ftkRow(t), { onConflict: 'id' }); t.dirty = !!r.error; } catch (e) { t.dirty = true; }
+  ftkSaveLocal();
+}
+async function ftkPull() {
+  if (typeof cloudReady !== 'function' || !cloudReady()) return;
+  try {
+    const since = new Date(Date.now() - 14 * 86400000).toISOString();
+    const r = await sb.from('field_twin_tickets').select('*').gte('updated_at', since).range(0, 1999);
+    if (r.error) return;
+    const byId = {};
+    ftTickets.forEach(t => { byId[t.id] = t; });
+    (r.data || []).forEach(row => {
+      const mine = byId[row.id];
+      if (!mine || (!mine.dirty && String(row.updated_at) > String(mine.updated_at || ''))) byId[row.id] = Object.assign({}, row);
+    });
+    ftTickets = Object.keys(byId).map(k => byId[k]);
+    ftkSaveLocal();
+    for (const t of ftTickets.filter(x => x.dirty)) await ftkPush(t);
+    ftkPins();
+  } catch (e) {}
+}
+
+// Time words for the countdowns.
+function ftkMins(ms) { return Math.round(ms / 60000); }
+function ftkClock(ms) {
+  const neg = ms < 0; let m = Math.abs(ftkMins(ms));
+  const h = Math.floor(m / 60); m = m % 60;
+  return (neg ? 'over ' : '') + (h ? h + 'h ' : '') + m + 'm';
+}
+function ftkColor(slackMs) {
+  if (slackMs < 0) return '#c62828';
+  if (slackMs < 30 * 60000) return '#e65100';
+  if (slackMs < 90 * 60000) return '#f9a825';
+  return '#2e7d32';
+}
+
+// Turns what the reader saw into a deadline. A bare time is placed on today, or tomorrow if that time has passed by
+// more than twelve hours. A stated SLA length is added to the opened time.
+function ftkParseWhen(v, ref) {
+  if (!v) return null;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{1,2}):(\d{2})/);
+  if (m) { const d = new Date(m[1] + 'T' + m[2].padStart(2, '0') + ':' + m[3] + ':00'); return isNaN(d) ? null : d; }
+  m = s.match(/^(\d{1,2}):(\d{2})\s*(am|pm)?$/i);
+  if (m) {
+    let h = Number(m[1]);
+    if (m[3]) { const pm = /pm/i.test(m[3]); if (pm && h < 12) h += 12; if (!pm && h === 12) h = 0; }
+    const d = new Date(ref || Date.now()); d.setHours(h, Number(m[2]), 0, 0);
+    if (d.getTime() < Date.now() - 12 * 3600000) d.setDate(d.getDate() + 1);
+    return d;
+  }
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+function ftkDueFrom(r) {
+  const due = ftkParseWhen(r.due);
+  if (due) return due;
+  const opened = ftkParseWhen(r.opened);
+  if (opened && r.sla_hours) return new Date(opened.getTime() + Number(r.sla_hours) * 3600000);
+  return ftkParseWhen(r.appt_end);
+}
+function ftkLocalInput(d) {
+  if (!d) return '';
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+
+// Finds the saved locker for a ticket. The site name is compared with locker names only, and the address only counts
+// when the house number and the street name both match, so city and state words never pick a locker by themselves.
+const FTK_GENERIC = ['amazon', 'at', 'the', 'hub', 'locker', 'lockers', 'counter', 'inc', 'llc', 'store', 'and'];
+function ftkMatchPlace(site, address) {
+  const words = s => String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(w => w.length > 1 && FTK_GENERIC.indexOf(w) === -1);
+  const siteWords = words(site);
+  const am = String(address || '').toLowerCase().match(/(\d+)\s+(?:[nsew]\s+)?([a-z]+)/);
+  let best = null, bestScore = 0;
+  ftPlaces.filter(p => p.kind === 'locker').forEach(p => {
+    let score = 0;
+    const nameWords = words(p.name);
+    if (nameWords.length && nameWords.every(w => siteWords.indexOf(w) !== -1)) score += 3;
+    if (am) {
+      const pa = String(p.address || '').toLowerCase();
+      if (new RegExp('(^|\\D)' + am[1] + '(\\D|$)').test(pa) && pa.indexOf(am[2]) !== -1) score += 3;
+    }
+    if (score > bestScore) { bestScore = score; best = p; }
+  });
+  return bestScore >= 3 ? best : null;
+}
+
+// Drive times. One road table call covers you and every open ticket. Straight line distance at forty miles an hour,
+// stretched for road bends, is the backup when the road service does not answer.
+function ftkCrowSec(a, b) { return dmCrow(a.lat, a.lon, b.lat, b.lon) * 1.35 / 40 * 3600; }
+async function ftkTable(points) {
+  const key = points.map(p => p.lat.toFixed(4) + ',' + p.lon.toFixed(4)).join(';');
+  if (ftkDrive.key === key && Date.now() - ftkDriveAt < 5 * 60000) return ftkDrive.m;
+  let m = null;
+  try {
+    const coords = points.map(p => p.lon + ',' + p.lat).join(';');
+    const res = await fetch('https://router.project-osrm.org/table/v1/driving/' + coords + '?annotations=duration');
+    if (res.ok) { const j = await res.json(); if (j.code === 'Ok' && j.durations) m = j.durations; }
+  } catch (e) {}
+  if (!m) m = points.map(a => points.map(b => ftkCrowSec(a, b)));
+  m = m.map((row, i) => row.map((v, j) => (v === null || v === undefined) ? ftkCrowSec(points[i], points[j]) : v));
+  ftkDrive = { key: key, m: m }; ftkDriveAt = Date.now();
+  return m;
+}
+
+// Plays the day forward from a chosen first ticket: after each job it takes the lowest slack ticket still makeable,
+// otherwise the nearest. Counts SLA wins and minutes of margin.
+function ftkPlay(firstIdx, list, m, now) {
+  const onsite = ftkOnsite() * 60000;
+  let at = 0, t = now, wins = 0, margin = 0;
+  const left = list.map((x, i) => i);
+  const order = [];
+  let next = firstIdx;
+  while (left.length) {
+    left.splice(left.indexOf(next), 1);
+    t += m[at][next + 1] * 1000;
+    const slack = list[next].dueMs - t;
+    if (slack >= 0) { wins++; margin += Math.min(slack, 3 * 3600000); }
+    order.push(next);
+    t += onsite; at = next + 1;
+    if (!left.length) break;
+    let pick = null, pickSlack = Infinity, near = null, nearSec = Infinity;
+    left.forEach(i => {
+      const arrive = t + m[at][i + 1] * 1000;
+      const s = list[i].dueMs - arrive;
+      if (s >= 0 && s < pickSlack) { pickSlack = s; pick = i; }
+      if (m[at][i + 1] < nearSec) { nearSec = m[at][i + 1]; near = i; }
+    });
+    next = pick !== null ? pick : near;
+  }
+  return { wins: wins, margin: margin, order: order, score: wins * 100 + Math.round(margin / 120000) };
+}
+async function ftkRank() {
+  const me = mySpot();
+  const now = Date.now();
+  const list = ftkOpen().filter(t => isFinite(t.lat) && isFinite(t.lon) && t.due_at).map(t => Object.assign({}, t, { dueMs: new Date(t.due_at).getTime() }));
+  if (!list.length) return { list: [], me: me };
+  const origin = me || { lat: list[0].lat, lon: list[0].lon };
+  const m = await ftkTable([origin].concat(list));
+  list.forEach((t, i) => { t.driveSec = me ? m[0][i + 1] : 0; t.slackMs = t.dueMs - now - t.driveSec * 1000; });
+  const plays = list.map((t, i) => ({ i: i, play: ftkPlay(i, list, m, now) })).sort((a, b) => b.play.score - a.play.score);
+  const best = plays[0];
+  // The fork: the two closest tickets when their drive times are within six minutes of each other.
+  const byDrive = list.map((t, i) => i).sort((a, b) => list[a].driveSec - list[b].driveSec);
+  let fork = null;
+  if (me && byDrive.length >= 2 && Math.abs(list[byDrive[0]].driveSec - list[byDrive[1]].driveSec) <= 360) {
+    const a = plays.find(p => p.i === byDrive[0]), b = plays.find(p => p.i === byDrive[1]);
+    fork = a.play.score >= b.play.score ? [a, b] : [b, a];
+  }
+  return { list: list, me: me, best: best, fork: fork, plays: plays };
+}
+
+// Map signs for tickets: a round countdown ring, unlike the diamond locker signs. The ring empties as slack runs out.
+function ftkIcon(t, slackMs) {
+  const color = ftkColor(slackMs);
+  const total = Math.max(1, new Date(t.due_at).getTime() - new Date(t.opened_at || t.created_at || t.updated_at || Date.now()).getTime());
+  const pct = Math.max(0, Math.min(100, Math.round(slackMs / total * 100)));
+  const label = slackMs < 0 ? 'LATE' : (ftkMins(slackMs) >= 100 ? Math.round(slackMs / 3600000) + 'h' : ftkMins(slackMs) + 'm');
+  return L.divIcon({ className: '', iconSize: [40, 40], iconAnchor: [20, 20],
+    html: '<div style="width:40px;height:40px;border-radius:50%;background:conic-gradient(' + color + ' ' + pct + '%, #e3e8ee 0);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px #ffffff,0 1px 4px rgba(0,0,0,.35);">'
+      + '<div style="width:30px;height:30px;border-radius:50%;background:#ffffff;color:' + color + ';font:bold 10px monospace;display:flex;align-items:center;justify-content:center;">' + label + '</div></div>' });
+}
+async function ftkPins() {
+  if (typeof map === 'undefined' || !map) return;
+  if (ftkLayer) { map.removeLayer(ftkLayer); ftkLayer = null; }
+  const open = ftkOpen().filter(t => isFinite(t.lat) && isFinite(t.lon));
+  if (!open.length) return;
+  let ranked = null;
+  try { ranked = await ftkRank(); } catch (e) {}
+  ftkLayer = L.layerGroup();
+  open.forEach(t => {
+    const r = ranked && ranked.list.find(x => x.id === t.id);
+    const slack = r ? r.slackMs : (t.due_at ? new Date(t.due_at).getTime() - Date.now() : 0);
+    L.marker([t.lat, t.lon], { icon: ftkIcon(t, slack), title: 'Ticket ' + (t.ticket || '') + ', ' + ftkClock(slack) + ' slack', zIndexOffset: 900 })
+      .on('click', () => showTicket(t.id)).addTo(ftkLayer);
+  });
+  ftkLayer.addTo(map);
+}
+setInterval(() => { if (ftkOpen().length) ftkPins(); }, 30000);
+
+// Points: one hundred for a close inside SLA, plus a bonus of one point per two minutes to spare, up to sixty.
+function ftkPoints(t) {
+  if (!t.closed_at || !t.due_at) return 0;
+  const spare = new Date(t.due_at).getTime() - new Date(t.closed_at).getTime();
+  return spare >= 0 ? 100 + Math.min(60, Math.round(spare / 120000)) : 0;
+}
+function ftkToday() {
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  return ftTickets.filter(t => t.status === 'closed' && t.closed_at && new Date(t.closed_at) >= d0);
+}
+
+async function showTickets() {
+  const panel = document.getElementById('panel');
+  const done = ftkToday();
+  const pts = done.reduce((s, t) => s + (t.points || 0), 0);
+  const wins = done.filter(t => t.made_sla).length;
+  let html = '<h2>Tickets</h2>';
+  html += '<div class="meta-line">Today: ' + pts + ' points, ' + wins + ' of ' + done.length + ' closed inside SLA.</div>';
+  html += '<div class="ftx-row"><button id="ftkScan">Scan ticket screen</button><button class="secondary" id="ftkHand">Add by hand</button></div>';
+  html += '<div id="ftkMsg" class="meta-line"></div><div id="ftkBody"><div class="meta-line">Working out drive times.</div></div>';
+  html += '<label class="hz-label" for="ftkOnsite">Time on site per ticket</label><select id="ftkOnsite">' + [20, 30, 45, 60, 90, 120].map(n => '<option value="' + n + '"' + (n === ftkOnsite() ? ' selected' : '') + '>' + n + ' minutes</option>').join('') + '</select>';
+  html += '<div class="panel-actions"><button class="secondary" id="ftkClose">Close</button></div>';
+  panel.innerHTML = html; panel.scrollTop = 0; panel.classList.add('open');
+  document.getElementById('ftkClose').addEventListener('click', closePanel);
+  document.getElementById('ftkScan').addEventListener('click', () => document.getElementById('ticketFile').click());
+  document.getElementById('ftkHand').addEventListener('click', () => { ftkPending = [{ ticket: '', site: '', address: '', priority: '', summary: '', due: null, opened: null }]; showTicketConfirm(0); });
+  document.getElementById('ftkOnsite').addEventListener('change', ev => { try { localStorage.setItem(FTK_ONSITE_KEY, ev.target.value); } catch (e) {} ftkDriveAt = 0; showTickets(); });
+  const body = document.getElementById('ftkBody');
+  let r;
+  try { r = await ftkRank(); } catch (e) { r = { list: [] }; }
+  if (!document.getElementById('ftkBody')) return;
+  const open = ftkOpen();
+  if (!open.length) { body.innerHTML = '<div class="meta-line">No open tickets. Scan the work phone screen to bring one in.</div>'; return; }
+  let out = '';
+  if (!r.me) out += '<div class="meta-line">Location is off, so drive times start from the first ticket. Turn on Location in the menu for real slack.</div>';
+  if (r.best) {
+    const b = r.list[r.best.i];
+    out += '<div class="question">Best next: ' + escapeHtml(b.ticket || b.site || 'ticket') + '</div>';
+    out += '<div class="meta-line">' + Math.round(b.driveSec / 60) + ' min drive, ' + ftkClock(b.slackMs) + ' slack. Played forward this wins ' + r.best.play.wins + ' of ' + r.list.length + ' SLAs.</div>';
+  }
+  if (r.fork) {
+    const a = r.list[r.fork[0].i], c = r.list[r.fork[1].i];
+    out += '<div class="question">Fork, both about the same drive</div>';
+    out += '<div class="mi-row" style="border-left:6px solid #2e7d32;"><b>Go to ' + escapeHtml(a.ticket || a.site) + '</b><br><span class="meta-line">' + Math.round(a.driveSec / 60) + ' min, wins ' + r.fork[0].play.wins + ' of ' + r.list.length + ', score ' + r.fork[0].play.score + '</span></div>';
+    out += '<div class="mi-row" style="border-left:6px solid #c62828;">' + escapeHtml(c.ticket || c.site) + '<br><span class="meta-line">' + Math.round(c.driveSec / 60) + ' min, wins ' + r.fork[1].play.wins + ' of ' + r.list.length + ', score ' + r.fork[1].play.score + '</span></div>';
+  }
+  out += '<div class="question">Open, lowest slack first</div>';
+  const ranked = r.list.slice().sort((x, y) => x.slackMs - y.slackMs);
+  const placed = new Set(ranked.map(x => x.id));
+  out += ranked.map(t => '<div class="mi-row" data-tk="' + t.id + '" style="border-left:6px solid ' + ftkColor(t.slackMs) + ';"><b style="color:var(--accent);">' + escapeHtml(t.ticket || 'no number') + '</b> ' + escapeHtml(t.site || '') + '<br><span class="meta-line">due ' + new Date(t.dueMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) + ', ' + Math.round(t.driveSec / 60) + ' min drive, ' + ftkClock(t.slackMs) + ' slack</span></div>').join('');
+  const loose = open.filter(t => !placed.has(t.id));
+  if (loose.length) out += '<div class="meta-line">Missing a site or due time, tap to fix:</div>' + loose.map(t => '<div class="mi-row" data-tk="' + t.id + '">' + escapeHtml(t.ticket || 'no number') + ' ' + escapeHtml(t.site || '') + '</div>').join('');
+  body.innerHTML = out;
+  body.querySelectorAll('[data-tk]').forEach(el => el.addEventListener('click', () => showTicket(el.getAttribute('data-tk'))));
+}
+
+function showTicket(id) {
+  const t = ftTickets.find(x => x.id === id);
+  if (!t) return;
+  const panel = document.getElementById('panel');
+  const slack = t.due_at ? new Date(t.due_at).getTime() - Date.now() : 0;
+  let html = '<h2>Ticket ' + escapeHtml(t.ticket || '') + '</h2>';
+  html += '<div class="meta-line">' + escapeHtml(t.site || '') + (t.address ? ', ' + escapeHtml(t.address) : '') + '</div>';
+  if (t.summary) html += '<div class="meta-line">' + escapeHtml(t.summary) + '</div>';
+  if (t.due_at) html += '<div class="question" style="color:' + ftkColor(slack) + ';">' + (t.status === 'open' ? ftkClock(slack) + ' to SLA, before driving' : (t.made_sla ? 'Closed inside SLA, ' + t.points + ' points' : 'Closed after SLA')) + '</div>';
+  html += '<div class="panel-actions">';
+  if (t.status === 'open') html += '<button id="ftkDone">Closed now</button><button class="secondary" id="ftkGo">Go</button>';
+  html += '<button class="secondary" id="ftkEdit">Edit</button><button class="secondary" id="ftkDel">Delete</button><button class="secondary" id="ftkBack">Back</button></div>';
+  panel.innerHTML = html; panel.scrollTop = 0; panel.classList.add('open');
+  document.getElementById('ftkBack').addEventListener('click', showTickets);
+  document.getElementById('ftkEdit').addEventListener('click', () => { ftkPending = [Object.assign({ _id: t.id }, t)]; showTicketConfirm(0); });
+  document.getElementById('ftkDel').addEventListener('click', async () => {
+    ftTickets = ftTickets.filter(x => x.id !== t.id); ftkSaveLocal();
+    if (typeof cloudReady === 'function' && cloudReady()) { try { await sb.from('field_twin_tickets').delete().eq('id', t.id); } catch (e) {} }
+    ftkPins(); showTickets();
+  });
+  if (t.status === 'open') {
+    document.getElementById('ftkDone').addEventListener('click', async () => {
+      t.status = 'closed'; t.closed_at = new Date().toISOString();
+      t.made_sla = t.due_at ? new Date(t.closed_at) <= new Date(t.due_at) : null;
+      t.points = ftkPoints(t);
+      await ftkPush(t); ftkPins();
+      setStatus(t.made_sla ? 'ticket closed inside SLA, plus ' + t.points + ' points' : 'ticket closed');
+      showTickets();
+    });
+    document.getElementById('ftkGo').addEventListener('click', () => {
+      closePanel();
+      if (isFinite(t.lat)) map.setView([t.lat, t.lon], 15);
+    });
+  }
+}
+
+// Confirm screen: every field the reader filled can be fixed before it counts, since a wrong due time gives a wrong score.
+function showTicketConfirm(idx) {
+  const r = ftkPending[idx];
+  if (!r) { showTickets(); return; }
+  const panel = document.getElementById('panel');
+  const due = r.due_at ? new Date(r.due_at) : ftkDueFrom(r);
+  const match = r.place_id ? ftPlaces.find(p => p.id === r.place_id) : ftkMatchPlace(r.site, r.address);
+  const lockers = ftPlaces.filter(p => p.kind === 'locker' && p.name).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  let html = '<h2>Check ticket' + (ftkPending.length > 1 ? ' ' + (idx + 1) + ' of ' + ftkPending.length : '') + '</h2>';
+  html += '<div class="question">Ticket number</div><input type="text" id="tkNum" value="' + escapeHtml(r.ticket || '') + '">';
+  html += '<div class="question">Site</div><input type="text" id="tkSite" value="' + escapeHtml(r.site || '') + '">';
+  html += '<div class="question">SLA due</div><input type="datetime-local" id="tkDue" value="' + ftkLocalInput(due) + '">';
+  html += '<div class="question">Priority</div><input type="text" id="tkPri" value="' + escapeHtml(r.priority || '') + '">';
+  html += '<div class="question">Problem</div><input type="text" id="tkSum" value="' + escapeHtml(r.summary || '') + '">';
+  html += '<div class="question">Where</div><select id="tkWhere"><option value="">pick a locker</option>' + (r.address ? '<option value="addr"' + (match ? '' : ' selected') + '>the address on the ticket</option>' : '') + '<option value="here">where I am now</option>'
+    + (r.lat && !r.place_id ? '<option value="keep" selected>keep the saved spot</option>' : '')
+    + lockers.map(p => '<option value="' + p.id + '"' + (match && match.id === p.id ? ' selected' : '') + '>' + escapeHtml(ftpLabel(p)) + '</option>').join('') + '</select>';
+  html += '<div class="meta-line">' + (match ? 'Matched to ' + escapeHtml(ftpLabel(match)) + ' from the site name.' : 'No locker matched the site name.') + '</div>';
+  html += '<div class="panel-actions"><button id="tkSave">Save ticket</button><button class="secondary" id="tkSkip">Skip</button></div>';
+  panel.innerHTML = html; panel.scrollTop = 0; panel.classList.add('open');
+  document.getElementById('tkSkip').addEventListener('click', () => showTicketConfirm(idx + 1));
+  document.getElementById('tkSave').addEventListener('click', async () => {
+    const where = document.getElementById('tkWhere').value;
+    const dueVal = document.getElementById('tkDue').value;
+    const old = r._id ? ftTickets.find(x => x.id === r._id) : null;
+    const t = old || { id: ftpId(), status: 'open', created_at: new Date().toISOString(), opened_at: (ftkParseWhen(r.opened) || new Date()).toISOString() };
+    t.ticket = document.getElementById('tkNum').value.trim();
+    t.site = document.getElementById('tkSite').value.trim();
+    t.priority = document.getElementById('tkPri').value.trim();
+    t.summary = document.getElementById('tkSum').value.trim();
+    t.address = r.address || t.address || '';
+    t.due_at = dueVal ? new Date(dueVal).toISOString() : null;
+    if (where === 'here') { const me = mySpot(); if (me) { t.lat = me.lat; t.lon = me.lon; t.place_id = null; } }
+    else if (where === 'addr' && t.address) {
+      setStatus('finding the ticket address');
+      try {
+        const g = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=' + encodeURIComponent(t.address));
+        const j = await g.json();
+        if (j && j[0]) { t.lat = Number(j[0].lat); t.lon = Number(j[0].lon); t.place_id = null; const near = ftpNear(t.lat, t.lon, 150, 'locker'); if (near) t.place_id = near.id; }
+        else setStatus('address not found, open the ticket and pick a locker');
+      } catch (e) { setStatus('address lookup failed, open the ticket and pick a locker'); }
+    }
+    else if (where && where !== 'keep') { const p = ftPlaces.find(x => x.id === where); if (p) { t.lat = p.lat; t.lon = p.lon; t.place_id = p.id; if (!t.address) t.address = p.address || ''; } }
+    if (!old) ftTickets.push(t);
+    await ftkPush(t);
+    ftkPins();
+    setStatus('ticket ' + (t.ticket || '') + ' saved');
+    showTicketConfirm(idx + 1);
+  });
+}
+
+// A ticket often needs two photos, the SLA at the top and the address further down. Each photo waits here
+// until Read now sends them all in one call.
+let ftkShots = [];
+async function addTicketShot(file) {
+  const data = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file); });
+  ftkShots.push(await shrinkDataUrl(data, 1400, 0.7));
+  const panel = document.getElementById('panel');
+  let html = '<h2>Ticket photos</h2><div class="meta-line">' + ftkShots.length + (ftkShots.length === 1 ? ' photo' : ' photos') + ' of this ticket. Scroll the work phone and add the part with the address, or read now.</div>';
+  html += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;">' + ftkShots.map(u => '<img src="' + u + '" style="width:72px;height:110px;object-fit:cover;border:1px solid var(--line);">').join('') + '</div>';
+  html += '<div class="ftx-row">' + (ftkShots.length < 4 ? '<button class="secondary" id="ftkMore">Add photo</button>' : '') + '<button id="ftkRead">Read now</button></div>';
+  html += '<div id="ftkMsg" class="meta-line"></div><div class="panel-actions"><button class="secondary" id="ftkDrop">Cancel</button></div>';
+  panel.innerHTML = html; panel.scrollTop = 0; panel.classList.add('open');
+  if (document.getElementById('ftkMore')) document.getElementById('ftkMore').addEventListener('click', () => document.getElementById('ticketFile').click());
+  document.getElementById('ftkRead').addEventListener('click', () => { const shots = ftkShots; ftkShots = []; document.getElementById('ftkRead').disabled = true; startTicketScan(shots); });
+  document.getElementById('ftkDrop').addEventListener('click', () => { ftkShots = []; showTickets(); });
+}
+async function startTicketScan(shots) {
+  setStatus('reading the ticket screen');
+  const msg = document.getElementById('ftkMsg');
+  if (msg) msg.textContent = 'Reading the ticket screen. This takes a few seconds.';
+  try {
+    const small = shots;
+    const base = getApiBase().replace(/\/+$/, '');
+    const headers = { 'Content-Type': 'application/json' };
+    let how = await apiAuthHeaders(headers);
+    let res = null, lastErr = null;
+    for (const wait of [0, 1500, 3000, 6000]) {
+      if (wait) await new Promise(r => setTimeout(r, wait));
+      try { res = await fetch(base + '/tickets/extract', { method: 'POST', headers: headers, body: JSON.stringify({ images: small }) }); break; }
+      catch (e) { lastErr = e; }
+    }
+    if (!res) throw new Error('the Field Twin service did not answer, ' + (lastErr ? lastErr.message : 'no signal'));
+    if (res.status === 401 && how !== 'token') { const h2 = { 'Content-Type': 'application/json' }; if (await apiAuthHeaders(h2, true) !== 'none') res = await fetch(base + '/tickets/extract', { method: 'POST', headers: h2, body: JSON.stringify({ images: small }) }); }
+    if (res.status === 401) throw new Error('sign in under Account and profile so the reader knows it is you');
+    if (res.status === 404) throw new Error('the Field Twin service is running an old build without the ticket reader');
+    let j = {};
+    try { j = await res.json(); } catch (e) {}
+    if (!res.ok) throw new Error(j.error || ('service returned ' + res.status));
+    ftkPending = (j.tickets || []).map(x => Object.assign({}, x));
+    if (!ftkPending.length) throw new Error('no ticket found in that photo');
+    setStatus('found ' + ftkPending.length + (ftkPending.length === 1 ? ' ticket' : ' tickets'));
+    showTicketConfirm(0);
+  } catch (e) {
+    setStatus('ticket reader: ' + e.message);
+    if (document.getElementById('ftkMsg')) document.getElementById('ftkMsg').textContent = 'Ticket reader: ' + e.message + '. Add by hand works without the service.';
+  }
+}
+
+(function () {
+  const inp = document.getElementById('ticketFile');
+  if (inp) inp.addEventListener('change', e => { if (e.target.files[0]) addTicketShot(e.target.files[0]); e.target.value = ''; });
+  const dock = document.getElementById('ticketDockBtn');
+  if (dock) dock.addEventListener('click', showTickets);
+  const mb = document.getElementById('ticketsBtn');
+  if (mb) mb.addEventListener('click', () => { document.getElementById('sideMenu').classList.remove('open'); document.getElementById('menuOverlay').classList.remove('open'); showTickets(); });
+  setTimeout(() => { ftkPins(); ftkPull(); }, 3500);
+  setInterval(ftkPull, 5 * 60000);
+})();
 </script>
 </body>
 </html>

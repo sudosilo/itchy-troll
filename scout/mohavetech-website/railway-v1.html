@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Railway</title>
+<style>
+:root { --bg: #f4f7fc; --card: #ffffff; --ink: #0e1320; --muted: #5b6475; --line: #d6deec; --blue: #2447f5; --soft: #e8eeff; --warn: #b45309; --bad: #c62828; --ok: #1b7f3b; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font-family: Arial, Helvetica, sans-serif; }
+body { padding: 12px; }
+.top { position: sticky; top: 0; z-index: 2; background: var(--bg); padding-bottom: 8px; }
+.totals { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 8px; }
+@media (min-width: 700px) { .totals { grid-template-columns: repeat(4, 1fr); } }
+.tot { background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--blue); border-radius: 8px; padding: 10px; min-height: 64px; }
+.tot b { display: block; font-size: 22px; color: var(--blue); }
+.tot span { font-size: 12px; color: var(--muted); }
+.sorts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.sorts button { font: 600 13px Arial, sans-serif; height: 36px; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 6px; cursor: pointer; }
+.sorts button.on { background: var(--blue); color: #ffffff; border-color: var(--blue); }
+.note { font-size: 12px; color: var(--muted); margin: 6px 2px 0; min-height: 15px; }
+.proj { background: var(--card); border: 1px solid var(--line); border-radius: 8px; margin: 8px 0; overflow: hidden; }
+.ph { display: grid; grid-template-columns: 1fr auto; gap: 6px; padding: 10px; border-left: 4px solid var(--blue); }
+.ph .name { font-weight: 700; font-size: 15px; word-break: break-word; }
+.ph .meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.cost { font: 700 15px monospace; color: var(--blue); text-align: right; }
+.cost small { display: block; font: 11px monospace; color: var(--muted); }
+.open { display: inline-block; margin-top: 6px; font: 600 12px Arial, sans-serif; color: var(--blue); border: 1px solid var(--blue); border-radius: 5px; padding: 4px 8px; text-decoration: none; background: var(--soft); }
+.svc { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; padding: 8px 10px; border-top: 1px solid var(--line); font-size: 13px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.dot.SUCCESS { background: var(--ok); } .dot.CRASHED, .dot.FAILED { background: var(--bad); } .dot.SLEEPING { background: #8aa0d8; }
+.dot.BUILDING, .dot.DEPLOYING, .dot.QUEUED, .dot.INITIALIZING, .dot.WAITING { background: var(--warn); }
+.svc .sm { color: var(--muted); font-size: 11px; }
+.svc a { color: var(--blue); text-decoration: none; font-weight: 600; }
+.chip { display: inline-block; font: 600 10px Arial, sans-serif; border-radius: 4px; padding: 1px 5px; margin-left: 4px; vertical-align: 1px; }
+.chip.idle { background: #fff3e0; color: var(--warn); border: 1px solid #f3c58a; }
+.chip.down { background: #fdeaea; color: var(--bad); border: 1px solid #f0b4b4; }
+.chip.zero { background: var(--soft); color: var(--blue); border: 1px solid #b9c7fb; }
+.msg { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="totals">
+    <div class="tot"><b id="t-now">...</b><span>spent this billing period</span></div>
+    <div class="tot"><b id="t-est">...</b><span>estimated by period end</span></div>
+    <div class="tot"><b id="t-proj">...</b><span>projects</span></div>
+    <div class="tot"><b id="t-idle">...</b><span>idle projects costing money</span></div>
+  </div>
+  <div class="sorts" id="sorts">
+    <button data-s="cost" class="on">Cost</button>
+    <button data-s="idle">Idle</button>
+    <button data-s="recent">Recent</button>
+    <button data-s="name">Name</button>
+  </div>
+  <div class="note" id="note"></div>
+</div>
+<div id="list"><div class="msg">Loading Railway...</div></div>
+<script>
+(function () {
+  var IDLE_DAYS = 30, data = null, sort = "cost";
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function money(v) { v = v || 0; return "$" + (v < 10 ? v.toFixed(2) : v.toFixed(0)); }
+  function days(iso) { return iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86400000) : null; }
+  function ago(iso) { var d = days(iso); if (d === null) return "never deployed"; if (d === 0) return "deployed today"; return "deployed " + d + "d ago"; }
+  function idle(p) { var d = days(p.lastDeploy || p.updatedAt); return d === null || d >= IDLE_DAYS; }
+  function down(p) { return p.services.some(function (s) { return s.status === "CRASHED" || s.status === "FAILED"; }); }
+  function sorted() {
+    var a = data.projects.slice();
+    if (sort === "cost") a.sort(function (x, y) { return y.cost - x.cost; });
+    if (sort === "idle") a.sort(function (x, y) { return (idle(y) - idle(x)) || (y.cost - x.cost); });
+    if (sort === "recent") a.sort(function (x, y) { return String(y.lastDeploy || "").localeCompare(String(x.lastDeploy || "")); });
+    if (sort === "name") a.sort(function (x, y) { return x.name.localeCompare(y.name); });
+    return a;
+  }
+  function render() {
+    var h = sorted().map(function (p) {
+      var chips = "";
+      if (idle(p) && p.cost > 0.005) chips += '<span class="chip idle">idle</span>';
+      if (down(p)) chips += '<span class="chip down">crashed</span>';
+      if (p.cost < 0.005) chips += '<span class="chip zero">no cost</span>';
+      var svcs = p.services.map(function (s) {
+        var st = s.sleeping && s.status === "SUCCESS" ? "SLEEPING" : s.status;
+        return '<div class="svc"><span class="dot ' + esc(st) + '"></span><div><a href="' + esc(s.url) + '" target="_blank" rel="noopener">' + esc(s.name) + '</a>' +
+          '<div class="sm">' + esc(st.toLowerCase()) + ' · ' + esc(ago(s.lastDeploy)) + (s.domain ? ' · ' + esc(s.domain) : '') + '</div></div>' +
+          '<div class="cost">' + money(s.cost) + '</div></div>';
+      }).join("");
+      return '<div class="proj"><div class="ph"><div><div class="name">' + esc(p.name) + chips + '</div>' +
+        '<div class="meta">' + p.services.length + ' service' + (p.services.length === 1 ? '' : 's') + ' · ' + esc(ago(p.lastDeploy)) + (data.workspaces.length > 1 ? ' · ' + esc(p.workspace) : '') + '</div>' +
+        '<a class="open" href="' + esc(p.url) + '" target="_blank" rel="noopener">Open in Railway</a></div>' +
+        '<div class="cost">' + money(p.cost) + '<small>est ' + money(p.estimate) + '</small></div></div>' + svcs + '</div>';
+    }).join("");
+    document.getElementById("list").innerHTML = h || '<div class="msg">No Railway projects found.</div>';
+  }
+  function totals() {
+    var now = 0, est = 0;
+    data.workspaces.forEach(function (w) { now += w.currentUsage || 0; est += w.estimate || 0; });
+    var idleCost = data.projects.filter(function (p) { return idle(p) && p.cost > 0.005; });
+    document.getElementById("t-now").textContent = money(now);
+    document.getElementById("t-est").textContent = money(est);
+    document.getElementById("t-proj").textContent = data.projects.length;
+    document.getElementById("t-idle").textContent = idleCost.length;
+    var w = data.workspaces[0] || {};
+    document.getElementById("note").textContent = "Idle means no deploy in " + IDLE_DAYS + " days. Updated " + new Date(data.generated).toLocaleString() + (w.billingEnd ? ". Period ends " + new Date(w.billingEnd).toLocaleDateString() : "") + ".";
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("#sorts button"), function (b) {
+    b.onclick = function () {
+      sort = b.getAttribute("data-s");
+      Array.prototype.forEach.call(document.querySelectorAll("#sorts button"), function (x) { x.classList.toggle("on", x === b); });
+      if (data) render();
+    };
+  });
+  fetch("/api/railway-v1").then(function (r) { return r.json(); }).then(function (j) {
+    if (j.error) throw new Error(j.error);
+    data = j;
+    totals();
+    render();
+  }).catch(function (e) {
+    ["t-now", "t-est", "t-proj", "t-idle"].forEach(function (id) { document.getElementById(id).textContent = "off"; });
+    document.getElementById("list").innerHTML = '<div class="msg">' + esc(e.message || e) + '</div>';
+  });
+})();
+</script>
+</body>
+</html>

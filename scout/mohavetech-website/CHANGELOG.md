@@ -1,5 +1,7 @@
 App Index changelog
 
+2026-11-16, v2026.11.16. Added a Railway tab that lists every Railway project and service with this billing period cost, an end of period estimate, deploy status, and idle flags. Apps with a Railway backend get a blue railway button that opens it in Railway. Hire Portal got its orange phone star.
+
 2026-11-14, v2026.11.14. Deploy dates were synced.
 
 2026-11-11, v2026.11.11. Added a dark mode for the modern look with a menu switch. Stars now run behind the links, and the panels are see through. The retro look got stars too. Deploy dates were synced.

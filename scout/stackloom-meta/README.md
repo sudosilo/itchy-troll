@@ -8,6 +8,6 @@ Live at stackloom-meta.vercel.app.
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-11-09, v2026.11.09. Added the Runner line, the math gate runner from the phone ads, opened by hiring an ad producer.
+Latest change. 2026-11-15, v2026.11.15. Added the Match line, the candy smashing match three game, opened by hiring a level designer.
 
 Full history is in CHANGELOG.md.

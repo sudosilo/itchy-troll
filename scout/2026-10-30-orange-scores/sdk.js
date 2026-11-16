@@ -45,6 +45,13 @@
       return call('/api/activity' + q);
     },
     games: function () { return call('/api/games'); },
+    // Token wallet. The server grants tokens each calendar cycle and does all spending.
+    wallet: function (game, pid) {
+      return call('/api/wallet?game=' + encodeURIComponent(game) + '&pid=' + encodeURIComponent(pid));
+    },
+    spend: function (game, pid, item) {
+      return call('/api/wallet', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ game: game, pid: pid, item: item }) });
+    },
     // Builds a safe element for a player link. Text is set as plain text, never as HTML.
     linkEl: function (entry) {
       var el;

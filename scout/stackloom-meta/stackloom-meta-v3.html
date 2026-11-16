@@ -227,6 +227,12 @@
   #runStatus { height: 38px; min-height: 38px; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 2px 14px; line-height: 1.3; }
   #runCanvas { display: block; border-radius: 6px; box-shadow: 0 0 0 1px var(--edge); touch-action: none; }
 
+  /* Match engine screen */
+  .mat { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--page); user-select: none; -webkit-user-select: none; }
+  .mat[hidden] { display: none; }
+  #matStatus { height: 38px; min-height: 38px; overflow: hidden; display: flex; align-items: center; justify-content: center; padding: 2px 14px; line-height: 1.3; }
+  #matCanvas { display: block; border-radius: 6px; box-shadow: 0 0 0 1px var(--edge); touch-action: none; }
+
   /* Card engine screen */
   .cards { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; background: var(--page); user-select: none; -webkit-user-select: none; }
   .cards[hidden] { display: none; }
@@ -416,6 +422,33 @@
   <div class="dtools">
     <button id="runLeft" class="btn primary">Left lane</button>
     <button id="runRight" class="btn primary">Right lane</button>
+  </div>
+</div>
+
+<div id="mat" class="mat" hidden>
+  <header class="play-top">
+    <div class="play-title">
+      <div id="matName" class="row-name"></div>
+      <div id="matFor" class="quiet"></div>
+    </div>
+    <div class="stat"><span class="label">Score</span><span id="matScore" class="value">0</span></div>
+    <div class="stat"><span class="label">Moves</span><span id="matMoves" class="value">0</span></div>
+    <button id="matClose" class="btn">Done</button>
+  </header>
+  <div id="matStatus" class="doku-status"></div>
+  <main id="matStage" class="stage">
+    <div id="matWrap" class="board-wrap">
+      <canvas id="matCanvas"></canvas>
+      <div id="matOverlay" class="overlay">
+        <h1 id="matOverlayTitle"></h1>
+        <p id="matOverlayText"></p>
+        <button id="matOverlayButton" class="btn primary">Start</button>
+      </div>
+    </div>
+  </main>
+  <div class="dtools">
+    <button id="matShuffle" class="btn">Shuffle</button>
+    <button id="matHint" class="btn primary">Hint</button>
   </div>
 </div>
 
@@ -762,6 +795,51 @@ const RUNNER_LENGTHS = {
 };
 
 // ------------------------------------------------------------------
+// SIXTH PRODUCT LINE: MATCH THREE
+// The candy smashing game from every phone. Swap two neighbors to line
+// up three or more, they clear, the rest fall, and new ones drop in.
+// One match engine, and every product is a skin file of six pieces.
+// ------------------------------------------------------------------
+const MATCH_THEMES = {
+  candy: { label: "Sucker Smash", work: 18, board: "#fff6fb", grid: "#f6d5e6", glow: false,
+    glyphs: ["🍬", "🍭", "🧁", "🍩", "🍪", "🍫"], names: ["candy", "lollipop", "cupcake", "donut", "cookie", "chocolate"],
+    colors: ["#ff5fa2", "#ffb13b", "#5cc8a8", "#9b7bff", "#d49a5e", "#8a6250"] },
+  hacker: { label: "Cache Crush", work: 24, board: "#f4f9ff", grid: "#cfe0f5", glow: true,
+    glyphs: ["🐛", "🐴", "🔒", "💣", "🕷️", "👁️"], names: ["worm", "trojan", "lock", "zero day", "crawler", "spyware"],
+    colors: ["#2463b0", "#2fb4e6", "#4fa36c", "#d0584f", "#8a5cb8", "#e0a33a"] },
+  neon: { label: "Neon Swap", work: 18, board: "#ffffff", grid: "#e6ecf5", glow: true,
+    glyphs: ["", "", "", "", "", ""], names: ["pink", "cyan", "lime", "gold", "orange", "violet"],
+    colors: ["#ff2fd6", "#00c8f0", "#29d614", "#ffc400", "#ff6a00", "#a526ff"] },
+  dog: { label: "Kibble Crush", work: 22, board: "#fffaf2", grid: "#eedfc9", glow: false,
+    glyphs: ["🐶", "🦴", "🐾", "🎾", "🌭", "🐕"], names: ["puppy", "bone", "paw", "ball", "hot dog", "hound"],
+    colors: ["#c68a52", "#e9c9a3", "#9a6843", "#b8d94a", "#d0584f", "#7a5548"] },
+  ocean: { label: "Reef Swap", work: 22, board: "#f3fbfd", grid: "#cde9f0", glow: false,
+    glyphs: ["🐟", "🐚", "🐙", "🦀", "🐬", "🪸"], names: ["fish", "shell", "octopus", "crab", "dolphin", "coral"],
+    colors: ["#2a7fbf", "#f2a65a", "#e76f6f", "#d0584f", "#39b3c6", "#ff7eb6"] },
+  space: { label: "Star Swap", work: 24, board: "#f6f6ff", grid: "#dcdaf5", glow: true,
+    glyphs: ["🚀", "🪐", "⭐", "🌙", "☄️", "👽"], names: ["rocket", "planet", "star", "moon", "comet", "alien"],
+    colors: ["#5b4bdb", "#8f6ee8", "#f0a830", "#4a6fe3", "#e85fb3", "#4fa36c"] },
+  fruit: { label: "Fruit Mash", work: 20, board: "#fffdf4", grid: "#efe6c6", glow: false,
+    glyphs: ["🍎", "🍌", "🍇", "🍓", "🍊", "🥝"], names: ["apple", "banana", "grapes", "strawberry", "orange", "kiwi"],
+    colors: ["#d0584f", "#f2c230", "#8a5cb8", "#e8657a", "#f39c4a", "#6bb34a"] },
+  gem: { label: "Gem Swap", work: 22, board: "#f7f9ff", grid: "#dde4f2", glow: true,
+    glyphs: ["💎", "🔷", "🔶", "🟣", "🟢", "🔴"], names: ["diamond", "sapphire", "topaz", "amethyst", "emerald", "ruby"],
+    colors: ["#7fc8f0", "#2463b0", "#f08a32", "#8a5cb8", "#3fae5a", "#d0584f"] },
+  dino: { label: "Dino Mash", work: 22, board: "#f8fbf1", grid: "#dde8c8", glow: false,
+    glyphs: ["🦖", "🦕", "🥚", "🌋", "🦴", "🌿"], names: ["rex", "longneck", "egg", "volcano", "bone", "fern"],
+    colors: ["#6a9f3a", "#a3c45a", "#e9c9a3", "#d98c3a", "#8b6b3d", "#4f7d4a"] }
+};
+
+const MATCH_COLORS = {
+  five: { label: "five pieces", count: 5, work: 0 },
+  six: { label: "six pieces", count: 6, work: 4 }
+};
+const MATCH_MOVES = {
+  generous: { label: "generous moves", moves: 30, work: 0 },
+  tight: { label: "tight moves", moves: 20, work: 3 }
+};
+
+// ------------------------------------------------------------------
 // Company rules
 // ------------------------------------------------------------------
 const DAY_SECONDS = 45;
@@ -795,6 +873,8 @@ const DEV_NAMES = ["Marlo", "Kestrel", "Ines"];
 const SENIORS = [
   { key: "puzzle", title: "Puzzle designer", name: "Odessa", cost: 2500, salary: 200, office: 1, needs: "dev", line: "doku", lineName: "Doku line",
     text: "Knows logic puzzles cold. Customers start ordering symbol sudoku games like Hackerdoku and Meowdoku, and doku builds go faster." },
+  { key: "level", title: "Level designer", name: "Paz", cost: 3500, salary: 250, office: 1, needs: "puzzle", line: "match", lineName: "Match line",
+    text: "Can make one board last a thousand levels. Customers start ordering match three games like Sucker Smash and Cache Crush, and match builds go faster." },
   { key: "physics", title: "Physics programmer", name: "Teodor", cost: 4500, salary: 300, office: 1, needs: "puzzle", line: "bubble", lineName: "Bubble line",
     text: "Makes things bounce right. Customers start ordering bubble shooters like Packet Popper and Pup Pop, and bubble builds go faster." },
   { key: "ads", title: "Ad producer", name: "Brisco", cost: 6000, salary: 360, office: 1, needs: "physics", line: "runner", lineName: "Runner line",
@@ -898,7 +978,9 @@ function isDoku(order) { return order.line === "doku"; }
 function isBubble(order) { return order.line === "bubble"; }
 function isCards(order) { return order.line === "cards"; }
 function isRunner(order) { return order.line === "runner"; }
+function isMatch(order) { return order.line === "match"; }
 function lookFor(order) {
+  if (isMatch(order)) return MATCH_THEMES[order.theme];
   if (isDoku(order)) return DOKU_THEMES[order.theme];
   if (isBubble(order)) return BUBBLE_THEMES[order.theme];
   if (isCards(order)) return CARD_THEMES[order.theme];
@@ -910,6 +992,7 @@ function bugSlots(order) {
   if (isBubble(order)) return BUBBLE_PALETTES[order.palette].count;
   if (isCards(order)) return 4;
   if (isRunner(order)) return 3;
+  if (isMatch(order)) return MATCH_COLORS[order.colors].count;
   return PIECE_SETS[order.pieceSet].shapes.length;
 }
 
@@ -922,6 +1005,7 @@ function orderSpec(order) {
     return parts.join(", ") + prem;
   }
   if (isCards(order)) return lookFor(order).label + " for " + CARD_GAMES[order.game].label + prem;
+  if (isMatch(order)) return lookFor(order).label + " match three, " + MATCH_COLORS[order.colors].label + ", " + MATCH_MOVES[order.moves].label + prem;
   if (isRunner(order)) return lookFor(order).label + " gate runner, " + RUNNER_MATH[order.math].label + ", " + RUNNER_LENGTHS[order.length].label + prem;
   const parts = [lookFor(order).label + " theme"];
   if (order.premium) parts.push("premium art");
@@ -1001,7 +1085,24 @@ function buildRunnerFile(customer, themeKey, mathKey, lengthKey, premium) {
   };
 }
 
+function buildMatchFile(customer, themeKey, colorKey, movesKey, premium) {
+  const look = MATCH_THEMES[themeKey];
+  const count = MATCH_COLORS[colorKey].count;
+  return {
+    product: "match",
+    themeName: look.label,
+    customer: customer,
+    premium: !!premium,
+    moves: MATCH_MOVES[movesKey].moves,
+    board: look.board,
+    grid: look.grid,
+    glow: look.glow,
+    candies: look.colors.slice(0, count).map((color, i) => ({ name: look.names[i], glyph: look.glyphs[i], color: color }))
+  };
+}
+
 function buildThemeFile(order) {
+  if (isMatch(order)) return buildMatchFile(order.customer, order.theme, order.colors, order.moves, order.premium);
   if (isDoku(order)) {
     const file = buildDokuFile(order.customer, order.theme, order.level);
     if (order.premium) file.premium = true;
@@ -1042,6 +1143,11 @@ function withBug(file, bug) {
   if (copy.product === "bubble") {
     copy.bubbles[bug.pieceIndex].glyph = "?";
     copy.bubbles[bug.pieceIndex].color = "#c3c8ca";
+    return copy;
+  }
+  if (copy.product === "match") {
+    copy.candies[bug.pieceIndex].glyph = "?";
+    copy.candies[bug.pieceIndex].color = "#c3c8ca";
     return copy;
   }
   if (copy.product === "runner") {
@@ -1111,6 +1217,15 @@ const HOUSE_RUNNER = {
   file: buildRunnerFile("The studio", "hacker", "tricky", "short", false)
 };
 
+const HOUSE_MATCH = {
+  id: "housematch",
+  customer: "the studio",
+  spec: "Sucker Smash, the sample match three every studio keeps on hand",
+  day: 0,
+  bug: false,
+  file: buildMatchFile("The studio", "candy", "five", "generous", false)
+};
+
 const HOUSE_GAME = {
   id: "house",
   customer: "the studio",
@@ -1130,12 +1245,14 @@ function makeOffer() {
   if (lineOpen("bubble")) lines.push("bubble");
   if (lineOpen("cards")) lines.push("cards");
   if (lineOpen("runner")) lines.push("runner");
+  if (lineOpen("match")) lines.push("match");
   const line = pick(lines);
   let order;
   if (line === "doku") order = makeDokuOffer();
   else if (line === "bubble") order = makeBubbleOffer();
   else if (line === "cards") order = makeCardOffer();
   else if (line === "runner") order = makeRunnerOffer();
+  else if (line === "match") order = makeMatchOffer();
   else order = makeBlockOffer();
   if (lineOpen("art") && Math.random() < 0.3) {
     order.premium = true;
@@ -1195,6 +1312,21 @@ function makeRunnerOffer() {
   };
   order.work = RUNNER_THEMES[order.theme].work + RUNNER_MATH[order.math].work + RUNNER_LENGTHS[order.length].work;
   return priceOrder(order, 12);
+}
+
+function makeMatchOffer() {
+  const order = {
+    id: company.nextId++,
+    line: "match",
+    customer: pick(CUSTOMERS),
+    theme: pick(Object.keys(MATCH_THEMES)),
+    colors: pick(["five", "five", "six"]),
+    moves: pick(["generous", "generous", "tight"]),
+    status: "offer", progress: 0, terminal: -1, builtBy: -1, bug: null, tested: false,
+    expiresAt: company.time + 40, deadline: 0, readyAt: 0
+  };
+  order.work = MATCH_THEMES[order.theme].work + MATCH_COLORS[order.colors].work + MATCH_MOVES[order.moves].work;
+  return priceOrder(order, 11);
 }
 
 function makeBlockOffer() {
@@ -1436,7 +1568,7 @@ function strip(colors) {
 }
 
 function motifLine(order) {
-  const motifs = (isDoku(order) || isBubble(order) || isCards(order) || isRunner(order) ? lookFor(order).glyphs : THEMES[order.theme].motifs).filter(Boolean);
+  const motifs = (isDoku(order) || isBubble(order) || isCards(order) || isRunner(order) || isMatch(order) ? lookFor(order).glyphs : THEMES[order.theme].motifs).filter(Boolean);
   return motifs.length ? `<div class="motifs">${motifs.join(" ")}</div>` : "";
 }
 
@@ -1672,9 +1804,9 @@ function renderOffice() {
 }
 
 function renderGames() {
-  let html = `<p class="note">Every block game runs on the block engine, every doku on the doku engine, every bubble shooter on the bubble engine, every deck on the deck engine, and every gate runner on the runner engine. The only difference between products on the same engine is the theme file. Premium products are the same file with one flag flipped and a bigger invoice. Tap View file to see one.</p>`;
+  let html = `<p class="note">Every block game runs on the block engine, every doku on the doku engine, every bubble shooter on the bubble engine, every deck on the deck engine, every gate runner on the runner engine, and every match three on the match engine. The only difference between products on the same engine is the theme file. Premium products are the same file with one flag flipped and a bigger invoice. Tap View file to see one.</p>`;
   html += renderHackCard();
-  [HOUSE_GAME, HOUSE_DOKU, HOUSE_BUBBLE, HOUSE_DECK, HOUSE_POKER, HOUSE_RUNNER, ...company.catalog].forEach(game => {
+  [HOUSE_GAME, HOUSE_DOKU, HOUSE_BUBBLE, HOUSE_DECK, HOUSE_POKER, HOUSE_RUNNER, HOUSE_MATCH, ...company.catalog].forEach(game => {
     html += `
       <article class="order">
         ${strip(fileColors(game.file))}
@@ -1752,12 +1884,14 @@ function gameById(id) {
   if (id === "housedeck") return HOUSE_DECK;
   if (id === "housepoker") return HOUSE_POKER;
   if (id === "houserunner") return HOUSE_RUNNER;
+  if (id === "housematch") return HOUSE_MATCH;
   return company.catalog.find(game => game.id === id);
 }
 
 function fileColors(file) {
   if (file.product === "doku") return file.symbols.map(symbol => symbol.color);
   if (file.product === "bubble") return file.bubbles.map(b => b.color);
+  if (file.product === "match") return file.candies.map(p => p.color);
   if (file.product === "runner") return [file.goodGate, file.badGate, file.road, file.ground, file.sky];
   if (file.product === "cards") return file.suits.map(suit => suit.color).concat(["#2463b0"]);
   return file.pieces.slice(0, 7).map(piece => piece.color);
@@ -2273,6 +2407,7 @@ function openPlay(file, context) {
   else if (file.product === "bubble") openBubble(file, context);
   else if (file.product === "cards") openCards(file, context);
   else if (file.product === "runner") openRunner(file, context);
+  else if (file.product === "match") openMatch(file, context);
   else openBlocks(file, context);
 }
 
@@ -2326,6 +2461,9 @@ function finishPlayTest(orderId) {
     } else if (isBubble(order)) {
       const bubbleName = BUBBLE_THEMES[order.theme].names[order.bug.pieceIndex];
       notify("Play test found a bug. The " + bubbleName + " bubble had gone grey with a question mark on it. Fixed before shipping.", true);
+    } else if (isMatch(order)) {
+      const pieceName = MATCH_THEMES[order.theme].names[order.bug.pieceIndex];
+      notify("Play test found a bug. The " + pieceName + " piece had gone grey with a question mark on it. Fixed before shipping.", true);
     } else if (isRunner(order)) {
       const unitName = RUNNER_THEMES[order.theme].names[order.bug.pieceIndex];
       notify("Play test found a bug. The " + unitName + " showed up as a question mark on the track. Fixed before shipping.", true);
@@ -3611,6 +3749,462 @@ document.getElementById("runClose").addEventListener("click", closeRunner);
 window.addEventListener("resize", runResize);
 
 // ------------------------------------------------------------------
+// THE MATCH ENGINE
+// Reads a match skin file and becomes that match three game. Swipe a
+// piece into its neighbor, or tap one and then the other. Three or more
+// in a line clear, the rest fall, and new pieces drop in from the top.
+// ------------------------------------------------------------------
+const MAT_N = 8;
+
+const matRoot = document.getElementById("mat");
+const matStage = document.getElementById("matStage");
+const matWrap = document.getElementById("matWrap");
+const matCanvas = document.getElementById("matCanvas");
+const matCtx = matCanvas.getContext("2d");
+const matOverlay = document.getElementById("matOverlay");
+const matStatusEl = document.getElementById("matStatus");
+
+let matOpen = false;
+let ms = null;
+
+function matStatus(text, kind) {
+  matStatusEl.textContent = text || "";
+  matStatusEl.className = "doku-status" + (kind ? " " + kind : "");
+}
+function matGoal(extra) { matStatus((extra ? extra + " " : "") + "Goal " + ms.target + " points.", ""); }
+function matShowOverlay(title, text, label) {
+  document.getElementById("matOverlayTitle").textContent = title;
+  document.getElementById("matOverlayText").textContent = text;
+  document.getElementById("matOverlayButton").textContent = label;
+  matOverlay.hidden = false;
+}
+function matStats() {
+  document.getElementById("matScore").textContent = ms.score;
+  document.getElementById("matMoves").textContent = ms.moves;
+}
+function matTarget() {
+  const perMove = 44 + ms.level * 6;
+  const hard = ms.file.candies.length >= 6 ? 0.8 : 1;
+  return Math.max(200, Math.round(ms.file.moves * perMove * hard / 50) * 50);
+}
+function matRandomKind() { return Math.floor(Math.random() * ms.file.candies.length); }
+function matInside(r, c) { return r >= 0 && r < MAT_N && c >= 0 && c < MAT_N; }
+
+function matFindMatches() {
+  const g = ms.grid;
+  const hit = new Set();
+  for (let r = 0; r < MAT_N; r++) {
+    let run = 1;
+    for (let c = 1; c <= MAT_N; c++) {
+      const same = c < MAT_N && g[r][c].k >= 0 && g[r][c].k === g[r][c - 1].k;
+      if (same) run++;
+      else { if (run >= 3) for (let i = c - run; i < c; i++) hit.add(r * MAT_N + i); run = 1; }
+    }
+  }
+  for (let c = 0; c < MAT_N; c++) {
+    let run = 1;
+    for (let r = 1; r <= MAT_N; r++) {
+      const same = r < MAT_N && g[r][c].k >= 0 && g[r][c].k === g[r - 1][c].k;
+      if (same) run++;
+      else { if (run >= 3) for (let i = r - run; i < r; i++) hit.add(i * MAT_N + c); run = 1; }
+    }
+  }
+  return hit;
+}
+
+function matSwapKinds(a, b) {
+  const t = ms.grid[a[0]][a[1]].k;
+  ms.grid[a[0]][a[1]].k = ms.grid[b[0]][b[1]].k;
+  ms.grid[b[0]][b[1]].k = t;
+}
+
+// Finds one swap that makes a line, or null when the board is stuck.
+function matFindMove() {
+  for (let r = 0; r < MAT_N; r++) {
+    for (let c = 0; c < MAT_N; c++) {
+      const tries = [[r, c + 1], [r + 1, c]];
+      for (const b of tries) {
+        if (!matInside(b[0], b[1])) continue;
+        if (ms.grid[r][c].k === ms.grid[b[0]][b[1]].k) continue;
+        matSwapKinds([r, c], b);
+        const good = matFindMatches().size > 0;
+        matSwapKinds([r, c], b);
+        if (good) return [[r, c], b];
+      }
+    }
+  }
+  return null;
+}
+
+function matFill(dropIn) {
+  let tries = 0;
+  do {
+    ms.grid = [];
+    for (let r = 0; r < MAT_N; r++) {
+      const row = [];
+      for (let c = 0; c < MAT_N; c++) {
+        let k, guard = 0;
+        do {
+          k = matRandomKind();
+        } while (guard++ < 30 && ((c >= 2 && row[c - 1].k === k && row[c - 2].k === k) ||
+          (r >= 2 && ms.grid[r - 1][c].k === k && ms.grid[r - 2][c].k === k)));
+        row.push({ k: k, oy: dropIn ? -MAT_N - 1 : 0 });
+      }
+      ms.grid.push(row);
+    }
+  } while ((matFindMatches().size > 0 || !matFindMove()) && tries++ < 60);
+}
+
+function matShuffle() {
+  const kinds = [];
+  ms.grid.forEach(row => row.forEach(cell => kinds.push(cell.k)));
+  for (let tries = 0; tries < 80; tries++) {
+    for (let i = kinds.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = kinds[i]; kinds[i] = kinds[j]; kinds[j] = t;
+    }
+    kinds.forEach((k, i) => { ms.grid[Math.floor(i / MAT_N)][i % MAT_N].k = k; });
+    if (!matFindMatches().size && matFindMove()) return;
+  }
+  matFill(false);
+}
+
+function matStart(nextLevel) {
+  if (!nextLevel) ms.level = 1;
+  ms.score = 0;
+  ms.moves = ms.file.moves;
+  ms.target = matTarget();
+  ms.sel = null; ms.hint = null; ms.swap = null; ms.pops = []; ms.combo = 0;
+  matFill(true);
+  ms.fallV = 6;
+  ms.phase = "fall";
+  ms.state = "playing";
+  matOverlay.hidden = true;
+  matGoal(nextLevel ? "Level " + ms.level + "." : "Swipe a piece into its neighbor.");
+  matStats();
+}
+
+function matTrySwap(a, b) {
+  if (!ms || ms.state !== "playing" || ms.phase !== "idle") return;
+  if (!matInside(b[0], b[1])) return;
+  if (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) !== 1) return;
+  ms.sel = null;
+  ms.hint = null;
+  matSwapKinds(a, b);
+  const good = matFindMatches().size > 0;
+  ms.swap = { a: a, b: b, t: 0, good: good, back: false };
+  ms.phase = "swap";
+}
+
+function matClear() {
+  const hit = matFindMatches();
+  if (!hit.size) { ms.phase = "idle"; matSettle(); return; }
+  ms.combo++;
+  ms.score += hit.size * 10 * ms.combo;
+  hit.forEach(i => {
+    const r = Math.floor(i / MAT_N), c = i % MAT_N;
+    ms.pops.push({ r: r, c: c, k: ms.grid[r][c].k, t: 0 });
+    ms.grid[r][c].k = -1;
+  });
+  if (ms.combo > 1) matGoal("Combo x" + ms.combo + ".");
+  ms.popT = 0;
+  ms.phase = "pop";
+  matStats();
+}
+
+function matDrop() {
+  const g = ms.grid;
+  for (let c = 0; c < MAT_N; c++) {
+    let write = MAT_N - 1;
+    for (let r = MAT_N - 1; r >= 0; r--) {
+      if (g[r][c].k < 0) continue;
+      if (r !== write) g[write][c] = { k: g[r][c].k, oy: g[r][c].oy - (write - r) };
+      write--;
+    }
+    const missing = write + 1;
+    for (let r = write; r >= 0; r--) g[r][c] = { k: matRandomKind(), oy: -missing };
+  }
+  ms.fallV = 6;
+  ms.phase = "fall";
+}
+
+function matSettle() {
+  ms.combo = 0;
+  if (ms.score >= ms.target) {
+    ms.state = "won";
+    matShowOverlay("Level cleared", "Score " + ms.score + " with " + ms.moves + " " + plural(ms.moves, "move") + " to spare.", "Next level");
+    return;
+  }
+  if (ms.moves <= 0) {
+    ms.state = "lost";
+    matShowOverlay("Out of moves", "Score " + ms.score + " of " + ms.target + " on level " + ms.level + ".", "Play again");
+    return;
+  }
+  if (!matFindMove()) {
+    matShuffle();
+    matGoal("No moves left, so the board shuffled.");
+  }
+}
+
+function matUpdate(dt) {
+  ms.pops.forEach(p => { p.t += dt; });
+  ms.pops = ms.pops.filter(p => p.t < 0.3);
+  if (ms.hint) { ms.hint.t -= dt; if (ms.hint.t <= 0) ms.hint = null; }
+  if (ms.state !== "playing") return;
+  if (ms.phase === "swap") {
+    ms.swap.t += dt / 0.16;
+    if (ms.swap.t >= 1) {
+      const sw = ms.swap;
+      if (sw.good) {
+        ms.swap = null;
+        ms.moves--;
+        ms.combo = 0;
+        matGoal("");
+        matClear();
+      } else if (!sw.back) {
+        matSwapKinds(sw.a, sw.b);
+        ms.swap = { a: sw.a, b: sw.b, t: 0, good: false, back: true };
+      } else {
+        ms.swap = null;
+        ms.phase = "idle";
+        matGoal("Those two do not make a line.");
+      }
+    }
+  } else if (ms.phase === "pop") {
+    ms.popT += dt;
+    if (ms.popT >= 0.16) matDrop();
+  } else if (ms.phase === "fall") {
+    ms.fallV += dt * 60;
+    let moving = false;
+    ms.grid.forEach(row => row.forEach(cell => {
+      if (cell.oy < 0) {
+        cell.oy = Math.min(0, cell.oy + ms.fallV * dt);
+        if (cell.oy < 0) moving = true;
+      }
+    }));
+    if (!moving) matClear();
+  }
+}
+
+function matRoundPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function matDrawPiece(x, y, S, k, alpha, scale) {
+  const p = ms.file.candies[k];
+  if (!p) return;
+  const ctx = matCtx;
+  const r = S * 0.42 * (scale || 1);
+  ctx.globalAlpha = alpha == null ? 1 : alpha;
+  if (ms.file.glow) { ctx.shadowColor = p.color; ctx.shadowBlur = S * 0.25; }
+  if (ms.file.premium) {
+    // Premium art: a lit, glossy candy with a rim and a highlight.
+    const g = ctx.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.1, x, y, r * 1.15);
+    g.addColorStop(0, shade(p.color, 0.75));
+    g.addColorStop(0.5, p.color);
+    g.addColorStop(1, shade(p.color, -0.45));
+    ctx.fillStyle = g;
+    matRoundPath(ctx, x - r, y - r, r * 2, r * 2, r * 0.6);
+    ctx.fill();
+    ctx.shadowBlur = 0; ctx.shadowColor = "transparent";
+    ctx.lineWidth = Math.max(1, S * 0.04);
+    ctx.strokeStyle = shade(p.color, -0.55);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+    ctx.beginPath(); ctx.ellipse(x - r * 0.35, y - r * 0.5, r * 0.35, r * 0.16, -0.4, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.fillStyle = p.color;
+    matRoundPath(ctx, x - r, y - r, r * 2, r * 2, r * 0.35);
+    ctx.fill();
+    ctx.shadowBlur = 0; ctx.shadowColor = "transparent";
+    ctx.lineWidth = Math.max(1, S * 0.03);
+    ctx.strokeStyle = shade(p.color, -0.35);
+    ctx.stroke();
+    if (p.glyph) {
+      ctx.fillStyle = shade(p.color, 0.6);
+      ctx.beginPath(); ctx.arc(x, y, r * 0.72, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  if (p.glyph) {
+    ctx.fillStyle = "#1c2833";
+    ctx.font = Math.round(r * 1.1) + "px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(p.glyph, x, y + r * 0.06);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function matRing(r, c, color, width, alpha) {
+  const S = ms.S;
+  matCtx.globalAlpha = alpha == null ? 1 : alpha;
+  matCtx.strokeStyle = color;
+  matCtx.lineWidth = width;
+  matRoundPath(matCtx, c * S + 2, r * S + 2, S - 4, S - 4, S * 0.22);
+  matCtx.stroke();
+  matCtx.globalAlpha = 1;
+}
+
+function matDraw() {
+  if (!ms) return;
+  const ctx = matCtx, f = ms.file, S = ms.S, W = ms.W;
+  ctx.clearRect(0, 0, W, W);
+  ctx.fillStyle = f.board;
+  ctx.fillRect(0, 0, W, W);
+  ctx.fillStyle = f.grid;
+  ctx.globalAlpha = 0.5;
+  for (let r = 0; r < MAT_N; r++) for (let c = 0; c < MAT_N; c++) if ((r + c) % 2) ctx.fillRect(c * S, r * S, S, S);
+  ctx.globalAlpha = 1;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 0, W, W); ctx.clip();
+  const sw = ms.swap;
+  const e = sw ? 1 - Math.pow(1 - Math.min(1, sw.t), 2) : 1;
+  for (let r = 0; r < MAT_N; r++) {
+    for (let c = 0; c < MAT_N; c++) {
+      const cell = ms.grid[r][c];
+      if (!cell || cell.k < 0) continue;
+      let x = c, y = r + cell.oy;
+      if (sw) {
+        if (r === sw.a[0] && c === sw.a[1]) { x = sw.a[1] + (sw.b[1] - sw.a[1]) * (1 - e); y = sw.a[0] + (sw.b[0] - sw.a[0]) * (1 - e); }
+        else if (r === sw.b[0] && c === sw.b[1]) { x = sw.b[1] + (sw.a[1] - sw.b[1]) * (1 - e); y = sw.b[0] + (sw.a[0] - sw.b[0]) * (1 - e); }
+      }
+      matDrawPiece(x * S + S / 2, y * S + S / 2, S, cell.k, 1, 1);
+    }
+  }
+  ms.pops.forEach(p => matDrawPiece(p.c * S + S / 2, p.r * S + S / 2, S, p.k, 1 - p.t / 0.3, 1 + p.t * 1.5));
+  ctx.restore();
+  if (ms.sel) matRing(ms.sel[0], ms.sel[1], "#2463b0", 3, 1);
+  if (ms.hint) {
+    const a = 0.45 + 0.55 * Math.abs(Math.sin(ms.hint.t * 6));
+    ms.hint.cells.forEach(cell => matRing(cell[0], cell[1], "#2fb4e6", 3, a));
+  }
+}
+
+let matLast = 0;
+function matFrame(time) {
+  if (!matOpen || !ms) return;
+  const dt = matLast ? Math.min(time - matLast, 50) / 1000 : 0;
+  matLast = time;
+  matUpdate(dt);
+  matDraw();
+  requestAnimationFrame(matFrame);
+}
+
+function matResize() {
+  if (!matOpen || !ms) return;
+  const availW = matStage.clientWidth - 16;
+  const availH = matStage.clientHeight - 16;
+  const S = Math.max(20, Math.floor(Math.min(availW, availH, 560) / MAT_N));
+  ms.S = S;
+  ms.W = S * MAT_N;
+  const d = window.devicePixelRatio || 1;
+  matWrap.style.width = ms.W + "px";
+  matWrap.style.height = ms.W + "px";
+  matCanvas.style.width = ms.W + "px";
+  matCanvas.style.height = ms.W + "px";
+  matCanvas.width = Math.round(ms.W * d);
+  matCanvas.height = Math.round(ms.W * d);
+  matCtx.setTransform(d, 0, 0, d, 0, 0);
+  matDraw();
+}
+
+function matCellAt(event) {
+  const rect = matCanvas.getBoundingClientRect();
+  const c = Math.floor((event.clientX - rect.left) / ms.S);
+  const r = Math.floor((event.clientY - rect.top) / ms.S);
+  return matInside(r, c) ? [r, c] : null;
+}
+
+function matTap(cell) {
+  if (ms.state !== "playing" || ms.phase !== "idle") return;
+  if (!ms.sel) { ms.sel = cell; return; }
+  if (ms.sel[0] === cell[0] && ms.sel[1] === cell[1]) { ms.sel = null; return; }
+  if (Math.abs(ms.sel[0] - cell[0]) + Math.abs(ms.sel[1] - cell[1]) === 1) matTrySwap(ms.sel, cell);
+  else ms.sel = cell;
+}
+
+let matPress = null;
+matCanvas.addEventListener("pointerdown", e => {
+  if (!ms || ms.state !== "playing") return;
+  e.preventDefault();
+  matCanvas.setPointerCapture(e.pointerId);
+  const cell = matCellAt(e);
+  matPress = cell ? { cell: cell, x: e.clientX, y: e.clientY, swiped: false } : null;
+});
+matCanvas.addEventListener("pointermove", e => {
+  if (!ms || !matPress || matPress.swiped) return;
+  const dx = e.clientX - matPress.x, dy = e.clientY - matPress.y;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < ms.S * 0.35) return;
+  matPress.swiped = true;
+  const [r, c] = matPress.cell;
+  const to = Math.abs(dx) > Math.abs(dy) ? [r, c + Math.sign(dx)] : [r + Math.sign(dy), c];
+  matTrySwap(matPress.cell, to);
+});
+matCanvas.addEventListener("pointerup", () => {
+  if (ms && matPress && !matPress.swiped) matTap(matPress.cell);
+  matPress = null;
+});
+matCanvas.addEventListener("pointercancel", () => { matPress = null; });
+
+document.getElementById("matHint").addEventListener("click", () => {
+  if (!ms || ms.state !== "playing" || ms.phase !== "idle") return;
+  const move = matFindMove();
+  if (move) ms.hint = { cells: move, t: 2 };
+});
+document.getElementById("matShuffle").addEventListener("click", () => {
+  if (!ms || ms.state !== "playing" || ms.phase !== "idle" || ms.moves <= 0) return;
+  ms.moves--;
+  ms.sel = null; ms.hint = null;
+  matShuffle();
+  matGoal("Shuffled for one move.");
+  matStats();
+  if (ms.moves <= 0) matSettle();
+});
+document.getElementById("matOverlayButton").addEventListener("click", () => {
+  if (!ms) return;
+  if (ms.state === "won") { ms.level++; matStart(true); }
+  else matStart(false);
+});
+
+function openMatch(file, context) {
+  ms = { file: file, ctx: context || {}, state: "ready", phase: "idle", level: 1, score: 0, moves: file.moves, target: 0,
+    grid: [], sel: null, hint: null, swap: null, pops: [], combo: 0, fallV: 0, popT: 0, S: 40, W: 320 };
+  matOpen = true;
+  ms.target = matTarget();
+  matFill(false);
+  document.getElementById("matName").textContent = file.themeName + (file.premium ? " premium" : "");
+  document.getElementById("matFor").textContent = "For " + file.customer;
+  matStatus("");
+  matShowOverlay(file.themeName,
+    ms.ctx.orderId != null
+      ? "Play this build the way the customer will. If a piece looks wrong, that is a bug."
+      : "Swipe a piece into its neighbor to line up three or more. Reach the goal before the moves run out.",
+    "Start");
+  matRoot.hidden = false;
+  matStats();
+  requestAnimationFrame(() => { matResize(); matLast = 0; requestAnimationFrame(matFrame); });
+}
+
+function closeMatch() {
+  matOpen = false;
+  matRoot.hidden = true;
+  const orderId = ms ? ms.ctx.orderId : null;
+  ms = null;
+  matPress = null;
+  finishPlayTest(orderId);
+  lastTick = performance.now();
+  render();
+}
+document.getElementById("matClose").addEventListener("click", closeMatch);
+window.addEventListener("resize", matResize);
+
+// ------------------------------------------------------------------
 // THE DECK ENGINE
 // Reads a deck file and deals either klondike solitaire or jacks or
 // better video poker. Tap a card and the engine moves it to the best
@@ -4091,7 +4685,7 @@ setInterval(() => {
   const dt = Math.min(1, (now - lastTick) / 1000);
   lastTick = now;
 
-  const engineOpen = playOpen || dokuOpen || bubOpen || cardsOpen || runOpen;
+  const engineOpen = playOpen || dokuOpen || bubOpen || cardsOpen || runOpen || matOpen;
   if (!engineOpen && !document.hidden) {
     simulate(dt);
     saveClock += dt;

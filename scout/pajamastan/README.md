@@ -8,6 +8,6 @@ Live at pajamastan.vercel.app
 
 Checked every morning by Control Troll, an automated test system that loads every app and clicks through its features.
 
-Latest change. 2026-11-11, v2026.11.11. Added a combined creator seal that shows the Pajamastan flag beside a round seal.
+Latest change. 2026-11-16, v2026.11.16. Added the Hire Portal to the Links tab as a Pajamastan portal.
 
 Full history is in CHANGELOG.md.

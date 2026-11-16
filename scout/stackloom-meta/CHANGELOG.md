@@ -1,3 +1,5 @@
+2026-11-15, v2026.11.15. Added the Match line, the candy smashing match three game. Swipe a piece into its neighbor to line up three or more, clear the goal before the moves run out, and chain cascades for combos. Opened by hiring a level designer once a puzzle designer is on staff. Nine skins, five or six pieces, generous or tight moves, and premium art. Sucker Smash joins the studio samples.
+
 2026-11-09, v2026.11.09. Added the Runner line, the math gate runner from the phone ads. Pick a lane, run through gates that add, multiply, subtract, or divide the crowd, smash enemy squads, and outnumber the boss. Opened by hiring an ad producer once a physics programmer is on staff. Eight skins, friendly or tricky math, short or long tracks, and premium art.
 
 2026-11-08, v2026.11.08.1. Product lines now open by hiring senior developers instead of buying licenses. A puzzle designer opens the Doku line, a physics programmer opens the Bubble line, a systems designer opens the Card line, and an art director opens premium orders. Each one costs more than the last, needs the one before on staff, and speeds up builds in their line. Lines bought in older saves stay open.

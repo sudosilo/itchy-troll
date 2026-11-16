@@ -18,6 +18,7 @@
       var f = Math.floor(score / 100000), t = 99999 - (score % 100000), m = Math.floor(t / 600), sec = ((t % 600) / 10).toFixed(1);
       return f + (f === 1 ? ' flag ' : ' flags ') + m + ':' + (sec < 10 ? '0' : '') + sec;
     }
+    if (fmt === 'meters') return (score / 10).toFixed(1) + ' m';
     return score.toLocaleString();
   }
   function fill(box, nodes, emptyText) {

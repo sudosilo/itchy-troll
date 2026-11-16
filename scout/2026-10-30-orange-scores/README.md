@@ -6,6 +6,6 @@ Games post a score with a three letter tag and an optional link through one smal
 
 Live at 2026-10-30-orange-scores.vercel.app
 
-Latest change. 2026-11-14, v2026.11.14. Registered MobbyHill on the score hub, shown as flags and a clock time.
+Latest change. 2026-11-15, v2026.11.15b. Added weekly token wallets that games spend through the server. MobbyHill is the first game with one.
 
 Full history is in CHANGELOG.md.

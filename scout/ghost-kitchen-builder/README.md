@@ -8,6 +8,6 @@ Live at ghost-kitchen-builder.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. Replaced the broken cloud connection with a simpler built in sync. The concept name, website, phone, address, point of sale, and ordering fields now link to the shared site profile.
+Latest change. 2026-11-15, v2026.11.15. Rebuilt as version 3 in the RTSS style, with a light theme, drop down cards, and Build, Survey, Demo and More tabs. A shared apps menu and site links were added. It saves one document per site with a phone copy, and old saves carry over on first open. It now opens inside Field Twin, shares site details with RTSS, and a Field Twin account records who saved.
 
 See CHANGELOG.md for the full history.

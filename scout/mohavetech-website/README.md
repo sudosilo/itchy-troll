@@ -2,12 +2,12 @@ App Index
 
 App Index is a single page that lists the apps on this account. It is for the developer, who uses it to find an app quickly and see how fresh it is.
 
-Apps are grouped by category and can be searched, sorted, and viewed in a statistics tab. Colors show how recently each app changed, and phone tags show which phone built it. Each app has a notes box, a rating count, and a GitHub button. A Links tab shows a links app, and a hidden starfield sits in the background. A view menu switches the page between many scenes, such as ships, trains, a garden, a galleon, and a tornado, where each app takes a part.
+Apps are grouped by category and can be searched, sorted, and viewed in a statistics tab. Colors show how recently each app changed, and phone tags show which phone built it. Each app has a notes box, a rating count, and a GitHub button. A Links tab shows a links app, a Railway tab shows every Railway service with its cost and status, and a hidden starfield sits in the background. A view menu switches the page between many scenes, such as ships, trains, a garden, a galleon, and a tornado, where each app takes a part.
 
 Live at mohavetech-website.vercel.app.
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-11-14, v2026.11.14. Deploy dates were synced.
+Latest change. 2026-11-16, v2026.11.16. Added a Railway tab and railway buttons on apps with a Railway backend. Hire Portal got its orange phone star.
 
 Full history is in CHANGELOG.md.

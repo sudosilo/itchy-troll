@@ -1,0 +1,85 @@
+// Sample concepts carried over from the 2026 page. They load into Build and never save.
+export const DEMOS = {
+  "bacon": {
+    "title": "Willis Bacon Shop",
+    "line": "BBQ pit, Willis TX, ghost kitchen proof of concept",
+    "f": {
+      "bId.name": "Willis Bacon Shop",
+      "bId.concept": "BBQ / Smokehouse",
+      "bId.domain": "willisbaconshop.com",
+      "bId.phone": "+1 (936) 555-0182",
+      "bId.address": "100 Conroe Park N Dr, Willis TX 77378",
+      "bId.market": "Willis / Conroe, TX",
+      "bId.desc": "Build Structure: Converted grain silo with covered outdoor patio\nAdjacent Landmark: Willis Police Department (next door)",
+      "bVis.logo": true,
+      "bVis.photos": true,
+      "bVis.menuDesign": true,
+      "bVis.menuPdf": true,
+      "bVis.video": true,
+      "bAds.socialAds": true,
+      "bAds.searchAds": true,
+      "bOps.aiPhone": true,
+      "bAds.reviewsSeeded": true,
+      "bOps.backend": true,
+      "bFoot.mapsStatus": "LIVE",
+      "bFoot.fbStatus": "LIVE",
+      "bFoot.videoStatus": "LIVE",
+      "bFoot.yelpStatus": "PENDING",
+      "bFoot.taStatus": "SKIPPED",
+      "bFoot.igStatus": "SKIPPED",
+      "bNotes.notes": "Full ghost kitchen deployed in under 8 hours. Primary purpose: creative retaliation and industry research. Concept resonated locally. Anchor insight: memorable brand identity and cop-adjacent location narrative drove higher ad CTR than generic BBQ comps."
+    }
+  },
+  "ufo": {
+    "title": "UFO Smoothie Co.",
+    "line": "Smoothie bar, Kingman AZ, Quonset hut look",
+    "f": {
+      "bId.name": "UFO Smoothie Co.",
+      "bId.concept": "Smoothie / Juice Bar",
+      "bId.domain": "ufosmoothieco.com",
+      "bId.phone": "+1 (928) 555-0247",
+      "bId.address": "3400 Stockton Hill Rd, Kingman AZ 86401",
+      "bId.market": "Kingman / Mohave County, AZ",
+      "bId.desc": "Build Structure: Quonset hut with corrugated steel exterior and neon interior\nDrive-Through: Airlock-themed single lane",
+      "bVis.logo": true,
+      "bVis.photos": true,
+      "bVis.menuDesign": true,
+      "bOps.email": true,
+      "bFoot.mapsStatus": "LIVE",
+      "bFoot.fbStatus": "LIVE",
+      "bFoot.igStatus": "LIVE",
+      "bFoot.yelpStatus": "PENDING",
+      "bFoot.videoStatus": "SKIPPED",
+      "bFoot.taStatus": "SKIPPED",
+      "bNotes.notes": "Concept demo for Route 66 corridor market. Quonset hut build gives strong visual identity at low construction cost. Alien menu naming convention, Crop Circle Bowl, Area 51 Protein Blast, Roswell Red, tested well with focus group. Drive-through airlock theming is high shareability asset."
+    }
+  },
+  "coffee": {
+    "title": "Grounds and Grid",
+    "line": "Coffee shop, Phoenix AZ, shipping container build",
+    "f": {
+      "bId.name": "Grounds and Grid Coffee Co.",
+      "bId.concept": "Coffee Shop",
+      "bId.domain": "groundsandgrid.com",
+      "bId.phone": "+1 (602) 555-0391",
+      "bId.address": "1820 N 7th St, Phoenix AZ 85006",
+      "bId.market": "Phoenix / Downtown Arts District, AZ",
+      "bId.desc": "Build Structure: Two stacked 40ft shipping containers, urban infill lot\nSeating: 12 indoor / 18 outdoor patio with Edison grid lighting",
+      "bVis.logo": true,
+      "bVis.photos": true,
+      "bVis.menuDesign": true,
+      "bVis.menuPdf": true,
+      "bVis.schema": true,
+      "bOps.email": true,
+      "bOps.loyalty": true,
+      "bOps.ordering": true,
+      "bFoot.mapsStatus": "LIVE",
+      "bFoot.igStatus": "LIVE",
+      "bFoot.fbStatus": "LIVE",
+      "bFoot.yelpStatus": "LIVE",
+      "bFoot.videoStatus": "SKIPPED",
+      "bFoot.taStatus": "PENDING",
+      "bNotes.notes": "Highest completeness score of the three demos. Container build is modular, designed to relocate or stack a third unit. Pour-over bar with aggressive sourcing notes on chalkboard creates strong repeat-visit culture. NAP consistency across all directories is fully locked."
+    }
+  }
+};

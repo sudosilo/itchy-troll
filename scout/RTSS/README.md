@@ -13,6 +13,6 @@ Live at rtss-sigma.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. The live page now syncs to the cloud. Name, brand, address, city, state, internet provider, point of sale, and firewall link to the shared site profile.
+Latest change. 2026-11-15, v2026.11.15. Rebuilt as version 3 with a light theme and a survey that saves one document per site, with a phone copy for offline work. Old saves carry over on first open. Added a Drive-thru tab with a 3D lane and equipment model, sun and shade by time of day, screen heat estimates, car stack, cable runs and photos. The Topology, Integration and Cabling tabs were rebuilt. An apps menu links RTSS, RDSS and Field Twin for the same site, and Notes has a visit log. RTSS now opens inside Field Twin and shares site details, and a Field Twin account records who saved.
 
 See CHANGELOG.md for the full history.

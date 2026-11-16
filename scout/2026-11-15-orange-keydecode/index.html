@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Key Decoder</title>
+<style>
+:root{--bg:#f6f5f1;--panel:#ffffff;--ink:#1d2328;--mute:#66707a;--line:#d9dcd6;--acc:#1f6feb;--acc2:#d9480f;--ok:#2b8a3e;}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;align-items:center;gap:10px}
+header h1{font-size:17px;margin:0;font-weight:650}
+header span{color:var(--mute);font-size:12px}
+.wrap{max-width:900px;margin:0 auto;padding:10px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+.card h2{font-size:14px;margin:0 0 8px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,select,input{font:inherit}
+button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 11px;color:var(--ink);cursor:pointer}
+button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+button.pri{background:var(--acc);color:#fff;border-color:var(--acc)}
+button.warn{color:var(--acc2)}
+select,input[type=number],input[type=text]{border:1px solid var(--line);border-radius:8px;padding:7px 8px;background:#fff;color:var(--ink)}
+input[type=number]{width:90px}
+#stage{position:relative;width:100%;height:58vh;min-height:320px;background:#e9ebe6;border:1px solid var(--line);border-radius:10px;overflow:hidden;touch-action:none}
+#cv{width:100%;height:100%;display:block}
+#hint{position:absolute;left:8px;right:8px;top:8px;background:rgba(255,255,255,.93);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:13px;pointer-events:none}
+#empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mute);text-align:center;padding:20px}
+.tools button{padding:7px 9px;font-size:14px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{border-bottom:1px solid var(--line);padding:5px 4px;text-align:left}
+th{color:var(--mute);font-weight:600}
+.code{font:600 26px/1.2 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.12em}
+.small{font-size:12px;color:var(--mute)}
+.pill{display:inline-block;padding:2px 8px;border-radius:99px;background:#eef3fd;color:var(--acc);font-size:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media(max-width:560px){.grid2{grid-template-columns:1fr}}
+td input[type=number]{width:70px;padding:4px}
+.hide{display:none!important}
+.depths button{min-width:34px;padding:6px 0}
+</style>
+</head>
+<body>
+<header><h1>Key Decoder</h1><span>educational key measurement and bitting tool</span></header>
+<div class="wrap">
+
+<div class="card">
+  <h2>1. Photo</h2>
+  <div class="row">
+    <label><button class="pri" onclick="document.getElementById('file').click()">Load key photo</button></label>
+    <input id="file" type="file" accept="image/*" class="hide">
+    <button onclick="fitView()">Fit</button>
+    <button onclick="rotateImg()">Rotate 90</button>
+  </div>
+  <p class="small">Lay the key flat on a plain contrasting surface with a coin beside it, same plane. Shoot straight down from 20 to 30 cm with good even light. Pinch or scroll to zoom, drag to pan, tap to place points.</p>
+</div>
+
+<div id="stage">
+  <canvas id="cv"></canvas>
+  <div id="empty">Load a photo of the key and a coin to begin.</div>
+  <div id="hint" class="hide"></div>
+</div>
+
+<div class="card" style="margin-top:10px">
+  <h2>2. Scale from coin</h2>
+  <div class="row">
+    <select id="coin">
+      <option value="17.91">US dime 17.91 mm</option>
+      <option value="19.05">US penny 19.05 mm</option>
+      <option value="21.21">US nickel 21.21 mm</option>
+      <option value="24.26" selected>US quarter 24.26 mm</option>
+      <option value="26.49">US dollar coin 26.49 mm</option>
+      <option value="custom">Custom diameter</option>
+    </select>
+    <input id="coinCustom" type="number" step="0.01" placeholder="mm" class="hide">
+    <button id="tCoin" onclick="setTool('coin')">Tap 3 points on coin edge</button>
+    <span id="scaleOut" class="pill">no scale</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>3. Key type</h2>
+  <div class="row">
+    <select id="ktype">
+      <option value="edge">Single sided edge cut (house, padlock)</option>
+      <option value="car">Double sided edge cut (car, motorcycle, RV)</option>
+      <option value="laser">Laser cut / sidewinder track</option>
+      <option value="dimple">Dimple key</option>
+      <option value="fob">Key fob / RFID / transponder</option>
+    </select>
+    <select id="fmt"></select>
+  </div>
+  <div id="customBox" class="hide" style="margin-top:8px">
+    <div class="grid2">
+      <label class="small">Cuts <input id="cN" type="number" value="5"></label>
+      <label class="small">Stop <select id="cStop"><option value="1">Shoulder</option><option value="2">Tip</option></select></label>
+      <label class="small">First cut from stop, mm <input id="cFirst" type="number" step="0.01" value="6.27"></label>
+      <label class="small">Cut spacing, mm <input id="cInc" type="number" step="0.01" value="3.81"></label>
+      <label class="small">Uncut height, mm <input id="cUncut" type="number" step="0.01" value="8.36"></label>
+      <label class="small">Depth step, mm <input id="cStep" type="number" step="0.01" value="0.58"></label>
+      <label class="small">Lowest depth number <input id="cMin" type="number" value="1"></label>
+      <label class="small">Highest depth number <input id="cMax" type="number" value="7"></label>
+      <label class="small">Cut flat width, mm <input id="cFlat" type="number" step="0.01" value="1.0"></label>
+      <label class="small">Cutter angle, deg <input id="cAng" type="number" value="90"></label>
+    </div>
+  </div>
+  <p id="typeNote" class="small"></p>
+</div>
+
+<div class="card" id="toolCard">
+  <h2>4. Align and measure</h2>
+  <div class="row tools" id="tools"></div>
+  <div id="dimpleOpts" class="row hide" style="margin-top:8px">
+    <label class="small">Cutter angle
+      <select id="dAng"><option value="90">90 deg</option><option value="100">100 deg</option><option value="110">110 deg</option></select>
+    </label>
+  </div>
+  <div id="depthPick" class="row depths hide" style="margin-top:8px"></div>
+  <p class="small" id="measOut"></p>
+</div>
+
+<div class="card" id="idCard">
+  <h2>5. Identify format</h2>
+  <p class="small">Uses the measured blade height and, if tapped, the cut spacing. Lower score is a closer match.</p>
+  <button onclick="identify()">Rank formats</button>
+  <div id="idOut" style="margin-top:8px"></div>
+</div>
+
+<div class="card" id="resCard">
+  <h2>6. Result</h2>
+  <div id="resOut"></div>
+  <div class="row" style="margin-top:10px">
+    <button onclick="exportJSON()">Download JSON</button>
+    <button onclick="exportSVG()">Download 1:1 SVG profile</button>
+    <input id="saveName" type="text" placeholder="label">
+    <button onclick="saveLib()">Save to library</button>
+  </div>
+</div>
+
+<div class="card" id="fobCard">
+  <h2>Key fob notes</h2>
+  <p class="small">Fobs and transponder keys carry no cuts to decode. They are identified by markings and radio type. Look on the back or inside the shell for an FCC ID, then look it up at fccid.io to see frequency and maker. Common types: 125 kHz proximity (EM4100, HID Prox), 13.56 MHz (MIFARE, NFC, iCLASS), car remotes at 315 MHz (North America) or 433 MHz, and car transponder chips (Texas 4C, 4D, ID46, Hitag) inside the key head.</p>
+  <div class="grid2">
+    <label class="small">FCC ID <input id="fFcc" type="text"></label>
+    <label class="small">Part number <input id="fPart" type="text"></label>
+    <label class="small">Frequency <select id="fFreq"><option>unknown</option><option>125 kHz</option><option>13.56 MHz</option><option>315 MHz</option><option>433 MHz</option><option>868 MHz</option><option>902 to 928 MHz</option></select></label>
+    <label class="small">Chip / type <input id="fChip" type="text"></label>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Library</h2>
+  <div id="libOut" class="small">Nothing saved yet.</div>
+</div>
+
+<p class="small">For learning how keys are measured. Decode only keys you own or have permission to work on.</p>
+</div>
+
+<script>
+// Format data in inches. Source: open key format tables used by locksmith reference cards.
+const FORMATS = [
+ {m:"Kwikset",n:"KW1",sides:1,stop:1,first:.247,inc:.15,num:5,flat:.084,ang:90,uncut:.329,step:.023,min:1,max:7,macs:4},
+ {m:"Schlage",n:"SC1 (5 pin)",sides:1,stop:1,first:.231,inc:.1562,num:5,flat:.031,ang:100,uncut:.335,step:.015,min:0,max:9,macs:7},
+ {m:"Schlage",n:"SC4 (6 pin)",sides:1,stop:1,first:.231,inc:.1562,num:6,flat:.031,ang:100,uncut:.335,step:.015,min:0,max:9,macs:7},
+ {m:"Arrow",n:"AR4",sides:1,stop:1,first:.265,inc:.155,num:6,flat:.060,ang:90,uncut:.312,step:.014,min:0,max:9,macs:6},
+ {m:"Master Lock",n:"M1",sides:1,stop:1,first:.185,inc:.126,num:5,flat:.039,ang:90,uncut:.276,step:.015,min:0,max:7,macs:7},
+ {m:"American",n:"AM7",sides:1,stop:1,first:.157,inc:.125,num:6,flat:.039,ang:90,uncut:.283,step:.016,min:1,max:8,macs:7},
+ {m:"Yale",n:"Y2",sides:1,stop:1,first:.200,inc:.165,num:6,flat:.054,ang:90,uncut:.320,step:.019,min:0,max:9,macs:9},
+ {m:"Yale",n:"Y11",sides:1,stop:1,first:.124,inc:.095,num:5,flat:.039,ang:90,uncut:.246,step:.020,min:1,max:5,macs:7},
+ {m:"Sargent",n:"S22",sides:1,stop:1,first:.216,inc:.156,num:6,flat:.063,ang:90,uncut:.328,step:.020,min:1,max:10,macs:7},
+ {m:"National",n:"NA25",sides:1,stop:1,first:.250,inc:.156,num:5,flat:.039,ang:90,uncut:.304,step:.012,min:0,max:9,macs:7},
+ {m:"National",n:"NA12",sides:1,stop:1,first:.150,inc:.140,num:5,flat:.039,ang:90,uncut:.270,step:.013,min:0,max:9,macs:7},
+ {m:"Corbin",n:"CO88",sides:1,stop:1,first:.250,inc:.156,num:6,flat:.047,ang:90,uncut:.343,step:.014,min:1,max:10,macs:7},
+ {m:"Lockwood",n:"LW4",sides:1,stop:1,first:.245,inc:.1562,num:5,flat:.031,ang:90,uncut:.344,step:.014,min:0,max:9,macs:9},
+ {m:"Lockwood",n:"LW5",sides:1,stop:1,first:.245,inc:.1562,num:6,flat:.031,ang:90,uncut:.344,step:.014,min:0,max:9,macs:9},
+ {m:"Russwin",n:"RU45",sides:1,stop:1,first:.250,inc:.156,num:6,flat:.053,ang:90,uncut:.343,step:.028,min:1,max:6,macs:5},
+ {m:"Weiser",n:"WR3",sides:1,stop:1,first:.237,inc:.156,num:5,flat:.090,ang:90,uncut:.315,step:.018,min:0,max:10,macs:6},
+ {m:"Best",n:"A2 SFIC",sides:1,stop:2,first:.250,inc:.149,num:6,flat:.051,ang:90,uncut:.318,step:.025,min:0,max:9,macs:5},
+ {m:"Ford",n:"H75 (8 cut)",sides:2,stop:2,first:.201,inc:.092,num:8,flat:.039,ang:90,uncut:.354,step:.025,min:1,max:5,macs:5},
+ {m:"GM / Chevrolet",n:"B102 (10 cut)",sides:2,stop:2,first:.205,inc:.093,num:10,flat:.039,ang:90,uncut:.315,step:.026,min:1,max:4,macs:5},
+ {m:"Dodge",n:"Y159",sides:2,stop:2,first:.297,inc:.092,num:8,flat:.039,ang:90,uncut:.339,step:.047,min:1,max:4,macs:5},
+ {m:"Kawasaki",n:"KA14",sides:2,stop:1,first:.098,inc:.098,num:6,flat:.039,ang:90,uncut:.258,step:.020,min:1,max:4,macs:4},
+ {m:"Suzuki",n:"SUZ18",sides:2,stop:1,first:.16,inc:.095,num:7,flat:.045,ang:90,uncut:.28,step:.020,min:1,max:4,macs:4},
+ {m:"Yamaha",n:"YM63",sides:2,stop:1,first:.157,inc:.098,num:7,flat:.039,ang:90,uncut:.295,step:.020,min:1,max:4,macs:4},
+ {m:"RV (FIC, GL, Bauer)",n:"RV",sides:2,stop:2,first:.126,inc:.094,num:5,flat:.039,ang:90,uncut:.260,step:.040,min:1,max:3,macs:3}
+];
+const IN = 25.4;
+
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const S = {
+  img:null, data:null, view:{s:1,x:0,y:0}, ppm:0, coinPts:[],
+  tool:'pan', a:null, b:null, top:null, stopPt:null, spacing:[],
+  cuts:[], sel:-1, dimples:[], pendingDimple:null, track:[]
+};
+
+// ---------- image ----------
+document.getElementById('file').addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const url = URL.createObjectURL(f); const im = new Image();
+  im.onload = ()=>{ setImage(im); URL.revokeObjectURL(url); };
+  im.src = url;
+});
+function setImage(src){
+  const max = 2400; let w = src.naturalWidth||src.width, h = src.naturalHeight||src.height;
+  const k = Math.min(1, max/Math.max(w,h));
+  const c = document.createElement('canvas'); c.width = Math.round(w*k); c.height = Math.round(h*k);
+  c.getContext('2d').drawImage(src,0,0,c.width,c.height);
+  S.img = c; S.data = c.getContext('2d').getImageData(0,0,c.width,c.height);
+  resetMarks(true);
+  document.getElementById('empty').classList.add('hide');
+  fitView();
+}
+function rotateImg(){
+  if(!S.img) return;
+  const c = document.createElement('canvas'); c.width = S.img.height; c.height = S.img.width;
+  const x = c.getContext('2d'); x.translate(c.width,0); x.rotate(Math.PI/2); x.drawImage(S.img,0,0);
+  S.img = c; S.data = x.getImageData(0,0,c.width,c.height); resetMarks(true); fitView();
+}
+function resetMarks(all){
+  if(all){ S.ppm=0; S.coinPts=[]; updScale(); }
+  S.a=S.b=S.top=S.stopPt=null; S.spacing=[]; S.dimples=[]; S.pendingDimple=null; S.track=[];
+  S.cuts=[]; S.sel=-1; refresh();
+}
+
+// ---------- view ----------
+function resize(){
+  const r = cv.getBoundingClientRect(), d = window.devicePixelRatio||1;
+  cv.width = r.width*d; cv.height = r.height*d; draw();
+}
+window.addEventListener('resize', resize);
+function fitView(){
+  if(!S.img) return; const r = cv.getBoundingClientRect();
+  const s = Math.min(r.width/S.img.width, r.height/S.img.height)*0.95;
+  S.view = {s, x:(r.width-S.img.width*s)/2, y:(r.height-S.img.height*s)/2}; draw();
+}
+function toImg(px,py){ return {x:(px-S.view.x)/S.view.s, y:(py-S.view.y)/S.view.s}; }
+
+const ptrs = new Map(); let gest = null;
+cv.addEventListener('pointerdown', e=>{
+  cv.setPointerCapture(e.pointerId);
+  ptrs.set(e.pointerId,{x:e.offsetX,y:e.offsetY,sx:e.offsetX,sy:e.offsetY});
+  if(ptrs.size===2){ const p=[...ptrs.values()]; gest={d:dist(p[0],p[1]),c:mid(p[0],p[1]),v:{...S.view},pinch:true}; }
+  else gest={moved:false,v:{...S.view},sx:e.offsetX,sy:e.offsetY};
+});
+cv.addEventListener('pointermove', e=>{
+  if(!ptrs.has(e.pointerId)) return;
+  const p = ptrs.get(e.pointerId); p.x=e.offsetX; p.y=e.offsetY;
+  if(gest && gest.pinch && ptrs.size===2){
+    const q=[...ptrs.values()], d=dist(q[0],q[1]), c=mid(q[0],q[1]);
+    const s = clamp(gest.v.s*d/gest.d, .05, 40);
+    const ix=(gest.c.x-gest.v.x)/gest.v.s, iy=(gest.c.y-gest.v.y)/gest.v.s;
+    S.view={s, x:c.x-ix*s, y:c.y-iy*s}; draw();
+  } else if(gest && !gest.pinch){
+    const dx=e.offsetX-gest.sx, dy=e.offsetY-gest.sy;
+    if(Math.hypot(dx,dy)>7) gest.moved=true;
+    if(gest.moved){ S.view={...gest.v, x:gest.v.x+dx, y:gest.v.y+dy}; draw(); }
+  }
+});
+function endPtr(e){
+  if(!ptrs.has(e.pointerId)) return;
+  const wasSingle = ptrs.size===1 && gest && !gest.pinch && !gest.moved;
+  ptrs.delete(e.pointerId);
+  if(wasSingle && S.img) onTap(toImg(e.offsetX,e.offsetY));
+  if(ptrs.size===0) gest=null;
+  else if(ptrs.size===1){ const p=[...ptrs.values()][0]; gest={moved:true,v:{...S.view},sx:p.x,sy:p.y}; }
+}
+cv.addEventListener('pointerup', endPtr); cv.addEventListener('pointercancel', endPtr);
+cv.addEventListener('wheel', e=>{
+  e.preventDefault(); const k = Math.exp(-e.deltaY*0.0015);
+  const s = clamp(S.view.s*k,.05,40), ix=(e.offsetX-S.view.x)/S.view.s, iy=(e.offsetY-S.view.y)/S.view.s;
+  S.view={s,x:e.offsetX-ix*s,y:e.offsetY-iy*s}; draw();
+},{passive:false});
+
+// ---------- math ----------
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+function mid(a,b){return {x:(a.x+b.x)/2,y:(a.y+b.y)/2}}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function circle3(p1,p2,p3){
+  const ax=p1.x,ay=p1.y,bx=p2.x,by=p2.y,cx=p3.x,cy=p3.y;
+  const d=2*(ax*(by-cy)+bx*(cy-ay)+cx*(ay-by)); if(Math.abs(d)<1e-6) return null;
+  const ux=((ax*ax+ay*ay)*(by-cy)+(bx*bx+by*by)*(cy-ay)+(cx*cx+cy*cy)*(ay-by))/d;
+  const uy=((ax*ax+ay*ay)*(cx-bx)+(bx*bx+by*by)*(ax-cx)+(cx*cx+cy*cy)*(bx-ax))/d;
+  return {x:ux,y:uy,r:Math.hypot(ax-ux,ay-uy)};
+}
+// Key frame: origin a, u along blade toward tip, n toward blade body.
+function frame(){
+  if(!S.a||!S.b) return null;
+  const L=dist(S.a,S.b); const u={x:(S.b.x-S.a.x)/L,y:(S.b.y-S.a.y)/L};
+  let n={x:-u.y,y:u.x};
+  if(S.top){ const t=(S.top.x-S.a.x)*n.x+(S.top.y-S.a.y)*n.y; if(t<0) n={x:-n.x,y:-n.y}; }
+  return {u,n};
+}
+function toKey(p){ const f=frame(); const dx=p.x-S.a.x, dy=p.y-S.a.y; return {s:dx*f.u.x+dy*f.u.y, t:dx*f.n.x+dy*f.n.y}; }
+function fromKey(s,t){ const f=frame(); return {x:S.a.x+f.u.x*s+f.n.x*t, y:S.a.y+f.u.y*s+f.n.y*t}; }
+
+// ---------- formats ----------
+const ktypeEl=document.getElementById('ktype'), fmtEl=document.getElementById('fmt');
+function fillFormats(){
+  const t=ktypeEl.value; fmtEl.innerHTML='';
+  const want = t==='edge'?1:(t==='car'?2:0);
+  if(want){
+    FORMATS.forEach((f,i)=>{ if(f.sides===want){ const o=document.createElement('option'); o.value=i; o.textContent=f.m+' '+f.n; fmtEl.appendChild(o);} });
+  }
+  if(t==='edge'||t==='car'||t==='laser'){ const o=document.createElement('option'); o.value='custom'; o.textContent='Custom spec'; fmtEl.appendChild(o); }
+  if(t==='laser') fmtEl.value='custom';
+  fmtEl.classList.toggle('hide', !(t==='edge'||t==='car'||t==='laser'));
+  onFormat();
+}
+function curFmt(){
+  if(fmtEl.value!=='custom') return FORMATS[+fmtEl.value];
+  const v=id=>parseFloat(document.getElementById(id).value)||0;
+  return {m:'Custom',n:'spec',sides:ktypeEl.value==='car'?2:1,stop:+document.getElementById('cStop').value,
+    first:v('cFirst')/IN,inc:v('cInc')/IN,num:Math.max(1,Math.round(v('cN'))),flat:v('cFlat')/IN,ang:v('cAng')||90,
+    uncut:v('cUncut')/IN,step:v('cStep')/IN,min:Math.round(v('cMin')),max:Math.round(v('cMax')),macs:99};
+}
+function depthIn(f,i){ return f.uncut-(i-f.min)*f.step; }
+function onFormat(){
+  const t=ktypeEl.value;
+  document.getElementById('customBox').classList.toggle('hide', fmtEl.value!=='custom' || !(t==='edge'||t==='car'||t==='laser'));
+  if(t==='edge'||t==='car'){ const f=curFmt(); S.cuts=new Array(f.num).fill(null); S.sel=-1; }
+  if(t==='laser'){ const f=curFmt(); S.track=new Array(f.num).fill(null); }
+  const notes={
+    edge:'Reference is the straight uncut bottom edge of the blade. Depths are measured from that edge up to each cut root.',
+    car:'Reference is the blade centerline. Both edges carry the same cuts, depth is the width between cut roots.',
+    laser:'Reference is the blade centerline. Tap the track wall at each cut position to record its offset from center.',
+    dimple:'Reference is the blade centerline. Mark each dimple center then its rim. Depth comes from rim diameter and cutter angle, or type a caliper reading.',
+    fob:'No cuts to decode. Record markings below.'
+  };
+  document.getElementById('typeNote').textContent=notes[t];
+  ['toolCard','idCard','resCard'].forEach(id=>document.getElementById(id).classList.toggle('hide',t==='fob'));
+  document.getElementById('idCard').classList.toggle('hide', !(t==='edge'||t==='car'));
+  document.getElementById('fobCard').classList.toggle('hide', t!=='fob');
+  document.getElementById('dimpleOpts').classList.toggle('hide', t!=='dimple');
+  buildTools(); refresh();
+}
+ktypeEl.addEventListener('change',()=>{ resetMarks(false); fillFormats(); });
+fmtEl.addEventListener('change',onFormat);
+document.querySelectorAll('#customBox input,#customBox select').forEach(el=>el.addEventListener('change',onFormat));
+document.getElementById('dAng').addEventListener('change',refresh);
+document.getElementById('coin').addEventListener('change',e=>{
+  document.getElementById('coinCustom').classList.toggle('hide',e.target.value!=='custom'); updScale();
+});
+document.getElementById('coinCustom').addEventListener('change',updScale);
+function coinMM(){ const v=document.getElementById('coin').value; return v==='custom'?(parseFloat(document.getElementById('coinCustom').value)||0):parseFloat(v); }
+
+// ---------- tools ----------
+function buildTools(){
+  const t=ktypeEl.value, f=(t==='edge'||t==='car'||t==='laser')?curFmt():null;
+  const list=[['pan','Pan only']];
+  if(t==='edge'){ list.push(['base','Bottom edge: 2 taps (bow side first)'],['top','Top of blade (uncut)']); }
+  if(t==='car'||t==='laser'||t==='dimple'){ list.push(['base','Centerline: 2 taps (bow side first)']); }
+  if(t==='car'||t==='dimple'||t==='laser') list.push(['top','One blade edge']);
+  if(f) list.push(['stop', f.stop===2?'Tip end':'Shoulder']);
+  if(t==='dimple') list.push(['stop','Shoulder']);
+  if(t==='edge'||t==='car'){ list.push(['spacing','Spacing: 2 adjacent cut centers'],['cut','Read cuts (tap a cut root)']); }
+  if(t==='laser') list.push(['track','Tap track wall']);
+  if(t==='dimple') list.push(['dimple','Add dimple: center then rim']);
+  const box=document.getElementById('tools'); box.innerHTML='';
+  list.forEach(([k,l])=>{ const b=document.createElement('button'); b.textContent=l; b.dataset.k=k; b.onclick=()=>setTool(k); box.appendChild(b); });
+  if(t==='edge'||t==='car'){ const b=document.createElement('button'); b.textContent='Auto read cuts'; b.onclick=autoRead; box.appendChild(b); }
+  if(t==='dimple'){ const b=document.createElement('button'); b.textContent='Undo dimple'; b.className='warn'; b.onclick=()=>{S.dimples.pop();S.pendingDimple=null;refresh();}; box.appendChild(b); }
+  const r=document.createElement('button'); r.textContent='Clear marks'; r.className='warn'; r.onclick=()=>{resetMarks(false); onFormat();}; box.appendChild(r);
+  markTool();
+}
+function markTool(){
+  const k=S.tool;
+  document.querySelectorAll('#tools button,#tCoin').forEach(b=>b.classList.toggle('on',b.dataset.k===k||(b.id==='tCoin'&&k==='coin')));
+  hint();
+}
+function setTool(k){
+  S.tool=k;
+  if(k==='coin') S.coinPts=[];
+  if(k==='base'){ S.a=S.b=null; }
+  if(k==='spacing') S.spacing=[];
+  markTool(); draw();
+}
+function need(){
+  if(!S.img) return 'Load a photo first.';
+  if(!S.ppm) return 'Set the scale from the coin first.';
+  if(!S.a||!S.b) return 'Set the reference line first.';
+  if(ktypeEl.value==='edge'&&!S.top) return 'Tap the top of the blade first.';
+  return '';
+}
+function hint(){
+  const h=document.getElementById('hint'); const t=ktypeEl.value;
+  const msg={
+    pan:'Drag to pan, pinch to zoom.',
+    coin:'Tap 3 points spread around the coin rim. ('+S.coinPts.length+'/3)',
+    base: t==='edge'?'Tap the straight bottom edge near the bow, then again near the tip.':'Tap the blade center near the bow, then again near the tip.',
+    top: t==='edge'?'Tap the top edge of the blade where it is not cut, between shoulder and first cut.':'Tap one blade edge, uncut part if possible.',
+    stop: (curFmtSafe()&&curFmtSafe().stop===2)?'Tap the very tip of the key.':'Tap the shoulder corner where the blade meets the bow stop.',
+    spacing:'Tap the bottom center of two neighboring cuts.',
+    cut:'Tap near the root of a cut. It snaps to the closest position and depth.',
+    track:'Tap the track wall at a cut position.',
+    dimple: S.pendingDimple?'Now tap the rim of that dimple.':'Tap the center of a dimple.'
+  }[S.tool]||'';
+  h.textContent=msg; h.classList.toggle('hide',!S.img||!msg);
+}
+function curFmtSafe(){ const t=ktypeEl.value; return (t==='edge'||t==='car'||t==='laser')?curFmt():null; }
+
+function onTap(p){
+  const t=ktypeEl.value;
+  switch(S.tool){
+    case 'coin':
+      S.coinPts.push(p);
+      if(S.coinPts.length===3){ updScale(); setTool('pan'); }
+      break;
+    case 'base':
+      if(!S.a) S.a=p; else { S.b=p; setTool(t==='edge'?'top':'stop'); }
+      break;
+    case 'top': S.top=p; setTool('stop'); break;
+    case 'stop': S.stopPt=p; setTool(t==='dimple'?'dimple':(t==='laser'?'track':'cut')); break;
+    case 'spacing': S.spacing.push(p); if(S.spacing.length>=2) setTool('cut'); break;
+    case 'cut': tapCut(p); break;
+    case 'track': tapTrack(p); break;
+    case 'dimple':
+      if(need()) { alertHint(need()); break; }
+      if(!S.pendingDimple) S.pendingDimple=p;
+      else { S.dimples.push({c:S.pendingDimple,e:p,over:null}); S.pendingDimple=null; }
+      break;
+  }
+  hint(); refresh();
+}
+function alertHint(m){ const h=document.getElementById('hint'); h.textContent=m; h.classList.remove('hide'); }
+function updScale(){
+  const out=document.getElementById('scaleOut');
+  if(S.coinPts.length===3){ const c=circle3(...S.coinPts); if(c){ S.coinC=c; S.ppm=(2*c.r)/coinMM(); } }
+  out.textContent=S.ppm?(S.ppm.toFixed(2)+' px/mm'):'no scale';
+  refresh();
+}
+
+// ---------- edge key geometry ----------
+function stopS(){ return S.stopPt?toKey(S.stopPt).s:null; }
+function cutS(f,i){ // position along u (px) of cut i, cuts numbered bow to tip
+  const s0=stopS(); if(s0===null) return null; const mm=IN*S.ppm;
+  if(f.stop===1) return s0+(f.first+i*f.inc)*mm;
+  return s0-(f.first+(f.num-1-i)*f.inc)*mm;
+}
+function measT(t){ // perpendicular distance in px -> measured inches
+  const sides=ktypeEl.value==='car'?2:1;
+  return (sides===2?2*Math.abs(t):t)/(S.ppm*IN);
+}
+function nearestDepth(f,inch){
+  let best=f.min,bd=1e9; for(let i=f.min;i<=f.max;i++){ const d=Math.abs(depthIn(f,i)-inch); if(d<bd){bd=d;best=i;} } return best;
+}
+function tapCut(p){
+  if(need()) return alertHint(need());
+  if(stopS()===null) return alertHint('Mark the '+(curFmt().stop===2?'tip':'shoulder')+' first.');
+  const f=curFmt(), k=toKey(p); let bi=0,bd=1e9;
+  for(let i=0;i<f.num;i++){ const d=Math.abs(cutS(f,i)-k.s); if(d<bd){bd=d;bi=i;} }
+  S.cuts[bi]=nearestDepth(f,measT(k.t)); S.sel=bi; refresh();
+}
+function tapTrack(p){
+  if(need()) return alertHint(need());
+  if(stopS()===null) return alertHint('Mark the stop first.');
+  const f=curFmt(), k=toKey(p); let bi=0,bd=1e9;
+  for(let i=0;i<f.num;i++){ const d=Math.abs(cutS(f,i)-k.s); if(d<bd){bd=d;bi=i;} }
+  S.track[bi]=k.t/S.ppm; S.sel=bi; refresh();
+}
+function lum(x,y){
+  x=Math.round(x); y=Math.round(y); const d=S.data; if(x<0||y<0||x>=d.width||y>=d.height) return null;
+  const o=(y*d.width+x)*4; return .299*d.data[o]+.587*d.data[o+1]+.114*d.data[o+2];
+}
+function autoRead(){
+  if(need()) return alertHint(need());
+  if(stopS()===null) return alertHint('Mark the stop point first.');
+  const f=curFmt(), mm=S.ppm*IN, sides=ktypeEl.value==='car'?2:1;
+  const tLo=((depthIn(f,f.max)-f.step)/sides)*mm, tHi=((f.uncut+f.step*1.5)/sides)*mm;
+  for(let i=0;i<f.num;i++){
+    const s=cutS(f,i); const vals=[];
+    for(let t=tLo;t<=tHi;t+=0.5){
+      let acc=0,c=0; for(let w=-2;w<=2;w++){ const q=fromKey(s+w,t); const l=lum(q.x,q.y); if(l!==null){acc+=l;c++;} }
+      vals.push({t,l:c?acc/c:0});
+    }
+    let best=null,bg=0;
+    for(let j=3;j<vals.length-3;j++){ const g=Math.abs((vals[j+3].l+vals[j+2].l)-(vals[j-3].l+vals[j-2].l)); if(g>bg){bg=g;best=vals[j].t;} }
+    if(best!==null) S.cuts[i]=nearestDepth(f,(sides===2?2*best:best)/mm);
+  }
+  refresh();
+}
+
+// ---------- draw ----------
+function draw(){
+  const d=window.devicePixelRatio||1; ctx.setTransform(d,0,0,d,0,0);
+  ctx.clearRect(0,0,cv.width,cv.height);
+  if(!S.img) return;
+  ctx.save(); ctx.translate(S.view.x,S.view.y); ctx.scale(S.view.s,S.view.s);
+  ctx.drawImage(S.img,0,0);
+  const lw=1.5/S.view.s, R=5/S.view.s;
+  const dot=(p,c)=>{ ctx.fillStyle=c; ctx.beginPath(); ctx.arc(p.x,p.y,R,0,7); ctx.fill(); ctx.strokeStyle='#fff'; ctx.lineWidth=lw; ctx.stroke(); };
+  const line=(p,q,c,w)=>{ ctx.strokeStyle=c; ctx.lineWidth=(w||1)*lw; ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(q.x,q.y); ctx.stroke(); };
+  S.coinPts.forEach(p=>dot(p,'#d9480f'));
+  if(S.coinC&&S.ppm){ ctx.strokeStyle='#d9480f'; ctx.lineWidth=lw*1.5; ctx.beginPath(); ctx.arc(S.coinC.x,S.coinC.y,S.coinC.r,0,7); ctx.stroke(); }
+  if(S.a) dot(S.a,'#1f6feb');
+  if(S.a&&S.b){
+    dot(S.b,'#1f6feb');
+    const f=frame(); const ext=Math.max(S.img.width,S.img.height);
+    line(fromKey(-ext*.2,0),fromKey(ext*.2+dist(S.a,S.b),0),'#1f6feb');
+    if(S.top) dot(S.top,'#2b8a3e');
+    if(S.stopPt){ dot(S.stopPt,'#7048e8'); const s=stopS(); line(fromKey(s,-40/S.view.s),fromKey(s,(S.ppm?S.ppm*12:200)),'#7048e8'); }
+    const t=ktypeEl.value;
+    if((t==='edge'||t==='car'||t==='laser')&&S.ppm&&S.stopPt) drawCuts(line,dot);
+    if(t==='dimple') drawDimples(dot,line);
+  }
+  S.spacing.forEach(p=>dot(p,'#e67700'));
+  if(S.pendingDimple) dot(S.pendingDimple,'#e67700');
+  ctx.restore();
+}
+function drawCuts(line,dot){
+  const f=curFmt(), mm=S.ppm*IN, t=ktypeEl.value, sides=t==='car'?2:1;
+  for(let i=0;i<f.num;i++){
+    const s=cutS(f,i); const hiT=(f.uncut/sides)*mm*1.15;
+    const col=i===S.sel?'#d9480f':'rgba(31,111,235,.75)';
+    if(t==='laser'){ line(fromKey(s,-hiT),fromKey(s,hiT),col); if(S.track[i]!=null) dot(fromKey(s,S.track[i]*S.ppm),'#d9480f'); continue; }
+    for(const sg of (sides===2?[1,-1]:[1])){
+      line(fromKey(s,0),fromKey(s,sg*hiT),col);
+      for(let k=f.min;k<=f.max;k++){ const tt=sg*depthIn(f,k)/sides*mm; line(fromKey(s-4/S.view.s,tt),fromKey(s+4/S.view.s,tt),'rgba(31,111,235,.45)'); }
+      if(S.cuts[i]!=null){ const tt=sg*depthIn(f,S.cuts[i])/sides*mm; const hw=f.flat/2*mm;
+        line(fromKey(s-hw,tt),fromKey(s+hw,tt),'#d9480f',2.5); }
+    }
+  }
+}
+function dimpleInfo(d){
+  const k=toKey(d.c), r=dist(d.c,d.e)/S.ppm, ang=+document.getElementById('dAng').value;
+  const s0=stopS()??0;
+  return {pos:(k.s-s0)/S.ppm, off:k.t/S.ppm, dia:2*r, depth:r/Math.tan(ang/2*Math.PI/180)};
+}
+function drawDimples(dot){
+  S.dimples.forEach((d,i)=>{
+    ctx.strokeStyle='#d9480f'; ctx.lineWidth=2/S.view.s; ctx.beginPath(); ctx.arc(d.c.x,d.c.y,dist(d.c,d.e),0,7); ctx.stroke();
+    ctx.fillStyle='#d9480f'; ctx.font=(14/S.view.s)+'px system-ui'; ctx.fillText(String(i+1),d.c.x+dist(d.c,d.e)+3/S.view.s,d.c.y);
+  });
+}
+
+// ---------- outputs ----------
+function refresh(){ draw(); renderMeas(); renderResult(); renderPick(); }
+function renderMeas(){
+  const o=document.getElementById('measOut'); const parts=[];
+  if(S.ppm&&S.a&&S.b&&S.top){
+    const k=toKey(S.top); const t=ktypeEl.value;
+    if(t==='edge') parts.push('Blade height '+(k.t/S.ppm).toFixed(2)+' mm ('+(k.t/S.ppm/IN).toFixed(3)+' in)');
+    else parts.push('Blade width '+(2*Math.abs(k.t)/S.ppm).toFixed(2)+' mm');
+  }
+  if(S.ppm&&S.spacing.length>=2){ const sp=spacingMM(); if(sp) parts.push('Cut spacing '+sp.toFixed(2)+' mm ('+(sp/IN).toFixed(3)+' in)'); }
+  o.textContent=parts.join('   ');
+}
+function spacingMM(){ if(!S.a||!S.b||S.spacing.length<2) return null; return Math.abs(toKey(S.spacing[0]).s-toKey(S.spacing[1]).s)/S.ppm; }
+function renderPick(){
+  const box=document.getElementById('depthPick'); const t=ktypeEl.value;
+  if(!(t==='edge'||t==='car')||S.sel<0){ box.classList.add('hide'); return; }
+  const f=curFmt(); box.classList.remove('hide'); box.innerHTML='<span class="small">Cut '+(S.sel+1)+' depth:</span>';
+  for(let k=f.min;k<=f.max;k++){ const b=document.createElement('button'); b.textContent=k; if(S.cuts[S.sel]===k) b.className='on';
+    b.onclick=()=>{S.cuts[S.sel]=k; refresh();}; box.appendChild(b); }
+  const p=document.createElement('button'); p.textContent='Next cut'; p.onclick=()=>{S.sel=(S.sel+1)%f.num; refresh();}; box.appendChild(p);
+}
+function result(){
+  const t=ktypeEl.value;
+  if(t==='edge'||t==='car'){
+    const f=curFmt(); const code=S.cuts.map(c=>c==null?'?':String(c)).join(f.max>=10?'-':'');
+    let macs=null; for(let i=1;i<S.cuts.length;i++){ if(S.cuts[i]!=null&&S.cuts[i-1]!=null){ const d=Math.abs(S.cuts[i]-S.cuts[i-1]); if(d>f.macs) macs=(macs||[]).concat(i); } }
+    return {type:t, format:f.m+' '+f.n, code, cuts:S.cuts.slice(), macsWarn:macs,
+      depths_in:S.cuts.map(c=>c==null?null:+depthIn(f,c).toFixed(4)),
+      positions_in:[...Array(f.num)].map((_,i)=>+(f.first+(f.stop===1?i:f.num-1-i)*f.inc).toFixed(4)), stop:f.stop===1?'shoulder':'tip'};
+  }
+  if(t==='laser'){ const f=curFmt(); return {type:t, offsets_mm:S.track.map(v=>v==null?null:+v.toFixed(2)), spacing_mm:+(f.inc*IN).toFixed(2)}; }
+  if(t==='dimple'){
+    const ang=+document.getElementById('dAng').value;
+    return {type:t, cutter_deg:ang, dimples:S.dimples.map((d,i)=>{const q=dimpleInfo(d); return {n:i+1,from_shoulder_mm:+q.pos.toFixed(2),off_center_mm:+q.off.toFixed(2),dia_mm:+q.dia.toFixed(2),depth_mm:+(d.over??q.depth).toFixed(2),depth_source:d.over!=null?'caliper':'from diameter'};})};
+  }
+  return {type:'fob', fcc:val('fFcc'), part:val('fPart'), freq:val('fFreq'), chip:val('fChip')};
+}
+function val(id){return document.getElementById(id).value}
+function renderResult(){
+  const o=document.getElementById('resOut'); const t=ktypeEl.value; if(t==='fob'){o.innerHTML='';return;}
+  const r=result(); let h='';
+  if(t==='edge'||t==='car'){
+    h+='<div class="small">'+r.format+', spaced from '+r.stop+', numbered bow to tip</div><div class="code">'+r.code+'</div>';
+    if(r.macsWarn) h+='<p class="small" style="color:#d9480f">Adjacent cut difference exceeds MACS at cut '+r.macsWarn.map(x=>x+1).join(', ')+'. Recheck those cuts.</p>';
+    h+='<table><tr><th>Cut</th><th>From stop (in)</th><th>Depth #</th><th>Root (in)</th></tr>';
+    r.cuts.forEach((c,i)=>{ h+='<tr><td>'+(i+1)+'</td><td>'+r.positions_in[i].toFixed(3)+'</td><td>'+(c??'?')+'</td><td>'+(r.depths_in[i]??'')+'</td></tr>'; });
+    h+='</table>';
+  } else if(t==='laser'){
+    h+='<table><tr><th>Pos</th><th>Track offset from center (mm)</th></tr>';
+    r.offsets_mm.forEach((v,i)=>h+='<tr><td>'+(i+1)+'</td><td>'+(v??'?')+'</td></tr>'); h+='</table>';
+  } else if(t==='dimple'){
+    if(!r.dimples.length) h='<p class="small">No dimples marked yet.</p>';
+    else { h+='<table><tr><th>#</th><th>From shoulder mm</th><th>Off center mm</th><th>Dia mm</th><th>Depth mm</th><th>Caliper depth</th></tr>';
+      r.dimples.forEach((d,i)=>{ h+='<tr><td>'+d.n+'</td><td>'+d.from_shoulder_mm+'</td><td>'+d.off_center_mm+'</td><td>'+d.dia_mm+'</td><td>'+d.depth_mm+'</td><td><input type="number" step="0.01" data-i="'+i+'" value="'+(S.dimples[i].over??'')+'" onchange="setOver(this)"></td></tr>'; });
+      h+='</table><p class="small">Depth from diameter assumes a '+r.cutter_deg+' degree cone cutter. A caliper value overrides it.</p>'; }
+  }
+  o.innerHTML=h;
+}
+function setOver(el){ const i=+el.dataset.i; const v=parseFloat(el.value); S.dimples[i].over=isNaN(v)?null:v; renderResult(); }
+
+// ---------- identify ----------
+function identify(){
+  const o=document.getElementById('idOut');
+  if(!S.ppm||!S.a||!S.b||!S.top){ o.innerHTML='<p class="small">Set scale, reference line and blade edge first.</p>'; return; }
+  const sides=ktypeEl.value==='car'?2:1; const k=toKey(S.top);
+  const h=(sides===2?2*Math.abs(k.t):k.t)/S.ppm/IN; const sp=spacingMM(); const spIn=sp?sp/IN:null;
+  const rows=FORMATS.map((f,i)=>({i,f,dh:Math.abs(f.uncut-h),ds:spIn?Math.abs(f.inc-spIn):0}))
+    .filter(r=>r.f.sides===sides)
+    .map(r=>({...r,score:r.dh/0.01+r.ds/0.005})).sort((a,b)=>a.score-b.score).slice(0,6);
+  let x='<p class="small">Measured '+(sides===2?'width ':'height ')+h.toFixed(3)+' in'+(spIn?(', spacing '+spIn.toFixed(3)+' in'):'')+'</p><table><tr><th>Format</th><th>Uncut</th><th>Spacing</th><th>Score</th><th></th></tr>';
+  rows.forEach(r=>{ x+='<tr><td>'+r.f.m+' '+r.f.n+'</td><td>'+r.f.uncut.toFixed(3)+'</td><td>'+r.f.inc.toFixed(3)+'</td><td>'+r.score.toFixed(1)+'</td><td><button onclick="useFmt('+r.i+')">Use</button></td></tr>'; });
+  o.innerHTML=x+'</table>';
+}
+function useFmt(i){ fmtEl.value=String(i); onFormat(); }
+
+// ---------- export ----------
+function dl(name,text,type){ const b=new Blob([text],{type}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); }
+function exportJSON(){ dl('key-decode-'+Date.now()+'.json',JSON.stringify({made:new Date().toISOString(),scale_px_per_mm:S.ppm,...result()},null,2),'application/json'); }
+function exportSVG(){
+  const t=ktypeEl.value; let svg='';
+  if(t==='edge'||t==='car'){
+    const f=curFmt(), sides=t==='car'?2:1, tan=Math.tan(f.ang/2*Math.PI/180);
+    const L=(f.first+(f.num-1)*f.inc+f.inc+0.1)*IN, U=f.uncut*IN;
+    const cuts=[...Array(f.num)].map((_,i)=>({c:(f.first+(f.stop===1?i:f.num-1-i)*f.inc)*IN,d:S.cuts[i]==null?U:depthIn(f,S.cuts[i])*IN}));
+    const prof=x=>{ let y=U; cuts.forEach(k=>{ const v=k.d+Math.max(0,Math.abs(x-k.c)-f.flat*IN/2)*tan; if(v<y) y=v; }); return y; };
+    const pts=[]; for(let x=0;x<=L;x+=0.05) pts.push([x,prof(x)]);
+    let d;
+    if(sides===1){ d='M0,'+U+' '+pts.map(p=>'L'+p[0].toFixed(2)+','+(U-p[1]).toFixed(3)).join(' ')+' L'+L.toFixed(2)+','+U+' Z'; }
+    else { const h=U/2; d='M'+pts.map(p=>p[0].toFixed(2)+','+(h-p[1]/2).toFixed(3)).join(' L')+' '+pts.slice().reverse().map(p=>'L'+p[0].toFixed(2)+','+(h+p[1]/2).toFixed(3)).join(' ')+' Z'; }
+    svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+(L+4).toFixed(1)+'mm" height="'+(U+4).toFixed(1)+'mm" viewBox="-2 -2 '+(L+4).toFixed(2)+' '+(U+4).toFixed(2)+'"><path d="'+d+'" fill="none" stroke="#000" stroke-width="0.1"/></svg>';
+  } else if(t==='dimple'){
+    const r=result(); if(!r.dimples.length) return alert('No dimples marked.');
+    const w=S.top&&S.a?2*Math.abs(toKey(S.top).t)/S.ppm:8; const L=Math.max(...r.dimples.map(d=>d.from_shoulder_mm))+5;
+    svg='<svg xmlns="http://www.w3.org/2000/svg" width="'+(L+4).toFixed(1)+'mm" height="'+(w+4).toFixed(1)+'mm" viewBox="-2 '+(-w/2-2).toFixed(2)+' '+(L+4).toFixed(2)+' '+(w+4).toFixed(2)+'"><rect x="0" y="'+(-w/2).toFixed(2)+'" width="'+L.toFixed(2)+'" height="'+w.toFixed(2)+'" fill="none" stroke="#000" stroke-width="0.1"/>'+
+      r.dimples.map(d=>'<circle cx="'+d.from_shoulder_mm+'" cy="'+d.off_center_mm+'" r="'+(d.dia_mm/2)+'" fill="none" stroke="#000" stroke-width="0.08"/>').join('')+'</svg>';
+  } else return alert('SVG export covers edge cut and dimple keys.');
+  dl('key-profile-'+Date.now()+'.svg',svg,'image/svg+xml');
+}
+
+// ---------- library ----------
+const LK='keydecoder.lib';
+function loadLib(){ try{ return JSON.parse(localStorage.getItem(LK)||'[]'); }catch(e){ return []; } }
+function saveLib(){
+  const lib=loadLib(); lib.unshift({label:val('saveName')||'untitled',when:new Date().toLocaleString(),...result()});
+  try{ localStorage.setItem(LK,JSON.stringify(lib.slice(0,100))); }catch(e){}
+  renderLib();
+}
+function delLib(i){ const lib=loadLib(); lib.splice(i,1); try{ localStorage.setItem(LK,JSON.stringify(lib)); }catch(e){} renderLib(); }
+function renderLib(){
+  const lib=loadLib(), o=document.getElementById('libOut');
+  if(!lib.length){ o.textContent='Nothing saved yet.'; return; }
+  o.innerHTML='<table><tr><th>Label</th><th>Type</th><th>Summary</th><th>Saved</th><th></th></tr>'+lib.map((r,i)=>{
+    const sum=r.code?(r.format+' '+r.code):(r.dimples?(r.dimples.length+' dimples'):(r.fcc?('FCC '+r.fcc):''));
+    return '<tr><td>'+esc(r.label)+'</td><td>'+r.type+'</td><td>'+esc(sum)+'</td><td>'+esc(r.when)+'</td><td><button class="warn" onclick="delLib('+i+')">x</button></td></tr>';
+  }).join('')+'</table>';
+}
+function esc(s){ return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+fillFormats(); renderLib(); resize();
+</script>
+</body>
+</html>
