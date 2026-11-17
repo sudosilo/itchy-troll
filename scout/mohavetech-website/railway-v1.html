@@ -101,6 +101,7 @@ body { padding: 12px; }
     document.getElementById("t-proj").textContent = data.projects.length;
     document.getElementById("t-idle").textContent = idleCost.length;
     var w = data.workspaces[0] || {};
+    if (data.snapshot) { document.getElementById("note").textContent = "Project list from the Railway CLI, saved " + new Date(data.generated).toLocaleString() + ". Costs show once the Railway key is on Vercel."; return; }
     document.getElementById("note").textContent = "Idle means no deploy in " + IDLE_DAYS + " days. Updated " + new Date(data.generated).toLocaleString() + (w.billingEnd ? ". Period ends " + new Date(w.billingEnd).toLocaleDateString() : "") + ".";
   }
   Array.prototype.forEach.call(document.querySelectorAll("#sorts button"), function (b) {
@@ -110,8 +111,13 @@ body { padding: 12px; }
       if (data) render();
     };
   });
-  fetch("/api/railway-v1").then(function (r) { return r.json(); }).then(function (j) {
-    if (j.error) throw new Error(j.error);
+  var apiError = "";
+  fetch("/api/railway-v1", { cache: "no-store" }).then(function (r) { return r.json().catch(function () { return { error: "railway feed missing" }; }); }).then(function (j) {
+    if (j && j.projects && j.projects.length) return j;
+    apiError = (j && j.error) || "no data";
+    return fetch("/railway-snapshot-v1.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : { error: apiError }; });
+  }).then(function (j) {
+    if (!j || j.error || !j.projects) throw new Error((j && j.error) || apiError);
     data = j;
     totals();
     render();

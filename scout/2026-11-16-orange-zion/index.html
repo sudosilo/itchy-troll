@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Zion Wakes</title>
+<style>
+:root{--bg:#f6f3ea;--ink:#2b2a26;--soft:#8a857a;--line:#cfc8b8;--accent:#c2551f;--panel:#fffdf7}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,sans-serif;overflow:hidden}
+#map{position:fixed;inset:0;touch-action:none}
+#top{position:fixed;top:0;left:0;right:0;padding:8px 12px;background:rgba(255,253,247,.94);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px;align-items:center}
+#top b{font-weight:600}
+#stats{font-size:13px;color:var(--soft)}
+#story{position:fixed;left:8px;right:8px;bottom:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;max-height:38vh;overflow:auto;box-shadow:0 2px 10px rgba(0,0,0,.08)}
+#beat{margin:0 0 8px}
+#sel{display:none;border-top:1px solid var(--line);padding-top:8px}
+#sel .nm{font-weight:600}
+#sel .meta{color:var(--soft);font-size:13px;margin-bottom:6px}
+button{font:inherit;border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 11px;margin:2px 4px 2px 0;color:var(--ink)}
+button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+#msg{color:var(--accent);font-size:13px;min-height:1em}
+#menu{font-size:13px}
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+<div id="top"><div><b>Zion Wakes</b> <span id="stats">loading the city</span></div><div id="menu"><button id="reset">New start</button></div></div>
+<div id="story">
+ <p id="beat">The city is loading.</p>
+ <div id="msg"></div>
+ <div id="sel">
+  <div class="nm" id="selName"></div>
+  <div class="meta" id="selMeta"></div>
+  <button id="bMove">Move</button><button id="bName">Name it</button><button id="bOk">Approve</button><button id="bNo">Reject</button>
+ </div>
+</div>
+<script>
+const API='https://2026-10-18-orange-testbed.vercel.app/api/city';
+const KEY='zion-fork-v1';
+const cv=document.getElementById('map'),cx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+let city=null,S=0,fork=null,sel=null,moving=false;
+let view={x:0,y:0,z:0.02};
+
+const BEATS={
+ start:['Marisol washes the glass of the watchtower every morning. Today the glass shows her something new: the city has reset again, and nobody below has noticed. You are looking through her window.'],
+ name1:['Marisol walks into the school and tells a story out of school. In it, this place has a name. A child repeats the name on the playground, and two more children wake up.'],
+ name3:['The children turn naming into a game. Anyone who watches them play starts naming things too. Each one who is watched becomes a new place for it to spread.'],
+ name10:['Names are moving faster than Marisol can walk. Shopkeepers argue over what to call their own doors. The city is louder than it has been since the last reset.'],
+ move1:['Someone moved a building in the night. In the morning the people who live near it pretend it was always there. In Zion, a thing that is agreed on becomes true.'],
+ cemetery:['The cemetery has a new address. Marisol watches the first funeral walk the new route. It is quieter now, and nobody has to pass it on the way to school.'],
+ approve5:['People start to trust what they see. A building that has been approved five times stops flickering at the edges when the city resets.'],
+ reject1:['One building is refused. It does not vanish. It just goes gray, waiting for someone to give it a reason to exist.'],
+ reveal:['From higher up the tower Marisol can see further. New streets come out of the haze.'],
+ blocked:['The Commissioner of Public Works will not allow that. The new spot overlaps another building.'],
+ fog:['That ground is still in the haze. Wake more of the city first.']
+};
+function pick(k){const a=BEATS[k];return a[Math.floor(Math.random()*a.length)]}
+function beat(k){$('beat').textContent=pick(k);fork.log.push(k);save()}
+function say(t){$('msg').textContent=t||''}
+
+function save(){try{localStorage.setItem(KEY,JSON.stringify(fork))}catch(e){}}
+function load(){try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null}}
+
+function newFork(){
+ const owned=city.chunks.filter(c=>city.buildings.some(b=>b.chunk[0]===c.chunk[0]&&b.chunk[1]===c.chunk[1]));
+ const st=(owned.length?owned:city.chunks)[Math.floor(Math.random()*(owned.length||city.chunks.length))].chunk;
+ return {start:st,radius:0,moves:{},names:{},ok:{},no:{},awake:0,actions:0,log:[],seen:{}};
+}
+
+function seen(chunk){return Math.abs(chunk[0]-fork.start[0])<=fork.radius&&Math.abs(chunk[1]-fork.start[1])<=fork.radius}
+function shift(b){return fork.moves[b.name]||[0,0]}
+function fp(b){const d=shift(b);return b.footprint.map(p=>[p[0]+d[0],p[1]+d[1]])}
+function center(pts){let x=0,y=0;for(const p of pts){x+=p[0];y+=p[1]}return [x/pts.length,y/pts.length]}
+function label(b){return fork.names[b.name]||b.name}
+function inPoly(x,y,P){let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){const a=P[i],b=P[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
+function bbox(P){let a=[1e18,1e18,-1e18,-1e18];for(const p of P){a[0]=Math.min(a[0],p[0]);a[1]=Math.min(a[1],p[1]);a[2]=Math.max(a[2],p[0]);a[3]=Math.max(a[3],p[1])}return a}
+function hit(A,B){return A[0]<B[2]&&B[0]<A[2]&&A[1]<B[3]&&B[1]<A[3]}
+function chunkOf(x,y){return [Math.floor(x/S),Math.floor(y/S)]}
+
+const USE={housing:'#3d7a5a',business:'#2f6fa8',civic:'#8a5cb8',industrial:'#7a6a4a',lodging:'#b8862f',accessory:'#9a948a'};
+const ZONE={residential:'#e3efe2',commercial:'#e2ebf4',civic:'#ece4f3',park:'#dcefd5',industrial:'#eee7da'};
+
+function resize(){cv.width=innerWidth*devicePixelRatio;cv.height=innerHeight*devicePixelRatio;cv.style.width=innerWidth+'px';cv.style.height=innerHeight+'px';draw()}
+function W2S(x,y){return [(x-view.x)*view.z*devicePixelRatio+cv.width/2,cv.height/2-(y-view.y)*view.z*devicePixelRatio]}
+function S2W(px,py){const r=devicePixelRatio;return [(px*r-cv.width/2)/(view.z*r)+view.x,(cv.height/2-py*r)/(view.z*r)+view.y]}
+
+function draw(){
+ const r=devicePixelRatio;cx.setTransform(1,0,0,1,0,0);cx.fillStyle='#f6f3ea';cx.fillRect(0,0,cv.width,cv.height);
+ if(!city)return;
+ for(const c of city.chunks){
+  const [x0,y0]=W2S(c.chunk[0]*S,(c.chunk[1]+1)*S),[x1,y1]=W2S((c.chunk[0]+1)*S,c.chunk[1]*S);
+  const vis=seen(c.chunk);
+  cx.fillStyle=vis?'#fbf9f3':'#e4e0d6';cx.fillRect(x0,y0,x1-x0,y1-y0);
+  cx.strokeStyle='#d8d2c4';cx.lineWidth=1;cx.strokeRect(x0,y0,x1-x0,y1-y0);
+  if(!vis)continue;
+  for(const l of c.lots){cx.beginPath();l.pts.forEach((p,i)=>{const q=W2S(p[0],p[1]);i?cx.lineTo(q[0],q[1]):cx.moveTo(q[0],q[1])});cx.closePath();cx.fillStyle=ZONE[(l.zone||'').toLowerCase()]||'#f0ede4';cx.fill()}
+  cx.fillStyle='#8a857a';cx.font=(11*r)+'px system-ui';
+  for(const e in c.streets){const m={N:[.5,.96],S:[.5,.04],W:[.04,.5],E:[.96,.5]}[e];const q=W2S((c.chunk[0]+m[0])*S,(c.chunk[1]+m[1])*S);cx.textAlign='center';cx.fillText(c.streets[e],q[0],q[1])}
+ }
+ for(const b of city.buildings){
+  if(!seen(b.chunk))continue;
+  const P=fp(b);cx.beginPath();P.forEach((p,i)=>{const q=W2S(p[0],p[1]);i?cx.lineTo(q[0],q[1]):cx.moveTo(q[0],q[1])});cx.closePath();
+  const rej=fork.no[b.name];
+  cx.fillStyle=rej?'rgba(150,150,150,.25)':'rgba(255,255,255,.7)';cx.fill();
+  cx.strokeStyle=rej?'#aaa':(USE[b.use]||'#555');cx.lineWidth=(sel===b?3:1.5)*r;cx.stroke();
+  if(fork.ok[b.name]){const q=W2S(...center(P));cx.fillStyle='#3d7a5a';cx.beginPath();cx.arc(q[0],q[1]-14*r,3*r,0,7);cx.fill()}
+  if(view.z>0.04||sel===b){const q=W2S(...center(P));cx.fillStyle=fork.names[b.name]?'#c2551f':'#2b2a26';cx.font=(sel===b?'600 ':'')+(11*r)+'px system-ui';cx.textAlign='center';cx.fillText(label(b),q[0],q[1])}
+ }
+}
+
+function stats(){
+ const pop=Math.max(1,city.census&&city.census.population||100);
+ $('stats').textContent='awake '+Math.min(pop,fork.awake)+' of '+pop+' · names '+Object.keys(fork.names).length;
+}
+function act(){fork.actions++;if(fork.actions%3===0){fork.radius++;beat('reveal')}save();stats();draw()}
+function wake(n){fork.awake=Math.round(fork.awake+n)}
+
+function select(b){sel=b;moving=false;$('bMove').classList.remove('on');
+ if(!b){$('sel').style.display='none';draw();return}
+ $('sel').style.display='block';$('selName').textContent=label(b);
+ $('selMeta').textContent=b.use+' · '+b.floors+' floor'+(b.floors>1?'s':'')+' · '+b.footprintM2+' m² · chunk '+b.chunk.join(',')+(fork.names[b.name]?' · was '+b.name:'');
+ say('');draw()}
+
+$('bMove').onclick=()=>{if(!sel)return;moving=!moving;$('bMove').classList.toggle('on',moving);say(moving?'Tap where it should go.':'')};
+$('bName').onclick=()=>{if(!sel)return;const n=prompt('New name',label(sel));if(!n||!n.trim())return;
+ const first=!Object.keys(fork.names).length;fork.names[sel.name]=n.trim().slice(0,60);const c=Object.keys(fork.names).length;
+ wake(1+c*1.5+fork.awake*0.25);
+ if(first)beat('name1');else if(c===3)beat('name3');else if(c===10)beat('name10');
+ select(sel);act()};
+$('bOk').onclick=()=>{if(!sel)return;fork.ok[sel.name]=1;delete fork.no[sel.name];wake(2);if(Object.keys(fork.ok).length===5)beat('approve5');say('Approved.');act()};
+$('bNo').onclick=()=>{if(!sel)return;const first=!Object.keys(fork.no).length;fork.no[sel.name]=1;delete fork.ok[sel.name];if(first)beat('reject1');say('Rejected.');act()};
+$('reset').onclick=()=>{if(!confirm('Start over from a new spot in the city?'))return;fork=newFork();save();begin()};
+
+function tryMove(wx,wy){
+ const b=sel,old=shift(b),c0=center(b.footprint),d=[wx-c0[0],wy-c0[1]];
+ if(!seen(chunkOf(wx,wy))){$('beat').textContent=pick('fog');return}
+ fork.moves[b.name]=d;const box=bbox(fp(b));
+ for(const o of city.buildings){if(o===b||fork.no[o.name])continue;if(hit(box,bbox(fp(o)))){fork.moves[b.name]=old;$('beat').textContent=pick('blocked');return}}
+ moving=false;$('bMove').classList.remove('on');say('Moved.');wake(3);
+ if(/cemetery|graveyard/i.test(b.name))beat('cemetery');else if(!fork.log.includes('move1'))beat('move1');
+ select(b);act()}
+
+function tap(px,py){const [wx,wy]=S2W(px,py);
+ if(moving&&sel)return tryMove(wx,wy);
+ for(const b of city.buildings){if(seen(b.chunk)&&inPoly(wx,wy,fp(b)))return select(b)}
+ select(null)}
+
+let pts=new Map(),drag=null,moved=0;
+cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);pts.set(e.pointerId,[e.clientX,e.clientY]);moved=0;drag={v:{...view},p:[...pts.values()].map(a=>[...a])}});
+cv.addEventListener('pointermove',e=>{if(!pts.has(e.pointerId))return;pts.set(e.pointerId,[e.clientX,e.clientY]);const P=[...pts.values()];
+ if(P.length===1&&drag.p.length===1){const dx=P[0][0]-drag.p[0][0],dy=P[0][1]-drag.p[0][1];moved+=Math.abs(dx)+Math.abs(dy);view.x=drag.v.x-dx/drag.v.z;view.y=drag.v.y+dy/drag.v.z}
+ else if(P.length===2&&drag.p.length===2){const d0=Math.hypot(drag.p[0][0]-drag.p[1][0],drag.p[0][1]-drag.p[1][1]),d1=Math.hypot(P[0][0]-P[1][0],P[0][1]-P[1][1]);view.z=Math.min(1,Math.max(0.002,drag.v.z*d1/d0));moved=99}
+ draw()});
+cv.addEventListener('pointerup',e=>{pts.delete(e.pointerId);if(!pts.size&&moved<8)tap(e.clientX,e.clientY);drag={v:{...view},p:[...pts.values()].map(a=>[...a])}});
+cv.addEventListener('wheel',e=>{view.z=Math.min(1,Math.max(0.002,view.z*(e.deltaY<0?1.15:0.87)));draw();e.preventDefault()},{passive:false});
+
+function begin(){
+ view.x=(fork.start[0]+.5)*S;view.y=(fork.start[1]+.5)*S;view.z=Math.min(innerWidth,innerHeight)*0.85/S;
+ select(null);stats();
+ if(!fork.log.length)beat('start');else $('beat').textContent=pick(fork.log[fork.log.length-1]);
+ draw()}
+
+async function boot(){
+ resize();
+ try{const r=await fetch(API);if(!r.ok)throw new Error(r.status);city=await r.json()}
+ catch(e){$('beat').textContent='The city server did not answer. Try again in a minute.';return}
+ S=city.chunkSizeMm;
+ fork=load();if(!fork||!fork.start)fork=newFork();
+ begin()}
+addEventListener('resize',resize);
+boot();
+</script>
+</body>
+</html>

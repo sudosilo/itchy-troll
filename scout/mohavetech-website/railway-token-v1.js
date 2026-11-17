@@ -62,7 +62,35 @@ async function storeInVercel(value) {
   return add.status === 0;
 }
 
+function tokenFromCli() {
+  const q = 'mutation { apiTokenCreate(input: { name: "mohave-wtf-railway-tab-' + Date.now() + '" }) }';
+  const runs = [];
+  try {
+    fs.writeFileSync(path.join(UBUNTU, "root/mohave-railway-q.graphql"), q);
+    runs.push("proot-distro login ubuntu -- bash -lc 'railway api -f /root/mohave-railway-q.graphql --compact'");
+  } catch (e) {}
+  const local = path.join(HOME, "mohave-railway-q.graphql");
+  try { fs.writeFileSync(local, q); runs.push("railway api -f " + local + " --compact"); } catch (e) {}
+  for (const cmd of runs) {
+    try {
+      const out = execSync(cmd, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 90000 });
+      const m = out.match(/\{[\s\S]*\}/);
+      const j = m ? JSON.parse(m[0]) : {};
+      const t = (j.data && j.data.apiTokenCreate) || j.apiTokenCreate;
+      if (t) return t;
+    } catch (e) {}
+  }
+  return null;
+}
+
 (async () => {
+  const cliToken = tokenFromCli();
+  if (cliToken && await works(cliToken)) {
+    console.log("\n***** SAVE THIS RAILWAY TOKEN *****\n" + cliToken + "\n");
+    const ok = await storeInVercel(cliToken);
+    console.log(ok ? "RAILWAY TOKEN STORED IN VERCEL" : "VERCEL STORE FAILED");
+    process.exit(ok ? 0 : 1);
+  }
   const logins = railwayLogins();
   if (!logins.length) { console.log("\nRAILWAY LOGIN MISSING ON THIS PHONE\n"); process.exit(1); }
 

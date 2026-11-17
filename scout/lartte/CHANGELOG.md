@@ -1,0 +1,3 @@
+lARTte changelog
+
+2026-11-16, v2026.11.16. Created lARTte, a latte art simulator. Added a demo mode that pours each design by itself, saving finished pours to the phone, an art generator, a gallery mode, symmetry, and cup spin. Added a garnish shaker with cinnamon, nutmeg, cocoa, sea salt, sugar, matcha, and sprinkles, and a paint style toolbar with drop downs for liquids, syrups, garnishes, and toppings. Toppings are now real scale, with a candy cane hung on the rim, growing whipped cream, glossy syrup, and drink names. Added the ARTchino tab for clear cup blended drinks with add ins, layers, wall drizzle, whip, and toppings. Added a coffee shop shift with customers, a time attack, tilt and shake controls, and sound.

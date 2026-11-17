@@ -191,14 +191,7 @@
       if (!words.length) return;
       t.setAttribute("data-stars", "1");
       t.textContent = "";
-      words.forEach(function (w) {
-        var s = document.createElement("span");
-        s.textContent = String.fromCharCode(9733);
-        s.style.color = COLORS[w];
-        s.style.marginRight = "2px";
-        s.style.pointerEvents = "none";
-        t.appendChild(s);
-      });
+      t.style.margin = "0";
       var h = document.createElement("span");
       h.textContent = " " + words.join(" ");
       h.style.display = "none";
@@ -422,10 +415,10 @@
       p.setAttribute("data-itch", "1");
       var b = document.createElement("button");
       b.type = "button";
-      b.textContent = "itch";
+      b.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" style="vertical-align:middle;fill:currentColor"><path d="M4.6 3.5h6.8c1.6 0 2.7 1 3.1 2.6l1.1 4.6c.4 1.7-.6 2.8-1.9 2.8-.9 0-1.5-.5-2-1.2l-.8-1.1H5.1l-.8 1.1c-.5.7-1.1 1.2-2 1.2-1.3 0-2.3-1.1-1.9-2.8l1.1-4.6c.4-1.6 1.5-2.6 3.1-2.6z"/><path d="M4.1 6.2h1v1.1h1.1v1h-1.1v1.1h-1V8.3H3V7.3h1.1z" fill="#000"/><circle cx="11.2" cy="6.9" r=".8" fill="#000"/><circle cx="12.6" cy="8.4" r=".8" fill="#000"/></svg><span style="display:none">itch</span>';
       b.title = "Play " + name + " on itch.io";
       b.setAttribute("aria-label", "Play " + name + " on itch.io");
-      b.style.cssText = "margin-left:8px;background:black;color:#b48cf0;border:1px solid #8a4bd6;padding:1px 5px;cursor:pointer;line-height:1;font-family:monospace;font-size:11px;";
+      b.style.cssText = "margin-left:8px;background:black;color:#b48cf0;border:1px solid #888888;padding:1px 5px;cursor:pointer;line-height:1;";
       b.onclick = function () { window.open(page, "_blank", "noopener"); };
       var gh = p.querySelector(".gh-btn");
       (gh || a).insertAdjacentElement("afterend", b);
@@ -445,7 +438,7 @@
 (function () {
   /* DEFAULT is the look every visitor gets: "modern", "future", "retro" or "classic". Change it to put another look back for everyone. */
   var DEFAULT = "modern";
-  var SHEET = { modern: ["modern.css?v=3", "#ffffff"], future: ["future.css?v=1", "#eef1ec"], retro: ["retro.css?v=2", "#000080"] };
+  var SHEET = { modern: ["modern.css?v=4", "#ffffff"], future: ["future.css?v=2", "#eef1ec"], retro: ["retro.css?v=2", "#000080"] };
   var NAME = { modern: "Modern look", future: "Future retro look", retro: "Retro look", classic: "Classic look" };
   var look = DEFAULT;
   try { look = localStorage.getItem("hub-look3") || DEFAULT; } catch (e) {}

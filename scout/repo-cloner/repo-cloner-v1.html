@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>[ REPO CLONER ]</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+@import url('https://fonts.bunny.net/css?family=overpass:400,600,800|bangers:400');
+:root{
+  --paper:#f6f4ee;
+  --ink:#111;
+  --blue:#1f5fbf;
+  --sky:#dce9fb;
+  --good:#2f7a3a;
+  --warn:#a8720f;
+  --bad:#a3322a;
+  --mute:#666;
+  --line:3px solid #111;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;background:var(--paper);}
+body{
+  color:var(--ink);
+  font-family:'Overpass','Segoe UI',Roboto,Arial,sans-serif;
+  background-image:radial-gradient(rgba(17,17,17,0.07) 1px, transparent 1.4px);
+  background-size:14px 14px;
+  padding:0 12px 80px;
+}
+header{
+  position:sticky;top:0;z-index:50;
+  background:var(--paper);
+  border-bottom:var(--line);
+  height:64px;
+  display:flex;align-items:center;justify-content:center;
+  margin:0 -12px 12px;
+}
+.burger{
+  position:absolute;left:10px;top:10px;
+  width:46px;height:44px;
+  background:var(--blue);color:#fff;
+  border:var(--line);font-size:22px;cursor:pointer;
+}
+h1{
+  margin:0;font-family:'Bangers',sans-serif;font-weight:400;
+  font-size:34px;letter-spacing:3px;color:var(--blue);
+  text-shadow:2px 2px 0 #111;
+}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:90;display:none;}
+.scrim.open{display:block;}
+.menu{
+  position:fixed;top:0;left:0;bottom:0;width:72%;max-width:300px;
+  background:#fff;border-right:var(--line);z-index:100;
+  transform:translateX(-105%);transition:transform .18s ease-out;
+  overflow-y:auto;padding:70px 0 20px;
+}
+.menu.open{transform:none;}
+.menu button.tab{
+  display:block;width:100%;text-align:left;
+  padding:14px 16px;font:800 15px 'Overpass',sans-serif;letter-spacing:1px;
+  background:#fff;color:var(--ink);border:none;border-bottom:2px solid #111;cursor:pointer;
+}
+.menu button.tab.active{background:var(--blue);color:#fff;}
+.menu details{border-bottom:2px solid #111;}
+.menu summary{padding:14px 16px;font:800 15px 'Overpass',sans-serif;letter-spacing:1px;cursor:pointer;}
+.menu .inside{padding:0 16px 14px;font-size:13px;line-height:1.5;color:#333;}
+.view{display:none;}
+.view.active{display:block;}
+.panel{
+  background:#fff;border:var(--line);box-shadow:4px 4px 0 #111;
+  padding:12px;margin-bottom:14px;
+}
+.panel h2{
+  margin:0 0 10px;font-family:'Bangers',sans-serif;font-weight:400;
+  letter-spacing:2px;font-size:22px;color:var(--ink);
+}
+label{display:block;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--mute);margin-bottom:3px;}
+input[type=text],input[type=number],input[type=password],select{
+  width:100%;font:15px 'Overpass',sans-serif;padding:8px;
+  border:2px solid #111;background:#fff;color:var(--ink);margin-bottom:10px;
+}
+.row{display:flex;gap:8px;}
+.row>div{flex:1;min-width:0;}
+.checks{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+.checks label{
+  display:flex;align-items:center;gap:5px;margin:0;
+  border:2px solid #111;padding:5px 8px;background:#fff;
+  font-size:12px;color:var(--ink);text-transform:none;letter-spacing:0;
+}
+.btn{
+  width:100%;font:800 15px 'Overpass',sans-serif;letter-spacing:2px;
+  padding:12px;background:var(--ink);color:#fff;border:var(--line);cursor:pointer;
+}
+.btn.blue{background:var(--blue);}
+.btn.ghost{background:#fff;color:var(--ink);}
+.btn:active{background:var(--blue);color:#fff;}
+.btns{display:flex;gap:8px;}
+.btns .btn{flex:1;}
+.status{
+  height:42px;overflow:hidden;
+  border:2px solid #111;background:var(--sky);
+  font-size:12px;line-height:1.4;padding:4px 8px;margin-bottom:12px;
+}
+.card{
+  background:#fff;border:var(--line);box-shadow:3px 3px 0 #111;
+  padding:10px;margin-bottom:12px;
+}
+.card .name{font-weight:800;font-size:15px;word-break:break-all;color:var(--blue);}
+.card .meta{font-size:12px;color:var(--mute);margin:3px 0;height:18px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.card .desc{font-size:13px;height:38px;overflow:hidden;margin-bottom:6px;}
+.card .grade{
+  height:26px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  font-size:12px;font-weight:800;border:2px solid #111;padding:3px 6px;margin-bottom:8px;background:#fafafa;
+}
+.grade.good{background:#e3f3e5;color:var(--good);}
+.grade.warn{background:#fbf0d9;color:var(--warn);}
+.grade.bad{background:#f8e1df;color:var(--bad);}
+.card .btns .btn{font-size:12px;letter-spacing:1px;padding:9px 4px;}
+.empty{font-size:13px;color:var(--mute);padding:10px 0;}
+.sheet{
+  position:fixed;left:0;right:0;bottom:0;top:64px;z-index:80;
+  background:#fff;border-top:var(--line);
+  transform:translateY(105%);transition:transform .18s ease-out;
+  display:flex;flex-direction:column;
+}
+.sheet.open{transform:none;}
+.sheet .top{display:flex;gap:8px;padding:10px 12px;border-bottom:2px solid #111;}
+.sheet .top .btn{padding:9px;font-size:13px;}
+.sheet .body{overflow-y:auto;padding:12px;font-size:14px;line-height:1.5;flex:1;}
+.sheet .body h3{margin:14px 0 4px;font-family:'Bangers',sans-serif;font-weight:400;letter-spacing:2px;font-size:19px;color:var(--blue);}
+.flag{border-left:6px solid #111;padding:4px 8px;margin:4px 0;background:#fafafa;font-size:13px;}
+.flag.good{border-color:var(--good);}
+.flag.warn{border-color:var(--warn);}
+.flag.bad{border-color:var(--bad);}
+.mono{font-family:'Courier New',monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;background:#f3f3f3;border:2px solid #111;padding:8px;max-height:260px;overflow:auto;}
+.gate{
+  position:fixed;inset:0;z-index:200;background:var(--paper);
+  background-image:radial-gradient(rgba(17,17,17,0.07) 1px, transparent 1.4px);background-size:14px 14px;
+  display:flex;align-items:flex-start;justify-content:center;padding:70px 14px 20px;overflow-y:auto;
+}
+.gate.hide{display:none;}
+.gate .panel{width:100%;max-width:420px;}
+.who{padding:12px 16px;font-size:12px;border-bottom:2px solid #111;background:var(--sky);word-break:break-all;}
+.log-line{font-size:12px;border-bottom:1px solid #ccc;padding:5px 0;}
+</style>
+</head>
+<body>
+<div class="gate" id="gate">
+  <div class="panel">
+    <h2>SIGN IN</h2>
+    <div style="font-size:13px;margin-bottom:10px">Repo Cloner uses your Mohave Tech account, the same one as Field Twin. Your Claude key is saved to your account and only you can read it.</div>
+    <label for="g-email">Email</label>
+    <input type="text" id="g-email" autocomplete="username" inputmode="email">
+    <label for="g-pass">Password</label>
+    <input type="password" id="g-pass" autocomplete="current-password">
+    <div class="btns">
+      <button class="btn blue" id="g-in">SIGN IN</button>
+      <button class="btn ghost" id="g-up">CREATE ACCOUNT</button>
+    </div>
+    <div class="status" id="g-status" style="margin:10px 0 0;height:60px">Sign in to use Repo Cloner.</div>
+  </div>
+</div>
+<header>
+  <button class="burger" id="burger" aria-label="menu">&#9776;</button>
+  <h1>REPO CLONER</h1>
+</header>
+
+<div class="scrim" id="scrim"></div>
+<nav class="menu" id="menu">
+  <div class="who" id="who">Not signed in</div>
+  <button class="tab active" data-view="hunt">HUNT</button>
+  <button class="tab" data-view="picks">PICKS</button>
+  <button class="tab" data-view="log">LOG</button>
+  <button class="tab" data-view="settings">SETTINGS</button>
+  <button class="tab" id="btn-signout">SIGN OUT</button>
+  <details>
+    <summary>LICENSE GUIDE</summary>
+    <div class="inside">
+      MIT, BSD, zlib, ISC, Unlicense, 0BSD and Apache let you reskin and sell. Keep the original copyright notice in your credits. Apache also wants a note saying you changed files.<br><br>
+      MPL lets you sell, but any file you change from theirs stays open source.<br><br>
+      GPL and AGPL are left out of hunts on purpose. They force your whole game open.<br><br>
+      No license means all rights reserved. Repo Cloner never shows those.<br><br>
+      Art, sound and fonts can carry their own license. NC or NonCommercial means you cannot sell a game that uses them. Deep Check reads those files for you.
+    </div>
+  </details>
+  <details>
+    <summary>HOW TO USE</summary>
+    <div class="inside">
+      Set your criteria on Hunt and tap Hunt. Tap Check on a card for the deep check: file tree, asset licenses, engine and a reskin grade. Tap Claude for a written verdict with what to swap and a twist idea. Tap Check All to grade every result in a row. Save the good ones to Picks, then export them or copy the names into Repo Find.
+    </div>
+  </details>
+</nav>
+
+<main>
+  <section class="view active" id="view-hunt">
+    <div class="panel">
+      <h2>CRITERIA</h2>
+      <label for="q-words">Keywords</label>
+      <input type="text" id="q-words" placeholder="platformer, puzzle, shooter">
+      <div class="row">
+        <div>
+          <label for="q-topic">Kind</label>
+          <select id="q-topic">
+            <option value="game">any game</option>
+            <option value="html5-game">html5 game</option>
+            <option value="browser-game">browser game</option>
+            <option value="phaser">phaser</option>
+            <option value="pixijs">pixi</option>
+            <option value="threejs">three js</option>
+            <option value="godot">godot</option>
+            <option value="love2d">love2d</option>
+            <option value="pygame">pygame</option>
+            <option value="">no kind filter</option>
+          </select>
+        </div>
+        <div>
+          <label for="q-lang">Language</label>
+          <select id="q-lang">
+            <option value="">any</option>
+            <option value="JavaScript" selected>JavaScript</option>
+            <option value="TypeScript">TypeScript</option>
+            <option value="HTML">HTML</option>
+            <option value="GDScript">GDScript</option>
+            <option value="Lua">Lua</option>
+            <option value="Python">Python</option>
+            <option value="C#">C#</option>
+            <option value="Rust">Rust</option>
+          </select>
+        </div>
+      </div>
+      <label>Licenses</label>
+      <div class="checks" id="q-licenses">
+        <label><input type="checkbox" value="mit" checked>MIT</label>
+        <label><input type="checkbox" value="bsd-2-clause" checked>BSD two clause</label>
+        <label><input type="checkbox" value="bsd-3-clause" checked>BSD three clause</label>
+        <label><input type="checkbox" value="zlib" checked>zlib</label>
+        <label><input type="checkbox" value="isc" checked>ISC</label>
+        <label><input type="checkbox" value="unlicense" checked>Unlicense</label>
+        <label><input type="checkbox" value="0bsd" checked>0BSD</label>
+        <label><input type="checkbox" value="apache-2.0" checked>Apache</label>
+        <label><input type="checkbox" value="mpl-2.0">MPL</label>
+      </div>
+      <div class="row">
+        <div>
+          <label for="q-stars">Min stars</label>
+          <input type="number" id="q-stars" value="20" min="0">
+        </div>
+        <div>
+          <label for="q-pushed">Updated within</label>
+          <select id="q-pushed">
+            <option value="6">six months</option>
+            <option value="12">a year</option>
+            <option value="24" selected>two years</option>
+            <option value="60">five years</option>
+            <option value="0">any time</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="q-size">Max repo size</label>
+          <select id="q-size">
+            <option value="5000">small</option>
+            <option value="30000" selected>medium</option>
+            <option value="150000">large</option>
+            <option value="0">no limit</option>
+          </select>
+        </div>
+        <div>
+          <label for="q-sort">Sort</label>
+          <select id="q-sort">
+            <option value="stars">stars</option>
+            <option value="updated">recently updated</option>
+            <option value="best">best match</option>
+          </select>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn blue" id="btn-hunt">HUNT</button>
+        <button class="btn" id="btn-checkall">CHECK ALL</button>
+      </div>
+    </div>
+    <div class="status" id="status">Ready.</div>
+    <div class="btns" style="margin-bottom:12px">
+      <button class="btn ghost" id="btn-prev">PREV PAGE</button>
+      <button class="btn ghost" id="btn-next">NEXT PAGE</button>
+    </div>
+    <div id="results"><div class="empty">Set criteria and tap Hunt.</div></div>
+  </section>
+
+  <section class="view" id="view-picks">
+    <div class="panel">
+      <h2>PICKS</h2>
+      <div class="btns" style="margin-bottom:8px">
+        <button class="btn" id="btn-exp-json">JSON</button>
+        <button class="btn" id="btn-exp-csv">CSV</button>
+      </div>
+      <div class="btns">
+        <button class="btn blue" id="btn-copy-names">COPY FOR REPO FIND</button>
+        <button class="btn ghost" id="btn-clear-picks">CLEAR</button>
+      </div>
+    </div>
+    <div class="status" id="picks-status">Saved repos land here, best grade first.</div>
+    <div id="picks"></div>
+  </section>
+
+  <section class="view" id="view-log">
+    <div class="panel">
+      <h2>HUNT LOG</h2>
+      <div class="btns">
+        <button class="btn" id="btn-exp-log">EXPORT LOG</button>
+        <button class="btn ghost" id="btn-clear-log">CLEAR LOG</button>
+      </div>
+    </div>
+    <div id="log"></div>
+  </section>
+
+  <section class="view" id="view-settings">
+    <div class="panel">
+      <h2>CLAUDE API KEY</h2>
+      <label for="s-claude">Your Anthropic API key</label>
+      <input type="password" id="s-claude" placeholder="sk-ant-xxxxxxxx" autocomplete="off">
+      <div class="btns">
+        <button class="btn blue" id="btn-save-claude">SAVE</button>
+        <button class="btn ghost" id="btn-clear-claude">CLEAR</button>
+      </div>
+      <div class="status" id="claude-status" style="margin:10px 0 0">The Claude button bills your own Anthropic account. The key is saved to your sign in and follows you to any device.</div>
+    </div>
+    <div class="panel">
+      <h2>GITHUB TOKEN</h2>
+      <label for="s-token">Personal access token, optional</label>
+      <input type="password" id="s-token" placeholder="xxxxxxxx">
+      <div class="btns">
+        <button class="btn blue" id="btn-save-token">SAVE</button>
+        <button class="btn ghost" id="btn-clear-token">CLEAR</button>
+      </div>
+      <div class="status" id="token-status" style="margin:10px 0 0">Without a token GitHub allows a small number of checks per hour. With one, thousands. The token is saved to your sign in.</div>
+    </div>
+    <div class="panel">
+      <h2>BACKUP</h2>
+      <div class="btns">
+        <button class="btn" id="btn-backup">EXPORT ALL</button>
+        <button class="btn ghost" id="btn-restore">IMPORT</button>
+      </div>
+      <input type="file" id="restore-file" accept="application/json" style="display:none">
+    </div>
+  </section>
+</main>
+
+<div class="sheet" id="sheet">
+  <div class="top">
+    <button class="btn ghost" id="sheet-close">CLOSE</button>
+    <button class="btn blue" id="sheet-claude">CLAUDE</button>
+    <button class="btn" id="sheet-save">SAVE</button>
+  </div>
+  <div class="body" id="sheet-body"></div>
+</div>
+
+<script>
+"use strict";
+
+var GOOD_LICENSES = ["mit","bsd-2-clause","bsd-3-clause","zlib","isc","unlicense","0bsd","apache-2.0","mpl-2.0"];
+var ASSET_DIR = /(^|\/)(assets?|art|sprites?|images?|img|gfx|graphics|audio|sounds?|sfx|music|fonts?|res|resources|media|textures?|tiles?|levels?|static|public)(\/|$)/i;
+var IMG_EXT = /\.(png|jpe?g|gif|webp|svg|bmp|aseprite|psd)$/i;
+var AUD_EXT = /\.(ogg|mp3|wav|m4a|flac|opus|mid|midi|xm|mod)$/i;
+var FONT_EXT = /\.(ttf|otf|woff2?|fnt)$/i;
+var CODE_EXT = /\.(js|mjs|ts|tsx|jsx|gd|lua|py|cs|rs|c|cpp|h|hpp|go|java|kt|hx|html)$/i;
+var LIC_NAME = /(^|\/)(licen[sc]e|copying|credits|attribution|authors|notice)[^\/]*$/i;
+var BAD_TEXT = /(non[- ]?commercial|CC[- ]?BY[- ]?NC|BY[- ]NC|not for commercial|personal use only|all rights reserved|may not be sold|do not redistribute)/i;
+var CCBY_TEXT = /(CC[- ]?BY(?![- ]?NC)|creative commons attribution(?! non))/i;
+var FREE_TEXT = /(CC0|public domain|cc[- ]?zero)/i;
+var GPL_TEXT = /(GNU GENERAL PUBLIC|GPL[- ]?v?[23]|AGPL)/i;
+
+var acct = { user: null, claudeKey: "", githubToken: "" };
+var state = { results: [], checks: {}, page: 1, lastQuery: "", current: null, busy: false };
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]; }); }
+function load(k, d){ try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } }
+function store(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+function token(){ return acct.githubToken || ""; }
+function say(msg){ $("status").textContent = msg; }
+
+/* ---------- menu ---------- */
+function menu(open){
+  $("menu").classList.toggle("open", open);
+  $("scrim").classList.toggle("open", open);
+}
+$("burger").onclick = function(){ menu(!$("menu").classList.contains("open")); };
+$("scrim").onclick = function(){ menu(false); };
+Array.prototype.forEach.call(document.querySelectorAll(".menu .tab[data-view]"), function(b){
+  b.onclick = function(){
+    document.querySelectorAll(".menu .tab").forEach(function(x){ x.classList.remove("active"); });
+    b.classList.add("active");
+    document.querySelectorAll(".view").forEach(function(v){ v.classList.remove("active"); });
+    $("view-" + b.dataset.view).classList.add("active");
+    if (b.dataset.view === "picks") renderPicks();
+    if (b.dataset.view === "log") renderLog();
+    menu(false);
+    window.scrollTo(0, 0);
+  };
+});
+
+/* ---------- github ---------- */
+var rateNote = "";
+async function gh(path){
+  var headers = { "Accept": "application/vnd.github+json" };
+  var t = token();
+  if (t) headers["Authorization"] = "Bearer " + t;
+  var r = await fetch("https://api.github.com" + path, { headers: headers });
+  var left = r.headers.get("x-ratelimit-remaining");
+  var reset = r.headers.get("x-ratelimit-reset");
+  if (left != null) rateNote = "GitHub calls left: " + left;
+  if (r.status === 403 || r.status === 429) {
+    var when = reset ? new Date(reset * 1000).toLocaleTimeString() : "soon";
+    throw new Error("GitHub limit reached. Resets at " + when + ". A token in Settings raises the limit.");
+  }
+  if (!r.ok) throw new Error("GitHub said " + r.status + " for " + path);
+  return r.json();
+}
+async function raw(full, branch, path){
+  var r = await fetch("https://raw.githubusercontent.com/" + full + "/" + encodeURIComponent(branch) + "/" + path.split("/").map(encodeURIComponent).join("/"));
+  if (!r.ok) return "";
+  var t = await r.text();
+  return t.slice(0, 40000);
+}
+
+function buildQuery(){
+  var parts = [];
+  var words = $("q-words").value.trim();
+  if (words) parts.push(words);
+  var topic = $("q-topic").value;
+  if (topic) parts.push("topic:" + topic);
+  var lang = $("q-lang").value;
+  if (lang) parts.push("language:\"" + lang + "\"");
+  var lics = Array.prototype.map.call(document.querySelectorAll("#q-licenses input:checked"), function(i){ return "license:" + i.value; });
+  if (!lics.length) lics = ["license:mit"];
+  parts = parts.concat(lics);
+  var stars = parseInt($("q-stars").value, 10);
+  if (stars > 0) parts.push("stars:>=" + stars);
+  var months = parseInt($("q-pushed").value, 10);
+  if (months > 0) {
+    var d = new Date(); d.setMonth(d.getMonth() - months);
+    parts.push("pushed:>=" + d.toISOString().slice(0, 10));
+  }
+  var size = parseInt($("q-size").value, 10);
+  if (size > 0) parts.push("size:<=" + size);
+  parts.push("archived:false");
+  parts.push("fork:false");
+  return parts.join(" ");
+}
+
+async function hunt(page){
+  if (state.busy) return;
+  state.busy = true;
+  var q = page > 1 ? state.lastQuery : buildQuery();
+  state.lastQuery = q; state.page = page;
+  say("Hunting page " + page + "...");
+  try {
+    var sort = $("q-sort").value;
+    var url = "/search/repositories?q=" + encodeURIComponent(q) + "&per_page=30&page=" + page + (sort === "best" ? "" : "&sort=" + sort + "&order=desc");
+    var data = await gh(url);
+    state.results = (data.items || []).filter(function(it){
+      return it.license && GOOD_LICENSES.indexOf(String(it.license.key).toLowerCase()) >= 0;
+    });
+    renderResults();
+    say("Page " + page + ". " + state.results.length + " shown of " + data.total_count + " matches. " + rateNote);
+    addLog({ at: new Date().toISOString(), query: q, page: page, total: data.total_count, shown: state.results.map(function(r){ return r.full_name; }) });
+  } catch(e) {
+    say(e.message);
+  }
+  state.busy = false;
+}
+
+/* ---------- deep check ---------- */
+function engineOf(paths, repo){
+  var has = function(re){ return paths.some(function(p){ return re.test(p); }); };
+  if (has(/(^|\/)project\.godot$/)) return { name: "Godot", browser: false };
+  if (has(/(^|\/)ProjectSettings\/ProjectVersion\.txt$/)) return { name: "Unity", browser: false };
+  if (has(/(^|\/)main\.lua$/) && has(/(^|\/)conf\.lua$/)) return { name: "LOVE", browser: false };
+  if (has(/(^|\/)Cargo\.toml$/)) return { name: "Rust", browser: has(/wasm|index\.html$/i) };
+  if (has(/\.py$/) && /pygame/i.test(repo.description || "")) return { name: "pygame", browser: false };
+  if (has(/(^|\/)package\.json$/)) {
+    if (has(/phaser/i)) return { name: "Phaser", browser: true };
+    return { name: "Node web build", browser: true };
+  }
+  if (has(/\.html?$/i)) return { name: "Plain web page", browser: true };
+  return { name: repo.language || "unknown", browser: false };
+}
+
+async function deepCheck(repo){
+  var full = repo.full_name, branch = repo.default_branch || "main";
+  var tree = await gh("/repos/" + full + "/git/trees/" + encodeURIComponent(branch) + "?recursive=1");
+  var files = (tree.tree || []).filter(function(n){ return n.type === "blob"; });
+  var paths = files.map(function(n){ return n.path; });
+  var imgs = paths.filter(function(p){ return IMG_EXT.test(p); });
+  var auds = paths.filter(function(p){ return AUD_EXT.test(p); });
+  var fonts = paths.filter(function(p){ return FONT_EXT.test(p); });
+  var code = paths.filter(function(p){ return CODE_EXT.test(p) && !/(^|\/)(node_modules|vendor|dist|build|lib)\//.test(p); });
+  var assets = imgs.concat(auds, fonts);
+  var inDir = assets.filter(function(p){ return ASSET_DIR.test(p); });
+  var licFiles = paths.filter(function(p){ return LIC_NAME.test(p); });
+  var subLic = licFiles.filter(function(p){ return p.indexOf("/") >= 0; });
+  var readmePath = paths.find(function(p){ return /^readme(\.md|\.txt)?$/i.test(p); });
+  var engine = engineOf(paths, repo);
+
+  var flags = [];
+  var readme = readmePath ? await raw(full, branch, readmePath) : "";
+  var toRead = subLic.slice(0, 8);
+  var texts = [];
+  for (var i = 0; i < toRead.length; i++) {
+    var t = await raw(full, branch, toRead[i]);
+    texts.push({ path: toRead[i], text: t });
+  }
+  var bad = false, credit = false;
+  texts.forEach(function(x){
+    if (BAD_TEXT.test(x.text)) { bad = true; flags.push({ k: "bad", t: x.path + " says noncommercial or all rights reserved. Replace whatever it covers before selling." }); }
+    else if (GPL_TEXT.test(x.text)) { bad = true; flags.push({ k: "bad", t: x.path + " is a GPL license inside the repo. That part would force your game open." }); }
+    else if (CCBY_TEXT.test(x.text)) { credit = true; flags.push({ k: "warn", t: x.path + " is Creative Commons Attribution. Sellable, but the artist goes in your credits." }); }
+    else if (FREE_TEXT.test(x.text)) { flags.push({ k: "good", t: x.path + " is CC0 or public domain. Free to use." }); }
+    else { flags.push({ k: "warn", t: x.path + " is a license or credits file Repo Cloner could not classify. Read it." }); }
+  });
+  var readmeBad = readme && BAD_TEXT.test(readme);
+  if (readmeBad) { bad = true; flags.push({ k: "bad", t: "The README mentions noncommercial or all rights reserved terms. Read it before using any asset." }); }
+  if (readme && CCBY_TEXT.test(readme) && !readmeBad) { credit = true; flags.push({ k: "warn", t: "The README mentions Creative Commons Attribution. Expect to credit artists." }); }
+  if (assets.length && !subLic.length && !readmeBad) flags.push({ k: "warn", t: "Assets have no license file of their own, so they fall under the main " + repo.license.spdx_id + " license unless the README says otherwise." });
+  if (!assets.length) flags.push({ k: "good", t: "No image, sound or font files. Visuals are drawn in code, so a reskin means editing code colors and shapes." });
+  if (repo.license.key === "apache-2.0") flags.push({ k: "warn", t: "Apache license. Keep their NOTICE file and say you changed files." });
+  if (repo.license.key === "mpl-2.0") flags.push({ k: "warn", t: "MPL license. Files you change from theirs must stay open source." });
+  if (tree.truncated) flags.push({ k: "warn", t: "The repo is so big GitHub cut the file list short." });
+  if (engine.browser) flags.push({ k: "good", t: engine.name + ". Runs in a browser, so it fits Vercel." });
+  else flags.push({ k: "warn", t: engine.name + ". Does not run in a browser as is." });
+
+  var score = 50;
+  if (engine.browser) score += 15;
+  if (assets.length && inDir.length / assets.length > 0.7) score += 10;
+  if (code.length > 0 && code.length <= 40) score += 10;
+  else if (code.length > 200) score -= 15;
+  if (repo.stargazers_count >= 200) score += 5;
+  var months = (Date.now() - new Date(repo.pushed_at).getTime()) / 2629800000;
+  if (months < 12) score += 5;
+  if (credit) score -= 5;
+  if (bad) score -= 40;
+  if (repo.license.key === "mpl-2.0") score -= 5;
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  var kind = bad ? "bad" : score >= 70 ? "good" : "warn";
+
+  return {
+    at: new Date().toISOString(), score: score, kind: kind, engine: engine.name, browser: engine.browser,
+    files: paths.length, code: code.length, images: imgs.length, audio: auds.length, fonts: fonts.length,
+    assetsInFolder: inDir.length, licenseFiles: licFiles, flags: flags,
+    readme: readme.slice(0, 6000), tree: paths.slice(0, 400), claude: null
+  };
+}
+
+function gradeLine(c){
+  if (!c) return { cls: "", text: "Not checked yet" };
+  var bits = ["Grade " + c.score, c.engine, c.code + " code files", (c.images + c.audio + c.fonts) + " assets"];
+  if (c.kind === "bad") bits.unshift("LICENSE RISK");
+  if (c.claude && c.claude.score != null) bits.push("Claude " + c.claude.score);
+  return { cls: c.kind, text: bits.join(" | ") };
+}
+
+async function runCheck(full){
+  var repo = findRepo(full);
+  if (!repo) return null;
+  var c = await deepCheck(repo);
+  state.checks[full] = c;
+  var saved = load("rc_checks", {});
+  saved[full] = c; store("rc_checks", saved);
+  updateCard(full);
+  return c;
+}
+
+function findRepo(full){
+  return state.results.find(function(r){ return r.full_name === full; }) || (load("rc_picks", []).find(function(p){ return p.repo.full_name === full; }) || {}).repo;
+}
+
+/* ---------- claude ---------- */
+async function askClaude(full){
+  var repo = findRepo(full);
+  var c = state.checks[full] || load("rc_checks", {})[full];
+  if (!c) { c = await runCheck(full); }
+  var text = [
+    "Repo: " + repo.full_name,
+    "Description: " + (repo.description || "none"),
+    "License: " + repo.license.spdx_id,
+    "Stars: " + repo.stargazers_count + ". Last push: " + repo.pushed_at,
+    "Engine guess: " + c.engine + ". Runs in browser: " + c.browser,
+    "Files: " + c.files + ". Code files: " + c.code + ". Images: " + c.images + ". Audio: " + c.audio + ". Fonts: " + c.fonts + ". Assets inside asset folders: " + c.assetsInFolder,
+    "Flags: " + c.flags.map(function(f){ return f.t; }).join(" "),
+    "File tree:\n" + c.tree.join("\n"),
+    "README:\n" + c.readme
+  ].join("\n");
+  if (!acct.claudeKey) throw new Error("Add your Claude API key in Settings first.");
+  var r = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": acct.claudeKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+    body: JSON.stringify({ model: "claude-sonnet-5-5", max_tokens: 900, system: CLAUDE_SYSTEM, messages: [{ role: "user", content: text.slice(0, 60000) }] })
+  });
+  var data = await r.json().catch(function(){ return null; });
+  if (!r.ok || !data) {
+    var why = data && data.error && data.error.message ? data.error.message : ("status " + r.status);
+    if (r.status === 401) why = "Anthropic rejected that key. Check it in Settings.";
+    throw new Error("Claude check failed: " + why);
+  }
+  var rawText = (data.content || []).filter(function(b){ return b.type === "text"; }).map(function(b){ return b.text; }).join("");
+  c.claude = cleanVerdict(rawText);
+  state.checks[full] = c;
+  var saved = load("rc_checks", {}); saved[full] = c; store("rc_checks", saved);
+  var picks = load("rc_picks", []);
+  picks.forEach(function(p){ if (p.repo.full_name === full) p.check = c; });
+  store("rc_picks", picks);
+  updateCard(full);
+  return c;
+}
+
+var CLAUDE_SYSTEM = [
+  "You judge open source games on GitHub for a solo developer who wants to fork one, put his own skin on it, add his own twist, and ship it as his own game, sometimes for sale.",
+  "You get the repo license, stats, flags from an automatic license scan, the file tree, and the README.",
+  "Score from 0 to 100 how good a reskin base it is: clean license for selling, art and sound easy to swap, small readable code, runs in a browser, fun core loop worth keeping.",
+  "Drop the score hard for any asset or code that is noncommercial, all rights reserved, GPL, or of unclear origin, and say so in risk.",
+  "Only judge from what you were given. Never invent files or facts.",
+  'Reply with JSON only, no other text, in this shape: {"score":0,"verdict":"one or two sentences","swap":"what art, sound, text and names to replace","keep":"what code and mechanics are worth keeping","twist":"one idea to make it his own","risk":"license or asset risks, or none seen"}',
+  "Plain words. No markdown, no lists, no em dashes, no en dashes."
+].join("\n");
+
+function cleanVerdict(raw){
+  var a = raw.indexOf("{"), b = raw.lastIndexOf("}"), parsed = null;
+  if (a >= 0 && b > a) { try { parsed = JSON.parse(raw.slice(a, b + 1)); } catch(e){ parsed = null; } }
+  if (!parsed) return { score: null, text: raw.slice(0, 1200) };
+  var out = {}, n = parseInt(parsed.score, 10);
+  out.score = isFinite(n) ? Math.max(0, Math.min(100, n)) : null;
+  ["verdict","swap","keep","twist","risk"].forEach(function(k){ if (typeof parsed[k] === "string") out[k] = parsed[k].slice(0, 600); });
+  return out;
+}
+
+/* ---------- render ---------- */
+function cardHtml(repo, where){
+  var c = state.checks[repo.full_name] || load("rc_checks", {})[repo.full_name];
+  if (c) state.checks[repo.full_name] = c;
+  var g = gradeLine(c);
+  var id = where + "-" + repo.full_name.replace(/[^a-z0-9]/gi, "_");
+  var extra = where === "pick"
+    ? '<button class="btn ghost" data-act="remove" data-full="' + esc(repo.full_name) + '">REMOVE</button>'
+    : '<button class="btn ghost" data-act="save" data-full="' + esc(repo.full_name) + '">SAVE</button>';
+  return '<div class="card" id="' + id + '">' +
+    '<div class="name">' + esc(repo.full_name) + '</div>' +
+    '<div class="meta">' + esc(repo.license.spdx_id) + ' | ' + esc(repo.language || "?") + ' | ' + repo.stargazers_count + ' stars | pushed ' + esc(String(repo.pushed_at).slice(0, 10)) + '</div>' +
+    '<div class="desc">' + esc(repo.description || "No description.") + '</div>' +
+    '<div class="grade ' + g.cls + '" data-grade="' + esc(repo.full_name) + '">' + esc(g.text) + '</div>' +
+    '<div class="btns">' +
+      '<button class="btn" data-act="check" data-full="' + esc(repo.full_name) + '">CHECK</button>' +
+      '<button class="btn blue" data-act="claude" data-full="' + esc(repo.full_name) + '">CLAUDE</button>' +
+      '<button class="btn ghost" data-act="open" data-full="' + esc(repo.full_name) + '">DETAIL</button>' +
+      extra +
+    '</div></div>';
+}
+function renderResults(){
+  $("results").innerHTML = state.results.length ? state.results.map(function(r){ return cardHtml(r, "res"); }).join("") : '<div class="empty">Nothing matched. Loosen the criteria.</div>';
+}
+function updateCard(full){
+  var c = state.checks[full];
+  var g = gradeLine(c);
+  document.querySelectorAll('[data-grade]').forEach(function(el){
+    if (el.dataset.grade === full) { el.className = "grade " + g.cls; el.textContent = g.text; }
+  });
+  if (state.current === full && $("sheet").classList.contains("open")) openSheet(full);
+}
+
+function openSheet(full){
+  state.current = full;
+  var repo = findRepo(full);
+  var c = state.checks[full] || load("rc_checks", {})[full];
+  var h = '<div class="name" style="font-weight:800;color:var(--blue);word-break:break-all">' + esc(full) + '</div>';
+  h += '<div style="font-size:13px;margin:4px 0">' + esc(repo.description || "") + '</div>';
+  h += '<a class="btn ghost" style="display:block;text-align:center;text-decoration:none;margin:8px 0" href="https://github.com/' + esc(full) + '" target="_blank" rel="noopener">OPEN ON GITHUB</a>';
+  if (!c) {
+    h += '<h3>NOT CHECKED</h3><div>Tap Check on the card for the deep check.</div>';
+  } else {
+    h += '<h3>GRADE ' + c.score + '</h3>';
+    h += '<div>' + esc(c.engine) + '. ' + c.files + ' files, ' + c.code + ' code files, ' + c.images + ' images, ' + c.audio + ' sounds, ' + c.fonts + ' fonts. ' + c.assetsInFolder + ' assets sit in asset folders.</div>';
+    h += '<h3>FLAGS</h3>' + c.flags.map(function(f){ return '<div class="flag ' + f.k + '">' + esc(f.t) + '</div>'; }).join("");
+    if (c.claude) {
+      var k = c.claude;
+      h += '<h3>CLAUDE ' + esc(k.score == null ? "" : k.score) + '</h3>';
+      if (k.verdict) h += '<div class="flag">' + esc(k.verdict) + '</div>';
+      if (k.swap) h += '<div class="flag warn"><b>Swap:</b> ' + esc(k.swap) + '</div>';
+      if (k.keep) h += '<div class="flag good"><b>Keep:</b> ' + esc(k.keep) + '</div>';
+      if (k.twist) h += '<div class="flag good"><b>Twist:</b> ' + esc(k.twist) + '</div>';
+      if (k.risk) h += '<div class="flag bad"><b>Risk:</b> ' + esc(k.risk) + '</div>';
+      if (k.text) h += '<div class="flag">' + esc(k.text) + '</div>';
+    }
+    h += '<h3>LICENSE FILES</h3><div class="mono">' + esc(c.licenseFiles.join("\n") || "none") + '</div>';
+    h += '<h3>FILE TREE</h3><div class="mono">' + esc(c.tree.join("\n")) + '</div>';
+  }
+  h += '<h3>CLONE IT</h3><div class="mono">git clone https://github.com/' + esc(full) + '.git</div>';
+  $("sheet-body").innerHTML = h;
+  $("sheet").classList.add("open");
+}
+$("sheet-close").onclick = function(){ $("sheet").classList.remove("open"); state.current = null; };
+$("sheet-claude").onclick = function(){ if (state.current) doClaude(state.current); };
+$("sheet-save").onclick = function(){ if (state.current) savePick(state.current); };
+
+async function doCheck(full){
+  say("Checking " + full + "...");
+  try { var c = await runCheck(full); say(full + " graded " + c.score + ". " + rateNote); }
+  catch(e){ say(e.message); }
+}
+async function doClaude(full){
+  say("Asking Claude about " + full + "...");
+  try { var c = await askClaude(full); say("Claude scored " + full + " " + (c.claude.score == null ? "" : c.claude.score) + "."); }
+  catch(e){ say(e.message); }
+}
+
+document.addEventListener("click", function(ev){
+  var b = ev.target.closest("[data-act]");
+  if (!b) return;
+  var full = b.dataset.full, act = b.dataset.act;
+  if (act === "check") doCheck(full);
+  if (act === "claude") doClaude(full);
+  if (act === "open") openSheet(full);
+  if (act === "save") savePick(full);
+  if (act === "remove") { store("rc_picks", load("rc_picks", []).filter(function(p){ return p.repo.full_name !== full; })); renderPicks(); }
+});
+
+$("btn-hunt").onclick = function(){ hunt(1); };
+$("btn-next").onclick = function(){ if (state.lastQuery) hunt(state.page + 1); };
+$("btn-prev").onclick = function(){ if (state.lastQuery && state.page > 1) hunt(state.page - 1); };
+$("btn-checkall").onclick = async function(){
+  if (state.busy || !state.results.length) return;
+  state.busy = true;
+  for (var i = 0; i < state.results.length; i++) {
+    var full = state.results[i].full_name;
+    if (state.checks[full]) continue;
+    say("Check all: " + (i + 1) + " of " + state.results.length + ", " + full);
+    try { await runCheck(full); }
+    catch(e){ say(e.message); break; }
+  }
+  state.busy = false;
+  if (!/limit/i.test($("status").textContent)) say("Check all finished. " + rateNote);
+  state.results.sort(function(a, b){ return ((state.checks[b.full_name] || {}).score || 0) - ((state.checks[a.full_name] || {}).score || 0); });
+  renderResults();
+};
+
+/* ---------- picks ---------- */
+function slimRepo(r){
+  return { full_name: r.full_name, html_url: r.html_url, description: r.description, language: r.language,
+    stargazers_count: r.stargazers_count, pushed_at: r.pushed_at, default_branch: r.default_branch,
+    license: { key: r.license.key, spdx_id: r.license.spdx_id } };
+}
+function savePick(full){
+  var picks = load("rc_picks", []);
+  if (picks.some(function(p){ return p.repo.full_name === full; })) { say(full + " is already in Picks."); return; }
+  var repo = findRepo(full);
+  picks.push({ savedAt: new Date().toISOString(), repo: slimRepo(repo), check: state.checks[full] || null });
+  store("rc_picks", picks);
+  say(full + " saved to Picks.");
+}
+function renderPicks(){
+  var picks = load("rc_picks", []);
+  picks.forEach(function(p){ if (p.check) state.checks[p.repo.full_name] = p.check; });
+  picks.sort(function(a, b){ return ((b.check || {}).score || 0) - ((a.check || {}).score || 0); });
+  $("picks").innerHTML = picks.length ? picks.map(function(p){ return cardHtml(p.repo, "pick"); }).join("") : '<div class="empty">No picks yet.</div>';
+  $("picks-status").textContent = picks.length + " saved. Best grade first.";
+}
+function download(name, text, type){
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: type }));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove();
+}
+function stamp(){ return new Date().toISOString().slice(0, 10); }
+$("btn-exp-json").onclick = function(){
+  download("repo-cloner-v1-picks-" + stamp() + ".json", JSON.stringify(load("rc_picks", []), null, 2), "application/json");
+};
+$("btn-exp-csv").onclick = function(){
+  var rows = [["repo","license","language","stars","pushed","grade","claude","engine","verdict"]];
+  load("rc_picks", []).forEach(function(p){
+    var c = p.check || {};
+    rows.push([p.repo.full_name, p.repo.license.spdx_id, p.repo.language || "", p.repo.stargazers_count, p.repo.pushed_at, c.score == null ? "" : c.score, c.claude && c.claude.score != null ? c.claude.score : "", c.engine || "", c.claude && c.claude.verdict || ""]);
+  });
+  download("repo-cloner-v1-picks-" + stamp() + ".csv", rows.map(function(r){ return r.map(function(v){ return '"' + String(v).replace(/"/g, '""') + '"'; }).join(","); }).join("\n"), "text/csv");
+};
+$("btn-copy-names").onclick = function(){
+  var names = load("rc_picks", []).map(function(p){ return p.repo.full_name; }).join("\n");
+  navigator.clipboard.writeText(names).then(function(){ $("picks-status").textContent = "Names copied. Paste them into Repo Find."; }, function(){ $("picks-status").textContent = "Clipboard blocked by the browser."; });
+};
+$("btn-clear-picks").onclick = function(){ if (confirmTwice(this)) { store("rc_picks", []); renderPicks(); } };
+
+function confirmTwice(btn){
+  if (btn.dataset.armed === "1") { btn.dataset.armed = ""; btn.textContent = btn.dataset.label; return true; }
+  btn.dataset.label = btn.textContent; btn.dataset.armed = "1"; btn.textContent = "TAP AGAIN";
+  setTimeout(function(){ if (btn.dataset.armed === "1") { btn.dataset.armed = ""; btn.textContent = btn.dataset.label; } }, 3000);
+  return false;
+}
+
+/* ---------- log ---------- */
+function addLog(entry){
+  var log = load("rc_log", []);
+  log.unshift(entry);
+  store("rc_log", log.slice(0, 300));
+}
+function renderLog(){
+  var log = load("rc_log", []);
+  $("log").innerHTML = log.length ? log.map(function(l){
+    return '<div class="log-line"><b>' + esc(l.at.replace("T", " ").slice(0, 16)) + '</b> page ' + l.page + ', ' + l.total + ' matches<br>' + esc(l.query) + '</div>';
+  }).join("") : '<div class="empty">No hunts yet.</div>';
+}
+$("btn-exp-log").onclick = function(){ download("repo-cloner-v1-log-" + stamp() + ".json", JSON.stringify(load("rc_log", []), null, 2), "application/json"); };
+$("btn-clear-log").onclick = function(){ if (confirmTwice(this)) { store("rc_log", []); renderLog(); } };
+
+/* ---------- settings ---------- */
+async function saveAccount(fields, statusId, msg){
+  try {
+    var res = await sb.auth.updateUser({ data: fields });
+    if (res.error) throw res.error;
+    readAccount(res.data.user);
+    $(statusId).textContent = msg;
+  } catch(e) { $(statusId).textContent = "Could not save: " + (e.message || e); }
+}
+$("btn-save-token").onclick = function(){
+  var t = $("s-token").value.trim();
+  saveAccount({ repo_cloner_github_token: t }, "token-status", t ? "Token saved to your sign in." : "Token field was empty.");
+};
+$("btn-clear-token").onclick = function(){
+  $("s-token").value = "";
+  saveAccount({ repo_cloner_github_token: "" }, "token-status", "Token cleared.");
+};
+$("btn-save-claude").onclick = function(){
+  var k = $("s-claude").value.trim();
+  if (k && !/^sk-ant-/.test(k)) { $("claude-status").textContent = "That does not look like an Anthropic key. They start with sk-ant-."; return; }
+  saveAccount({ repo_cloner_claude_key: k }, "claude-status", k ? "Claude key saved to your sign in." : "Key field was empty.");
+};
+$("btn-clear-claude").onclick = function(){
+  $("s-claude").value = "";
+  saveAccount({ repo_cloner_claude_key: "" }, "claude-status", "Claude key cleared.");
+};
+$("btn-backup").onclick = function(){
+  download("repo-cloner-v1-backup-" + stamp() + ".json", JSON.stringify({ picks: load("rc_picks", []), checks: load("rc_checks", {}), log: load("rc_log", []) }), "application/json");
+};
+$("btn-restore").onclick = function(){ $("restore-file").click(); };
+$("restore-file").onchange = function(){
+  var f = this.files[0]; if (!f) return;
+  f.text().then(function(t){
+    var d = JSON.parse(t);
+    if (d.picks) store("rc_picks", d.picks);
+    if (d.checks) store("rc_checks", d.checks);
+    if (d.log) store("rc_log", d.log);
+    $("token-status").textContent = "Backup imported.";
+  }).catch(function(){ $("token-status").textContent = "That file is not a Repo Cloner backup."; });
+};
+
+/* ---------- sign in ---------- */
+var HUB_URL = "https://zasyjjoypkpvyqdueums.supabase.co";
+var HUB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inphc3lqam95cGtwdnlxZHVldW1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMjk1NjQsImV4cCI6MjEwNjgwNTU2NH0.PZrUvG4qsTpMQeihXbbzaFYUAAJ9YV7FtxLTkcQGFVI";
+var sb = window.supabase.createClient(HUB_URL, HUB_KEY, { auth: { persistSession: true, autoRefreshToken: true, storageKey: "repo-cloner-v1-auth" } });
+
+function readAccount(user){
+  acct.user = user || null;
+  var m = (user && user.user_metadata) || {};
+  acct.claudeKey = m.repo_cloner_claude_key || "";
+  acct.githubToken = m.repo_cloner_github_token || "";
+  $("s-claude").value = acct.claudeKey;
+  $("s-token").value = acct.githubToken;
+  $("who").textContent = user ? "Signed in as " + user.email : "Not signed in";
+  $("gate").classList.toggle("hide", !!user);
+}
+function gateSay(m){ $("g-status").textContent = m; }
+
+$("g-in").onclick = async function(){
+  gateSay("Signing in...");
+  var r = await sb.auth.signInWithPassword({ email: $("g-email").value.trim(), password: $("g-pass").value });
+  if (r.error) { gateSay(r.error.message); return; }
+  var u = await sb.auth.getUser();
+  readAccount(u.data.user);
+  $("g-pass").value = "";
+};
+$("g-up").onclick = async function(){
+  var email = $("g-email").value.trim(), pass = $("g-pass").value;
+  if (pass.length < 8) { gateSay("Pick a password of at least eight characters."); return; }
+  gateSay("Creating account...");
+  var r = await sb.auth.signUp({ email: email, password: pass, options: { emailRedirectTo: location.origin } });
+  if (r.error) { gateSay(r.error.message); return; }
+  if (r.data.session) { readAccount(r.data.user); $("g-pass").value = ""; }
+  else gateSay("Check your email for the confirmation link, then come back and sign in.");
+};
+$("btn-signout").onclick = async function(){
+  menu(false);
+  await sb.auth.signOut();
+  readAccount(null);
+  gateSay("Signed out.");
+};
+sb.auth.onAuthStateChange(function(ev){ if (ev === "SIGNED_OUT") readAccount(null); });
+(async function(){
+  var s0 = await sb.auth.getSession();
+  if (s0.data.session) {
+    var u = await sb.auth.getUser();
+    readAccount(u.data.user || null);
+  } else readAccount(null);
+})();
+</script>
+</body>
+</html>

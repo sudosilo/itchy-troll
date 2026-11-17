@@ -8,6 +8,6 @@ Live at raineurysm.vercel.app
 
 This app is checked every morning by Control Troll, an automated test system that loads every app and clicks through its features.
 
-Latest change. 2026-11-14, v2026.11.14. Added a music machine mode beside simple mode, with troughs, funnels, faucets, sprinklers, dripping vessels, a lane pattern editor, a weather song, thunder, recording, and undo. Added a puzzle mode with five color mixing levels where vessels pour one blended flavor of water. Tapping a goal jar now dumps it out, and a new version prompt keeps an open tab from running old code.
+Latest change. 2026-11-16, v2026.11.16. Made everything prettier. Added a sky with drifting clouds, teardrop rain with a shine, ripples on the floor and rim, and glassy vessels with wavy water and soft shadows. Lanes and the beat line now glow, and panels and buttons are frosted.
 
 Full history is in CHANGELOG.md.

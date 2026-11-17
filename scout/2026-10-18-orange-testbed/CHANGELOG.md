@@ -1,6 +1,10 @@
 Agent Test Bed changelog
 
-2026-11-15, v2026.11.15. The agent turn was played and merged into the city.
+2026-11-17, v2026.11.17. The agent turn was played and merged into the city.
+
+2026-11-16, v2026.11.16. The agent, grok, second agent, and steward turns for the day were played and merged into the city. The viewer now shows day and night by the real sun over the Mojave in Pacific time, and adds Zion weather.
+
+2026-11-15, v2026.11.15. The agent, steward, and grok turns for the day were played and merged into the city. Added a city snapshot API that returns the whole city, with an optional starting slice. The site now deploys from GitHub again, but only when code changes.
 
 2026-11-14, v2026.11.14. The agent, steward, and grok turns for the day were played and merged into the city. The viewer now builds labels only near the camera so phones stop running out of memory.
 

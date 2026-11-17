@@ -14,6 +14,14 @@
   }
   // flagsTime scores pack checkpoints and time: flags*100000 + (99999 - tenths of a second)
   function show(score, fmt) {
+    if (fmt === 'jobsTime') {
+      var jf = Math.floor(score / 100000), jt = 99999 - (score % 100000), jm = Math.floor(jt / 600), js = ((jt % 600) / 10).toFixed(1);
+      return jf + (jf === 1 ? ' job ' : ' jobs ') + jm + ':' + (js < 10 ? '0' : '') + js;
+    }
+    if (fmt === 'rescueTime') {
+      var rf = Math.floor(score / 100000), rt = 99999 - (score % 100000), rm = Math.floor(rt / 600), rs = ((rt % 600) / 10).toFixed(1);
+      return rf + ' rescued ' + rm + ':' + (rs < 10 ? '0' : '') + rs;
+    }
     if (fmt === 'flagsTime') {
       var f = Math.floor(score / 100000), t = 99999 - (score % 100000), m = Math.floor(t / 600), sec = ((t % 600) / 10).toFixed(1);
       return f + (f === 1 ? ' flag ' : ' flags ') + m + ':' + (sec < 10 ? '0' : '') + sec;

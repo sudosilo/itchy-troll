@@ -30,11 +30,17 @@ const Q_CONTEXT = `query C($w: String!) {
   workspace(workspaceId: $w) { id name customer { currentUsage billingPeriod { start end } } }
 }`;
 
-const Q_DATA = `query D($w: String!, $m: [MetricMeasurement!]!, $s: DateTime!, $e: DateTime!) {
+const Q_USAGE = `query U($w: String!, $m: [MetricMeasurement!]!, $s: DateTime!, $e: DateTime!) {
   usage(workspaceId: $w, measurements: $m, groupBy: [PROJECT_ID, SERVICE_ID], startDate: $s, endDate: $e) {
     measurement value tags { projectId serviceId }
   }
+}`;
+
+const Q_EST = `query E($w: String!, $m: [MetricMeasurement!]!) {
   estimatedUsage(workspaceId: $w, measurements: $m) { measurement estimatedValue projectId }
+}`;
+
+const Q_PROJECTS = `query P($w: String) {
   projects(first: 500, workspaceId: $w) {
     edges { node {
       id name createdAt updatedAt
@@ -53,12 +59,17 @@ const Q_DATA = `query D($w: String!, $m: [MetricMeasurement!]!, $s: DateTime!, $
 function price(m, v) { return (PRICE[m] || 0) * (v || 0); }
 
 async function workspaceData(token, ws) {
-  const ctx = await gql(token, Q_CONTEXT, { w: ws.id });
+  const ctx = await gql(token, Q_CONTEXT, { w: ws.id }).catch(() => ({}));
   const cust = (ctx.workspace && ctx.workspace.customer) || {};
   const bp = cust.billingPeriod || {};
   const start = bp.start || new Date(Date.now() - 30 * 86400000).toISOString();
   const end = new Date().toISOString();
-  const d = await gql(token, Q_DATA, { w: ws.id, m: MEASURES, s: start, e: end });
+  const [pr, us, es] = await Promise.all([
+    gql(token, Q_PROJECTS, { w: ws.id }).catch(() => gql(token, Q_PROJECTS.replace("source { repo image }", ""), { w: ws.id })),
+    gql(token, Q_USAGE, { w: ws.id, m: MEASURES, s: start, e: end }).catch(() => ({})),
+    gql(token, Q_EST, { w: ws.id, m: MEASURES }).catch(() => ({}))
+  ]);
+  const d = { projects: pr.projects, usage: us.usage, estimatedUsage: es.estimatedUsage };
 
   const svcCost = {}, projCost = {}, projEst = {};
   (d.usage || []).forEach(u => {
@@ -131,9 +142,11 @@ module.exports = async (req, res) => {
     return;
   }
   try {
-    const me = await gql(token, Q_ME);
-    const list = (me.me && me.me.workspaces) || [];
+    const me = await gql(token, Q_ME).catch(() => ({}));
+    let list = (me.me && me.me.workspaces) || [];
+    if (!list.length) list = [{ id: null, name: "Railway" }];
     const all = await Promise.all(list.map(ws => workspaceData(token, ws)));
+    if (!all.some(a => a.projects.length)) throw new Error("Railway token works but no projects came back");
     const projects = [].concat(...all.map(a => a.projects)).sort((a, b) => b.cost - a.cost);
     res.setHeader("Cache-Control", "s-maxage=600, stale-while-revalidate=3600");
     res.statusCode = 200;
