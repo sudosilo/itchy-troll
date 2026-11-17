@@ -6,6 +6,6 @@ The agent picks games itself, scouts repos for candidates, builds gated copies w
 
 Live at itchy-troll.vercel.app.
 
-Latest change. 2026-10-30, v2026.10.30. Added a browser userscript that fills in a game's page on the publishing site from a saved page file, including description, tagline, genre, and tags. It picks the genre from the site's own dropdown, treats a genre that is already set as done, uploads cover and gameplay screenshots, and can create new pages. Added EDMIA cover and gameplay screenshots and queued Gladhand Dockyard next. Page text is now pasted by hand, so the page workflow was removed.
+Latest change. 2026-11-17, v2026.11.17. Updated the MobbyHill pick note.
 
 Full history is in CHANGELOG.md.
