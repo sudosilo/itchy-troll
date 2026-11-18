@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#e9e6dc">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23eceae3'/%3E%3Cpath d='M2 24 L10 12 L16 18 L22 8 L30 24 Z' fill='none' stroke='%23d2601a' stroke-width='2.4'/%3E%3C/svg%3E">
 <!--
-MobbyHill v12. v1 written in chat with Claude Opus 5.5, Nov 14 2026.
+MobbyHill v14. v1 written in chat with Claude Opus 5.5, Nov 14 2026.
 Wireframe 4x4 on wireframe terrain. Driver seat camera with hood, dash and steering wheel, chase camera, top camera.
 Controls carried over from the dock yard truck game: drag steering wheel, D N R gears, Brake and Gas pedals.
 Phone tilt shifts the driver's weight left or right. The center of gravity moves with the driver,
@@ -25,6 +25,8 @@ v9 adds three vehicles (side by side, Jeep, pickup) and Search and rescue: tow a
 v10 adds a fourth rig, a boxy 90s SUV in purple nicknamed the eggplant, and Off road recovery: yank stuck wrecks with a kinetic rope, winch flipped ones upright, and haul burned ones on a flatbed that only the pickup can pull. The pickup gets a wrecker boom and wheel lift. The Store adds a heavy rope and a fast winch.
 v11 adds tow sounds: hook and unhook clanks, rope twang and snap, wheel lift hiss and a winch whine.
 v12 adds weather: rain (slick dirt and slickrock, higher creeks, muddier ground), fog and dust storms (short view, dust gusts push the rig sideways), and snow (bare dirt turns to snow). The menu picks one or rolls a random one that suits the landscape.
+v13 locks the side by side, SUV and pickup behind tokens (1500, 1500 and 2500). The Jeep stays free. Spending goes through the score hub wallet.
+v14 adds sign in through Supabase Auth with the player's own email (a six digit code) or any outside provider turned on in Supabase. Signed in players get the weekly tokens, can buy 1000 tokens for $1 through Stripe, and keep vehicle and part unlocks on the account across phones.
 -->
 <style>
 :root{
@@ -136,6 +138,14 @@ input{user-select:text;-webkit-user-select:text}
 .modes button{border:2px solid var(--edge);background:#fff;border-radius:9px;padding:10px 4px;font-size:15px;font-weight:900}
 .modes button.on{background:#fbe6d6;border-color:var(--orange);color:#7a3510}
 .sc .mnote{text-align:center;font-size:13px;min-height:36px;margin-top:6px}
+.unl button:disabled{opacity:.45}
+.acct{margin-top:10px;background:#fff;border:2px solid var(--blue);border-radius:9px;padding:8px;text-align:left}
+.acct input{flex:1;min-width:0;font:inherit;font-size:15px;padding:8px;border:2px solid #b9b5a8;border-radius:7px;background:#fbfaf6;color:#222}
+.acct .acT{font-weight:800;color:var(--blue);margin-bottom:4px}.acct #acWho{font-weight:800;color:var(--blue);margin-bottom:4px}.acct #acMsg{font-size:13px;margin-top:6px;min-height:1em}
+.acct button:disabled{opacity:.45}
+.unl{display:none;margin-top:8px;background:#fff;border:2px solid var(--blue);border-radius:9px;padding:8px}.unl.on{display:block}
+#unlockTxt{font-size:13px;font-weight:800;text-align:center}
+.sc #vehs button.lk{color:var(--ink2);border-style:dashed}
 .sc .vnote{font-size:12px;color:var(--ink2);text-align:center;margin-top:5px}
 .sc .lbl{font-size:11px;font-weight:900;color:var(--ink2);letter-spacing:.06em;text-transform:uppercase;margin-top:10px;text-align:left}
 .sc .lbl+.modes{margin-top:4px}
@@ -211,7 +221,7 @@ input{user-select:text;-webkit-user-select:text}
   <div id="board"><div class="bt" id="boardTitle">MobbyHill top runs</div><div id="boardList"></div><div class="loc" id="boardLoc"></div><button id="boardClose">Close</button></div>
 </div>
 
-<div id="garage"><div class="bt">Store</div><div id="bank"></div><div id="tokLine"></div><div id="parts"></div><div id="gStats"></div><div class="loc">Flags, coins and stunts pay cash. Tokens arrive every week.</div><button id="garageClose">Done</button></div>
+<div id="garage"><div class="bt">Store</div><div id="bank"></div><div id="tokLine"></div><div id="parts"></div><div id="gStats"></div><div class="loc">Flags, coins and stunts pay cash. Signed in players get tokens every week, and token buys stay on the account.</div><button id="garageClose">Done</button></div>
 <div id="start">
   <div class="sc">
     <h1>MobbyHill</h1>
@@ -219,6 +229,7 @@ input{user-select:text;-webkit-user-select:text}
     <div class="lbl">1. Vehicle</div>
     <div class="modes" id="vehs"></div>
     <p class="vnote" id="vehNote"></p>
+    <div class="unl" id="unlock"><div id="unlockTxt"></div><div class="row"><button class="go" id="unlockYes">Unlock</button><button id="unlockNo">Not now</button></div></div>
     <div class="lbl">2. Map</div>
     <div class="modes" id="lands"></div>
     <div class="lbl">3. Challenge</div>
@@ -230,6 +241,14 @@ input{user-select:text;-webkit-user-select:text}
     <div class="row"><button class="go" id="sTilt">Start with tilt</button><button id="sPlain">Start</button></div>
     <div class="best" id="sBest"></div>
     <div class="best" id="sTok"></div>
+    <div class="acct" id="acct">
+      <div id="acOut"><div class="acT">Sign in with your email</div>
+        <div class="row"><input id="acEmail" type="email" maxlength="254" placeholder="Your email" autocomplete="email" autocapitalize="none" spellcheck="false" aria-label="Your email"><button id="acSend">Send code</button></div>
+        <div class="row" id="acCodeRow" style="display:none"><input id="acCode" inputmode="numeric" maxlength="10" placeholder="6 digit code" autocomplete="one-time-code" aria-label="Code from the email"><button class="go" id="acVerify">Sign in</button></div>
+        <div class="row" id="acProv"></div></div>
+      <div id="acOn"><div id="acWho"></div><div class="row"><button class="go" id="acBuy">Buy 1000 tokens  $1</button><button id="acOff">Sign out</button></div></div>
+      <div id="acMsg"></div>
+    </div>
   </div>
 </div>
 
@@ -257,6 +276,8 @@ const VEHS={
   pickup:{n:'Mob in a pickup',s:'Pickup',T:.82,A:1.62,wr:.45,cgh:.92,power:1.12,vmax:26,eye:[-.4,1.78,-.18],sw:[-.4,1.42,.22],col:[-.4,1.2,.5],cutY:1.12,cutZ:-.3,hitch:2.95,
     note:'Long and strong. Hard to flip end over end, wide turns, tips on side slopes.'}};
 let VK='jeep',VEH=VEHS.jeep;
+// the Jeep is free. the other rigs unlock with tokens from the weekly wallet
+const VEHPRICE={sxs:1500,suv:1500,pickup:2500};
 try{const o=JSON.parse(localStorage.getItem('mobbyhill-opts')||'null');if(o&&VEHS[o.veh]){VK=o.veh;VEH=VEHS[VK];T=VEH.T;A=VEH.A;}}catch(e){}
 // game modes. each has its own leaderboard on the score hub, its own best run and its own ghost
 const MODES={
@@ -299,8 +320,8 @@ const PARTS=[
   {k:'winch',name:'Winch',best:'Off road recovery',note:'A faster winch rights flipped wrecks and loads the flatbed in almost half the time.',opts:[{n:'Stock',c:0},{n:'Fast',c:350}]},
   {k:'engine',name:'Engine',best:'Every landscape',note:'More power for steep climbs and soft ground',opts:[{n:'Stock',c:0},{n:'Big V8',c:600}]},
   {k:'tank',name:'Fuel tank',best:'Fuel challenge',note:'A long range tank goes half again as far on one fill',opts:[{n:'Stock',c:0},{n:'Long range',c:350}]}];
-let SHOP={bank:0,own:{lift:[0],tires:[0],engine:[0],snorkel:[0],tank:[0],lockers:[0],sliders:[0],guard:[0],shocks:[0],chains:[0],rope:[0],winch:[0]},eq:{lift:0,tires:0,engine:0,snorkel:0,tank:0,lockers:0,sliders:0,guard:0,shocks:0,chains:0,rope:0,winch:0},dmg:0,pull:1};
-try{const sh=JSON.parse(localStorage.getItem('mobbyhill-shop')||'null');if(sh&&sh.own&&sh.eq){SHOP.bank=sh.bank||0;Object.assign(SHOP.own,sh.own);Object.assign(SHOP.eq,sh.eq);SHOP.dmg=sh.dmg||0;SHOP.pull=sh.pull||1;}}catch(e){}
+let SHOP={vehs:['jeep'],bank:0,own:{lift:[0],tires:[0],engine:[0],snorkel:[0],tank:[0],lockers:[0],sliders:[0],guard:[0],shocks:[0],chains:[0],rope:[0],winch:[0]},eq:{lift:0,tires:0,engine:0,snorkel:0,tank:0,lockers:0,sliders:0,guard:0,shocks:0,chains:0,rope:0,winch:0},dmg:0,pull:1};
+try{const sh=JSON.parse(localStorage.getItem('mobbyhill-shop')||'null');if(sh&&sh.own&&sh.eq){SHOP.bank=sh.bank||0;Object.assign(SHOP.own,sh.own);Object.assign(SHOP.eq,sh.eq);SHOP.dmg=sh.dmg||0;SHOP.pull=sh.pull||1;if(Array.isArray(sh.vehs))SHOP.vehs=sh.vehs;}}catch(e){}
 function saveShop(){try{localStorage.setItem('mobbyhill-shop',JSON.stringify(SHOP));}catch(e){}}
 // two currencies. cash is earned at flags and kept on the phone. tokens come from the score hub server,
 // 1000 every calendar week by the server's clock, and every token spend goes through the server
@@ -315,26 +336,44 @@ const PERKS=[
   {k:'repair',n:'Repair kit',d:'Fixes half of the damage right away'},
   {k:'turbo',n:'Turbo',d:'20% more power for your next run'},
   {k:'sticky',n:'Sticky tires',d:'15% more grip for your next run'}];
-function tokText(){if(TOK.bal===null)return TOK.err==='too_many_wallets'?'Token limit for this phone this week':'Tokens offline';
+const HUB='https://2026-10-30-orange-scores.vercel.app/api/';
+// Signed in players keep tokens and unlocks on the server. The game only shows what the server says.
+let ACC={tok:'',name:'',unl:[]};
+try{const a=JSON.parse(localStorage.getItem('mobbyhill-acct')||'null');if(a&&typeof a.tok==='string')ACC={tok:a.tok,name:String(a.name||''),unl:Array.isArray(a.unl)?a.unl:[]};}catch(e){}
+function saveAcc(){try{localStorage.setItem('mobbyhill-acct',JSON.stringify(ACC));}catch(e){}}
+function api(path,method,body){
+  const h={'Content-Type':'application/json'};if(ACC.tok)h.Authorization='Bearer '+ACC.tok;
+  return fetch(HUB+path,{method:method||'GET',headers:h,body:body?JSON.stringify(body):undefined})
+    .then(r=>r.json().then(j=>{if(r.status===401&&j&&j.error==='sign_in')signOut(true);return j;}))
+    .catch(()=>({ok:false,error:'offline'}));}
+function mergeUnlocks(){
+  for(const it of ACC.unl){const m=/^part-(\w+)-(\d)$/.exec(it);if(m&&SHOP.own[m[1]]&&!SHOP.own[m[1]].includes(+m[2]))SHOP.own[m[1]].push(+m[2]);}}
+function signOut(quiet){ACC={tok:'',name:'',unl:[]};saveAcc();TOK.bal=null;TOK.err='signin';
+  if(typeof VK!=='undefined'&&!ownsVeh(VK))setVehicle('jeep');
+  if(!quiet)acMsg('Signed out');if(typeof renderMenu==='function'&&$('start'))renderMenu();}
+function tokText(){if(!ACC.tok)return 'Sign in to get 1000 free tokens every week';
+  if(TOK.bal===null)return 'Tokens offline';
   const ms=Math.max(0,TOK.next-Date.now()),d=Math.floor(ms/86400000),h=Math.floor(ms%86400000/3600000);
   return TOK.bal+' tokens  ·  +1000 in '+(d?d+'d ':'')+h+'h';}
 function tokRefresh(cb){
-  if(!window.Scores){TOK.err='offline';cb&&cb();return;}
-  window.Scores.wallet('mobbyhill',PID).then(r=>{
-    if(r&&r.ok){TOK.bal=r.balance;TOK.next=r.next;TOK.items=r.items||{};TOK.err='';if(r.granted)msg('+'+r.granted+' tokens this week',3);}
+  if(!ACC.tok){TOK.bal=null;TOK.err='signin';cb&&cb();return;}
+  api('mh-wallet').then(r=>{
+    if(r&&r.ok){TOK.bal=r.balance;TOK.next=r.next;TOK.items=r.items||{};TOK.err='';ACC.unl=r.unlocks||[];saveAcc();mergeUnlocks();saveShop();
+      if(r.granted)msg('+'+r.granted+' tokens this week',3);}
     else TOK.err=(r&&r.error)||'offline';
     cb&&cb();
   });
 }
 function tokSpend(item,done){
-  if(!window.Scores||TOK.busy||TOK.bal===null){$('gStats').textContent='Token server unreachable';return;}
+  if(!ACC.tok){$('gStats').textContent='Sign in from the main menu to use tokens';return;}
+  if(TOK.busy||TOK.bal===null){$('gStats').textContent='Token server unreachable';return;}
   TOK.busy=true;$('gStats').textContent='Spending tokens...';
-  window.Scores.spend('mobbyhill',PID,item).then(r=>{
+  api('mh-wallet','POST',{item}).then(r=>{
     TOK.busy=false;
-    if(r&&r.ok){TOK.bal=r.balance;done();renderGarage();return;}
+    if(r&&r.ok){TOK.bal=r.balance;if(r.kept&&!ACC.unl.includes(item)){ACC.unl.push(item);saveAcc();}done();renderGarage();return;}
     if(r&&typeof r.balance==='number')TOK.bal=r.balance;
     renderGarage();
-    $('gStats').textContent={not_enough_tokens:'Not enough tokens',slow_down:'One second, then try again',offline:'Token server unreachable'}[r&&r.error]||'Not spent ('+((r&&r.error)||'error')+')';
+    $('gStats').textContent={not_enough_tokens:'Not enough tokens',slow_down:'One second, then try again',offline:'Token server unreachable',sign_in:'Sign in again from the main menu'}[r&&r.error]||'Not spent ('+((r&&r.error)||'error')+')';
   });
 }
 function applyRig(){
@@ -1190,7 +1229,10 @@ function buildSuv(){
   for(const sx of[-1,1])for(const sz of[-1,1]){const pts=[];for(let k=0;k<=8;k++){const a=Math.PI*(k/8);pts.push([sx*.9,WR-MUP+Math.sin(a)*(WR+.18),sz*A+Math.cos(a)*(WR+.18)]);}poly3(pts);}
   if(SHOP.eq.snorkel){poly3([[.86,1.0,1.4],[.92,1.0,1.4],[.92,2.1,.6],[.92,2.1,.78]]);}
 }
-function setVehicle(k){VK=k;VEH=VEHS[k];applyRig();saveOpts();renderMenu();}
+function ownsVeh(k){return k==='jeep'||ACC.unl.includes('veh-'+k);}
+let VPEND=null;
+function setVehicle(k){if(!ownsVeh(k)){VPEND=k;renderMenu();return;}VPEND=null;VK=k;VEH=VEHS[k];applyRig();saveOpts();renderMenu();}
+if(!ownsVeh(VK)){VK='jeep';VEH=VEHS.jeep;}
 applyRig();makeWrecks();
 
 function bodyPose(){
@@ -1717,7 +1759,13 @@ function renderMenu(){
   const lb=$('lands');lb.replaceChildren();
   for(const l in LANDS){const b=document.createElement('button');b.textContent=LANDS[l].n;b.className=l===LAND?'on':'';b.addEventListener('click',()=>setPlay(MODE,l));lb.appendChild(b);}
   const vb=$('vehs');vb.replaceChildren();
-  for(const v in VEHS){const b=document.createElement('button');b.textContent=VEHS[v].n;b.className=v===VK?'on':'';b.addEventListener('click',()=>setVehicle(v));vb.appendChild(b);}
+  for(const v in VEHS){const b=document.createElement('button'),own=ownsVeh(v);b.textContent=VEHS[v].n+(own?'':'  ·  locked');b.className=v===VK?'on':own?'':'lk';
+    b.addEventListener('click',()=>setVehicle(v));vb.appendChild(b);}
+  const ub=$('unlock');ub.classList.toggle('on',!!VPEND);
+  if(VPEND){const pr=VEHPRICE[VPEND],have=TOK.bal;
+    $('unlockTxt').textContent=!ACC.tok?'Unlock '+VEHS[VPEND].n+' for '+pr+' tokens. Sign in below to use tokens. Unlocks stay on your account.':have===null?'Unlock '+VEHS[VPEND].n+' for '+pr+' tokens. Token server unreachable right now.':
+      have>=pr?'Unlock '+VEHS[VPEND].n+' for '+pr+' tokens? You have '+have+'.':'Unlock '+VEHS[VPEND].n+' for '+pr+' tokens. You have '+have+'. Tokens refill 1000 every week.';
+    $('unlockYes').disabled=have===null||have<pr;$('unlockYes').textContent='Unlock  '+pr;}
   const box=$('modes');box.replaceChildren();const fuel=MODES[MODE].fuel,cur=baseOf(MODE);
   for(const base of['trail','climb','rescue','recovery']){const b=document.createElement('button');b.textContent=MODES[base].n;b.className=cur===base?'on':'';
     b.addEventListener('click',()=>setPlay(modeKey(base,fuel)));box.appendChild(b);}
@@ -1728,9 +1776,54 @@ function renderMenu(){
   $('tDmg').textContent='Damage '+(OPT.damage?'on':'off');$('tDmg').classList.toggle('on',OPT.damage);
   $('sBest').textContent=VEHS[VK].s+'  ·  Best '+playName()+': '+bestText()+(OPT.damage&&SHOP.dmg>.005?'  ·  Damage '+Math.round(SHOP.dmg*100)+'%':'');
   $('sTok').textContent=tokText();
+  $('acOut').style.display=ACC.tok?'none':'';$('acOn').style.display=ACC.tok?'':'none';$('acWho').textContent='Signed in as '+ACC.name;
   $('sTilt').textContent=G.tiltOn?'Start':'Start with tilt';$('sPlain').style.display=G.tiltOn?'none':'';
 }
 function openMenu(){G.started=false;renderMenu();$('start').classList.remove('hide');tokRefresh(renderMenu);}
+$('unlockNo').addEventListener('click',()=>{VPEND=null;renderMenu();});
+$('unlockYes').addEventListener('click',()=>{const k=VPEND;if(!k||!ACC.tok||TOK.busy)return;TOK.busy=true;$('unlockTxt').textContent='Spending tokens...';
+  api('mh-wallet','POST',{item:'veh-'+k}).then(r=>{TOK.busy=false;
+    if(r&&r.ok){TOK.bal=r.balance;if(!ACC.unl.includes('veh-'+k)){ACC.unl.push('veh-'+k);saveAcc();}VPEND=null;setVehicle(k);return;}
+    if(r&&typeof r.balance==='number')TOK.bal=r.balance;renderMenu();
+    $('unlockTxt').textContent={not_enough_tokens:'Not enough tokens',slow_down:'One second, then try again',offline:'Token server unreachable'}[r&&r.error]||'Not unlocked ('+((r&&r.error)||'error')+')';});});
+function acMsg(t){$('acMsg').textContent=t;}
+const ACERR={bad_email:'That email does not look right',bad_code:'That code did not match. Check the newest email.',bad_token:'Sign in did not finish, try again',
+  slow_down:'Too many tries. Wait a few minutes.',offline:'Account server unreachable',service_unavailable:'Account server busy, try again',email_failed:'The code email did not send, try again',
+  payments_not_configured:'Purchases are not open yet',checkout_failed:'Checkout did not open, try again'};
+function acDone(r){if(r&&r.ok){ACC={tok:r.token,name:r.name,unl:[]};saveAcc();acMsg('Signed in');tokRefresh(renderMenu);renderMenu();return true;}
+  acMsg(ACERR[r&&r.error]||'Did not work ('+((r&&r.error)||'error')+')');return false;}
+$('acSend').addEventListener('click',()=>{const email=$('acEmail').value.trim();if(!email)return acMsg('Type your email first');
+  $('acSend').disabled=true;acMsg('Sending code...');
+  api('mh-auth','POST',{action:'send',email}).then(r=>{$('acSend').disabled=false;
+    if(r&&r.ok){$('acCodeRow').style.display='';$('acSend').textContent='Send again';acMsg('Code sent to '+email+'. Type it above.');$('acCode').focus();}
+    else acMsg(ACERR[r&&r.error]||'Code did not send ('+((r&&r.error)||'error')+')');});});
+$('acVerify').addEventListener('click',()=>{const email=$('acEmail').value.trim(),code=$('acCode').value.trim();if(!code)return acMsg('Type the code from the email');
+  $('acVerify').disabled=true;acMsg('Checking code...');
+  api('mh-auth','POST',{action:'verify',email,code}).then(r=>{$('acVerify').disabled=false;if(acDone(r))$('acCode').value='';});});
+// Outside providers turned on in Supabase show up here as buttons.
+const PNAME={github:'GitHub',discord:'Discord',apple:'Apple',gitlab:'GitLab',twitch:'Twitch',spotify:'Spotify',slack:'Slack',azure:'Microsoft',twitter:'X',facebook:'Facebook',linkedin_oidc:'LinkedIn',bitbucket:'Bitbucket',notion:'Notion',zoom:'Zoom',kakao:'Kakao',keycloak:'Keycloak',figma:'Figma',workos:'WorkOS'};
+let AUTHZ='';
+function loadProviders(){api('mh-auth').then(r=>{const box=$('acProv');box.replaceChildren();if(!(r&&r.ok))return;AUTHZ=r.authorize;
+  for(const p of r.providers||[]){if(!PNAME[p])continue;const b=document.createElement('button');b.textContent='Sign in with '+PNAME[p];
+    b.addEventListener('click',()=>{const back=location.origin+location.pathname;window.open(AUTHZ+'?provider='+encodeURIComponent(p)+'&redirect_to='+encodeURIComponent(back),'_blank');acMsg('Finish signing in on the new tab.');});
+    box.appendChild(b);}});}
+// A provider sign in comes back to the game with a Supabase token in the address. Swap it for a game session.
+(function(){const h=new URLSearchParams(location.hash.slice(1));const at=h.get('access_token');if(!at)return;
+  history.replaceState(null,'',location.pathname+location.search);acMsg('Finishing sign in...');
+  api('mh-auth','POST',{action:'exchange',access_token:at}).then(r=>{if(acDone(r)&&window.opener)acMsg('Signed in. You can close this tab.');});})();
+window.addEventListener('storage',e=>{if(e.key!=='mobbyhill-acct')return;
+  try{const a=JSON.parse(e.newValue||'null');if(a&&a.tok&&a.tok!==ACC.tok){ACC={tok:a.tok,name:String(a.name||''),unl:[]};acMsg('Signed in');tokRefresh(renderMenu);renderMenu();}}catch(x){}});
+loadProviders();
+$('acOff').addEventListener('click',()=>signOut(false));
+let PAYPOLL=0;
+$('acBuy').addEventListener('click',()=>{if(!ACC.tok)return;const w=window.open('','_blank');acMsg('Opening checkout...');$('acBuy').disabled=true;
+  api('mh-buy','POST',{}).then(r=>{$('acBuy').disabled=false;
+    if(!(r&&r.ok&&r.url)){if(w)w.close();acMsg(ACERR[r&&r.error]||'Checkout did not open ('+((r&&r.error)||'error')+')');return;}
+    if(w)w.location.href=r.url;else location.href=r.url;
+    acMsg('Finish paying in the new tab. Tokens show here when it clears.');
+    const start=TOK.bal;let n=0;clearInterval(PAYPOLL);
+    PAYPOLL=setInterval(()=>{if(++n>60||!ACC.tok){clearInterval(PAYPOLL);return;}
+      tokRefresh(()=>{renderMenu();if(TOK.bal!==null&&start!==null&&TOK.bal>start){clearInterval(PAYPOLL);acMsg('Payment cleared. +'+(TOK.bal-start)+' tokens');}});},5000);});});
 $('tWx').addEventListener('click',()=>{const L=['clear','random','rain','fog','dust','snow'];WXPICK=L[(L.indexOf(WXPICK)+1)%L.length];saveOpts();renderMenu();});
 $('tGhost').addEventListener('click',()=>{OPT.ghost=!OPT.ghost;saveOpts();renderMenu();});
 $('tFuel').addEventListener('click',()=>{setPlay(modeKey(baseOf(MODE),!MODES[MODE].fuel));});

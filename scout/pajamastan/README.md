@@ -8,6 +8,6 @@ Live at pajamastan.vercel.app
 
 Checked every morning by Control Troll, an automated test system that loads every app and clicks through its features.
 
-Latest change. 2026-11-16, v2026.11.16. Added the Hire Portal to the Links tab as a Pajamastan portal.
+Latest change. 2026-11-17, v2026.11.17. Added a donate pill to the creator seal that invites people to support the micronation.
 
 Full history is in CHANGELOG.md.

@@ -38,7 +38,7 @@ function start(req, res) {
   }
   res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Key');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Key, Authorization');
   res.setHeader('Access-Control-Max-Age', '86400');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', 'no-store');
@@ -167,4 +167,4 @@ function adminOk(req) {
   return crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want));
 }
 
-module.exports = { GAMES, CAP, redis, start, send, fail, body, ipKey, gameOf, cleanTag, checkLink, adminOk };
+module.exports = { GAMES, CAP, redis, start, send, fail, body, ipKey, gameOf, cleanTag, textHasSlur, checkLink, adminOk };

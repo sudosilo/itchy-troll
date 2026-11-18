@@ -1,0 +1,1 @@
+2026-11-17, v2026.11.17. Created Campus, a video learning tool where building counts more than watching. Added stumble mode, course mode, sources, a transcript with credits, education genres, profiles, and a fallback when a course will not embed.

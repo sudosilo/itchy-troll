@@ -1,5 +1,7 @@
 Pajamastan changelog
 
+2026-11-17, v2026.11.17. Added a donate pill to the creator seal that invites people to support the micronation.
+
 2026-11-16, v2026.11.16. Added the Hire Portal to the Links tab as a Pajamastan portal.
 
 2026-11-11, v2026.11.11. Added a combined creator seal that shows the Pajamastan flag beside a round seal.

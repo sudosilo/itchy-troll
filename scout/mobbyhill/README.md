@@ -6,6 +6,6 @@ You drive up a wireframe hill from the driver seat and lean by tilting the phone
 
 Live at mobbyhill.vercel.app
 
-Latest change. 2026-11-17, v2026.11.17. Buzzards now fly from flag to flag. There are four landscapes, the games were renamed, and the store is now a menu with icons and terrain parts. Added three vehicles and a Search and rescue challenge with a trailer and teammates. Added an Off road recovery mission with a purple SUV, a pickup with a wrecker boom, and a flatbed.
+Latest change. 2026-11-18, v2026.11.18. Sign in now works with your own email or an outside sign in provider.
 
 Full history is in CHANGELOG.md.

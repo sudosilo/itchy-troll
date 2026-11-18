@@ -1,5 +1,7 @@
 raineurysm changelog
 
+2026-11-17, v2026.11.17. Added seven more puzzle levels, for twelve in all. A puzzle run now scores points for speed and few parts, can be sent to the shared score board, and has a high score board in the puzzle menu. Added a start screen with three modes, a hint on the first puzzle, a full screen button, and a rain detail setting that lowers itself on slow phones. Fixed layouts on wider screens.
+
 2026-11-16, v2026.11.16. Made everything prettier. Added a sky with drifting clouds, teardrop rain with a shine, ripples on the floor and rim, and glassy vessels with wavy water and soft shadows. Lanes and the beat line now glow, and panels and buttons are frosted.
 
 2026-11-14, v2026.11.14. Added a music machine mode beside simple mode, with troughs, funnels, faucets, sprinklers, dripping vessels, a lane pattern editor, a weather song, thunder, recording, and undo. Added a puzzle mode with five color mixing levels where vessels pour one blended flavor of water. Tapping a goal jar now dumps it out, and a new version prompt keeps an open tab from running old code.

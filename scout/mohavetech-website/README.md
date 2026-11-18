@@ -8,6 +8,6 @@ Live at mohavetech-website.vercel.app.
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-11-16, v2026.11.16. Added a Railway tab and railway buttons on apps with a Railway backend. Hire Portal got its orange phone star.
+Latest change. 2026-11-16, v2026.11.16c. Apps now show buttons for the outside services they use, including Supabase, Cloudflare, Anthropic, ElevenLabs, YouTube, MusicBrainz, and AudD. An API plug button opens an overlay of every outside API an app calls, and chain buttons link apps that call each other. The itch button is now a boxed purple controller icon, the Railway button is boxed like the GitHub button, and the colored phone stars were dropped from app rows.
 
 Full history is in CHANGELOG.md.

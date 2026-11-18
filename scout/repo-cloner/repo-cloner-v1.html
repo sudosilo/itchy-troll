@@ -168,7 +168,8 @@ input[type=text],input[type=number],input[type=password],select{
 <div class="scrim" id="scrim"></div>
 <nav class="menu" id="menu">
   <div class="who" id="who">Not signed in</div>
-  <button class="tab active" data-view="hunt">HUNT</button>
+  <button class="tab active" data-view="scans">SCANS</button>
+  <button class="tab" data-view="hunt">HUNT</button>
   <button class="tab" data-view="picks">PICKS</button>
   <button class="tab" data-view="log">LOG</button>
   <button class="tab" data-view="settings">SETTINGS</button>
@@ -192,7 +193,21 @@ input[type=text],input[type=number],input[type=password],select{
 </nav>
 
 <main>
-  <section class="view active" id="view-hunt">
+  <section class="view active" id="view-scans">
+    <div class="panel">
+      <h2>SCANS</h2>
+      <label for="scan-pick">Show</label>
+      <select id="scan-pick"><option value="all">every scan combined</option></select>
+      <div class="btns">
+        <button class="btn blue" id="btn-scan-reload">RELOAD</button>
+        <button class="btn ghost" id="btn-scan-hide-risk">HIDE RISKY</button>
+      </div>
+    </div>
+    <div class="status" id="scan-status">Loading scans...</div>
+    <div id="scan-list"></div>
+  </section>
+
+  <section class="view" id="view-hunt">
     <div class="panel">
       <h2>CRITERIA</h2>
       <label for="q-words">Keywords</label>
@@ -370,9 +385,12 @@ var BAD_TEXT = /(non[- ]?commercial|CC[- ]?BY[- ]?NC|BY[- ]NC|not for commercial
 var CCBY_TEXT = /(CC[- ]?BY(?![- ]?NC)|creative commons attribution(?! non))/i;
 var FREE_TEXT = /(CC0|public domain|cc[- ]?zero)/i;
 var GPL_TEXT = /(GNU GENERAL PUBLIC|GPL[- ]?v?[23]|AGPL)/i;
+var SA_TEXT = /(BY[- ]?SA|share[- ]?alike)/i;
+var RIPPED_TEXT = /(do not own|don'?t own|not own the|extracted (directly )?from|ripped from|without (explicit )?permission|fan[- ]?game|fan[- ]?made|unofficial (remake|port|clone|version))/i;
+var FAMOUS_IP = /(duck ?hunt|pac-?man|super mario|\bmario\b|zelda|pok[eé]mon|tetris|flappy ?bird|sonic the|\bsonic\b|binding of isaac|\bisaac\b|minecraft|nintendo|\bsega\b|street fighter|mortal kombat|space invaders|galaga|donkey kong|metroid|\bkirby\b|angry birds|candy crush|among us|fortnite|roblox|undertale|hollow knight|stardew|terraria|geometry dash|frogger|uncharted waters|age of empires|monopoly|scrabble|wordle|bomberman|megaman|mega man|castlevania|final fantasy|street racer|crossy road|plants vs|clash of clans|doodle jump|cut the rope|fruit ninja|subway surfers|temple run|chrome dino|t-rex runner)/i;
 
 var acct = { user: null, claudeKey: "", githubToken: "" };
-var state = { results: [], checks: {}, page: 1, lastQuery: "", current: null, busy: false };
+var state = { scanRepos: {}, scans: [], hideRisky: false, results: [], checks: {}, page: 1, lastQuery: "", current: null, busy: false };
 
 function $(id){ return document.getElementById(id); }
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]; }); }
@@ -395,6 +413,7 @@ Array.prototype.forEach.call(document.querySelectorAll(".menu .tab[data-view]"),
     document.querySelectorAll(".view").forEach(function(v){ v.classList.remove("active"); });
     $("view-" + b.dataset.view).classList.add("active");
     if (b.dataset.view === "picks") renderPicks();
+    if (b.dataset.view === "scans") renderScans();
     if (b.dataset.view === "log") renderLog();
     menu(false);
     window.scrollTo(0, 0);
@@ -516,11 +535,18 @@ async function deepCheck(repo){
   texts.forEach(function(x){
     if (BAD_TEXT.test(x.text)) { bad = true; flags.push({ k: "bad", t: x.path + " says noncommercial or all rights reserved. Replace whatever it covers before selling." }); }
     else if (GPL_TEXT.test(x.text)) { bad = true; flags.push({ k: "bad", t: x.path + " is a GPL license inside the repo. That part would force your game open." }); }
+    else if (SA_TEXT.test(x.text)) { credit = true; flags.push({ k: "warn", t: x.path + " is Creative Commons share alike. Sellable with credit, and art you change from it must stay share alike." }); }
     else if (CCBY_TEXT.test(x.text)) { credit = true; flags.push({ k: "warn", t: x.path + " is Creative Commons Attribution. Sellable, but the artist goes in your credits." }); }
     else if (FREE_TEXT.test(x.text)) { flags.push({ k: "good", t: x.path + " is CC0 or public domain. Free to use." }); }
     else { flags.push({ k: "warn", t: x.path + " is a license or credits file Repo Cloner could not classify. Read it." }); }
   });
   var readmeBad = readme && BAD_TEXT.test(readme);
+  var ipHit = (repo.full_name + " " + (repo.description || "")).match(FAMOUS_IP);
+  var ipNote = !ipHit && readme ? readme.match(FAMOUS_IP) : null;
+  if (ipHit) { bad = true; flags.push({ k: "bad", t: "Built on a famous game (" + ipHit[0] + "). The code license does not cover that game's name, characters or any art copied from it. Rename it and replace every asset before shipping." }); }
+  if (ipNote) { credit = true; flags.push({ k: "warn", t: "The README mentions " + ipNote[0] + ". Usually that means inspired by, but look at the art to be sure nothing was copied." }); }
+  if (readme && RIPPED_TEXT.test(readme)) { bad = true; flags.push({ k: "bad", t: "The README says the art or sound was taken from another game or used without permission. Replace all of it." }); }
+  if (readme && SA_TEXT.test(readme)) flags.push({ k: "warn", t: "The README mentions Creative Commons share alike. Art you change from those files must stay under the same license." });
   if (readmeBad) { bad = true; flags.push({ k: "bad", t: "The README mentions noncommercial or all rights reserved terms. Read it before using any asset." }); }
   if (readme && CCBY_TEXT.test(readme) && !readmeBad) { credit = true; flags.push({ k: "warn", t: "The README mentions Creative Commons Attribution. Expect to credit artists." }); }
   if (assets.length && !subLic.length && !readmeBad) flags.push({ k: "warn", t: "Assets have no license file of their own, so they fall under the main " + repo.license.spdx_id + " license unless the README says otherwise." });
@@ -557,7 +583,7 @@ function gradeLine(c){
   if (!c) return { cls: "", text: "Not checked yet" };
   var bits = ["Grade " + c.score, c.engine, c.code + " code files", (c.images + c.audio + c.fonts) + " assets"];
   if (c.kind === "bad") bits.unshift("LICENSE RISK");
-  if (c.claude && c.claude.score != null) bits.push("Claude " + c.claude.score);
+  if (c.claude && c.claude.score != null) bits.unshift("Claude " + c.claude.score);
   return { cls: c.kind, text: bits.join(" | ") };
 }
 
@@ -573,14 +599,14 @@ async function runCheck(full){
 }
 
 function findRepo(full){
-  return state.results.find(function(r){ return r.full_name === full; }) || (load("rc_picks", []).find(function(p){ return p.repo.full_name === full; }) || {}).repo;
+  return state.results.find(function(r){ return r.full_name === full; }) || state.scanRepos[full] || (load("rc_picks", []).find(function(p){ return p.repo.full_name === full; }) || {}).repo;
 }
 
 /* ---------- claude ---------- */
 async function askClaude(full){
   var repo = findRepo(full);
   var c = state.checks[full] || load("rc_checks", {})[full];
-  if (!c) { c = await runCheck(full); }
+  if (!c || !c.tree) { c = await runCheck(full); }
   var text = [
     "Repo: " + repo.full_name,
     "Description: " + (repo.description || "none"),
@@ -589,7 +615,7 @@ async function askClaude(full){
     "Engine guess: " + c.engine + ". Runs in browser: " + c.browser,
     "Files: " + c.files + ". Code files: " + c.code + ". Images: " + c.images + ". Audio: " + c.audio + ". Fonts: " + c.fonts + ". Assets inside asset folders: " + c.assetsInFolder,
     "Flags: " + c.flags.map(function(f){ return f.t; }).join(" "),
-    "File tree:\n" + c.tree.join("\n"),
+    "File tree:\n" + (c.tree || []).join("\n"),
     "README:\n" + c.readme
   ].join("\n");
   if (!acct.claudeKey) throw new Error("Add your Claude API key in Settings first.");
@@ -692,7 +718,7 @@ function openSheet(full){
       if (k.text) h += '<div class="flag">' + esc(k.text) + '</div>';
     }
     h += '<h3>LICENSE FILES</h3><div class="mono">' + esc(c.licenseFiles.join("\n") || "none") + '</div>';
-    h += '<h3>FILE TREE</h3><div class="mono">' + esc(c.tree.join("\n")) + '</div>';
+    if (c.tree && c.tree.length) h += '<h3>FILE TREE</h3><div class="mono">' + esc(c.tree.join("\n")) + '</div>';
   }
   h += '<h3>CLONE IT</h3><div class="mono">git clone https://github.com/' + esc(full) + '.git</div>';
   $("sheet-body").innerHTML = h;
@@ -741,6 +767,65 @@ $("btn-checkall").onclick = async function(){
   if (!/limit/i.test($("status").textContent)) say("Check all finished. " + rateNote);
   state.results.sort(function(a, b){ return ((state.checks[b.full_name] || {}).score || 0) - ((state.checks[a.full_name] || {}).score || 0); });
   renderResults();
+};
+
+/* ---------- scans ---------- */
+async function loadScans(){
+  $("scan-status").textContent = "Loading scans...";
+  try {
+    var r = await fetch("/scans/repo-cloner-v1-scans.json?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw new Error("no scans yet");
+    var index = await r.json();
+    index.sort(function(a, b){ return String(b.at).localeCompare(String(a.at)); });
+    var scans = [];
+    for (var i = 0; i < index.length; i++) {
+      var sr = await fetch("/scans/" + index[i].file, { cache: "no-store" });
+      if (sr.ok) scans.push(await sr.json());
+    }
+    state.scans = scans;
+    var pick = $("scan-pick"), keep = pick.value;
+    pick.innerHTML = '<option value="all">every scan combined</option>' + scans.map(function(sc){
+      return '<option value="' + esc(sc.id) + '">' + esc(String(sc.at).slice(0, 10)) + ' | ' + esc(sc.by) + ' | ' + sc.results.length + ' games</option>';
+    }).join("");
+    pick.value = Array.prototype.some.call(pick.options, function(o){ return o.value === keep; }) ? keep : "all";
+    renderScans();
+  } catch(e) {
+    $("scan-status").textContent = "No scans found yet.";
+    $("scan-list").innerHTML = "";
+  }
+}
+function scanRows(){
+  var which = $("scan-pick").value, seen = {}, rows = [];
+  state.scans.forEach(function(sc){
+    if (which !== "all" && sc.id !== which) return;
+    sc.results.forEach(function(x){
+      if (seen[x.repo.full_name]) return;
+      seen[x.repo.full_name] = true;
+      rows.push({ repo: x.repo, check: x.check, scan: sc });
+    });
+  });
+  return rows;
+}
+function rank(c){ return c && c.claude && c.claude.score != null ? c.claude.score : (c ? c.score - 40 : -99); }
+function renderScans(){
+  var rows = scanRows();
+  rows.forEach(function(x){
+    state.scanRepos[x.repo.full_name] = x.repo;
+    var mine = state.checks[x.repo.full_name];
+    if (!mine || String(mine.at) < String(x.check.at)) state.checks[x.repo.full_name] = x.check;
+  });
+  if (state.hideRisky) rows = rows.filter(function(x){ var c = state.checks[x.repo.full_name]; return c && c.kind !== "bad"; });
+  rows.sort(function(a, b){ return rank(state.checks[b.repo.full_name]) - rank(state.checks[a.repo.full_name]); });
+  var total = state.scans.reduce(function(n, sc){ return n + sc.results.length; }, 0);
+  $("scan-status").textContent = rows.length + " games shown from " + state.scans.length + " scan" + (state.scans.length === 1 ? "" : "s") + ". Best Claude grade first.";
+  $("scan-list").innerHTML = rows.length ? rows.map(function(x){ return cardHtml(x.repo, "scan"); }).join("") : '<div class="empty">Nothing to show.</div>';
+}
+$("scan-pick").onchange = renderScans;
+$("btn-scan-reload").onclick = loadScans;
+$("btn-scan-hide-risk").onclick = function(){
+  state.hideRisky = !state.hideRisky;
+  this.textContent = state.hideRisky ? "SHOW RISKY" : "HIDE RISKY";
+  renderScans();
 };
 
 /* ---------- picks ---------- */
@@ -897,6 +982,7 @@ sb.auth.onAuthStateChange(function(ev){ if (ev === "SIGNED_OUT") readAccount(nul
     var u = await sb.auth.getUser();
     readAccount(u.data.user || null);
   } else readAccount(null);
+  loadScans();
 })();
 </script>
 </body>

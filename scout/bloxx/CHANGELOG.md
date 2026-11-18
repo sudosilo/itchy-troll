@@ -1,0 +1,1 @@
+2026-11-17, v2026.11.17. Created Bloxx, a modular stage block configurator joined to the Stompbox band room. You can build stages from blocks, pick presets, light patterns, and motion, and view the stage from several angles.
