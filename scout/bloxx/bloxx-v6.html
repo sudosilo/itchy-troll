@@ -48,6 +48,9 @@ select:disabled{color:var(--ink);background:#f1f4f8}
 .sl{display:grid;grid-template-columns:90px 1fr;align-items:center;height:36px;gap:8px;margin-bottom:6px}
 .sl label{font-size:12px;color:var(--mute)}.sl label b{color:var(--ink);display:block;font-size:13px}
 input[type=range]{width:100%;accent-color:var(--blue)}
+.lnk{display:grid;grid-template-columns:1fr 92px;gap:6px;align-items:center;height:44px;border-bottom:1px solid #eef2f6;font-size:13px;font-weight:600}
+.lnk .door{justify-content:center}
+.lnk .door.on{background:#e3f7ea;border-color:#2fb36b;color:#1d7a45}
 .roomrow{display:grid;grid-template-columns:1fr 64px 64px;gap:6px;margin-bottom:6px}
 .roomrow input{height:40px;border:1px solid var(--line);border-radius:9px;padding:0 10px;font:inherit;min-width:0}
 .rstat{height:36px;font-size:12px;color:var(--blue);font-weight:600;line-height:1.4;overflow:hidden;margin-bottom:8px}
@@ -132,14 +135,16 @@ details>div{padding:0 12px 12px}
       <button class="btn" data-m="person" id="mPerson">Person for scale</button>
       <button class="btn" data-m="spin" id="mSpin">Auto spin</button>
       <button class="btn" data-m="full" id="mFull">Hide editor</button>
-      <button class="btn" data-m="openall">Unlock every door</button>
-      <button class="btn" data-m="shutall">Lock every door</button>
+      <button class="btn" data-m="openall">Open every door</button>
+      <button class="btn" data-m="shutall">Shut every door</button>
+      <button class="btn" data-m="lockall">Lock every pin</button>
+      <button class="btn" data-m="relall">Release every pin</button>
     </div>
   </div></details>
   <details><summary>Layout totals</summary><div class="tot" id="totals"></div></details>
   <details><summary>Door panels</summary><div id="legend"></div></details>
   <details><summary>How it works</summary><div class="note">
-    Every block is built to one standard size, so every cubby slot and every door panel is identical and any panel fits any opening on any block. The tech lives on the door: speakers, pico projectors, LED wash, strobes, lasers, smoke and sensors all mount to the panel and work with the door shut. Swapping a function means swapping the door. Each door hangs on spring loaded hinge pins on the inside, like a toolbox latch, so squeezing the pins frees the panel. An electric solenoid locks it with a click, and the solenoids answer to a Bluetooth controller from a phone. A stuck door can be reached from the inside by opening the cubby from another face. Inside, folded steel shelves with a hollow center stack into a full height cable chase, four corner rods lock every shelf, a power strip runs the full height, and a sealed lead acid UPS is bolted into the bottom cubby so the block can tip, lie down or stack. Blocks stack automatically when moved on top of each other, and a deck laid across two towers bridges them. Weights and power are rough planning estimates.
+    Every block is built to one standard size, so every cubby slot and every door panel is identical and any panel fits any opening on any block. The tech lives on the door: speakers, pico projectors, LED wash, strobes, lasers, smoke and sensors all mount to the panel and work with the door shut. Swapping a function means swapping the door. Each door hangs on spring loaded hinge pins on the inside, like a toolbox latch, so squeezing the pins frees the panel, and an electric solenoid holds it shut with a click. A stuck door can be reached from the inside by opening the cubby from another face. Blocks join with motorized twist lock pins. Every corner and every shelf line on the frame carries a casting that is both a pin and a receiver, like the genderless docking rings on spacecraft, so any face of any block can lock to any face of another, standing, lying down or stacked. When castings line up, the pins drive into the sloped receivers, twist, and draw the blocks tight, and each pin reports back when it is locked. A locked block cannot be moved until its pins are released. Inside, folded steel shelves with a hollow center stack into a full height cable chase, four corner rods lock every shelf, a power strip runs the full height, and a sealed lead acid UPS is bolted into the bottom cubby so the block can tip, lie down or stack. Blocks stack automatically when moved on top of each other, and a deck laid across two towers bridges them. Weights and power are rough planning estimates.
   </div></details>
 </div>
 
@@ -217,8 +222,8 @@ function presetBlocks(k){
     mk(L,{},[null,{in:'amp',f:'sub',b:'sub'},{in:'amp',f:'sub'},{f:'mid',l:'mid',r:'mid'},{f:'tweet',l:'tweet',r:'tweet'}]);
     mk(L,{},[{f:'smoke'},{f:'strobe',l:'led',r:'led'},{f:'lzG18'},{f:'lzWig',l:'lz45',r:'lz45'},{f:'lzUp',l:'lzFlat',r:'lzFlat'}]);
   }else if(k==='bridge'){
-    mk(L,{x:-30},[{f:'smoke'},{in:'amp',f:'sub'},{f:'mid'},{f:'tweet'},{f:'led',r:'lz45'}]);
-    mk(L,{x:30},[{f:'smoke'},{in:'amp',f:'sub'},{f:'mid'},{f:'tweet'},{f:'led',l:'lz45'}]);
+    mk(L,{x:-31.5},[{f:'smoke'},{in:'amp',f:'sub'},{f:'mid'},{f:'tweet'},{f:'led',r:'lz45'}]);
+    mk(L,{x:31.5},[{f:'smoke'},{in:'amp',f:'sub'},{f:'mid'},{f:'tweet'},{f:'led',l:'lz45'}]);
     mk(L,{mode:'deck'},[{f:'lzG9'},{f:'strobe'},{f:'proj'},{f:'strobe'},{f:'lzG9'}]);
   }else if(k==='stage'){
     [-36,-12,12,36].forEach((z,i)=>{
@@ -249,6 +254,7 @@ function load(){
 function save(){try{localStorage.setItem('bloxx-v2-state',JSON.stringify(S))}catch(e){}}
 let S=load()||defaultState();
 S.show=Object.assign({},SHOW_DEF,S.show||{});
+if(!S.locks||typeof S.locks!=='object')S.locks={};
 const selBlock=()=>S.blocks.find(b=>b.id===S.sel);
 
 /* ---------- stacking ---------- */
@@ -327,7 +333,7 @@ function labelTex(txt,sel){return canvasTex(128,64,(g,w,h)=>{g.fillStyle=sel?'#1
 
 /* ---------- build ---------- */
 let world=new THREE.Group();scene.add(world);
-let anim=[],spotCount=0,outlines={},labels={};
+let anim=[],spotCount=0,outlines={},labels={},tilts={},LINKS=[],lockParts=[];
 const hoverMesh=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),M.hover);hoverMesh.matrixAutoUpdate=false;hoverMesh.visible=false;hoverMesh.renderOrder=9;scene.add(hoverMesh);
 function disposeTree(o){o.traverse(c=>{if(c.geometry)c.geometry.dispose();const m=c.material;if(m&&m.userData&&m.userData.temp){if(m.map)m.map.dispose();m.dispose()}})}
 function box(sx,sy,sz,x,y,z,m,p){const me=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),m);me.position.set(x,y,z);me.castShadow=true;me.receiveShadow=true;p.add(me);return me}
@@ -417,6 +423,13 @@ function buildBlock(b){
   for(const sx of[-1,1])for(const sz of[-1,1])for(const y of[t*0.6,H-t*0.6])box(t*1.3,t*1.3,t*1.3,sx*(W/2-t/2),y,sz*(D/2-t/2),M.blue,tilt);
   box(W-2*t,pt,D-2*t,0,H-pt/2,0,M.wood,tilt);
   const n=b.bays.length,topY=base+n*bayH,capH=H-topY-gap;
+  const cast=[];
+  for(const sx of[-1,1])for(const sz of[-1,1]){
+    for(let k=1;k<n;k++)box(t*1.3,t*1.3,t*1.3,sx*(W/2-t/2),base+k*bayH,sz*(D/2-t/2),M.blue,tilt);
+    const ys=[t*0.6,H-t*0.6];for(let k=1;k<n;k++)ys.push(base+k*bayH);
+    ys.forEach(y=>cast.push(new THREE.Vector3(sx*(W/2-t/2),y,sz*(D/2-t/2))));
+  }
+  tilts[b.id]={tilt,cast};
   const Wi=W-2*t,Di=D-2*t,ch=CHASE/12,st=1.5/12;
   const shelf=y=>{
     const fd=(Di-ch)/2,fw=(Wi-ch)/2;
@@ -470,16 +483,51 @@ function buildPerson(){
   p.traverse(c=>c.userData.fx=1);
   return p;
 }
+function computeLinks(){
+  LINKS=[];lockParts=[];
+  const WP={};for(const b of S.blocks){const r=tilts[b.id];if(r)WP[b.id]=r.cast.map(v=>r.tilt.localToWorld(v.clone()))}
+  for(let i=0;i<S.blocks.length;i++)for(let j=i+1;j<S.blocks.length;j++){
+    const a=S.blocks[i],b=S.blocks[j],pts=[];
+    for(const p of WP[a.id]||[])for(const q of WP[b.id]||[])if(p.distanceTo(q)<0.28)pts.push({p,q});
+    if(pts.length<2)continue;
+    const dy=Math.abs(pts[0].p.y-pts[0].q.y),dxz=Math.hypot(pts[0].p.x-pts[0].q.x,pts[0].p.z-pts[0].q.z);
+    LINKS.push({key:[a.id,b.id].sort().join('|'),a,b,pts,kind:dy>dxz?'stacked':'side by side'});
+  }
+  const keys=new Set(LINKS.map(l=>l.key));for(const k in S.locks)if(!keys.has(k))delete S.locks[k];
+  const up=new THREE.Vector3(0,1,0);
+  for(const L of LINKS)for(const {p,q} of L.pts){
+    const g=new THREE.Group(),m=p.clone().add(q).multiplyScalar(0.5),d=q.clone().sub(p);
+    const len=d.length();if(len>0.001)d.normalize();else d.set(0,1,0);
+    g.position.copy(m);g.quaternion.setFromUnitVectors(up,d);
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,Math.max(len,0.08)+0.16,12),M.blue);g.add(body);
+    const head=new THREE.Mesh(new THREE.BoxGeometry(0.3,0.05,0.08),M.steelDark);g.add(head);
+    const lm=new THREE.MeshBasicMaterial({color:0xf2a33a});lm.userData.temp=1;
+    const led=new THREE.Mesh(new THREE.SphereGeometry(0.06,12,8),lm);led.position.set(0.16,0,0.12);g.add(led);
+    head.rotation.y=S.locks[L.key]?Math.PI/2:0;
+    markFx(g);world.add(g);lockParts.push({head,led,key:L.key});
+  }
+}
+function linksFor(b){return LINKS.filter(l=>l.a===b||l.b===b)}
+function lockedOn(b){return linksFor(b).some(l=>S.locks[l.key])}
+function motorSound(){try{AC=AC||new(window.AudioContext||window.webkitAudioContext)();const t=AC.currentTime;const o=AC.createOscillator(),g=AC.createGain();o.type='sawtooth';o.frequency.setValueAtTime(70,t);o.frequency.linearRampToValueAtTime(150,t+0.32);g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(0.06,t+0.04);g.gain.linearRampToValueAtTime(0.0001,t+0.34);o.connect(g);g.connect(AC.destination);o.start(t);o.stop(t+0.36);setTimeout(clickSound,340)}catch(e){}}
+function setLocks(list,on){let ch=false;list.forEach(l=>{if(!!S.locks[l.key]!==on){S.locks[l.key]=on;ch=true}});if(ch)motorSound();save();renderLinks();refreshSheetValues();renderTotals()}
+function renderLinks(){
+  const el=document.getElementById('links');const b=selBlock();if(!el||!b)return;
+  const ls=linksFor(b);
+  if(!ls.length){el.innerHTML='<div class="empty">Not touching another block. Push it against one, or tap Snap.</div>';return}
+  el.innerHTML=ls.map(l=>{const o=l.a===b?l.b:l.a,on=!!S.locks[l.key];return `<div class="lnk"><span>Block ${o.name}, ${l.kind}, ${l.pts.length} pins</span><button class="door${on?' on':''}" data-link="${l.key}">${on?'Locked':'Open'}</button></div>`}).join('');
+}
 function layoutBox(){const bx=new THREE.Box3();let any=false;for(const id in outlines){if(!outlines[id].parent)continue;bx.expandByObject(outlines[id]);any=true}return any?bx:null}
 
 function rebuild(){
   hoverMesh.visible=false;
   scene.remove(world);disposeTree(world);world=new THREE.Group();scene.add(world);
-  anim=[];spotCount=0;outlines={};labels={};coneMats=[];laserMats=[];paintMats=[];rgbs=[];motors=[];
+  anim=[];spotCount=0;outlines={};labels={};tilts={};coneMats=[];laserMats=[];paintMats=[];rgbs=[];motors=[];
   S.blocks.forEach(normBlock);computeElev();
   smokeOn=S.blocks.some(b=>b.bays.some(x=>FACES.some(f=>x.doors[f].t==='smoke'&&!x.doors[f].open)));
   for(const b of S.blocks)world.add(buildBlock(b));
   world.updateMatrixWorld(true);
+  computeLinks();
   const lbx=layoutBox();
   if(lbx){const c=lbx.getCenter(new THREE.Vector3()),sz=lbx.getSize(new THREE.Vector3());LB={cx:c.x,cy:c.y,cz:c.z,span:Math.max(2,sz.x,sz.y,sz.z),top:lbx.max.y};
     over.position.set(c.x+1.5,lbx.max.y+12,c.z+7);over.target.position.set(c.x,0,c.z);over.target.updateMatrixWorld();
@@ -589,21 +637,27 @@ function renderSheet(){
     <button class="btn" data-a="mx+">&#9654;</button>
     <button class="btn" data-a="top">On top</button>
     <button class="btn" data-a="floor">To floor</button>
-    <button class="btn" data-a="unlock">Unlock</button>
-    <button class="btn" data-a="lock">Lock</button>
+    <button class="btn" data-a="pinlock">Lock pins</button>
+    <button class="btn" data-a="pinrel">Release</button>
+    <button class="btn" data-a="snap" style="grid-column:span 2">Snap to nearest</button>
+    <button class="btn" data-a="dopen">Open all</button>
+    <button class="btn" data-a="dshut">Shut all</button>
   </div>
   ${palette}
   <div class="sec">Cubbies, top to bottom</div>
   <div id="bays"></div>
+  <div class="sec">Twist lock connections</div>
+  <div id="links"></div>
   <div class="sec">Standard</div>
   <div class="spec">Every block is <b>${b.h}" tall, ${b.w}" wide, ${b.d}" deep</b>. Every cubby slot is <b>${b.bayU}U, ${(b.bayU*U).toFixed(1)}"</b>. Every door panel is <b>${(b.w-3)}" by ${(b.bayU*U-0.4).toFixed(1)}"</b>, the same on all four faces of every cubby on every block.</div>`;
-  refreshSheetValues();renderBays();
+  refreshSheetValues();renderBays();renderLinks();
 }
 function refreshSheetValues(){
   const b=selBlock();if(!b)return;
   const bm=document.getElementById('bMode');if(bm)bm.textContent=b.mode==='tower'?'Lay down':'Stand up';
   const st=blockStats(b);const e=document.getElementById('bstats');
-  if(e)e.textContent=`${Math.round(st.lb)} lb, ${st.w} W${b.y>0?', stacked':''}`;
+  const ls=linksFor(b),lk=ls.filter(l=>S.locks[l.key]).length;
+  if(e)e.textContent=`${Math.round(st.lb)} lb, ${st.w} W${ls.length?`, ${lk} of ${ls.length} links locked`:''}`;
 }
 function renderBays(){
   const b=selBlock();const el=document.getElementById('bays');if(!b||!el)return;
@@ -626,9 +680,13 @@ function setArmed(k,force){armed=force?k:(armed===k?null:k);sheet.querySelectorA
 sheet.addEventListener('click',e=>{
   const dbtn=e.target.closest('button.door');const b=selBlock();
   if(dbtn&&b){const tag={id:b.id,i:+dbtn.dataset.i,f:dbtn.dataset.f};if(armed)applyTool(tag,armed);else toggleDoor(tag);return}
+  const lb=e.target.closest('[data-link]');
+  if(lb){const l=LINKS.find(x=>x.key===lb.dataset.link);if(l)setLocks([l],!S.locks[l.key]);return}
   const a=e.target.closest('[data-a]');if(!a)return;const act=a.dataset.a;
   if(act==='add'){addBlock(null);return}
   if(!b)return;
+  if(['mode','rot','mx-','mx+','mz-','mz+','top','floor','del','snap'].includes(act)&&lockedOn(b)){flash('Release the twist lock pins first.');return}
+  if(act==='pinlock'||act==='pinrel'){const ls=linksFor(b);if(!ls.length){flash('Nothing touching this block to lock to.');return}setLocks(ls,act==='pinlock');return}
   const moved=()=>{if(!supports(b))toTop(b)};
   if(act==='mode'){b.mode=b.mode==='tower'?'deck':'tower';moved()}
   else if(act==='rot'){b.rot=(b.rot+1)%4;moved()}
@@ -637,8 +695,16 @@ sheet.addEventListener('click',e=>{
   else if(act==='mx-'){b.x-=6;moved()}else if(act==='mx+'){b.x+=6;moved()}else if(act==='mz-'){b.z-=6;moved()}else if(act==='mz+'){b.z+=6;moved()}
   else if(act==='top')toTop(b);
   else if(act==='floor')toFloor(b);
-  else if(act==='unlock'||act==='lock'){b.bays.forEach(x=>FACES.forEach(f=>x.doors[f].open=act==='unlock'));clickSound();rebuild();renderBays();refreshSheetValues();return}
-  rebuild();refreshSheetValues();
+  else if(act==='dopen'||act==='dshut'){b.bays.forEach(x=>FACES.forEach(f=>x.doors[f].open=act==='dopen'));clickSound();rebuild();renderBays();refreshSheetValues();return}
+  else if(act==='snap'){
+    const A=fp(b);let best=null;
+    const pick=arr=>arr.reduce((m,v)=>Math.abs(v)<Math.abs(m)?v:m);
+    for(const o of S.blocks){if(o===b)continue;const B=fp(o);
+      const dx=pick([B.x2+1-A.x1,B.x1-1-A.x2,B.x1-A.x1,B.x2-A.x2]),dz=pick([B.z2+1-A.z1,B.z1-1-A.z2,B.z1-A.z1,B.z2-A.z2]);
+      const d=Math.abs(dx)+Math.abs(dz);if(!best||d<best.d)best={dx,dz,d}}
+    if(!best)return;b.x+=best.dx;b.z+=best.dz;moved();
+  }
+  rebuild();refreshSheetValues();renderLinks();
 });
 sheet.addEventListener('input',e=>{if(e.target.id==='cp'){S.customPaint=e.target.value;save();setArmed('paint:'+e.target.value,true)}});
 sheet.addEventListener('change',e=>{
@@ -692,6 +758,7 @@ document.getElementById('menu').addEventListener('click',e=>{
   else if(k==='person'){S.person=!S.person;rebuild()}
   else if(k==='spin'){S.spin=!S.spin;applyMode()}
   else if(k==='full'){S.full=!S.full;applyMode();setTimeout(resize,30)}
+  else if(k==='lockall'||k==='relall'){setLocks(LINKS,k==='lockall')}
   else if(k==='openall'||k==='shutall'){S.blocks.forEach(b=>b.bays.forEach(x=>FACES.forEach(f=>x.doors[f].open=k==='openall')));clickSound();rebuild();renderBays()}
   save();
 });
@@ -710,7 +777,7 @@ function renderTotals(){
   S.blocks.forEach(b=>{const s=blockStats(b);lb+=s.lb;w+=s.w;shell+=s.shell;b.bays.forEach(x=>FACES.forEach(f=>{const t=x.doors[f].t;if(t!=='plain')counts[t]=(counts[t]||0)+1}))});
   const list=Object.entries(counts).map(([k,v])=>`${DOORS[k].name} ${v}`).join(', ')||'none';
   const tall=S.blocks.reduce((m,b)=>Math.max(m,b.y+fp(b).hy),0);
-  document.getElementById('totals').innerHTML=`Blocks <b>${S.blocks.length}</b>, UPS units <b>${S.blocks.length}</b><br>Tallest point <b>${Math.floor(tall/12)}' ${Math.round(tall%12)}"</b><br>Shell weight <b>${Math.round(shell)} lb</b><br>Total weight <b>${Math.round(lb)} lb</b><br>Power draw <b>${w} W</b>, about <b>${(w/120).toFixed(1)} A</b> at 120 V<br>Plain household circuits needed <b>${Math.ceil(w/1440)}</b><br>Tech doors: ${list}`;
+  document.getElementById('totals').innerHTML=`Blocks <b>${S.blocks.length}</b>, UPS units <b>${S.blocks.length}</b><br>Tallest point <b>${Math.floor(tall/12)}' ${Math.round(tall%12)}"</b><br>Shell weight <b>${Math.round(shell)} lb</b><br>Total weight <b>${Math.round(lb)} lb</b><br>Power draw <b>${w} W</b>, about <b>${(w/120).toFixed(1)} A</b> at 120 V<br>Plain household circuits needed <b>${Math.ceil(w/1440)}</b><br>Twist lock links <b>${LINKS.filter(l=>S.locks[l.key]).length} locked of ${LINKS.length}</b>, pins <b>${LINKS.reduce((n,l)=>n+(S.locks[l.key]?l.pts.length:0),0)} confirmed</b><br>Tech doors: ${list}`;
 }
 document.getElementById('legend').innerHTML=Object.entries(DOORS).map(([k,v])=>`<div class="leg"><span class="sw" style="background:${hex(v.color)}"></span><span>${v.name}</span><span style="color:#5b6878">${v.lb} lb, ${v.w} W</span></div>`).join('');
 
@@ -882,6 +949,7 @@ function loop(){
     else if(u.kind==='wig'){o.rotation.y=Math.sin(t*3.1+u.phase)*0.45;o.rotation.x=Math.sin(t*2.3+u.phase)*0.3}
     else if(u.kind==='smoke'){const a=o.geometry.attributes.position;u.seeds.forEach((sd,k)=>{const p=(t*0.18+sd[0])%1;a.setXYZ(k,sd[1]*p*3.2,-0.2+p*(1.2+sd[2]*0.8),0.3+p*8)});a.needsUpdate=true}
   }
+  for(const lp of lockParts){const tg=S.locks[lp.key]?Math.PI/2:0,dif=tg-lp.head.rotation.y;lp.head.rotation.y+=dif*0.12;lp.led.material.color.setHex(Math.abs(dif)<0.04?(S.locks[lp.key]?0x2fe36b:0xf2a33a):0x37a0ff)}
   controls.update();renderer.render(scene,camera);requestAnimationFrame(loop);
 }
 resize();rebuild();renderSheet();frameView();roomStatus();if(sync.room)sync.connect();loop();

@@ -512,6 +512,20 @@ button:disabled{ opacity:0.55 !important; }
 
 .summary-text, .summary-pending{ border-top:2px dashed var(--c-ink) !important; }
 </style>
+<style>
+  /* pipeline builder and teardown, merged in */
+  .pb-row{display:flex;gap:10px;align-items:flex-start;padding:8px 6px;border-bottom:1px dashed var(--rule);cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;color:var(--ink);margin:0;}
+  .pb-row.on{background:#f2e9d8;border-left:3px solid var(--orange);}
+  .pb-row input{width:18px;height:18px;margin-top:2px;flex-shrink:0;accent-color:var(--orange);}
+  .pb-desc{font-size:12px;color:var(--mute);}
+  .pb-arrow{text-align:center;font-size:20px;font-weight:bold;color:var(--orange);line-height:1;margin:-8px 0 4px;}
+  .pb-layer{margin-bottom:8px;}
+  .pb-export{width:100%;min-height:180px;font-family:inherit;font-size:12px;padding:8px;border:1px solid var(--ink);background:#fff;color:var(--ink);margin-top:10px;}
+  .td-layer{padding:8px 0;border-bottom:1px dashed var(--rule);}
+  .td-layer:last-child{border-bottom:none;}
+  .td-lname{font-weight:bold;font-size:12px;letter-spacing:1px;text-transform:uppercase;}
+  .td-lval{font-size:14px;margin-top:3px;}
+</style>
 </head>
 <body>
 
@@ -527,6 +541,8 @@ button:disabled{ opacity:0.55 !important; }
     <div class="tab" data-view="archive">ARCHIVE</div>
     <div class="tab" data-view="shodan">SHODAN</div>
     <div class="tab" data-view="catalog">CATALOG</div>
+    <div class="tab" data-view="teardown">TEARDOWN</div>
+    <div class="tab" data-view="builder">BUILDER</div>
     <div class="tab" data-view="sitewatch">SITE WATCH</div>
     <div class="tab" data-view="rabbit">RABBIT</div>
     <div class="tab" data-view="backup">BACKUP</div>
@@ -795,6 +811,81 @@ button:disabled{ opacity:0.55 !important; }
     <label>discovered from find tab</label>
     <div class="count" id="eq-discovered-count"></div>
     <div id="eq-discovered-list"></div>
+  </div>
+</div>
+
+<!-- BUILDER VIEW (pipeline builder, merged in) -->
+<div class="view" id="view-builder">
+  <div class="banner">pipeline builder, merged in. check tools to compose a stack, roll a random one as a build challenge, see it drawn as layers, or load a real world template. teardowns from the teardown tab land here with one tap. your current stack is saved on this device and included in backup.</div>
+
+  <div class="panel">
+    <label>mode</label>
+    <div class="chips" id="pb-modes">
+      <div class="chip on" data-pbmode="build">build</div>
+      <div class="chip" data-pbmode="random">randomize</div>
+      <div class="chip" data-pbmode="diagram">diagram</div>
+      <div class="chip" data-pbmode="templates">templates</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <label for="pb-name">stack name</label>
+    <input type="text" id="pb-name" placeholder="name this stack">
+    <div class="count" id="pb-count"></div>
+    <div id="pb-stack"></div>
+    <div class="btn-row">
+      <button class="btn-ghost" id="pb-copy">copy for claude</button>
+      <button class="btn-ghost" id="pb-clear">clear</button>
+    </div>
+    <div class="status" id="pb-status"></div>
+    <textarea id="pb-export" class="pb-export" readonly style="display:none"></textarea>
+  </div>
+
+  <div id="pb-mode-build">
+    <div class="panel">
+      <label for="pb-filter">filter tools</label>
+      <input type="text" id="pb-filter" placeholder="type to narrow, like auth or redis">
+      <div id="pb-toollist"></div>
+    </div>
+  </div>
+
+  <div id="pb-mode-random" style="display:none">
+    <div class="panel">
+      <label>roll a coherent stack, one pick from each core layer plus a few extras, then build the challenge with it</label>
+      <button id="pb-roll">roll new stack</button>
+      <div id="pb-roll-result"></div>
+    </div>
+  </div>
+
+  <div id="pb-mode-diagram" style="display:none">
+    <div id="pb-diagram"></div>
+  </div>
+
+  <div id="pb-mode-templates" style="display:none">
+    <div id="pb-templates"></div>
+  </div>
+</div>
+
+<!-- TEARDOWN VIEW -->
+<div class="view" id="view-teardown">
+  <div class="banner">teardown. roll a well known piece of software and see what it is built out of, layer by layer. known means a public engineering blog, talk, source release or spec confirms it. inferred means a best read from the outside. under each teardown sits a rebuild with tools from the builder list and the open alternatives that already exist, each linked into the catalog when it has an entry.</div>
+
+  <div class="panel">
+    <label>roll from</label>
+    <div class="chips" id="td-kinds"></div>
+    <div class="chips" id="td-flags" style="margin-top:8px">
+      <div class="chip on" data-flag="hidebt">hide big tech alternatives</div>
+      <div class="chip" data-flag="skipbt">skip big tech products when rolling</div>
+    </div>
+    <button id="td-roll" style="margin-top:12px">roll a teardown</button>
+    <div class="count" id="td-count"></div>
+  </div>
+
+  <div id="td-result"></div>
+
+  <div class="panel">
+    <label>or pick one</label>
+    <div class="chips" id="td-picklist"></div>
   </div>
 </div>
 
@@ -3448,5 +3539,663 @@ document.getElementById('rb-export').addEventListener('click', function(){
 rbRenderLog();
 </script>
 
+<script>
+/* ---------- PIPELINE BUILDER + TEARDOWN (merged in) ---------- */
+var PB_CATS = {
+  frontend:  'Frontend',
+  native:    'Native and runtime',
+  backend:   'Backend',
+  data:      'Data',
+  auth:      'Auth',
+  payments:  'Payments',
+  plumbing:  'Plumbing',
+  media:     'Media and realtime',
+  game:      'Game and graphics',
+  maps:      'Maps and location',
+  device:    'Devices and hardware',
+  infra:     'Infra and hosting',
+  observe:   'Observability',
+  ai:        'AI'
+};
+
+var PB_VOCAB = {
+  frontend: [
+    ['react','React','ui','component UI library'],
+    ['nextjs','Next.js','ui','React framework with routing, SSR and serverless'],
+    ['vue','Vue','ui','lightweight component framework'],
+    ['svelte','Svelte','ui','compiles away, no virtual DOM'],
+    ['html_css','Plain HTML, CSS, JS','ui','single file, smallest footprint'],
+    ['tailwind','Tailwind CSS','styling','utility first CSS'],
+    ['pwa','PWA shell','apptype','installable, works offline'],
+    ['editor','ProseMirror or Tiptap','editor','rich text document editor in the browser'],
+    ['pdfjs','pdf.js','docs','renders PDF pages in the browser']
+  ],
+  native: [
+    ['webworker','Web Workers','compute','background threads in the browser for heavy math'],
+    ['wasm','WebAssembly','compute','run compiled C, C++ or Rust in the browser'],
+    ['tauri','Tauri','desktop','small desktop apps from a web frontend plus Rust'],
+    ['electron','Electron','desktop','desktop apps that ship a full browser'],
+    ['capacitor','Capacitor','mobile','wrap a web app as an Android or iOS app'],
+    ['rust','Rust','language','fast, memory safe systems language'],
+    ['cpp','C or C++','language','the native language most big desktop software is written in']
+  ],
+  backend: [
+    ['express','Express (Node)','api','minimal Node web server'],
+    ['fastify','Fastify (Node)','api','fast modern Node server'],
+    ['fastapi','FastAPI (Python)','api','Python API server with auto docs'],
+    ['django','Django (Python)','api','batteries included Python framework'],
+    ['rails','Ruby on Rails','api','opinionated full stack Ruby framework'],
+    ['go','Go','api','compiled, high concurrency API server'],
+    ['elixir','Elixir and Phoenix','api','huge numbers of live connections on the Erlang VM'],
+    ['serverless_fn','Serverless functions','api','pay per call functions on Vercel or Cloudflare'],
+    ['worker','Background worker','worker','processes jobs from a queue'],
+    ['cron','Cron jobs','scheduler','scheduled recurring tasks']
+  ],
+  data: [
+    ['sqlite','SQLite','db','file based SQL, zero config'],
+    ['postgres','PostgreSQL','db','powerful open relational database'],
+    ['supabase_db','Supabase Postgres','db','hosted Postgres with row level security and an instant API'],
+    ['mysql','MySQL','db','widely used relational database'],
+    ['mongodb','MongoDB','db','document database'],
+    ['cassandra','Cassandra or ScyllaDB','db','wide column store for massive write volume'],
+    ['d1','Cloudflare D1','db','SQLite at the edge'],
+    ['redis','Redis (Upstash)','cache','in memory key value store'],
+    ['pgvector','pgvector','vector','vector search inside Postgres'],
+    ['s3','S3 or R2 blob storage','blob','bucket of files with URLs'],
+    ['meilisearch','Meilisearch','search','fast typo tolerant search'],
+    ['elasticsearch','Elasticsearch or OpenSearch','search','full text search engine']
+  ],
+  auth: [
+    ['supabase_auth','Supabase Auth','auth','email, magic link and OAuth logins tied to row level security'],
+    ['oauth_github','OAuth via GitHub','auth','sign in with a GitHub account'],
+    ['oauth_apple','OAuth via Apple','auth','sign in with an Apple account'],
+    ['oauth_discord','OAuth via Discord','auth','sign in with a Discord account'],
+    ['magic_link','Magic link email','auth','passwordless email login'],
+    ['jwt_local','Local JWT auth','auth','username and password with signed tokens'],
+    ['passkeys','Passkeys (WebAuthn)','auth','phishing proof cryptographic login']
+  ],
+  payments: [
+    ['stripe','Stripe','payments','cards and subscriptions'],
+    ['square','Square','payments','POS friendly payments'],
+    ['lemonsqueezy','Lemon Squeezy','payments','merchant of record for digital goods'],
+    ['btcpay','BTCPay Server','payments','self hosted crypto payments']
+  ],
+  plumbing: [
+    ['rest_api','REST API','apistyle','standard HTTP API style'],
+    ['graphql','GraphQL','apistyle','client asks for exactly the fields it wants'],
+    ['websocket','WebSocket','realtime','two way live connection'],
+    ['webhook','Webhooks','eventin','services ping your URL when something happens'],
+    ['mqtt','MQTT broker','pubsub','event driven pub sub for devices'],
+    ['queue_bullmq','BullMQ (Redis queue)','queue','job queue on Redis'],
+    ['supabase_rt','Supabase Realtime','realtime','database changes pushed live to clients'],
+    ['cf_cdn','Cloudflare CDN','cdn','global edge cache and DDoS shield']
+  ],
+  media: [
+    ['webrtc','WebRTC','realtime','peer to peer audio, video and data in the browser'],
+    ['hls','HLS streaming','streaming','video cut into small chunks over plain HTTP'],
+    ['ffmpeg','FFmpeg','transcode','convert and compress audio and video'],
+    ['webaudio','Web Audio API','audio','synthesis and effects in the browser'],
+    ['socketio','Socket.IO','realtime','WebSocket wrapper with rooms and reconnects']
+  ],
+  game: [
+    ['canvas_api','Canvas API','graphics','browser 2D drawing'],
+    ['threejs','Three.js','graphics','3D rendering in the browser'],
+    ['phaser','Phaser','engine','2D HTML5 game framework'],
+    ['godot','Godot','engine','open source 2D and 3D game engine'],
+    ['matter','Matter.js','physics','2D rigid body physics for the browser'],
+    ['colyseus','Colyseus','gameserver','authoritative multiplayer game server']
+  ],
+  maps: [
+    ['maplibre','MapLibre GL','map','open vector map rendering'],
+    ['osm','OpenStreetMap data','mapdata','open world map data'],
+    ['osrm','OSRM','routing','open source road routing engine'],
+    ['h3','H3 hex grid','geoindex','hexagon grid for bucketing locations']
+  ],
+  device: [
+    ['esp32','ESP32 firmware','mcu','cheap WiFi and Bluetooth microcontroller'],
+    ['emb_linux','Embedded Linux board','soc','small Linux computer inside a device'],
+    ['rtsp','RTSP and ONVIF','camproto','how IP cameras stream and get discovered'],
+    ['ble','Bluetooth LE','radio','short range low power link to a phone']
+  ],
+  infra: [
+    ['vercel','Vercel','hosting','frontends plus serverless functions'],
+    ['railway','Railway','hosting','backends and databases'],
+    ['supabase','Supabase platform','hosting','database, auth, storage and realtime in one'],
+    ['fly','Fly.io','hosting','global app VMs'],
+    ['cf_workers','Cloudflare Workers','hosting','edge serverless functions'],
+    ['docker','Docker','container','containerized deploys'],
+    ['gh_actions','GitHub Actions','cicd','tests and builds on every push']
+  ],
+  observe: [
+    ['sentry','Sentry','errors','error tracking with stack traces'],
+    ['posthog','PostHog','analytics','product analytics and feature flags'],
+    ['plausible','Plausible','analytics','privacy friendly traffic stats'],
+    ['uptimerobot','UptimeRobot','uptime','pings your site, alerts if down']
+  ],
+  ai: [
+    ['claude_api','Claude API','llm','text generation and reasoning'],
+    ['ollama','Ollama (local LLM)','llm','run open models on your own machine'],
+    ['elevenlabs','ElevenLabs TTS','tts','voice generation'],
+    ['whisper','Whisper STT','stt','speech to text'],
+    ['rag','RAG pipeline','aipattern','retrieve documents, then answer from them']
+  ]
+};
+
+var PB_TOOLS = {};
+Object.keys(PB_VOCAB).forEach(function(cat){
+  PB_VOCAB[cat].forEach(function(r){
+    PB_TOOLS[r[0]] = { id:r[0], name:r[1], role:r[2], desc:r[3], cat:cat };
+  });
+});
+
+var PB_TEMPLATES = [
+  {name:'Virtual pet web game', desc:'Persistent pets, mini games, currency, trading.', why:'Accounts plus a database for pet stats, real time mini games, and a cron that ticks hunger down while players are away.', tools:['nextjs','tailwind','phaser','fastify','postgres','redis','jwt_local','stripe','cron','queue_bullmq','vercel','railway','sentry']},
+  {name:'Hotel booking site', desc:'Search rooms by date, book, pay, get confirmation.', why:'Availability is the core. Booking must be one transaction. Confirmation email runs async.', tools:['nextjs','tailwind','fastapi','postgres','redis','stripe','oauth_github','meilisearch','webhook','queue_bullmq','vercel','railway','sentry','plausible']},
+  {name:'Apartment complex site', desc:'Listings with photos, availability, tour scheduling.', why:'Read heavy and photo heavy. SEO matters so pages render ahead of time.', tools:['nextjs','tailwind','fastify','postgres','s3','magic_link','webhook','cf_cdn','vercel','plausible']},
+  {name:'Auto parts catalog', desc:'Huge catalog, fitment by vehicle, cart, shipping.', why:'Search dominates. Inventory must stay accurate. Fitment is a big lookup table.', tools:['nextjs','tailwind','fastapi','postgres','elasticsearch','redis','s3','stripe','jwt_local','webhook','queue_bullmq','vercel','railway','sentry','cf_cdn']},
+  {name:'Coffee shop site', desc:'Menu, hours, order ahead, loyalty.', why:'Mostly marketing. Order ahead adds a real backend, loyalty adds accounts.', tools:['nextjs','tailwind','serverless_fn','supabase_db','supabase_auth','stripe','cf_cdn','vercel','plausible']},
+  {name:'Print on demand shirt store', desc:'Designs on products, size and color, printed and shipped.', why:'The print partner handles the physical side through webhooks.', tools:['nextjs','tailwind','serverless_fn','postgres','s3','stripe','webhook','magic_link','cf_cdn','vercel','plausible','sentry']},
+  {name:'Browser multiplayer game', desc:'Real time shared world, leaderboards.', why:'The server is authoritative so clients cannot cheat. WebSockets carry every tick.', tools:['html_css','phaser','colyseus','socketio','redis','postgres','oauth_discord','fly','sentry']},
+  {name:'Chat app', desc:'Channels, DMs, file uploads, notifications.', why:'Live messages over sockets, a queue for push notifications, blob storage for files.', tools:['nextjs','tailwind','supabase_db','supabase_auth','supabase_rt','s3','meilisearch','queue_bullmq','vercel','sentry']},
+  {name:'AI document Q and A', desc:'Upload docs, ask questions, answers from your data.', why:'Classic RAG. Embeddings in a vector store, the LLM streams the answer.', tools:['nextjs','tailwind','serverless_fn','postgres','pgvector','s3','claude_api','rag','supabase_auth','vercel','sentry']},
+  {name:'Restaurant POS', desc:'Ring up orders, send to kitchen, take payment, sync.', why:'Must keep working offline. Local database syncs up. Printers and card readers hang off it.', tools:['html_css','pwa','sqlite','fastify','postgres','redis','square','websocket','webhook','queue_bullmq','fly','sentry']},
+  {name:'Blog', desc:'Articles, feed, search.', why:'Can be fully static, built at deploy time.', tools:['nextjs','tailwind','s3','cf_cdn','vercel','plausible']},
+  {name:'SaaS dashboard', desc:'Login, teams, billing, charts, settings.', why:'Auth and billing are most of the work. Stripe webhooks drive subscription state.', tools:['nextjs','tailwind','fastify','postgres','redis','supabase_auth','stripe','webhook','cron','queue_bullmq','vercel','railway','sentry','posthog']}
+];
+
+/* teardown catalog. layers: [layer, value, 1 known or 0 inferred]. bt marks a big tech maker. alts: [name, bigtech flag] */
+var TD_KINDS = { office:'Office and docs', games:'Games', finance:'Finance and POS', retail:'Retail', media:'Media and streaming', social:'Social and chat', infra:'Infrastructure', creative:'Creative tools', devices:'Devices', travel:'Travel and mobility' };
+
+var TD = [
+  {n:'Microsoft Excel', by:'Microsoft', y:1985, k:'office', bt:1, what:'Spreadsheet with a formula engine.', L:[['language','C and C++ core',1],['client','native desktop apps for Windows and macOS',1],['format','XLSX, zipped XML files (Office Open XML)',1],['engine','dependency graph that recalculates only cells downstream of a change',1],['web version','browser UI with calculation shared between browser and server',0]], R:['react','webworker','wasm','sqlite','tauri'], why:'A grid UI in the browser, the formula engine in a Web Worker so typing never stalls, files saved as SQLite or XLSX.', A:[['LibreOffice Calc'],['Gnumeric'],['ONLYOFFICE'],['EtherCalc'],['Grist']]},
+  {n:'Microsoft Word', by:'Microsoft', y:1983, k:'office', bt:1, what:'Word processor.', L:[['language','C and C++',1],['format','DOCX, zipped XML',1],['layout','pagination engine that flows text into fixed size pages',1],['collab','co authoring through cloud sync',1]], R:['react','editor','supabase_db','supabase_rt','supabase_auth'], why:'A ProseMirror editor with live collaboration over Supabase Realtime covers most daily use.', A:[['LibreOffice Writer'],['AbiWord'],['ONLYOFFICE Docs'],['CryptPad']]},
+  {n:'Adobe Acrobat', by:'Adobe', y:1993, k:'office', what:'PDF viewer, editor and form filler.', L:[['format','PDF, an ISO standard (ISO 32000)',1],['language','C and C++',0],['rendering','own PDF rendering engine',1],['signing','certificate based digital signatures',1]], R:['html_css','pdfjs','wasm','s3'], why:'pdf.js renders, a WebAssembly PDF library edits, files stay in the browser.', A:[['Okular'],['Xournal++'],['PDF Arranger'],['Stirling-PDF']]},
+  {n:'Notion', by:'Notion Labs', y:2016, k:'office', what:'Block based notes, docs and databases.', L:[['client','React web app wrapped for desktop and mobile',1],['server','Node.js and TypeScript',1],['data','PostgreSQL split across many shards',1],['model','everything is a block with a parent, a type and properties',1]], R:['react','editor','supabase_db','supabase_auth','supabase_rt','vercel'], why:'Blocks as rows in Postgres with a parent column, an editor on top, realtime for multiplayer.', A:[['AppFlowy'],['AFFiNE'],['Anytype'],['Logseq'],['Joplin']]},
+  {n:'Trello', by:'Atlassian', y:2011, k:'office', what:'Kanban boards.', L:[['client','single page app, Backbone.js at launch',1],['server','Node.js',1],['data','MongoDB',1],['live','WebSocket pushes card moves to everyone on the board',1]], R:['svelte','supabase_db','supabase_rt','supabase_auth','vercel'], why:'Lists and cards are two tables. Realtime handles the live board.', A:[['Wekan'],['Planka'],['Focalboard'],['Kanboard']]},
+  {n:'Microsoft Outlook', by:'Microsoft', y:1997, k:'office', bt:1, what:'Email and calendar client.', L:[['language','C and C++ desktop',1],['protocol','Exchange protocols plus IMAP and SMTP',1],['calendar','iCalendar events with recurrence rules',1]], R:['react','fastify','postgres','worker','tauri'], why:'An IMAP sync worker into Postgres, a web client on top, iCalendar for events.', A:[['Mozilla Thunderbird'],['Evolution'],['Roundcube']]},
+
+  {n:'SimCity (1989)', by:'Maxis', y:1989, k:'games', what:'City builder.', L:[['language','C',1],['world','tile grid where each tile holds a zone, road, rail or power line',1],['simulation','repeated passes over the grid for traffic, pollution, land value and crime',1],['source','released as open source under the name Micropolis',1]], R:['html_css','canvas_api','webworker'], why:'A typed array grid, a Web Worker running the simulation passes, Canvas drawing the map.', A:[['Micropolis'],['LinCity-NG']]},
+  {n:'Minecraft Java Edition', by:'Mojang (Microsoft)', y:2011, k:'games', bt:1, what:'Voxel sandbox game.', L:[['language','Java',1],['graphics','LWJGL over OpenGL',1],['world','16 by 16 block chunks generated from noise',1],['storage','region files in the Anvil format',1],['multiplayer','dedicated Java server over TCP',1]], R:['threejs','webworker','websocket','fly'], why:'Chunks meshed in a Web Worker, Three.js renders, a socket server holds the world.', A:[['Luanti'],['Terasology']]},
+  {n:'Roblox', by:'Roblox Corporation', y:2006, k:'games', what:'Platform where players build and publish games.', L:[['engine','C++ engine',1],['scripting','Luau, a typed Lua dialect, released as open source',1],['hosting','own data centers',1],['economy','virtual currency with creator payouts',1]], R:['threejs','colyseus','postgres','stripe','fly'], why:'A shared 3D engine, a sandboxed script layer, an authoritative game server per world.', A:[['Luanti'],['Godot']]},
+  {n:'Fortnite', by:'Epic Games', y:2017, k:'games', what:'Online battle royale.', L:[['engine','Unreal Engine, C++',1],['servers','dedicated authoritative match servers in rented cloud regions',1],['netcode','client prediction with server reconciliation',1]], R:['godot','colyseus','redis','fly'], why:'Godot client, authoritative match servers, Redis for matchmaking queues.', A:[['Godot'],['O3DE']]},
+  {n:'Doom (1993)', by:'id Software', y:1993, k:'games', what:'First person shooter.', L:[['language','C',1],['rendering','BSP tree decides which walls to draw and in what order',1],['assets','WAD files hold maps, sprites and sounds',1],['source','engine source released in 1997',1]], R:['html_css','canvas_api','wasm'], why:'The original C compiled to WebAssembly runs in a browser today.', A:[['Chocolate Doom'],['GZDoom'],['Freedoom']]},
+  {n:'World of Warcraft', by:'Blizzard', y:2004, k:'games', what:'Massively multiplayer online RPG.', L:[['client','C++',1],['ui','Lua addons and XML layouts',1],['servers','realms split into shards that each hold a slice of players',1]], R:['threejs','colyseus','postgres','redis','fly'], why:'Zone servers per area, a character database, Redis for presence.', A:[['Ryzom'],['Veloren']]},
+  {n:'Stardew Valley', by:'ConcernedApe', y:2016, k:'games', what:'Farming life sim.', L:[['language','C#',1],['framework','XNA, later MonoGame',1],['saves','XML save files',1]], R:['phaser','html_css','pwa'], why:'Phaser tilemaps plus a JSON save in browser storage.', A:[['MonoGame'],['Godot']]},
+  {n:'Angry Birds', by:'Rovio', y:2009, k:'games', what:'Physics puzzle game.', L:[['physics','Box2D rigid body physics',1],['language','C++',0],['levels','data files placing blocks, pigs and materials',0]], R:['phaser','matter','canvas_api'], why:'Matter.js handles the physics, Canvas draws it.', A:[['Box2D'],['Godot']]},
+  {n:'Neopets', by:'Neopets', y:1999, k:'games', what:'Virtual pet community site.', L:[['games','Flash mini games',1],['server','PHP pages',0],['data','relational database of pets, items and accounts',0],['economy','site wide currency, shops and trading',1]], R:['nextjs','phaser','supabase_db','supabase_auth','cron'], why:'See the virtual pet template on the builder tab.', A:[['Ruffle']]},
+
+  {n:'TurboTax', by:'Intuit', y:1993, k:'finance', what:'Guided tax filing.', L:[['interview','question flow that skips what does not apply to you',1],['rules','tax law encoded as a calculation graph',0],['filing','IRS Modernized e-File, XML submissions',1],['server','Java services',0]], R:['react','fastapi','postgres','supabase_auth'], why:'A rules engine as data, a guided form UI, XML export.', A:[['OpenTaxSolver']]},
+  {n:'QuickBooks Online', by:'Intuit', y:2001, k:'finance', what:'Small business accounting.', L:[['ledger','double entry bookkeeping, every entry balances',1],['banking','bank feeds pulled through aggregators',1],['server','Java services',0]], R:['react','fastify','postgres','supabase_auth','cron'], why:'A journal table where debits equal credits, reports are queries on it.', A:[['GnuCash'],['Akaunting'],['Firefly III'],['LedgerSMB']]},
+  {n:'Square POS', by:'Block', y:2009, k:'finance', what:'Point of sale with card readers.', L:[['hardware','card readers for chip, swipe and tap',1],['server','Ruby and Java services',1],['mobile','native Android and iOS apps',1],['payments','card network processing built in',1]], R:['pwa','sqlite','fastify','postgres','square','websocket'], why:'See the restaurant POS template on the builder tab.', A:[['Floreant POS'],['uniCenta oPOS'],['Odoo']]},
+  {n:'PayPal', by:'PayPal', y:1998, k:'finance', what:'Online payments and wallet.', L:[['server','Java services, web tier moved to Node.js',1],['fraud','risk scoring on every transaction',1],['rails','card networks plus bank transfers',1]], R:['fastify','postgres','redis','webhook','queue_bullmq'], why:'A ledger in Postgres, idempotent payment calls, webhooks to merchants.', A:[['GNU Taler'],['BTCPay Server']]},
+  {n:'Venmo', by:'PayPal', y:2009, k:'finance', what:'Peer to peer payments with a social feed.', L:[['rails','bank transfers and cards',1],['feed','social timeline of payments',1],['server','Python at launch',0]], R:['react','fastapi','postgres','supabase_auth','stripe'], why:'A ledger plus a feed table, payouts through a processor.', A:[['GNU Taler']]},
+  {n:'Robinhood', by:'Robinhood Markets', y:2013, k:'finance', what:'Stock trading app.', L:[['server','Python and Django',1],['market data','streaming quotes pushed to clients',1],['orders','routed to market makers',1]], R:['react','fastapi','postgres','redis','websocket'], why:'Quotes over sockets, orders through a broker API.', A:[['Ghostfolio']]},
+
+  {n:'Nike app and SNKRS', by:'Nike', y:2015, k:'retail', what:'Shoe shopping and limited release drops.', L:[['hosting','AWS',1],['drops','randomized draw instead of first come first served',1],['server','microservices',0]], R:['nextjs','fastify','postgres','redis','queue_bullmq','stripe'], why:'A queue absorbs the drop spike, a draw picks winners fairly.', A:[['Saleor'],['Medusa']]},
+  {n:'Shopify', by:'Shopify', y:2006, k:'retail', what:'Hosted online stores.', L:[['server','Ruby on Rails monolith split into modules',1],['data','MySQL split by shop',1],['themes','Liquid template language',1],['mobile','React Native',1]], R:['nextjs','rails','mysql','stripe','webhook','cf_cdn'], why:'One app, every store a row, themes as templates.', A:[['WooCommerce'],['PrestaShop'],['Saleor'],['Medusa'],['Magento Open Source']]},
+  {n:'Etsy', by:'Etsy', y:2005, k:'retail', what:'Handmade goods marketplace.', L:[['server','PHP',1],['data','MySQL',1],['search','own search ranking',1]], R:['nextjs','postgres','meilisearch','stripe','s3'], why:'Listings, shops and orders in Postgres, Meilisearch for browse.', A:[['Saleor'],['Medusa']]},
+  {n:'Amazon storefront', by:'Amazon', y:1995, k:'retail', bt:1, what:'Retail marketplace.', L:[['architecture','hundreds of services talking only through APIs',1],['data','key value stores in the Dynamo lineage',1],['hosting','AWS',1]], R:['nextjs','fastify','postgres','redis','queue_bullmq','elasticsearch'], why:'Catalog, cart and orders as separate services behind one API.', A:[['Saleor'],['Medusa']]},
+  {n:'Domino\'s order tracker', by:'Domino\'s', y:2008, k:'retail', what:'Live pizza order status.', L:[['source','status events from the store POS',0],['client','web and mobile timeline',1]], R:['nextjs','supabase_db','supabase_rt','webhook'], why:'The store pushes status rows, Realtime pushes them to the customer.', A:[['TastyIgniter'],['Odoo']]},
+
+  {n:'Netflix', by:'Netflix', y:2007, k:'media', what:'Video streaming.', L:[['server','Java microservices',1],['hosting','AWS for the control plane',1],['delivery','Open Connect, own CDN boxes inside ISPs',1],['data','Cassandra',1],['encoding','every title encoded at many bitrates per scene',1]], R:['nextjs','ffmpeg','hls','s3','cf_cdn','postgres'], why:'FFmpeg makes the bitrate ladder, HLS serves it, a CDN carries it.', A:[['Jellyfin'],['PeerTube'],['Kodi']]},
+  {n:'Spotify', by:'Spotify', y:2008, k:'media', what:'Music streaming.', L:[['server','Java services',1],['desktop','C++ core with an embedded browser UI',1],['data','Cassandra and big data pipelines',1],['recs','collaborative filtering on listening history',1]], R:['react','webaudio','fastify','postgres','s3','cf_cdn'], why:'Audio files in a bucket, a library database, the Web Audio API player.', A:[['Navidrome'],['Funkwhale'],['Jellyfin']]},
+  {n:'Disney+', by:'Disney', y:2019, k:'media', what:'Video streaming.', L:[['platform','BAMTech streaming stack',1],['delivery','HLS and DASH',1],['hosting','AWS',1]], R:['nextjs','ffmpeg','hls','s3','cf_cdn','supabase_auth'], why:'Same shape as any streaming service, smaller library.', A:[['Jellyfin'],['PeerTube']]},
+  {n:'Twitch', by:'Amazon', y:2011, k:'media', bt:1, what:'Live streaming.', L:[['ingest','RTMP from the streamer',1],['delivery','HLS to viewers',1],['server','Go services',1],['chat','IRC style chat',1]], R:['ffmpeg','hls','websocket','fly','redis'], why:'RTMP in, FFmpeg repackages to HLS, sockets for chat.', A:[['Owncast'],['PeerTube']]},
+  {n:'SoundCloud', by:'SoundCloud', y:2007, k:'media', what:'Audio uploads and streaming.', L:[['server','Ruby on Rails, then Scala microservices',1],['audio','transcoded streams',1]], R:['nextjs','ffmpeg','s3','postgres','webaudio'], why:'Upload, transcode with FFmpeg, store, stream.', A:[['Funkwhale'],['Navidrome']]},
+  {n:'VLC', by:'VideoLAN', y:2001, k:'media', what:'Plays nearly any media file.', L:[['language','C',1],['codecs','libavcodec from FFmpeg',1],['design','module per input, codec and output',1]], R:['html_css','wasm','ffmpeg'], why:'FFmpeg compiled to WebAssembly plays files in the browser.', A:[['mpv'],['MPC-HC']]},
+  {n:'Shazam', by:'Apple', y:2002, k:'media', bt:1, what:'Song recognition.', L:[['fingerprint','peaks in a spectrogram hashed into pairs',1],['lookup','hash match against a huge index',1]], R:['webaudio','fastapi','postgres','redis'], why:'Web Audio captures, an FFT finds peaks, Postgres stores hashes.', A:[['Chromaprint'],['AcoustID']]},
+
+  {n:'Instagram', by:'Meta', y:2010, k:'social', bt:1, what:'Photo and video sharing.', L:[['server','Python and Django',1],['data','PostgreSQL and Cassandra',1],['media','images and video in blob storage behind a CDN',1]], R:['nextjs','django','postgres','s3','cf_cdn','queue_bullmq'], why:'Upload to a bucket, a worker resizes, a feed query.', A:[['Pixelfed']]},
+  {n:'WhatsApp', by:'Meta', y:2009, k:'social', bt:1, what:'Messaging.', L:[['server','Erlang',1],['os','FreeBSD at scale',1],['crypto','Signal protocol end to end encryption',1]], R:['elixir','postgres','websocket','pwa'], why:'Elixir runs on the same Erlang VM, built for millions of open connections.', A:[['Signal'],['Element'],['Delta Chat']]},
+  {n:'Discord', by:'Discord', y:2015, k:'social', what:'Voice and text communities.', L:[['server','Elixir for real time',1],['hot paths','Rust',1],['data','Cassandra, then ScyllaDB',1],['client','React, Electron desktop',1],['voice','WebRTC',1]], R:['react','elixir','cassandra','webrtc','electron'], why:'Elixir for presence and messages, WebRTC for voice.', A:[['Element'],['Mumble'],['Rocket.Chat'],['Mattermost']]},
+  {n:'Slack', by:'Salesforce', y:2013, k:'social', what:'Team chat.', L:[['server','PHP, then Hack',1],['data','MySQL scaled with Vitess',1],['desktop','Electron',1]], R:['react','supabase_db','supabase_rt','supabase_auth','electron'], why:'See the chat app template on the builder tab.', A:[['Mattermost'],['Zulip'],['Rocket.Chat']]},
+  {n:'Zoom', by:'Zoom', y:2013, k:'social', what:'Video meetings.', L:[['media','own protocol with a browser client on WebRTC',0],['servers','media routers that forward streams instead of mixing them',0]], R:['webrtc','fastify','fly','redis'], why:'A selective forwarding unit relays WebRTC streams between people.', A:[['Jitsi Meet'],['BigBlueButton']]},
+  {n:'Reddit', by:'Reddit', y:2005, k:'social', what:'Link sharing and discussion.', L:[['server','Python',1],['data','PostgreSQL and Cassandra',1],['source','was open source until 2017',1],['ranking','votes and age combined into a hot score',1]], R:['nextjs','fastapi','postgres','redis','cron'], why:'Posts and votes in Postgres, a cron recomputes hot scores.', A:[['Lemmy'],['PieFed']]},
+  {n:'Twitter (X)', by:'X Corp', y:2006, k:'social', what:'Short posts timeline.', L:[['server','Ruby on Rails at launch, then Scala on the JVM',1],['timelines','fan out on write into cached timelines',1]], R:['nextjs','fastify','postgres','redis','queue_bullmq'], why:'A post fans out into followers timelines stored in Redis.', A:[['Mastodon'],['Misskey']]},
+  {n:'Craigslist', by:'Craigslist', y:1995, k:'social', what:'Classified ads.', L:[['server','Perl',1],['data','MySQL',1],['design','plain HTML, almost no JavaScript',1]], R:['html_css','sqlite','fly'], why:'Server rendered pages and one database is still enough.', A:[['Osclass']]},
+
+  {n:'DNS', by:'internet standard', y:1983, k:'infra', what:'Turns names into IP addresses.', L:[['protocol','UDP and TCP on port 53',1],['hierarchy','root, then top level domain, then the domain\'s own servers',1],['software','BIND, written in C, the classic server',1],['caching','every answer carries a time to live',1]], R:['go','redis','cf_workers'], why:'A small resolver that caches answers and blocks bad domains.', A:[['Unbound'],['PowerDNS'],['Knot DNS'],['CoreDNS'],['AdGuard Home']]},
+  {n:'Firefox', by:'Mozilla', y:2002, k:'infra', what:'Web browser.', L:[['language','C++ and Rust',1],['engine','Gecko layout engine',1],['javascript','SpiderMonkey',1],['source','open source, MPL 2.0',1]], R:['rust','cpp'], why:'Browser engines are some of the largest software ever made. Study one rather than rebuild it.', A:[['LibreWolf'],['Ladybird'],['Pale Moon']]},
+  {n:'Safari', by:'Apple', y:2003, k:'infra', bt:1, what:'Web browser.', L:[['engine','WebKit, C++',1],['javascript','JavaScriptCore',1]], R:['rust','cpp'], why:'WebKit itself is open source and readable.', A:[['Firefox'],['LibreWolf'],['Ladybird'],['GNOME Web']]},
+  {n:'Git', by:'Linus Torvalds', y:2005, k:'infra', what:'Version control.', L:[['language','C',1],['storage','content addressed objects named by hash',1],['model','commits point to trees, trees point to files',1]], R:['rust','sqlite'], why:'A tiny version of it, hash files and store commits, is a classic learning build.', A:[['Mercurial'],['Fossil'],['Pijul']]},
+  {n:'GitHub', by:'Microsoft', y:2008, k:'infra', bt:1, what:'Code hosting and collaboration.', L:[['server','Ruby on Rails',1],['data','MySQL',1],['git','git storage service spread across many servers',1]], R:['rails','postgres','gh_actions'], why:'A Rails app over bare git repos on disk.', A:[['Forgejo'],['Gitea'],['GitLab CE'],['SourceHut']]},
+  {n:'Stack Overflow', by:'Prosus', y:2008, k:'infra', what:'Programming Q and A.', L:[['server','C# and .NET',1],['data','SQL Server',1],['hosting','a small number of their own servers',1]], R:['nextjs','postgres','meilisearch'], why:'Questions, answers, votes, tags, all relational.', A:[['Apache Answer'],['Discourse']]},
+  {n:'WordPress', by:'Automattic and community', y:2003, k:'infra', what:'Website and blog engine.', L:[['server','PHP',1],['data','MySQL',1],['plugins','hook system that lets code attach anywhere',1]], R:['nextjs','s3','cf_cdn','vercel'], why:'A static site generator covers most blogs.', A:[['Ghost'],['Grav'],['Hugo']]},
+  {n:'Dropbox', by:'Dropbox', y:2007, k:'infra', what:'File sync.', L:[['server','Python, then Go',1],['sync engine','rewritten in Rust',1],['storage','own storage system',1],['dedupe','files split into blocks named by hash',1]], R:['rust','s3','supabase_db','worker'], why:'Chunk files, hash chunks, upload only what changed.', A:[['Syncthing'],['Nextcloud'],['Seafile']]},
+  {n:'1Password', by:'AgileBits', y:2006, k:'infra', what:'Password manager.', L:[['core','Rust',1],['desktop','Electron',1],['crypto','vault encrypted on the device before upload',1]], R:['rust','tauri','supabase_db','passkeys'], why:'Encrypt in the client, the server only stores ciphertext.', A:[['Bitwarden'],['Vaultwarden'],['KeePassXC']]},
+
+  {n:'Adobe Photoshop', by:'Adobe', y:1990, k:'creative', what:'Raster image editor.', L:[['language','C++',1],['format','PSD with layers',1],['plugins','plugin API',1]], R:['react','canvas_api','wasm','webworker'], why:'Layers as canvases, filters in WebAssembly.', A:[['GIMP'],['Krita']]},
+  {n:'Figma', by:'Figma', y:2016, k:'creative', what:'Collaborative design tool.', L:[['editor','C++ compiled to WebAssembly',1],['rendering','WebGL',1],['multiplayer','own sync server written in Rust',1]], R:['react','wasm','threejs','websocket','rust'], why:'A document tree synced over sockets, rendered on WebGL.', A:[['Penpot'],['Inkscape']]},
+  {n:'Autodesk Maya', by:'Autodesk', y:1998, k:'creative', what:'3D modeling and animation.', L:[['language','C++',1],['scripting','Python and MEL',1]], R:['threejs','react','wasm'], why:'Three.js handles viewing and simple modeling in the browser.', A:[['Blender'],['Wings 3D']]},
+  {n:'Ableton Live', by:'Ableton', y:2001, k:'creative', what:'Music production.', L:[['language','C++',0],['audio','real time audio thread separate from the UI',1],['plugins','VST plugin hosting',1]], R:['webaudio','react','webworker'], why:'Web Audio plus AudioWorklets gets a clip launcher running in a browser.', A:[['Ardour'],['LMMS'],['Zrythm']]},
+
+  {n:'IP security camera', by:'many makers', y:2005, k:'devices', what:'Network video camera.', L:[['hardware','embedded Linux on a camera chip',1],['video','H.264 or H.265',1],['protocol','RTSP stream, ONVIF discovery',1],['cloud','vendor relay for remote viewing',0]], R:['emb_linux','rtsp','ffmpeg','hls','fly'], why:'Pull RTSP, repackage to HLS with FFmpeg, keep it on your own network.', A:[['Frigate'],['ZoneMinder'],['Shinobi'],['motionEye']]},
+  {n:'Ring doorbell', by:'Amazon', y:2013, k:'devices', bt:1, what:'Video doorbell.', L:[['hardware','camera, motion sensor, WiFi',1],['cloud','AWS',1],['os','embedded Linux',0]], R:['esp32','rtsp','ffmpeg','webhook'], why:'A motion trigger, a clip upload, a push notification.', A:[['Frigate'],['Home Assistant']]},
+  {n:'Bitcoin', by:'open project', y:2009, k:'devices', what:'Peer to peer money.', L:[['language','C++ in Bitcoin Core',1],['network','P2P over TCP port 8333',1],['ledger','proof of work blockchain',1],['storage','LevelDB',1]], R:['rust','sqlite','websocket'], why:'A toy chain, blocks of hashes, is a classic learning build.', A:[['BTCPay Server'],['Monero']]},
+
+  {n:'Uber', by:'Uber', y:2009, k:'travel', what:'Ride hailing.', L:[['server','Go and Java',1],['data','Schemaless, built on MySQL',1],['geo','H3 hexagon grid, open sourced',1],['dispatch','matches riders to nearby drivers by cell',1]], R:['react','go','postgres','h3','websocket','maplibre','osrm'], why:'Driver positions bucketed into H3 cells, a match looks at nearby cells.', A:[['OSRM'],['Traccar']]},
+  {n:'Airbnb', by:'Airbnb', y:2008, k:'travel', what:'Short term rentals.', L:[['server','Ruby on Rails monolith, then services',1],['client','React',1],['search','ranked listing search',1]], R:['nextjs','postgres','meilisearch','stripe','maplibre'], why:'See the hotel booking template on the builder tab.', A:[['QloApps']]},
+  {n:'Strava', by:'Strava', y:2009, k:'travel', what:'GPS activity tracking.', L:[['server','Ruby on Rails at launch',1],['data','GPS tracks matched to segments',1]], R:['react','fastapi','postgres','maplibre','osm'], why:'Store tracks as point lists, match against saved segments.', A:[['FitTrackee'],['OpenTracks']]},
+  {n:'Duolingo', by:'Duolingo', y:2011, k:'travel', what:'Language lessons.', L:[['spaced repetition','models when you are about to forget each word',1],['server','Python, then other services',0]], R:['react','supabase_db','supabase_auth','pwa'], why:'Cards plus a review schedule per user.', A:[['Anki'],['LibreLingo']]}
+];
+
+/* ---------- builder state ---------- */
+var pbSel = new Set();
+var pbName = '';
+var pbLastRoll = null;
+
+function pbLoad(){
+  try {
+    var s = JSON.parse(localStorage.getItem('rf_builder') || '{}');
+    pbSel = new Set((s.ids || []).filter(function(id){ return PB_TOOLS[id]; }));
+    pbName = s.name || '';
+  } catch(e){ pbSel = new Set(); pbName = ''; }
+}
+function pbSave(){
+  try { localStorage.setItem('rf_builder', JSON.stringify({ name: pbName, ids: Array.from(pbSel) })); } catch(e){}
+}
+function pbPick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+function pbSay(t){ document.getElementById('pb-status').textContent = t; }
+
+function pbGrouped(ids){
+  var g = {};
+  ids.forEach(function(id){
+    var t = PB_TOOLS[id];
+    if(!t) return;
+    (g[t.cat] = g[t.cat] || []).push(t);
+  });
+  return g;
+}
+
+function pbRenderStack(){
+  document.getElementById('pb-name').value = pbName;
+  var ids = Array.from(pbSel);
+  document.getElementById('pb-count').textContent = ids.length + ' tool' + (ids.length === 1 ? '' : 's') + ' in this stack';
+  var box = document.getElementById('pb-stack');
+  if(!ids.length){ box.innerHTML = '<div class="empty">no tools yet. check some below, roll one, or load a template or teardown.</div>'; return; }
+  var g = pbGrouped(ids);
+  box.innerHTML = Object.keys(PB_CATS).filter(function(c){ return g[c]; }).map(function(c){
+    return '<div class="daylabel">' + escapeHtml(PB_CATS[c]) + '</div><div class="chips">' +
+      g[c].map(function(t){ return '<div class="chip on" data-pbdrop="' + t.id + '">' + escapeHtml(t.name) + ' x</div>'; }).join('') + '</div>';
+  }).join('');
+}
+
+function pbRenderToolList(){
+  var q = (document.getElementById('pb-filter').value || '').toLowerCase().trim();
+  var box = document.getElementById('pb-toollist');
+  var html = '';
+  Object.keys(PB_CATS).forEach(function(c){
+    var rows = PB_VOCAB[c].map(function(r){ return PB_TOOLS[r[0]]; }).filter(function(t){
+      return !q || (t.name + ' ' + t.desc + ' ' + t.role + ' ' + PB_CATS[c]).toLowerCase().indexOf(q) !== -1;
+    });
+    if(!rows.length) return;
+    html += '<div class="daylabel">' + escapeHtml(PB_CATS[c]) + '</div>';
+    rows.forEach(function(t){
+      html += '<label class="pb-row' + (pbSel.has(t.id) ? ' on' : '') + '"><input type="checkbox" data-pbtool="' + t.id + '"' + (pbSel.has(t.id) ? ' checked' : '') + '>' +
+        '<span><b>' + escapeHtml(t.name) + '</b><br><span class="pb-desc">' + escapeHtml(t.desc) + '</span></span></label>';
+    });
+  });
+  box.innerHTML = html || '<div class="empty">nothing matches that filter.</div>';
+}
+
+function pbSetIds(ids, name){
+  pbSel = new Set(ids.filter(function(id){ return PB_TOOLS[id]; }));
+  pbName = name || '';
+  pbSave();
+  pbRenderAll();
+}
+
+function pbRenderAll(){
+  pbRenderStack();
+  pbRenderToolList();
+  pbRenderDiagram();
+}
+
+var PB_LAYERS = [
+  { label:'User', test:function(){ return false; } },
+  { label:'Frontend', test:function(t){ return t.cat === 'frontend'; } },
+  { label:'Native and runtime', test:function(t){ return t.cat === 'native'; } },
+  { label:'Game and graphics', test:function(t){ return t.cat === 'game'; } },
+  { label:'Edge and CDN', test:function(t){ return t.role === 'cdn'; } },
+  { label:'Auth', test:function(t){ return t.cat === 'auth'; } },
+  { label:'API and live links', test:function(t){ return t.cat === 'plumbing' && t.role !== 'queue' && t.role !== 'pubsub'; } },
+  { label:'Media and realtime', test:function(t){ return t.cat === 'media'; } },
+  { label:'Backend', test:function(t){ return t.cat === 'backend'; } },
+  { label:'Queue and pub sub', test:function(t){ return t.role === 'queue' || t.role === 'pubsub'; } },
+  { label:'AI', test:function(t){ return t.cat === 'ai'; } },
+  { label:'Maps and location', test:function(t){ return t.cat === 'maps'; } },
+  { label:'Data', test:function(t){ return t.cat === 'data'; } },
+  { label:'Payments', test:function(t){ return t.cat === 'payments'; } },
+  { label:'Devices and hardware', test:function(t){ return t.cat === 'device'; } },
+  { label:'Observability', test:function(t){ return t.cat === 'observe'; } },
+  { label:'Infra and hosting', test:function(t){ return t.cat === 'infra'; } }
+];
+
+function pbRenderDiagram(){
+  var box = document.getElementById('pb-diagram');
+  var tools = Array.from(pbSel).map(function(id){ return PB_TOOLS[id]; });
+  if(!tools.length){ box.innerHTML = '<div class="empty">add tools to see the stack drawn as layers.</div>'; return; }
+  var placed = {};
+  var buckets = PB_LAYERS.map(function(){ return []; });
+  buckets[0] = [{ name:'Browser or device' }];
+  tools.forEach(function(t){
+    for(var i = 1; i < PB_LAYERS.length; i++){
+      if(PB_LAYERS[i].test(t)){ buckets[i].push(t); placed[t.id] = 1; return; }
+    }
+  });
+  var html = '<div class="daylabel">data flows top to bottom</div>';
+  var first = true;
+  PB_LAYERS.forEach(function(L, i){
+    if(!buckets[i].length) return;
+    if(!first) html += '<div class="pb-arrow">&#8595;</div>';
+    first = false;
+    html += '<div class="panel pb-layer"><label>' + escapeHtml(L.label) + '</label><div class="chips">' +
+      buckets[i].map(function(t){ return '<div class="chip">' + escapeHtml(t.name) + '</div>'; }).join('') + '</div></div>';
+  });
+  box.innerHTML = html;
+}
+
+/* randomizer */
+var PB_NAME_PARTS = {
+  pre:['Project','Operation','Stack','Forge','Engine','Core','Lab','Build'],
+  ai:['Oracle','Cortex','Whisper','Echo','Sage'],
+  live:['Pulse','Beacon','Relay','Signal','Flux'],
+  money:['Ledger','Vault','Counter','Tender','Market'],
+  data:['Archive','Atlas','Lattice','Index','Cipher'],
+  game:['Arena','Realm','Quest','Glyph','Dungeon'],
+  map:['Compass','Meridian','Survey','Waypoint'],
+  plain:['Foundry','Nexus','Outpost','Workshop','Anvil','Garden']
+};
+var PB_CHALLENGE_TYPES = ['small game','productivity tool','social app','logging dashboard','AI assistant','inventory tracker','community forum','media player','note taking app','recipe organizer','workout tracker','field service tool','map tool','music toy'];
+var PB_CHALLENGES = [
+  'Build a {t} with this exact stack. Write one line on what each tool contributes.',
+  'Clone a familiar {t} using only these tools.',
+  'Design a {t} where this stack is the best possible choice, and defend every pick.',
+  'Ship a minimum {t} in one weekend with this stack.'
+];
+
+function pbRoll(){
+  var picks = new Set();
+  ['frontend','backend','data','infra'].forEach(function(c){ picks.add(pbPick(PB_VOCAB[c])[0]); });
+  var extras = ['auth','payments','plumbing','media','game','maps','observe','ai','native'];
+  var n = 2 + Math.floor(Math.random() * 3);
+  for(var i = 0; i < n; i++){ picks.add(pbPick(PB_VOCAB[pbPick(extras)])[0]); }
+  var ids = Array.from(picks);
+  var cats = new Set(ids.map(function(id){ return PB_TOOLS[id].cat; }));
+  var pool = cats.has('ai') ? 'ai' : cats.has('game') ? 'game' : cats.has('payments') ? 'money' : cats.has('maps') ? 'map' : (cats.has('media') || cats.has('plumbing')) ? 'live' : cats.has('data') ? 'data' : 'plain';
+  var name = pbPick(PB_NAME_PARTS.pre) + ' ' + pbPick(PB_NAME_PARTS[pool]);
+  var challenge = pbPick(PB_CHALLENGES).replace('{t}', pbPick(PB_CHALLENGE_TYPES));
+  pbLastRoll = { name:name, ids:ids, challenge:challenge };
+  var g = pbGrouped(ids);
+  document.getElementById('pb-roll-result').innerHTML =
+    '<div class="alert-card high"><span class="badge high">rolled</span> <span class="alert-repo">' + escapeHtml(name) + '</span>' +
+    '<div class="alert-msg">' + escapeHtml(challenge) + '</div>' +
+    Object.keys(PB_CATS).filter(function(c){ return g[c]; }).map(function(c){
+      return '<div class="alert-meta">' + escapeHtml(PB_CATS[c]) + ': ' + g[c].map(function(t){ return escapeHtml(t.name); }).join(', ') + '</div>';
+    }).join('') +
+    '<div class="btn-row"><button class="btn-ghost" id="pb-roll-apply">load into stack</button><button class="btn-ghost" id="pb-roll-copy">copy for claude</button></div></div>';
+  document.getElementById('pb-roll-apply').addEventListener('click', function(){
+    pbSetIds(pbLastRoll.ids, pbLastRoll.name);
+    pbSetMode('build');
+    pbSay('loaded ' + pbLastRoll.name);
+  });
+  document.getElementById('pb-roll-copy').addEventListener('click', function(){
+    pbCopy(pbStackText(pbLastRoll.name, pbLastRoll.ids,
+      'CHALLENGE\n' + pbLastRoll.challenge + '\n\nQUESTION FOR CLAUDE\nThe randomizer suggested this stack. Is it a sensible combination? What does each tool contribute? Where are the gaps? What would you swap out?'));
+  });
+}
+
+/* templates */
+function pbRenderTemplates(){
+  document.getElementById('pb-templates').innerHTML = PB_TEMPLATES.map(function(tp, i){
+    return '<div class="alert-card dormant"><span class="alert-repo">' + escapeHtml(tp.name) + '</span>' +
+      '<div class="alert-msg">' + escapeHtml(tp.desc) + '</div>' +
+      '<div class="alert-meta">why this stack: ' + escapeHtml(tp.why) + '</div>' +
+      '<div class="alert-meta">' + tp.tools.map(function(id){ return escapeHtml(PB_TOOLS[id].name); }).join(', ') + '</div>' +
+      '<div class="btn-row"><button class="btn-ghost" data-pbtpl="' + i + '">load into stack</button></div></div>';
+  }).join('');
+}
+
+/* export */
+function pbStackText(name, ids, tail){
+  var g = pbGrouped(ids);
+  var txt = 'STACK: ' + (name || 'unnamed stack') + '\n\n';
+  Object.keys(PB_CATS).forEach(function(c){
+    if(!g[c]) return;
+    txt += '[' + PB_CATS[c].toUpperCase() + ']\n';
+    g[c].forEach(function(t){ txt += '  ' + t.name + ' (role: ' + t.role + '), ' + t.desc + '\n'; });
+    txt += '\n';
+  });
+  txt += tail || 'QUESTION FOR CLAUDE\nGiven this stack, what kinds of apps does it suit? What is missing or redundant? What would you build first to prove it works end to end?';
+  return txt;
+}
+function pbCopy(text){
+  var ta = document.getElementById('pb-export');
+  ta.value = text;
+  var done = function(){ pbSay('copied, paste it into a chat with claude'); ta.style.display = 'none'; };
+  var fail = function(){ ta.style.display = 'block'; ta.focus(); ta.select(); pbSay('copy was blocked, the text is in the box below, long press to copy'); };
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done, fail); } else { fail(); }
+}
+
+function pbSetMode(m){
+  document.querySelectorAll('#pb-modes .chip').forEach(function(c){ c.classList.toggle('on', c.getAttribute('data-pbmode') === m); });
+  ['build','random','diagram','templates'].forEach(function(k){
+    document.getElementById('pb-mode-' + k).style.display = k === m ? 'block' : 'none';
+  });
+  if(m === 'diagram') pbRenderDiagram();
+}
+
+/* ---------- teardown ---------- */
+var tdKind = 'all';
+var tdHideBt = true;
+var tdSkipBt = false;
+var tdCurrent = null;
+
+function tdCatalogHit(name){
+  if(typeof eqAllTools !== 'function') return null;
+  var q = eqNorm(name);
+  var all = eqAllTools();
+  for(var i = 0; i < all.length; i++){
+    var names = [all[i].n].concat(all[i].al || []).map(eqNorm);
+    if(names.indexOf(q) !== -1) return all[i].n;
+  }
+  return null;
+}
+
+function tdBigTechName(name){
+  var hit = null;
+  if(typeof eqAllTools === 'function'){
+    var q = eqNorm(name);
+    eqAllTools().some(function(t){ if(eqNorm(t.n) === q){ hit = t; return true; } return false; });
+  }
+  if(!hit || !hit.v) return false;
+  return /microsoft|meta|facebook|amazon|apple/i.test(hit.v);
+}
+
+function tdRenderKinds(){
+  var html = '<div class="chip' + (tdKind === 'all' ? ' on' : '') + '" data-tdkind="all">everything</div>';
+  Object.keys(TD_KINDS).forEach(function(k){
+    html += '<div class="chip' + (tdKind === k ? ' on' : '') + '" data-tdkind="' + k + '">' + escapeHtml(TD_KINDS[k].toLowerCase()) + '</div>';
+  });
+  document.getElementById('td-kinds').innerHTML = html;
+}
+
+function tdPool(){
+  return TD.filter(function(p){
+    if(tdKind !== 'all' && p.k !== tdKind) return false;
+    if(tdSkipBt && p.bt) return false;
+    return true;
+  });
+}
+
+function tdRenderCount(){
+  var pool = tdPool();
+  var known = 0, total = 0;
+  pool.forEach(function(p){ p.L.forEach(function(l){ total++; if(l[2]) known++; }); });
+  document.getElementById('td-count').textContent = pool.length + ' product' + (pool.length === 1 ? '' : 's') + ' in this pool, ' + known + ' of ' + total + ' layers known';
+}
+
+function tdRenderPicklist(){
+  document.getElementById('td-picklist').innerHTML = tdPool().map(function(p){
+    return '<div class="chip" data-tdpick="' + TD.indexOf(p) + '">' + escapeHtml(p.n) + '</div>';
+  }).join('');
+}
+
+function tdRoll(){
+  var pool = tdPool();
+  if(!pool.length){ document.getElementById('td-result').innerHTML = '<div class="empty">nothing in this pool, pick another category.</div>'; return; }
+  var p = pbPick(pool);
+  if(pool.length > 1 && tdCurrent === p){ p = pool[(pool.indexOf(p) + 1) % pool.length]; }
+  tdShow(p);
+}
+
+function tdShow(p){
+  tdCurrent = p;
+  var html = '<div class="alert-card critical"><span class="badge critical">' + escapeHtml(TD_KINDS[p.k].toLowerCase()) + '</span> ' +
+    '<span class="alert-repo">' + escapeHtml(p.n) + '</span>' +
+    '<div class="alert-meta">' + escapeHtml(p.by) + ', ' + p.y + '</div>' +
+    '<div class="alert-msg">' + escapeHtml(p.what) + '</div></div>';
+
+  html += '<div class="daylabel">how it is built</div><div class="panel">';
+  p.L.forEach(function(l){
+    html += '<div class="td-layer"><span class="td-lname">' + escapeHtml(l[0]) + '</span> ' +
+      '<span class="badge ' + (l[2] ? 'dormant' : 'high') + '">' + (l[2] ? 'known' : 'inferred') + '</span>' +
+      '<div class="td-lval">' + escapeHtml(l[1]) + '</div></div>';
+  });
+  html += '</div>';
+
+  html += '<div class="daylabel">rebuild it with the builder list</div><div class="panel"><div class="chips">' +
+    p.R.map(function(id){ return '<div class="chip on">' + escapeHtml(PB_TOOLS[id].name) + '</div>'; }).join('') + '</div>' +
+    '<div class="alert-meta" style="margin-top:8px">' + escapeHtml(p.why) + '</div></div>';
+
+  var alts = p.A.filter(function(a){ return !(tdHideBt && tdBigTechName(a[0])); });
+  var hidden = p.A.length - alts.length;
+  html += '<div class="daylabel">open alternatives that already exist</div><div class="panel">';
+  html += alts.length ? '<div class="chips">' + alts.map(function(a){
+    var hit = tdCatalogHit(a[0]);
+    return hit ? '<div class="chip on" data-tdcat="' + escapeHtml(hit) + '">' + escapeHtml(a[0]) + ', open in catalog</div>' : '<div class="chip">' + escapeHtml(a[0]) + '</div>';
+  }).join('') + '</div>' : '<div class="empty">every alternative on file is big tech owned.</div>';
+  if(hidden) html += '<div class="alert-meta">' + hidden + ' hidden by the big tech filter.</div>';
+  html += '</div>';
+
+  var selfHit = tdCatalogHit(p.n);
+  html += '<div class="btn-row">' +
+    '<button class="btn-ghost" id="td-apply">load rebuild into builder</button>' +
+    (selfHit ? '<button class="btn-ghost" data-tdcat="' + escapeHtml(selfHit) + '">see equivalents in catalog</button>' : '') +
+    '<button class="btn-ghost" id="td-copy">copy for claude</button>' +
+    '</div><div class="status" id="td-status"></div>';
+
+  document.getElementById('td-result').innerHTML = html;
+  document.getElementById('td-apply').addEventListener('click', function(){
+    pbSetIds(p.R, 'Rebuild of ' + p.n);
+    pbSetMode('build');
+    tdGoView('builder');
+    pbSay('loaded the rebuild of ' + p.n);
+  });
+  document.getElementById('td-copy').addEventListener('click', function(){
+    var txt = 'TEARDOWN: ' + p.n + ' (' + p.by + ', ' + p.y + ')\n' + p.what + '\n\nHOW IT IS BUILT\n' +
+      p.L.map(function(l){ return '  ' + l[0] + ': ' + l[1] + (l[2] ? ' [known]' : ' [inferred]'); }).join('\n') +
+      '\n\nREBUILD WITH\n  ' + p.R.map(function(id){ return PB_TOOLS[id].name; }).join(', ') + '\n  ' + p.why +
+      '\n\nOPEN ALTERNATIVES\n  ' + alts.map(function(a){ return a[0]; }).join(', ') +
+      '\n\nQUESTION FOR CLAUDE\nCheck the inferred layers. What would you build differently or better with the rebuild tools? What is the hardest part of this product to reproduce?';
+    var st = document.getElementById('td-status');
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(function(){ st.textContent = 'copied, paste it into a chat with claude'; }, function(){ st.textContent = 'copy was blocked by the browser'; });
+    } else { st.textContent = 'copy is not available in this browser'; }
+  });
+  document.getElementById('td-result').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function tdGoView(name){
+  var tab = document.querySelector('.tab[data-view="' + name + '"]');
+  if(tab) tab.click();
+}
+
+function tdOpenCatalog(name){
+  tdGoView('catalog');
+  if(typeof eqSetMode === 'function') eqSetMode('lookup');
+  var q = document.getElementById('eq-q');
+  q.value = name;
+  if(typeof eqRenderLookup === 'function') eqRenderLookup();
+  q.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+/* ---------- wiring ---------- */
+(function(){
+  pbLoad();
+  pbRenderAll();
+  pbRenderTemplates();
+  tdRenderKinds();
+  tdRenderCount();
+  tdRenderPicklist();
+
+  document.getElementById('pb-modes').addEventListener('click', function(e){
+    var c = e.target.closest('[data-pbmode]');
+    if(c) pbSetMode(c.getAttribute('data-pbmode'));
+  });
+  document.getElementById('pb-name').addEventListener('input', function(e){ pbName = e.target.value; pbSave(); });
+  document.getElementById('pb-filter').addEventListener('input', pbRenderToolList);
+  document.getElementById('pb-toollist').addEventListener('change', function(e){
+    var id = e.target.getAttribute('data-pbtool');
+    if(!id) return;
+    if(e.target.checked) pbSel.add(id); else pbSel.delete(id);
+    e.target.closest('.pb-row').classList.toggle('on', e.target.checked);
+    pbSave(); pbRenderStack(); pbRenderDiagram();
+  });
+  document.getElementById('pb-stack').addEventListener('click', function(e){
+    var c = e.target.closest('[data-pbdrop]');
+    if(!c) return;
+    pbSel.delete(c.getAttribute('data-pbdrop'));
+    pbSave(); pbRenderAll();
+  });
+  document.getElementById('pb-copy').addEventListener('click', function(){
+    if(!pbSel.size){ pbSay('add at least one tool first'); return; }
+    pbCopy(pbStackText(pbName, Array.from(pbSel)));
+  });
+  document.getElementById('pb-clear').addEventListener('click', function(){ pbSetIds([], ''); pbSay('cleared'); });
+  document.getElementById('pb-roll').addEventListener('click', pbRoll);
+  document.getElementById('pb-templates').addEventListener('click', function(e){
+    var b = e.target.closest('[data-pbtpl]');
+    if(!b) return;
+    var tp = PB_TEMPLATES[+b.getAttribute('data-pbtpl')];
+    pbSetIds(tp.tools, tp.name);
+    pbSetMode('build');
+    pbSay('loaded ' + tp.name);
+    document.getElementById('view-builder').scrollIntoView({ behavior:'smooth', block:'start' });
+  });
+
+  document.getElementById('td-kinds').addEventListener('click', function(e){
+    var c = e.target.closest('[data-tdkind]');
+    if(!c) return;
+    tdKind = c.getAttribute('data-tdkind');
+    tdRenderKinds(); tdRenderCount(); tdRenderPicklist();
+  });
+  document.getElementById('td-flags').addEventListener('click', function(e){
+    var c = e.target.closest('[data-flag]');
+    if(!c) return;
+    var f = c.getAttribute('data-flag');
+    if(f === 'hidebt') tdHideBt = !tdHideBt;
+    if(f === 'skipbt') tdSkipBt = !tdSkipBt;
+    c.classList.toggle('on');
+    tdRenderCount(); tdRenderPicklist();
+    if(tdCurrent) tdShow(tdCurrent);
+  });
+  document.getElementById('td-roll').addEventListener('click', tdRoll);
+  document.getElementById('td-picklist').addEventListener('click', function(e){
+    var c = e.target.closest('[data-tdpick]');
+    if(c) tdShow(TD[+c.getAttribute('data-tdpick')]);
+  });
+  document.getElementById('td-result').addEventListener('click', function(e){
+    var c = e.target.closest('[data-tdcat]');
+    if(c) tdOpenCatalog(c.getAttribute('data-tdcat'));
+  });
+
+  if(typeof BACKUP_KEYS !== 'undefined' && BACKUP_KEYS.indexOf('rf_builder') === -1) BACKUP_KEYS.push('rf_builder');
+  var oldRefresh = window.baRefreshEverything;
+  if(typeof oldRefresh === 'function'){
+    window.baRefreshEverything = function(){ oldRefresh(); pbLoad(); pbRenderAll(); };
+  }
+})();
+</script>
 </body>
 </html>

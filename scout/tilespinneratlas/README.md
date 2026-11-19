@@ -8,6 +8,6 @@ Live at tile-spinner.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. First release. Atlas of Tiles lets players rotate tiles to close loops, with several regional tile styles.
+Latest change. Added Pipes challenge levels, Pipe Rush, and Visualizer modes, and the tradition styles became skins. Pipes gained rocks, bridges, pinned tiles, triangle and octagon grids, and intro cards. Added a Vault challenge where you reveal five digits and crack the code, with difficulty levels. Rush, Pipes, and Vault scores post to the score hub. Added pipe styles, Big boards in three sizes, synth sounds with a mute button, and a Circuit style with AC and DC boards. Added Cyber, Color Pop, and Escher Remix skins.
 
 See CHANGELOG.md for the full history.

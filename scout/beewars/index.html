@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="color-scheme" content="light only">
+<title>Bee Wars</title>
+<style>
+:root{color-scheme:light only}
+html,body,div,span,button,canvas,input,label{-webkit-filter:none!important;filter:none!important}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Courier New',monospace;display:flex;flex-direction:column;height:100vh;height:100dvh;overflow:hidden;background:#f3ecd2;color:#3a1a00}
+#hud{background:#f5a800;border-bottom:3px solid #b07000;padding:4px 8px;font-size:11px;font-weight:bold;display:flex;flex-wrap:wrap;gap:2px 10px}
+#hud b{color:#000;font-size:12px}
+#hud .rv{color:#4a2a7a}#hud .rv b{color:#2a0a5a}
+#race{height:8px;background:#fff3cc;position:relative;border-bottom:1px solid #b07000}
+#raceA,#raceB{position:absolute;left:0;height:4px}
+#raceA{top:0;background:#c06000}#raceB{top:4px;background:#7a4ac8}
+.bar{background:#ffd060;border-bottom:2px solid #b07000;padding:4px 6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+#tools{background:#fff0bb}
+button{background:#fff8e8;color:#3a1a00;border:2px solid #b07000;padding:4px 7px;font:bold 11px 'Courier New',monospace;border-radius:3px;-webkit-appearance:none;appearance:none;cursor:pointer}
+button.on{background:#c07800;color:#fff;border-color:#804000}
+button.red{background:#cc0044;color:#fff;border-color:#880022}
+button.grn{background:#1f7a2e;color:#fff;border-color:#0f4a18}
+button.pur{background:#6a3ab8;color:#fff;border-color:#3a1a78}
+button.blu{background:#1f5aa8;color:#fff;border-color:#0f3468}
+.spd{font-size:11px;font-weight:bold;display:flex;align-items:center;gap:4px}
+input[type=range]{accent-color:#b07000}
+#tip{font-size:10px;font-weight:bold;color:#804000;width:100%}
+#panel{background:#fff3cc;border-bottom:2px solid #b07000;padding:6px 10px;display:none;flex-wrap:wrap;gap:8px 18px;max-height:45vh;overflow:auto}
+#panel.open{display:flex}
+.sg{display:flex;flex-direction:column;gap:2px;min-width:140px;font-size:10px;font-weight:bold}
+.sg span{color:#804000}
+.row{display:flex;gap:6px;align-items:center;font-size:10px;font-weight:bold;width:100%;flex-wrap:wrap}
+#log{background:#fffae8;border-bottom:1px solid #b07000;padding:3px 8px;font-size:11px;font-weight:bold;height:20px;overflow:hidden;white-space:nowrap}
+#wrap{flex:1;min-height:0;position:relative;background:#cfc49e;overflow:hidden}
+canvas#c{position:absolute;left:0;top:0;touch-action:none}
+#legend{position:absolute;left:6px;bottom:6px;background:rgba(255,250,232,.92);border:1px solid #b07000;border-radius:3px;padding:3px 6px;font-size:10px;font-weight:bold;display:flex;gap:8px;flex-wrap:wrap;max-width:calc(100% - 12px);pointer-events:none}
+#legend i{display:inline-block;width:9px;height:9px;border:1px solid #4a2200;margin-right:3px;vertical-align:-1px}
+.ov{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(243,236,210,.8)}
+.ov.show{display:flex}
+.card{background:#fffaf0;border:3px solid #b07000;border-radius:6px;padding:14px 16px;width:min(94%,420px);font-size:12px;font-weight:bold;line-height:1.5;max-height:92%;overflow:auto;box-shadow:0 4px 18px rgba(80,40,0,.25)}
+.card h2{font-size:20px;text-align:center;margin-bottom:6px}
+.card p{margin:5px 0}
+.card canvas{width:100%;height:110px;border:1px solid #d8c890;background:#fffdf5;margin:6px 0}
+.ctr{text-align:center;margin-top:8px}
+</style>
+</head>
+<body>
+<div id="hud">
+  <span>BEES <b id="hb">3/21</b></span>
+  <span>W <b id="hw">1</b> S <b id="hs">1</b> SC <b id="hc">1</b></span>
+  <span>QUEEN <b id="hq">40</b></span>
+  <span>POLLEN <b id="hp">0</b></span>
+  <span>NEXT <b id="hn">50</b></span>
+  <span>LAND <b id="hl">0%</b></span>
+  <span>TURN <b id="ht">0</b></span>
+  <span class="rv">RIVAL <b id="rb">3/21</b> QUEEN <b id="rq">?</b> LAND <b id="rl">0%</b></span>
+</div>
+<div id="race"><div id="raceA"></div><div id="raceB"></div></div>
+<div class="bar" id="ctrl">
+  <button id="brun" class="on">PAUSE</button>
+  <button id="bstep">STEP</button>
+  <button id="bhatch">HATCH AUTO</button>
+  <button id="bfol">FOLLOW</button>
+  <button id="bzo">-</button><button id="bzi">+</button>
+  <button id="bloop">LOOP</button>
+  <button id="bset">SETTINGS</button>
+  <button id="brst">NEW MAP</button>
+  <label class="spd">SPEED <input id="speed" type="range" min="1" max="10" value="3" style="width:70px"> <span id="sv"></span></label>
+</div>
+<div class="bar" id="tools">
+  <button id="t_pan" class="on">PAN</button>
+  <button id="t_worker">WORKERS</button>
+  <button id="t_soldier">SOLDIERS</button>
+  <button id="t_scout">SCOUTS</button>
+  <button id="t_wall">WALL</button>
+  <button id="t_clear">CLEAR ORDERS</button>
+  <span id="tip"></span>
+</div>
+<div id="panel"></div>
+<div id="log">Starting</div>
+<div id="wrap">
+  <canvas id="c"></canvas>
+  <div id="legend"></div>
+  <div class="ov" id="over"><div class="card" id="endcard"></div></div>
+  <div class="ov show" id="intro"><div class="card">
+    <h2>BEE WARS</h2>
+    <p>Two colonies, one meadow. Win by growing to 21 bees or by killing the rival queen.</p>
+    <p>Every 50 pollen your bees bring home hatches a new bee. Hive pollen never goes down. HATCH picks what comes out next: AUTO, WORKER, SOLDIER or SCOUT.</p>
+    <p>WORKERS gather pollen and flee from enemy soldiers. SOLDIERS have 3 health and fight. SCOUTS fly twice as fast and see farther.</p>
+    <p>Pick WORKERS, SOLDIERS or SCOUTS, then tap the map to send that caste there. Tap your own hive with SOLDIERS to guard the queen. Tap the rival hive with SOLDIERS to attack it.</p>
+    <p>Land you hold is tinted your color. In your land your soldiers hit twice as hard, flowers regrow faster, and enemy workers will not forage.</p>
+    <p>WALL paints tiles your bees refuse to cross. Your queen stings anything that gets close. Spiders hide in the grass.</p>
+    <div class="ctr"><button id="go" class="grn">START</button></div>
+  </div></div>
+</div>
+
+<script>
+// ===================== RULES =====================
+// Hive pollen only goes up. Nothing ever subtracts it.
+// A colony hatches its next bee when pollen reaches (bees hatched so far + 1) x 50. Starting bees are free.
+// Win by reaching (pollen to win / 50) + 1 living bees, or by killing the rival queen.
+// One flower, one claim, across both colonies. Every bee moves every turn.
+
+const GRID=128,N=GRID*GRID,CH=8,CN=GRID/CH,CARRY=10;
+const T_EMPTY=0,T_HIVE=1,T_FLOWER=2,T_SPIDER=3,T_WATER=4;
+const GOLD=Math.PI*(3-Math.sqrt(5));
+const NB=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+const RATES=[3,6,12,25,50,100,200,400,800,1600];
+const QUEEN_HP=40;
+const CASTE={
+  worker:{hp:1,speed:1,see:3,carry:10,atk:0,inf:0.012},
+  soldier:{hp:3,speed:1,see:3,carry:0,atk:1,inf:0.05},
+  scout:{hp:1,speed:2,see:5,carry:0,atk:0,inf:0.006}
+};
+const AUTO=['worker','worker','soldier','worker','scout','soldier','worker','soldier'];
+const FT=[
+  ['clover',10,1.3,0.8,[214,72,140],[234,176,204]],
+  ['lavender',10,1.0,1.0,[124,82,204],[196,176,232]],
+  ['sunflower',20,0.7,1.4,[226,150,0],[240,206,130]]
+];
+
+let CFG={skill:3,flowers:180,life:3,regen:40,spiders:8,winPollen:1000,moves:200,startPollen:40};
+const SL=[
+  ['skill','RIVAL SKILL',1,5,1,''],
+  ['flowers','FLOWERS',60,320,10,''],
+  ['life','FLOWER LIFE',1,10,1,' harvests'],
+  ['regen','REGROW',5,200,5,' turns'],
+  ['spiders','SPIDERS',0,30,1,''],
+  ['winPollen','POLLEN TO WIN',200,3000,50,''],
+  ['moves','WORKER RANGE',60,400,20,' moves'],
+  ['startPollen','START POLLEN',0,200,10,'']
+];
+const winCount=()=>Math.floor(CFG.winPollen/50)+1;
+const idx=(x,y)=>y*GRID+x;
+const inB=(x,y)=>x>=0&&y>=0&&x<GRID&&y<GRID;
+const cheb=(ax,ay,bx,by)=>Math.max(Math.abs(ax-bx),Math.abs(ay-by));
+const rnd=n=>Math.floor(Math.random()*n);
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const chunk=i=>(((i/GRID)|0)>>3)*CN+((i%GRID)>>3);
+
+let W=null,G=null,loopTimer=null;
+const UI={running:false,debug:false,tool:'pan',hatch:'auto',loop:false,speed:3,follow:false,z:1,cx:GRID/2,cy:GRID/2};
+
+// ===================== WORLD =====================
+function noiseField(){
+  const S=9,g=[];for(let i=0;i<S*S;i++)g.push(Math.random());
+  const t=new Float32Array(N),cell=GRID/(S-1);
+  for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++){
+    const fx=x/cell,fy=y/cell,ix=Math.min(S-2,fx|0),iy=Math.min(S-2,fy|0),u=fx-ix,v=fy-iy;
+    const a=g[iy*S+ix],b=g[iy*S+ix+1],c=g[(iy+1)*S+ix],d=g[(iy+1)*S+ix+1];
+    t[idx(x,y)]=(a*(1-u)+b*u)*(1-v)+(c*(1-u)+d*u)*v+(Math.random()-0.5)*0.12;
+  }
+  return t;
+}
+function nearHive(x,y,r){for(const h of W.hives)if(cheb(x,y,h[0],h[1])<=r)return true;return false;}
+function addFlower(x,y,t){
+  const i=idx(x,y),f=FT[t];
+  W.type[i]=T_FLOWER;W.ft[i]=t;W.fmax[i]=f[1];W.pollen[i]=f[1];
+  W.life[i]=Math.max(1,Math.round(CFG.life*f[2]));W.flowers.push(i);
+}
+function makeWorld(hives){
+  W={type:new Uint8Array(N),ft:new Uint8Array(N),pollen:new Uint8Array(N),fmax:new Uint8Array(N),
+    life:new Uint8Array(N),cd:new Uint16Array(N),spotted:new Uint8Array(N),mark:new Uint8Array(N),
+    claim:new Int32Array(N).fill(-1),tex:noiseField(),inf:new Float32Array(CN*CN),flowers:[],hives};
+  for(const h of hives)W.type[idx(h[0],h[1])]=T_HIVE;
+  for(let p=0;p<4;p++){
+    let cx,cy,g=0;
+    do{cx=8+rnd(GRID-16);cy=8+rnd(GRID-16);}while(nearHive(cx,cy,16)&&g++<200);
+    const r=3+rnd(5);
+    for(let dy=-r-2;dy<=r+2;dy++)for(let dx=-r-2;dx<=r+2;dx++){
+      const x=cx+dx,y=cy+dy;if(!inB(x,y))continue;
+      const d=Math.sqrt(dx*dx+dy*dy)+(W.tex[idx(x,y)]-0.5)*4;
+      if(d<r&&W.type[idx(x,y)]===T_EMPTY)W.type[idx(x,y)]=T_WATER;
+    }
+  }
+  for(const h of hives)for(let g=0;g<500;g++){
+    const x=h[0]+rnd(13)-6,y=h[1]+rnd(13)-6,d=cheb(x,y,h[0],h[1]);
+    if(d>=2&&d<=6&&inB(x,y)&&W.type[idx(x,y)]===T_EMPTY){addFlower(x,y,0);break;}
+  }
+  const nc=Math.max(6,Math.round(CFG.flowers/14)),cl=[];
+  for(let k=0;k<nc;k++)cl.push([6+rnd(GRID-12),6+rnd(GRID-12),rnd(3)]);
+  let guard=0;
+  while(W.flowers.length<CFG.flowers&&guard++<300000){
+    let x,y,t;
+    if(Math.random()<0.7){
+      const c=cl[rnd(nc)],a=Math.random()*Math.PI*2,r=Math.abs(Math.random()+Math.random()+Math.random()-1.5)*9;
+      x=Math.round(c[0]+Math.cos(a)*r);y=Math.round(c[1]+Math.sin(a)*r);t=Math.random()<0.6?c[2]:rnd(3);
+    }else{x=2+rnd(GRID-4);y=2+rnd(GRID-4);t=rnd(3);}
+    if(!inB(x,y)||W.type[idx(x,y)]!==T_EMPTY||nearHive(x,y,12))continue;
+    addFlower(x,y,t);
+  }
+  let s=0;guard=0;
+  while(s<CFG.spiders&&guard++<200000){
+    const x=2+rnd(GRID-4),y=2+rnd(GRID-4);
+    if(W.type[idx(x,y)]===T_EMPTY&&!nearHive(x,y,20)){W.type[idx(x,y)]=T_SPIDER;s++;}
+  }
+}
+
+// ===================== COLONY =====================
+function makeColony(id,hx,hy,isPlayer){
+  const c={id,hx,hy,isPlayer,pollen:CFG.startPollen,qhp:QUEEN_HP,bees:[],known:new Set(),seen:new Uint8Array(N),seenCount:0,
+    danger:new Uint8Array(N),heat:new Float32Array(N),heatMax:1,nextId:1,hatched:0,ptrip:0,alive:0,lost:0,kills:0,
+    orders:{worker:null,soldier:null,scout:null},autoI:0,hist:[CFG.startPollen],land:0,
+    cost:isPlayer?50:[0,65,57,50,45,40][CFG.skill],knowsEnemyHive:false};
+  for(const k of['scout','worker','soldier'])c.bees.push(makeBee(c,k));
+  const f=new Set();revealAt(c,hx,hy,8,f);for(const i of f)c.known.add(i);
+  return c;
+}
+function makeBee(c,caste){
+  const s=CASTE[caste];
+  return{c,caste,id:c.id*100000+c.nextId,n:c.nextId++,hp:s.hp,x:c.hx,y:c.hy,ox:c.hx,oy:c.hy,px:-1,py:-1,
+    moves:caste==='scout'?CFG.moves*2:CFG.moves,carry:0,ret:false,alive:true,mode:'',tx:-1,ty:-1,claimI:-1,
+    found:new Set(),trip:0,head:0,headBase:Math.random()*Math.PI*2,cool:0,foe:null,flash:0};
+}
+const enemyOf=c=>G.cols[1-c.id];
+const blocked=(c,i)=>c.danger[i]||(c.isPlayer&&W.mark[i]);
+const owner=i=>{const v=W.inf[chunk(i)];return v>1?0:v<-1?1:-1;};
+
+function revealAt(c,x0,y0,r,found){
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+    if(dx*dx+dy*dy>r*r+1)continue;
+    const x=x0+dx,y=y0+dy;if(!inB(x,y))continue;
+    const i=idx(x,y);
+    if(!c.seen[i]){c.seen[i]=1;c.seenCount++;}
+    if(W.type[i]===T_FLOWER&&W.life[i]>0&&!c.known.has(i))found.add(i);
+  }
+  if(G&&G.cols.length===2){const e=enemyOf(c);if(cheb(x0,y0,e.hx,e.hy)<=r)c.knowsEnemyHive=true;}
+}
+function rayTarget(x,y,a){
+  const cs=Math.cos(a),sn=Math.sin(a);let t=1e9;
+  if(cs>1e-6)t=Math.min(t,(GRID-2-x)/cs);else if(cs<-1e-6)t=Math.min(t,(1-x)/cs);
+  if(sn>1e-6)t=Math.min(t,(GRID-2-y)/sn);else if(sn<-1e-6)t=Math.min(t,(1-y)/sn);
+  return[Math.round(x+cs*t),Math.round(y+sn*t)];
+}
+function release(b){if(b.claimI>=0&&W.claim[b.claimI]===b.id)W.claim[b.claimI]=-1;b.claimI=-1;}
+
+function claimFlower(b){
+  const c=b.c,o=c.orders.worker;
+  let best=-1,bs=1e9;
+  for(const i of c.known){
+    if(W.life[i]===0){c.known.delete(i);continue;}
+    if(W.pollen[i]===0||W.claim[i]!==-1||blocked(c,i))continue;
+    if(owner(i)===1-c.id)continue;
+    const x=i%GRID,y=(i/GRID)|0,d=cheb(x,y,c.hx,c.hy);
+    if(d*2+6>CFG.moves)continue;
+    let s=d-(W.fmax[i]>10?6:0);
+    if(o)s=cheb(x,y,o[0],o[1])*3+d*0.3;
+    if(s<bs){bs=s;best=i;}
+  }
+  if(best<0)return false;
+  W.claim[best]=b.id;b.claimI=best;b.tx=best%GRID;b.ty=(best/GRID)|0;b.mode='harvest';
+  return true;
+}
+function setLine(b,fx,fy){
+  let t=rayTarget(fx,fy,b.head);
+  if(cheb(t[0],t[1],fx,fy)<3){b.head=Math.atan2(b.c.hy-fy,b.c.hx-fx)+(Math.random()-0.5);t=rayTarget(fx,fy,b.head);}
+  b.tx=t[0];b.ty=t[1];
+}
+function plan(b){
+  const c=b.c;b.mode='';b.tx=-1;b.ty=-1;
+  if(b.caste==='soldier'){b.mode='soldier';return;}
+  if(b.caste==='worker'&&claimFlower(b))return;
+  b.mode='line';
+  const o=b.caste==='scout'?c.orders.scout:c.orders.worker;
+  if(o)b.head=Math.atan2(o[1]-c.hy,o[0]-c.hx)+(Math.random()-0.5)*(b.caste==='scout'?0.25:0.7);
+  else b.head=b.caste==='scout'?(c.ptrip++)*GOLD+c.id:b.headBase+b.trip*GOLD;
+  setLine(b,c.hx,c.hy);
+}
+function fx(kind,x,y,col,txt){if(G.fx.length>90)G.fx.shift();G.fx.push({kind,x,y,col,txt,t:performance.now()});}
+
+function arriveHome(b){
+  const c=b.c;
+  if(b.carry>0){
+    c.pollen+=b.carry;
+    if(c.isPlayer)fx('drop',c.hx,c.hy,0,'+'+b.carry);
+    b.carry=0;
+  }
+  for(const i of b.found)if(W.life[i]>0)c.known.add(i);
+  b.found.clear();
+  b.moves=b.caste==='scout'?CFG.moves*2:CFG.moves;b.ret=false;b.trip++;b.px=-1;b.py=-1;
+  plan(b);
+}
+
+function nextStep(b,tx,ty){
+  const c=b.c,dx=tx-b.x,dy=ty-b.y,m=Math.max(Math.abs(dx),Math.abs(dy));
+  if(m===0)return null;
+  const x=b.x+Math.round(dx/m),y=b.y+Math.round(dy/m);
+  if(inB(x,y)&&(!blocked(c,idx(x,y))||(x===tx&&y===ty)))return[x,y];
+  let best=null,bs=Infinity;
+  for(const o of NB){
+    const nx=b.x+o[0],ny=b.y+o[1];
+    if(!inB(nx,ny)||(nx===b.px&&ny===b.py))continue;
+    if(blocked(c,idx(nx,ny))&&!(nx===tx&&ny===ty))continue;
+    const s=(nx-tx)*(nx-tx)+(ny-ty)*(ny-ty);if(s<bs){bs=s;best=[nx,ny];}
+  }
+  return best;
+}
+function anyStep(b){
+  for(const o of NB){const x=b.x+o[0],y=b.y+o[1];if(inB(x,y)&&!blocked(b.c,idx(x,y)))return[x,y];}
+  for(const o of NB){const x=b.x+o[0],y=b.y+o[1];if(inB(x,y))return[x,y];}
+  return[b.x,b.y];
+}
+
+function die(b,why){
+  const c=b.c;release(b);b.alive=false;c.lost++;
+  if(c.isPlayer||G.cols[0].seen[idx(b.x,b.y)])fx('kill',b.x,b.y,c.id,'');
+  if(c.isPlayer)G.log='Your '+b.caste+' '+why+'.';
+}
+function spiderHit(b,si){
+  const c=b.c,sx=si%GRID,sy=(si/GRID)|0;
+  if(c.isPlayer||G.cols[0].seen[si])W.spotted[si]=1;
+  for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
+    const x=sx+dx,y=sy+dy;if(!inB(x,y))continue;
+    const i=idx(x,y);c.danger[i]=1;if(!c.seen[i]){c.seen[i]=1;c.seenCount++;}
+  }
+  die(b,'was caught by a spider. Zone marked');
+}
+function harvest(b,i){
+  const take=Math.min(W.pollen[i],CARRY-b.carry);
+  W.pollen[i]-=take;b.carry+=take;
+  if(W.pollen[i]===0){
+    W.life[i]--;
+    if(W.life[i]>0)W.cd[i]=Math.max(1,Math.round(CFG.regen*FT[W.ft[i]][3]));
+    else for(const c of G.cols)c.known.delete(i);
+  }
+  if(b.mode==='harvest'&&(W.pollen[i]===0||b.carry>=CARRY))release(b);
+  if(b.carry>=CARRY)turnBack(b);
+}
+function turnBack(b){if(b.ret)return;b.ret=true;if(b.mode==='harvest')release(b);}
+
+// Nearest enemy bee within r
+function nearestFoe(b,r,soldiersOnly){
+  const e=enemyOf(b.c);if(!e)return null;
+  let best=null,bd=r+1;
+  for(const o of e.bees){
+    if(!o.alive||(soldiersOnly&&o.caste!=='soldier'))continue;
+    const d=cheb(b.x,b.y,o.x,o.y);if(d<bd){bd=d;best=o;}
+  }
+  return best;
+}
+
+function soldierTarget(b){
+  const c=b.c,e=enemyOf(c),o=c.orders.soldier;
+  const home=!o||o.guard;
+  const cx=home?c.hx:o.x,cy=home?c.hy:o.y,leash=home?7:9;
+  // Retreat to heal
+  if(b.hp===1&&home&&cheb(b.x,b.y,c.hx,c.hy)>2){b.foe=null;return[c.hx,c.hy];}
+  // Assault: go for the queen unless an enemy soldier is right on us
+  const assault=e&&o&&!o.guard&&cheb(o.x,o.y,e.hx,e.hy)<=4;
+  if(assault&&cheb(b.x,b.y,e.hx,e.hy)<=12){
+    const g=nearestFoe(b,2,true);
+    if(g){b.foe=g;return[g.x,g.y];}
+    b.foe=null;return[e.hx,e.hy];
+  }
+  // Engage foes near me or near my post
+  const f=nearestFoe(b,6);
+  if(f&&cheb(f.x,f.y,cx,cy)<=leash+6){b.foe=f;return[f.x,f.y];}
+  b.foe=null;
+  // Attack queen if ordered there
+  if(e&&o&&!o.guard&&cheb(o.x,o.y,e.hx,e.hy)<=4)return[e.hx,e.hy];
+  // Patrol around post
+  if(b.tx<0||cheb(b.x,b.y,b.tx,b.ty)<=0||cheb(b.tx,b.ty,cx,cy)>leash){
+    const a=Math.random()*Math.PI*2,r=home?2+Math.random()*4:Math.random()*5;
+    b.tx=clamp(Math.round(cx+Math.cos(a)*r),1,GRID-2);b.ty=clamp(Math.round(cy+Math.sin(a)*r),1,GRID-2);
+  }
+  return[b.tx,b.ty];
+}
+
+function workerTarget(b){
+  const c=b.c;
+  if(b.ret)return[c.hx,c.hy];
+  if(b.mode==='harvest')return[b.tx,b.ty];
+  if(b.tx<0||(b.x===b.tx&&b.y===b.ty)){b.head+=GOLD;setLine(b,b.x,b.y);}
+  return[b.tx,b.ty];
+}
+
+function beeStep(b){
+  const c=b.c,cs=CASTE[b.caste];
+  if(b.caste==='soldier'){
+    if(b.x===c.hx&&b.y===c.hy&&b.hp<cs.hp&&G.turn%15===0)b.hp++;
+  }else{
+    if(b.x===c.hx&&b.y===c.hy&&(b.ret||b.mode===''))arriveHome(b);
+    if(b.mode==='harvest'&&!b.ret&&b.claimI>=0&&(blocked(c,b.claimI)||owner(b.claimI)===1-c.id))turnBack(b);
+    if(!b.ret&&(b.carry>=CARRY||b.moves<=cheb(b.x,b.y,c.hx,c.hy)+4))turnBack(b);
+    if(b.caste==='worker'&&!b.ret){const th=nearestFoe(b,3,true);if(th){turnBack(b);}}
+  }
+  const t=b.caste==='soldier'?soldierTarget(b):workerTarget(b);
+  const s=nextStep(b,t[0],t[1])||anyStep(b);
+  b.px=b.x;b.py=b.y;b.x=s[0];b.y=s[1];
+  if(b.caste!=='soldier')b.moves--;
+  const i=idx(b.x,b.y);
+  c.heat[i]+=1;if(c.heat[i]>c.heatMax)c.heatMax=c.heat[i];
+  revealAt(c,b.x,b.y,cs.see,b.found);
+  for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+    const x=b.x+dx,y=b.y+dy;
+    if(inB(x,y)&&W.type[idx(x,y)]===T_SPIDER){spiderHit(b,idx(x,y));return false;}
+  }
+  if(b.caste==='worker'){
+    if(W.type[i]===T_FLOWER&&W.pollen[i]>0&&b.carry<CARRY&&(W.claim[i]===-1||W.claim[i]===b.id)&&owner(i)!==1-c.id)harvest(b,i);
+    else if(b.mode==='harvest'&&!b.ret&&b.x===b.tx&&b.y===b.ty)turnBack(b);
+  }else if(b.caste==='scout'&&!b.ret&&b.found.size>=6)turnBack(b);
+  if(b.caste!=='soldier'&&b.moves<=0&&!(b.x===c.hx&&b.y===c.hy)){release(b);b.x=c.hx;b.y=c.hy;b.ox=b.x;b.oy=b.y;b.carry=0;b.ret=true;}
+  return true;
+}
+
+function beeTick(b){
+  if(!b.alive)return;
+  b.ox=b.x;b.oy=b.y;if(b.flash>0)b.flash--;
+  const steps=CASTE[b.caste].speed;
+  for(let k=0;k<steps;k++)if(!beeStep(b))return;
+  W.inf[chunk(idx(b.x,b.y))]+=(b.c.id===0?1:-1)*CASTE[b.caste].inf;
+}
+
+// ===================== COMBAT =====================
+function combat(){
+  if(G.cols.length<2)return;
+  for(const c of G.cols){
+    const e=enemyOf(c);
+    for(const b of c.bees){
+      if(!b.alive||b.caste!=='soldier')continue;
+      if(b.cool>0){b.cool--;continue;}
+      const dmg=owner(idx(b.x,b.y))===c.id?2:1;
+      let tgt=null;
+      for(const o of e.bees){if(o.alive&&cheb(b.x,b.y,o.x,o.y)<=1){if(!tgt||o.caste==='soldier')tgt=o;if(o.caste==='soldier')break;}}
+      if(tgt){
+        tgt.hp-=dmg;tgt.flash=4;b.cool=1;
+        if(tgt.hp<=0){die(tgt,'was killed by a rival soldier');c.kills++;}
+        continue;
+      }
+      if(cheb(b.x,b.y,e.hx,e.hy)<=2&&e.qhp>0){
+        e.qhp-=dmg;b.cool=1;
+        if(G.cols[0].seen[idx(e.hx,e.hy)])fx('sting',e.hx,e.hy,c.id,'');
+        if(e.isPlayer&&G.turn%10===0)G.log='Your queen is under attack. Send soldiers home.';
+      }
+    }
+    // Queen stings intruders
+    if(G.turn%4===0&&c.qhp>0){
+      for(const o of e.bees){
+        if(o.alive&&cheb(o.x,o.y,c.hx,c.hy)<=2){o.hp--;o.flash=4;if(o.hp<=0){die(o,'was stung by the rival queen');c.kills++;}break;}
+      }
+    }
+  }
+}
+
+// ===================== RIVAL AI =====================
+function rivalThink(c){
+  const e=enemyOf(c),sk=CFG.skill;
+  const soldiers=c.bees.filter(b=>b.alive&&b.caste==='soldier').length;
+  const near=e.bees.some(o=>o.alive&&o.caste==='soldier'&&cheb(o.x,o.y,c.hx,c.hy)<=10);
+  if(near||c.qhp<QUEEN_HP*0.6)c.orders.soldier={guard:true};
+  else if(c.knowsEnemyHive&&soldiers>=8-sk)c.orders.soldier={x:e.hx,y:e.hy};
+  else if(soldiers>=3){
+    const tw=e.bees.find(o=>o.alive&&o.caste==='worker'&&cheb(o.x,o.y,c.hx,c.hy)<=30);
+    c.orders.soldier=tw?{x:tw.x,y:tw.y}:{guard:true};
+  }else c.orders.soldier={guard:true};
+}
+function rivalCaste(c){
+  const r=Math.random(),sk=CFG.skill;
+  if(r<0.18+0.05*sk)return'soldier';
+  if(r<0.3+0.05*sk)return'scout';
+  return'worker';
+}
+
+// ===================== GAME =====================
+function newGame(){
+  if(loopTimer){clearTimeout(loopTimer);loopTimer=null;}
+  const a=Math.random()*Math.PI*2;
+  const hives=[[Math.round(64+Math.cos(a)*30),Math.round(64+Math.sin(a)*30)],[Math.round(64-Math.cos(a)*30),Math.round(64-Math.sin(a)*30)]];
+  makeWorld(hives);
+  G={turn:0,cols:[],fx:[],won:false,winner:-1,how:'',log:'Your hive is ready. Scout, worker and soldier heading out.'};
+  G.cols.push(makeColony(0,hives[0][0],hives[0][1],true));
+  G.cols.push(makeColony(1,hives[1][0],hives[1][1],false));
+  for(const c of G.cols)for(const b of c.bees)plan(b);
+  UI.cx=hives[0][0];UI.cy=hives[0][1];
+  document.getElementById('over').classList.remove('show');
+  buildLegend();
+}
+
+function hatch(c){
+  let caste;
+  if(c.isPlayer)caste=UI.hatch==='auto'?AUTO[c.autoI++%AUTO.length]:UI.hatch;
+  else caste=rivalCaste(c);
+  const b=makeBee(c,caste);plan(b);c.bees.push(b);c.hatched++;
+  fx('hatch',c.hx,c.hy,c.id,'');
+  if(c.isPlayer)G.log='A '+caste+' hatched.';
+}
+
+function tick(){
+  if(G.won)return;
+  G.turn++;
+  for(const c of G.cols)for(const b of c.bees)beeTick(b);
+  combat();
+  // Territory
+  for(const c of G.cols)W.inf[chunk(idx(c.hx,c.hy))]+=c.id===0?0.3:-0.3;
+  if(G.turn%5===0){
+    let a=0,r=0;
+    for(let k=0;k<W.inf.length;k++){W.inf[k]=clamp(W.inf[k]*0.99,-12,12);if(W.inf[k]>1)a++;else if(W.inf[k]<-1)r++;}
+    G.cols[0].land=a/W.inf.length;G.cols[1].land=r/W.inf.length;
+  }
+  for(const i of W.flowers){
+    if(W.life[i]>0&&W.pollen[i]===0&&W.cd[i]>0){
+      W.cd[i]=Math.max(0,W.cd[i]-(owner(i)>=0?2:1));
+      if(W.cd[i]===0)W.pollen[i]=W.fmax[i];
+    }
+  }
+  if(G.turn%40===1)rivalThink(G.cols[1]);
+  const wc=winCount();
+  for(const c of G.cols){
+    if(G.turn%100===0)c.bees=c.bees.filter(b=>b.alive);
+    let a=0;for(const b of c.bees)if(b.alive)a++;c.alive=a;
+    if(c.alive<wc&&c.pollen>=(c.hatched+1)*c.cost)hatch(c);
+    if(G.turn%10===0)c.hist.push(c.pollen);
+  }
+  for(const c of G.cols){
+    const e=enemyOf(c);
+    if(e.qhp<=0&&!G.won){G.won=true;G.winner=c.id;G.how='queen';}
+    else if(c.alive>=wc&&!G.won){G.won=true;G.winner=c.id;G.how='colony';}
+  }
+  if(G.won)endGame();
+}
+
+function store(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v);}catch(e){return null;}}
+function endGame(){
+  const P=G.cols[0],R=G.cols[1],win=G.winner===0;
+  const key='beewars_best_'+CFG.skill;
+  let best=+store(key)||0,rec=false;
+  if(win&&(!best||G.turn<best)){store(key,String(G.turn));best=G.turn;rec=true;}
+  const title=win?(G.how==='queen'?'RIVAL QUEEN DOWN':'COLONY COMPLETE'):(G.how==='queen'?'YOUR QUEEN FELL':'RIVAL COLONY COMPLETE');
+  G.log=title+' in '+G.turn+' turns.';
+  const card=document.getElementById('endcard');
+  card.innerHTML='<h2 style="color:'+(win?'#1f7a2e':'#6a3ab8')+'">'+title+'</h2>'+
+    '<p>Turns '+G.turn+(rec?' (new best)':'')+'. Best at skill '+CFG.skill+': '+(best||'none')+'</p>'+
+    '<p>You: '+P.alive+' bees, '+P.pollen+' pollen, '+P.kills+' kills, '+P.lost+' lost, land '+Math.round(P.land*100)+'%</p>'+
+    '<p>Rival: '+R.alive+' bees, '+R.pollen+' pollen, '+R.kills+' kills, '+R.lost+' lost, land '+Math.round(R.land*100)+'%</p>'+
+    '<canvas id="chart"></canvas>'+
+    '<div class="ctr"><button id="again" class="grn">PLAY AGAIN</button> <button id="close">VIEW MAP</button></div>';
+  document.getElementById('over').classList.add('show');
+  drawChart();
+  document.getElementById('again').onclick=newGame;
+  document.getElementById('close').onclick=()=>document.getElementById('over').classList.remove('show');
+  if(UI.loop)loopTimer=setTimeout(newGame,2500);
+}
+function drawChart(){
+  const cv=document.getElementById('chart'),r=cv.getBoundingClientRect(),d=window.devicePixelRatio||1;
+  cv.width=r.width*d;cv.height=r.height*d;
+  const x=cv.getContext('2d');x.scale(d,d);
+  const w=r.width,h=r.height,pad=6;
+  let mx=1,len=1;for(const c of G.cols){len=Math.max(len,c.hist.length);for(const v of c.hist)mx=Math.max(mx,v);}
+  x.strokeStyle='#e8dcb0';x.lineWidth=1;
+  for(let k=1;k<4;k++){const yy=pad+(h-2*pad)*k/4;x.beginPath();x.moveTo(pad,yy);x.lineTo(w-pad,yy);x.stroke();}
+  ['#c06000','#7a4ac8'].forEach((col,j)=>{
+    const c=G.cols[j];x.strokeStyle=col;x.lineWidth=2;x.beginPath();
+    c.hist.forEach((v,k)=>{const px=pad+(w-2*pad)*k/Math.max(1,len-1),py=h-pad-(h-2*pad)*v/mx;k?x.lineTo(px,py):x.moveTo(px,py);});
+    x.stroke();
+  });
+  x.fillStyle='#804000';x.font='bold 10px Courier New';x.fillText('pollen over time',pad+2,pad+9);
+}
+
+// ===================== RENDER =====================
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d'),wrap=document.getElementById('wrap');
+const off=document.createElement('canvas');off.width=GRID;off.height=GRID;
+const octx=off.getContext('2d'),img=octx.createImageData(GRID,GRID),PX=img.data;
+let VW=1,VH=1,DPR=1;
+
+function paintMap(){
+  const P=G.cols[0],R=G.cols[1];
+  const lp=Math.log1p(P.heatMax),lr=Math.log1p(R.heatMax);
+  for(let i=0;i<N;i++){
+    const seen=P.seen[i],tx=W.tex[i];let r,g,b;
+    if(!seen&&!UI.debug){r=176+tx*14;g=166+tx*14;b=128+tx*10;}
+    else{
+      const t=W.type[i];
+      if(t===T_WATER){r=126+tx*20;g=184+tx*20;b=214+tx*12;}
+      else if(t===T_FLOWER){
+        const f=FT[W.ft[i]];
+        if(W.life[i]===0){r=150;g=126;b=88;}
+        else if(W.pollen[i]>0){r=f[4][0];g=f[4][1];b=f[4][2];}
+        else{r=f[5][0];g=f[5][1];b=f[5][2];}
+      }else if(t===T_HIVE){r=238;g=212;b=150;}
+      else if(t===T_SPIDER&&(W.spotted[i]||UI.debug)){r=196;g=24;b=24;}
+      else{
+        r=226+tx*18;g=228+tx*12;b=176+tx*8;
+        const ow=owner(i);
+        if(ow===0){r+=(250-r)*0.35;g+=(196-g)*0.35;b+=(110-b)*0.35;}
+        else if(ow===1){r+=(206-r)*0.35;g+=(184-g)*0.35;b+=(236-b)*0.35;}
+        const hp=P.heat[i];
+        if(hp>0){const k=0.15+0.65*Math.log1p(hp)/lp;r+=(156-r)*k;g+=(62-g)*k;b+=(12-b)*k;}
+        const hr=R.heat[i];
+        if(hr>0){const k=0.14+0.55*Math.log1p(hr)/lr;r+=(104-r)*k;g+=(58-g)*k;b+=(176-b)*k;}
+      }
+      if(W.mark[i]){r+=(90-r)*0.75;g+=(64-g)*0.75;b+=(40-b)*0.75;}
+      else if(P.danger[i]&&t!==T_SPIDER){r+=(244-r)*0.5;g+=(140-g)*0.5;b+=(176-b)*0.5;}
+      if(!seen){r=r*0.55+180*0.45;g=g*0.55+170*0.45;b=b*0.55+132*0.45;}
+    }
+    const o=i*4;PX[o]=r;PX[o+1]=g;PX[o+2]=b;PX[o+3]=255;
+  }
+  octx.putImageData(img,0,0);
+}
+function view(){
+  const sc=Math.min(VW,VH)/GRID*UI.z;
+  UI.cx=GRID*sc<=VW?GRID/2:clamp(UI.cx,VW/2/sc,GRID-VW/2/sc);
+  UI.cy=GRID*sc<=VH?GRID/2:clamp(UI.cy,VH/2/sc,GRID-VH/2/sc);
+  return{sc,ox:VW/2-UI.cx*sc,oy:VH/2-UI.cy*sc};
+}
+function hexPath(x,y,r){ctx.beginPath();for(let k=0;k<6;k++){const a=Math.PI/6+k*Math.PI/3;k?ctx.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r):ctx.moveTo(x+Math.cos(a)*r,y+Math.sin(a)*r);}ctx.closePath();}
+const OCOL={worker:'#c06000',soldier:'#b0002a',scout:'#1f5aa8'};
+
+function draw(frac){
+  paintMap();
+  const P=G.cols[0];
+  if(UI.follow){const s=P.bees.find(b=>b.alive&&b.caste==='scout')||P.bees.find(b=>b.alive);if(s){UI.cx=s.ox+(s.x-s.ox)*frac+0.5;UI.cy=s.oy+(s.y-s.oy)*frac+0.5;}}
+  const v=view(),sc=v.sc;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.fillStyle='#cfc49e';ctx.fillRect(0,0,VW,VH);
+  ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(off,v.ox,v.oy,GRID*sc,GRID*sc);
+  const X=x=>v.ox+(x+0.5)*sc,Y=y=>v.oy+(y+0.5)*sc;
+
+  // Spider webs
+  ctx.strokeStyle='rgba(90,20,20,.55)';ctx.lineWidth=Math.max(0.6,sc*0.12);
+  for(let i=0;i<N;i++){
+    if(W.type[i]!==T_SPIDER||!(W.spotted[i]||UI.debug))continue;
+    const cx=X(i%GRID),cy=Y((i/GRID)|0),r=sc*1.8;ctx.beginPath();
+    for(let k=0;k<8;k++){const a=k*Math.PI/4;ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r);}
+    for(const rr of[0.6,1.2,1.8])for(let k=0;k<=8;k++){const a=k*Math.PI/4,px=cx+Math.cos(a)*sc*rr,py=cy+Math.sin(a)*sc*rr;k?ctx.lineTo(px,py):ctx.moveTo(px,py);}
+    ctx.stroke();
+  }
+
+  // Your orders
+  ctx.setLineDash([Math.max(3,sc),Math.max(3,sc)]);ctx.lineWidth=Math.max(1.5,sc*0.3);
+  for(const k of['worker','scout','soldier']){
+    const o=P.orders[k];if(!o)continue;
+    const ox=o.guard?P.hx:(o.x!==undefined?o.x:o[0]),oy=o.guard?P.hy:(o.y!==undefined?o.y:o[1]);
+    if(o.guard){ctx.strokeStyle=OCOL[k];ctx.beginPath();ctx.arc(X(P.hx),Y(P.hy),sc*7,0,Math.PI*2);ctx.stroke();continue;}
+    ctx.strokeStyle=OCOL[k];ctx.beginPath();ctx.moveTo(X(P.hx),Y(P.hy));ctx.lineTo(X(ox),Y(oy));ctx.stroke();
+    ctx.setLineDash([]);ctx.fillStyle=OCOL[k];ctx.beginPath();ctx.arc(X(ox),Y(oy),Math.max(4,sc*1.1),0,Math.PI*2);ctx.fill();
+    ctx.setLineDash([Math.max(3,sc),Math.max(3,sc)]);
+  }
+  ctx.setLineDash([]);
+
+  // Hives
+  G.cols.forEach(c=>{
+    if(!c.isPlayer&&!P.seen[idx(c.hx,c.hy)]&&!UI.debug)return;
+    const x=X(c.hx),y=Y(c.hy),r=Math.max(7,sc*2.6);
+    hexPath(x,y,r);ctx.fillStyle=c.isPlayer?'#f0a020':'#9a70e0';ctx.fill();
+    ctx.lineWidth=Math.max(1.5,sc*0.4);ctx.strokeStyle=c.isPlayer?'#6a3200':'#3a1a78';ctx.stroke();
+    hexPath(x,y,r*0.45);ctx.fillStyle=c.isPlayer?'#ffd870':'#d8c4ff';ctx.fill();
+    const w=r*2.2,h=Math.max(3,sc*0.5),f=Math.max(0,c.qhp/QUEEN_HP);
+    ctx.fillStyle='#fff';ctx.fillRect(x-w/2,y-r-h-3,w,h);
+    ctx.fillStyle=f>0.5?'#1f7a2e':f>0.25?'#d48a00':'#c00000';ctx.fillRect(x-w/2,y-r-h-3,w*f,h);
+    ctx.strokeStyle='#4a2200';ctx.lineWidth=1;ctx.strokeRect(x-w/2,y-r-h-3,w,h);
+  });
+
+  // Bees
+  const bs=Math.max(2.4,sc*0.8);
+  for(const c of G.cols)for(const b of c.bees){
+    if(!b.alive)continue;
+    if(!c.isPlayer&&!UI.debug&&!P.seen[idx(b.x,b.y)])continue;
+    const x=X(b.ox+(b.x-b.ox)*frac),y=Y(b.oy+(b.y-b.oy)*frac);
+    const pl=c.isPlayer,edge=pl?'#4a2200':'#2a0a5a';
+    ctx.lineWidth=Math.max(0.8,sc*0.2);ctx.strokeStyle=b.flash?'#ff0000':edge;
+    if(b.caste==='soldier'){
+      const s=bs*1.5;ctx.beginPath();ctx.moveTo(x,y-s);ctx.lineTo(x+s,y);ctx.lineTo(x,y+s);ctx.lineTo(x-s,y);ctx.closePath();
+      ctx.fillStyle=pl?'#d23a00':'#5a1aa8';ctx.fill();ctx.stroke();
+      if(b.hp<CASTE.soldier.hp){ctx.fillStyle='#fff';ctx.fillRect(x-s,y+s+1,s*2,2);ctx.fillStyle='#c00000';ctx.fillRect(x-s,y+s+1,s*2*b.hp/CASTE.soldier.hp,2);}
+    }else if(b.caste==='scout'){
+      const s=bs*1.15;ctx.beginPath();ctx.arc(x,y,s,0,Math.PI*2);ctx.fillStyle=pl?'#ffe24a':'#c0a0ff';ctx.fill();ctx.stroke();
+      ctx.beginPath();ctx.arc(x,y,s*1.7,0,Math.PI*2);ctx.strokeStyle=pl?'rgba(31,90,168,.7)':'rgba(90,40,170,.7)';ctx.stroke();
+    }else{
+      ctx.beginPath();ctx.arc(x,y,bs,0,Math.PI*2);ctx.fillStyle=pl?(b.carry?'#a84000':'#ff9a20'):(b.carry?'#3a1088':'#8a5ae0');ctx.fill();ctx.stroke();
+    }
+  }
+
+  // Effects
+  const now=performance.now();
+  G.fx=G.fx.filter(e=>now-e.t<900);
+  for(const e of G.fx){
+    const k=(now-e.t)/900,x=X(e.x),y=Y(e.y);ctx.globalAlpha=1-k;
+    if(e.kind==='drop'){ctx.fillStyle='#6a3200';ctx.font='bold '+Math.max(10,sc*2.2)+'px Courier New';ctx.textAlign='center';ctx.fillText(e.txt,x,y-sc*3-k*sc*5);}
+    else{
+      ctx.strokeStyle=e.kind==='kill'?'#c00000':e.kind==='sting'?'#ff4400':e.kind==='order'?OCOL[e.txt]||'#1f7a2e':(e.col?'#6a3ab8':'#1f7a2e');
+      ctx.lineWidth=Math.max(1.5,sc*0.4);ctx.beginPath();ctx.arc(x,y,sc*(1.5+k*(e.kind==='order'?6:4)),0,Math.PI*2);ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+  }
+}
+
+function hud(){
+  const wc=winCount(),P=G.cols[0],R=G.cols[1],T=s=>document.getElementById(s);
+  const cnt=(c,k)=>c.bees.filter(b=>b.alive&&b.caste===k).length;
+  T('hb').textContent=P.alive+'/'+wc;
+  T('hw').textContent=cnt(P,'worker');T('hs').textContent=cnt(P,'soldier');T('hc').textContent=cnt(P,'scout');
+  T('hq').textContent=Math.max(0,P.qhp);
+  T('hp').textContent=P.pollen;
+  T('hn').textContent=(P.hatched+1)*50;
+  T('hl').textContent=Math.round(P.land*100)+'%';
+  T('ht').textContent=G.turn;
+  T('rb').textContent=R.alive+'/'+wc;
+  T('rq').textContent=P.seen[idx(R.hx,R.hy)]||UI.debug?Math.max(0,R.qhp):'?';
+  T('rl').textContent=Math.round(R.land*100)+'%';
+  T('log').textContent=G.log;
+  const qa=1-Math.max(0,R.qhp)/QUEEN_HP,qb=1-Math.max(0,P.qhp)/QUEEN_HP;
+  T('raceA').style.width=(Math.min(1,Math.max(P.alive/wc,qa))*100)+'%';
+  T('raceB').style.width=(Math.min(1,Math.max(R.alive/wc,qb))*100)+'%';
+}
+function buildLegend(){
+  const items=[['#f0a020','your hive'],['#ff9a20','worker'],['#d23a00','soldier'],['#ffe24a','scout'],['#9a70e0','rival'],
+    ['rgb(214,72,140)','clover'],['rgb(124,82,204)','lavender'],['rgb(226,150,0)','sunflower'],['#5a4028','wall'],['#c41818','spider']];
+  document.getElementById('legend').innerHTML=items.map(i=>'<span><i style="background:'+i[0]+'"></i>'+i[1]+'</span>').join('');
+}
+function fit(){
+  const r=wrap.getBoundingClientRect();
+  DPR=window.devicePixelRatio||1;VW=Math.max(64,r.width);VH=Math.max(64,r.height);
+  canvas.style.width=VW+'px';canvas.style.height=VH+'px';
+  canvas.width=Math.round(VW*DPR);canvas.height=Math.round(VH*DPR);
+}
+let acc=0,last=0;
+function frame(t){
+  const dt=last?Math.min(250,t-last):0;last=t;
+  if(UI.running&&!G.won){
+    acc+=dt*RATES[UI.speed-1]/1000;let n=Math.floor(acc);acc-=n;
+    if(n>200){n=200;acc=0;}
+    for(let k=0;k<n&&!G.won;k++)tick();
+  }
+  draw(RATES[UI.speed-1]<=25&&UI.running?acc:1);hud();
+  requestAnimationFrame(frame);
+}
+
+// ===================== CONTROLS =====================
+function setBtn(id,on,cls,a,b){const e=document.getElementById(id);e.className=on?cls:'';e.textContent=on?a:b;}
+const TIPS={pan:'Drag to look around. Pinch or plus and minus to zoom.',
+  worker:'Tap where workers should forage. Tap your hive to let them choose.',
+  soldier:'Tap a spot to send soldiers. Tap the rival hive to attack. Tap your hive to guard the queen.',
+  scout:'Tap where scouts should explore. Tap your hive to let them roam.',
+  wall:'Drag to paint walls your bees will not cross. Drag on a wall to erase.'};
+const TCLS={pan:'on',worker:'on',soldier:'red',scout:'blu',wall:'pur'};
+function setTool(t){
+  UI.tool=t;
+  for(const k of['pan','worker','soldier','scout','wall'])document.getElementById('t_'+k).className=k===t?TCLS[k]:'';
+  document.getElementById('tip').textContent=TIPS[t];
+}
+for(const k of['pan','worker','soldier','scout','wall'])document.getElementById('t_'+k).onclick=()=>setTool(k);
+document.getElementById('t_clear').onclick=()=>{const P=G.cols[0];P.orders={worker:null,soldier:null,scout:null};G.log='Orders cleared. Soldiers guard the queen.';};
+
+function giveOrder(x,y){
+  const P=G.cols[0],R=G.cols[1],k=UI.tool;
+  const onHome=cheb(x,y,P.hx,P.hy)<=3;
+  if(k==='soldier'){
+    if(onHome){P.orders.soldier={guard:true};G.log='Soldiers guarding the queen.';}
+    else if(cheb(x,y,R.hx,R.hy)<=4&&(P.seen[idx(R.hx,R.hy)]||UI.debug)){P.orders.soldier={x:R.hx,y:R.hy};G.log='Soldiers attacking the rival queen.';}
+    else{P.orders.soldier={x,y};G.log='Soldiers moving to hold that ground.';}
+    for(const b of P.bees)if(b.caste==='soldier')b.tx=-1;
+  }else{
+    if(onHome){P.orders[k]=null;G.log=k==='worker'?'Workers choose their own flowers.':'Scouts roam freely.';}
+    else{
+      P.orders[k]=[x,y];G.log=k==='worker'?'Workers will forage near that spot.':'Scouts heading there.';
+      for(const b of P.bees){
+        if(!b.alive||b.caste!==k||b.ret||b.mode==='harvest')continue;
+        b.mode='line';b.head=Math.atan2(y-b.y,x-b.x)+(Math.random()-0.5)*0.3;setLine(b,b.x,b.y);
+      }
+    }
+  }
+  fx('order',x,y,0,k);
+}
+
+document.getElementById('brun').onclick=()=>{UI.running=!UI.running;setBtn('brun',UI.running,'on','PAUSE','RUN');};
+document.getElementById('bstep').onclick=()=>{UI.running=false;setBtn('brun',false,'on','PAUSE','RUN');tick();};
+document.getElementById('bhatch').onclick=()=>{
+  const o=['auto','worker','soldier','scout'];UI.hatch=o[(o.indexOf(UI.hatch)+1)%4];
+  const b=document.getElementById('bhatch');b.textContent='HATCH '+UI.hatch.toUpperCase();
+  b.className=UI.hatch==='auto'?'':UI.hatch==='soldier'?'red':UI.hatch==='scout'?'blu':'on';
+};
+document.getElementById('bfol').onclick=()=>{UI.follow=!UI.follow;setBtn('bfol',UI.follow,'on','FOLLOWING','FOLLOW');if(UI.follow&&UI.z<3)UI.z=3;};
+function zoom(f,mx,my){
+  const v=view();
+  const tx=mx===undefined?UI.cx:(mx-v.ox)/v.sc,ty=my===undefined?UI.cy:(my-v.oy)/v.sc;
+  const nz=clamp(UI.z*f,1,10);if(nz===UI.z)return;
+  const nsc=Math.min(VW,VH)/GRID*nz;
+  if(mx!==undefined){UI.cx=tx-(mx-VW/2)/nsc;UI.cy=ty-(my-VH/2)/nsc;}
+  UI.z=nz;
+}
+document.getElementById('bzi').onclick=()=>zoom(1.5);
+document.getElementById('bzo').onclick=()=>zoom(1/1.5);
+document.getElementById('bloop').onclick=()=>{UI.loop=!UI.loop;setBtn('bloop',UI.loop,'grn','LOOP ON','LOOP');if(UI.loop&&G.won&&!loopTimer)loopTimer=setTimeout(newGame,1500);};
+document.getElementById('bset').onclick=()=>{const open=document.getElementById('panel').classList.toggle('open');setBtn('bset',open,'on','SETTINGS ON','SETTINGS');requestAnimationFrame(fit);};
+document.getElementById('brst').onclick=()=>{for(const s of SL)CFG[s[0]]=+document.getElementById('s_'+s[0]).value;newGame();};
+document.getElementById('speed').oninput=e=>{UI.speed=+e.target.value;document.getElementById('sv').textContent=RATES[UI.speed-1]+'/s';};
+document.getElementById('go').onclick=()=>{document.getElementById('intro').classList.remove('show');UI.running=true;setBtn('brun',true,'on','PAUSE','RUN');};
+
+function buildPanel(){
+  let h='<div class="row"><button id="bdbg">DEBUG</button><span style="color:#804000">Settings apply on NEW MAP</span></div>';
+  for(const s of SL)h+='<div class="sg"><label>'+s[1]+' <span id="v_'+s[0]+'">'+CFG[s[0]]+s[5]+'</span></label><input type="range" id="s_'+s[0]+'" min="'+s[2]+'" max="'+s[3]+'" step="'+s[4]+'" value="'+CFG[s[0]]+'"></div>';
+  document.getElementById('panel').innerHTML=h;
+  for(const s of SL)document.getElementById('s_'+s[0]).addEventListener('input',e=>{document.getElementById('v_'+s[0]).textContent=e.target.value+s[5];});
+  document.getElementById('bdbg').onclick=()=>{UI.debug=!UI.debug;setBtn('bdbg',UI.debug,'on','DEBUG ON','DEBUG');};
+}
+
+const ptrs=new Map();let downAt=null,moved=0,pinch=null,painting=false,paintVal=1,lastPan=null;
+function local(e){const r=canvas.getBoundingClientRect();return[e.clientX-r.left,e.clientY-r.top];}
+function tileAt(p){const v=view();const x=Math.floor((p[0]-v.ox)/v.sc),y=Math.floor((p[1]-v.oy)/v.sc);return inB(x,y)?[x,y]:null;}
+function paintAt(t){if(!t)return;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const x=t[0]+dx,y=t[1]+dy;if(inB(x,y)&&W.type[idx(x,y)]!==T_HIVE)W.mark[idx(x,y)]=paintVal;}}
+canvas.addEventListener('pointerdown',e=>{
+  canvas.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,local(e));
+  if(ptrs.size===2){painting=false;downAt=null;const p=[...ptrs.values()];pinch={d:Math.hypot(p[0][0]-p[1][0],p[0][1]-p[1][1]),z:UI.z};return;}
+  const p=local(e);
+  if(UI.tool==='wall'){const t=tileAt(p);if(!t)return;paintVal=W.mark[idx(t[0],t[1])]?0:1;painting=true;paintAt(t);G.log=paintVal?'Building wall.':'Erasing wall.';}
+  else{lastPan=p;downAt=p;moved=0;}
+});
+canvas.addEventListener('pointermove',e=>{
+  if(!ptrs.has(e.pointerId))return;
+  const p=local(e);ptrs.set(e.pointerId,p);
+  if(pinch&&ptrs.size===2){const q=[...ptrs.values()],d=Math.hypot(q[0][0]-q[1][0],q[0][1]-q[1][1]);zoom((pinch.z*d/pinch.d)/UI.z,(q[0][0]+q[1][0])/2,(q[0][1]+q[1][1])/2);return;}
+  if(painting){paintAt(tileAt(p));return;}
+  if(lastPan){
+    moved+=Math.abs(p[0]-lastPan[0])+Math.abs(p[1]-lastPan[1]);
+    if(UI.tool!=='pan'&&moved<12)return;
+    const sc=view().sc;UI.cx-=(p[0]-lastPan[0])/sc;UI.cy-=(p[1]-lastPan[1])/sc;lastPan=p;
+    if(UI.follow){UI.follow=false;setBtn('bfol',false,'on','FOLLOWING','FOLLOW');}
+  }
+});
+function up(e){
+  if(ptrs.size===1&&downAt&&moved<12&&!pinch&&UI.tool!=='pan'&&UI.tool!=='wall'){const t=tileAt(downAt);if(t)giveOrder(t[0],t[1]);}
+  ptrs.delete(e.pointerId);if(ptrs.size<2)pinch=null;
+  if(ptrs.size===0){painting=false;lastPan=null;downAt=null;}
+}
+canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',up);
+canvas.addEventListener('wheel',e=>{e.preventDefault();const p=local(e);zoom(e.deltaY<0?1.2:1/1.2,p[0],p[1]);},{passive:false});
+
+// ===================== START =====================
+buildPanel();setTool('pan');
+document.getElementById('sv').textContent=RATES[UI.speed-1]+'/s';
+newGame();fit();
+new ResizeObserver(fit).observe(wrap);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

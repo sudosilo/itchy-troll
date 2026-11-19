@@ -8,6 +8,6 @@ Live at hackercons-roulette.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change: Created the clip player, version two, with stumble and guess modes.
+Latest change. Redesigned the player in a comic book look. Added a fresh only filter and sound effect bursts.
 
 See CHANGELOG.md for the full history.

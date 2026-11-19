@@ -1,3 +1,5 @@
+2026-11-18, v2026.11.18. A mobile control dock now replaces the hamburger drawer.
+
 2026-09-08, v2026.09.08. Version 8 adds a hamburger drawer and a full bleed canvas. Version 9 follows with further refinements.
 
 2026-09-05, v2026.09.05. Version 7 adds image presets that are built into the page.

@@ -32,6 +32,7 @@ async function getProjects() {
   for (;;) {
     const q = new URLSearchParams({ limit: '100' });
     if (team) q.set('teamId', team);
+    else if (process.env.VERCEL_SLUG) q.set('slug', process.env.VERCEL_SLUG);
     if (until) q.set('until', String(until));
     const r = await fetch('https://api.vercel.com/v9/projects?' + q, {
       headers: { Authorization: 'Bearer ' + token }

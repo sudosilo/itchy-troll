@@ -1,0 +1,1 @@
+2026-11-18, v2026.11.18. Created Bee Wars, a territory control game with two bee colonies in one meadow. You win by growing to 21 bees or by killing the rival queen. Send workers, soldiers, and scouts around the map, paint walls, and pick what each new bee will be.

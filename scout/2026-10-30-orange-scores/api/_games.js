@@ -4,6 +4,9 @@
 // fmt: how the hub shows a score. flagsTime packs checkpoints and time as flags*100000 + (99999 - tenths of a second). meters is tenths of a meter.
 module.exports = {
   edmia: { name: 'EDMIA', max: 200000, perSecond: 2000 },
+  'tile-spinner-rush': { name: 'Tile Spinner Rush', max: 500, perSecond: 1 },
+  'tile-spinner-pipes': { name: 'Tile Spinner Pipes', max: 100000, perSecond: 1, maxMs: 400 * 24 * 3600 * 1000 },
+  'tile-spinner-vault': { name: 'Tile Spinner Vault', max: 3000, perSecond: 200 },
   'raineurysm-puzzle': { name: 'Raineurysm Puzzle', max: 60000, perSecond: 300, maxMs: 30 * 24 * 3600 * 1000 },
   'mill-ionaire': { name: 'Mill-ionaire', max: Number.MAX_SAFE_INTEGER, perSecond: 1000000000000, maxMs: 400 * 24 * 3600 * 1000 },
   'fogwarren-vx': { name: 'FogWarren', max: 30000, perSecond: 5000, maxMs: 24 * 3600 * 1000 },
@@ -39,5 +42,12 @@ module.exports = {
   'mobbyhill-recovery-canyon': { name: 'MobbyHill Recovery Canyon', max: 99999999, perSecond: 60000, fmt: 'jobsTime' },
   'mobbyhill-recoveryfuel-canyon': { name: 'MobbyHill Recovery Fuel Canyon', max: 99999999, perSecond: 60000, fmt: 'jobsTime' },
   'mobbyhill-recovery-dunes': { name: 'MobbyHill Recovery Dunes', max: 99999999, perSecond: 60000, fmt: 'jobsTime' },
-  'mobbyhill-recoveryfuel-dunes': { name: 'MobbyHill Recovery Fuel Dunes', max: 99999999, perSecond: 60000, fmt: 'jobsTime' }
+  'mobbyhill-recoveryfuel-dunes': { name: 'MobbyHill Recovery Fuel Dunes', max: 99999999, perSecond: 60000, fmt: 'jobsTime' },
+  'just-five-more-math': { name: 'Just Five More Math', max: 100000, perSecond: 3 },
+  'just-five-more-petals': { name: 'Just Five More Petals', max: 100000, perSecond: 3 },
+  'just-five-more-paint': { name: 'Just Five More Paint', max: 100000, perSecond: 3 },
+  'just-five-more-scratch': { name: 'Just Five More Scratch', max: 100000, perSecond: 3 },
+  'just-five-more-bubble': { name: 'Just Five More Bubble Wrap', max: 100000, perSecond: 3 },
+  'just-five-more-leaves': { name: 'Just Five More Leaves', max: 100000, perSecond: 3 },
+  'just-five-more-cable': { name: 'Just Five More Cables', max: 100000, perSecond: 3 }
 };

@@ -1,0 +1,3 @@
+2026-11-19, v2026.11.19. Added an Auto build mode that places tiles in spots that avoid gaps. It builds only inside the view and leaves fog beyond it. Added connector tiles for every edge combination, and holes now fill automatically.
+
+2026-11-18, v2026.11.18. Created Tile-topia, a tile placing game where you build a map one tile at a time and score finished features. Added Longest Road, Biggest Castle, and Longest River records. Added a Cyber skin with animated lanes and placement effects, a Graphite on paper skin, and an isometric view toggle. Added completion chimes, a record celebration, player outlines, and bot opponents. Redrew the City skin as detailed illustrations with lit 3D buildings and added the full River tile set.

@@ -25,3 +25,9 @@ Score Hub changelog
 2026-10-31, v2026.10.31. Registered FogWarren on the score hub so its scores show up there.
 
 2026-10-30, v2026.10.30. First release. A shared score service for the games, with a small script that games use to send scores and a hub page that lists top scores and live plays. It accepts the Redis variable names from the hosting marketplace. Mill-ionaire was registered, with scores up to the safe integer limit and runs that can last for days.
+
+2026-11-18, v2026.11.18b. Registered Tile Spinner on the score hub with three boards: Rush counts boards cleared before time runs out, Pipes counts total stars earned across challenge levels, and Vault scores how fast and in how few tries a code is cracked.
+
+2026-11-18, v2026.11.18c. Tile Spinner Vault scores now scale with vault difficulty, up to three times for Expert, so the board accepts scores up to 3000.
+
+2026-11-19, v2026.11.19. Registered Just Five More on the score hub with seven boards, one for each task: math, petals, paint, scratch tickets, bubble wrap, leaves and cables. A score is how many items the player did in one shift after being told to do five.

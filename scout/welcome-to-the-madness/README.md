@@ -8,6 +8,6 @@ Live at welcome-to-the-madness.vercel.app.
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-10-25, v2026.10.25. First release. Added the kitchen rush game, then leveled it up with canvas graphics, a doneness ring, perfect pulls, combos, rush levels, sound, and a pause button.
+Latest change. The shift over screen now shows a top five shifts board.
 
 Full history is in CHANGELOG.md.

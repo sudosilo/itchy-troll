@@ -1,0 +1,1 @@
+2026-11-18, v2026.11.18. Created Cipher Wars version 3. It adds a warm up round before the campaigns begin. Players read a briefing, make a choice, and earn intel points toward a final rank, with a codex and a list of key figures to look things up.

@@ -8,6 +8,6 @@ bitfield-synth.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. Version 8 adds a hamburger drawer and a full bleed canvas. Version 9 follows with further refinements.
+Latest change. A mobile control dock now replaces the hamburger drawer.
 
 See CHANGELOG.md for the full history.

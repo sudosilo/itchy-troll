@@ -1,1 +1,3 @@
+2026-11-18, v2026.11.18. Added Pipes challenge levels, Pipe Rush, and Visualizer modes, and the tradition styles became skins. Pipes gained rocks, bridges, pinned tiles, triangle and octagon grids, and intro cards. Added a Vault challenge where you reveal five digits and crack the code, with difficulty levels. Rush, Pipes, and Vault scores post to the score hub. Added pipe styles, Big boards in three sizes, synth sounds with a mute button, and a Circuit style with AC and DC boards. Added Cyber, Color Pop, and Escher Remix skins.
+
 2026-09-11, v2026.09.11. First release. Atlas of Tiles lets players rotate tiles to close loops, with several regional tile styles.

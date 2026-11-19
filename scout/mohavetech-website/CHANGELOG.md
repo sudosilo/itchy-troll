@@ -1,5 +1,9 @@
 App Index changelog
 
+2026-11-19, v2026.11.19. Added a sticky notes view where a mannequin wears a fitted gown made of one note per app. Added wall, car, semi trailer, 747, and wind scenes for the notes. Sync now refreshes the Vercel login first and still deploys if the app list read fails.
+
+2026-11-18, v2026.11.18. Apps that were unsorted now sit in categories. A new category was tried and then removed, and apps went back to their old spots. The menu now floats over the page in the retro and future looks, and the future look has stars behind the links and plain striped section titles. Sync now resets to GitHub first and only deploys after a good push.
+
 2026-11-16, v2026.11.16c. Apps now show buttons for the outside services they use, including Supabase, Cloudflare, Anthropic, ElevenLabs, YouTube, MusicBrainz, and AudD. An API plug button opens an overlay of every outside API an app calls, and chain buttons link apps that call each other. The itch button is now a boxed purple controller icon, the Railway button is boxed like the GitHub button, and the colored phone stars were dropped from app rows.
 
 2026-11-16, v2026.11.16b. Search moved out of the menu into a permanent bar at the top beside the menu button. Railway buttons now use a blue train icon, and the Railway status tag at the top was removed.
