@@ -8,6 +8,6 @@ Live at threat-atlas-two.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. First release. Threat Atlas shows a rotating globe with layered threat data and country intel.
+Latest change. Data refresh. Added incidents from 2025 and 2026 including Bybit, Poland grid, Stryker, Iranian PLC attacks and ShinyHunters campaigns. Added new countries, conferences, firms, bases, satellites and state entries. Year slider now reaches 2026 and filters the other layers.
 
 See CHANGELOG.md for the full history.

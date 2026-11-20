@@ -1,5 +1,7 @@
 Score Hub changelog
 
+2026-11-19, v2026.11.19r. Raineurysm Puzzle grew to twenty four levels, so its top believable run score went up to match.
+
 2026-11-17, v2026.11.17f. Registered Raineurysm Puzzle on the score hub. A run adds up points for each solved level, for speed and for using few parts, and can be played across many sessions.
 
 2026-11-18, v2026.11.18. MobbyHill sign in now runs on Supabase Auth. Players sign in with their own email and a six digit code, or with any outside provider turned on in Supabase. Wallets, unlocks and payments belong to the Supabase Auth user. Removed the name and password accounts and the mh-account endpoint. New endpoint mh-auth.

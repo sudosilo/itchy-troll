@@ -6,6 +6,6 @@ Each turn you draw from a tile bag that never runs out, preview a tile on a glow
 
 Live at tile-topia.vercel.app
 
-Latest change. Added an Auto build mode that places tiles in spots that avoid gaps. It builds only inside the view and leaves fog beyond it. Added connector tiles for every edge combination, and holes now fill automatically.
+Latest change. Added a War skin with an army map, trenches, bases, HQs, and marching soldiers. Added West and Bunker skins. Added Meadow fields that score points, with a Biggest Meadow record. Each map now keeps its skin, with heart and strip landmarks, and city towers grow with district size.
 
 See CHANGELOG.md for the full history.

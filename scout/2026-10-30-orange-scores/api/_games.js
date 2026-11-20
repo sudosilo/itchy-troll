@@ -7,7 +7,7 @@ module.exports = {
   'tile-spinner-rush': { name: 'Tile Spinner Rush', max: 500, perSecond: 1 },
   'tile-spinner-pipes': { name: 'Tile Spinner Pipes', max: 100000, perSecond: 1, maxMs: 400 * 24 * 3600 * 1000 },
   'tile-spinner-vault': { name: 'Tile Spinner Vault', max: 3000, perSecond: 200 },
-  'raineurysm-puzzle': { name: 'Raineurysm Puzzle', max: 60000, perSecond: 300, maxMs: 30 * 24 * 3600 * 1000 },
+  'raineurysm-puzzle': { name: 'Raineurysm Puzzle', max: 150000, perSecond: 300, maxMs: 30 * 24 * 3600 * 1000 },
   'mill-ionaire': { name: 'Mill-ionaire', max: Number.MAX_SAFE_INTEGER, perSecond: 1000000000000, maxMs: 400 * 24 * 3600 * 1000 },
   'fogwarren-vx': { name: 'FogWarren', max: 30000, perSecond: 5000, maxMs: 24 * 3600 * 1000 },
   'sky-flow': { name: 'Sky Flow', max: 20000, perSecond: 150 },

@@ -8,6 +8,6 @@ Live at stackloom-meta.vercel.app.
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-11-15, v2026.11.15. Added the Match line, the candy smashing match three game, opened by hiring a level designer.
+Latest change. 2026-11-19, v2026.11.19.2. Added the Shooter line built from Dragon Drop, opened by hiring an arcade veteran.
 
 Full history is in CHANGELOG.md.

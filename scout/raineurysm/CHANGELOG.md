@@ -1,5 +1,7 @@
 raineurysm changelog
 
+2026-11-19, v2026.11.19. Added twelve more puzzle levels, for twenty four in all, with fixed pieces, lower faucets, and a cup splitter level. Added velocity settings for how much drop size and speed change loudness, plus octave jump speed and an on or off switch. Added fall speed for lanes and a storm that stays on the beat. Settings are kept on the phone.
+
 2026-11-17, v2026.11.17. Added seven more puzzle levels, for twelve in all. A puzzle run now scores points for speed and few parts, can be sent to the shared score board, and has a high score board in the puzzle menu. Added a start screen with three modes, a hint on the first puzzle, a full screen button, and a rain detail setting that lowers itself on slow phones. Fixed layouts on wider screens.
 
 2026-11-16, v2026.11.16. Made everything prettier. Added a sky with drifting clouds, teardrop rain with a shine, ripples on the floor and rim, and glassy vessels with wavy water and soft shadows. Lanes and the beat line now glow, and panels and buttons are frosted.

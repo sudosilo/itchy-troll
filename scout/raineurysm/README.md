@@ -8,6 +8,6 @@ Live at raineurysm.vercel.app
 
 This app is checked every morning by Control Troll, an automated test system that loads every app and clicks through its features.
 
-Latest change. 2026-11-17, v2026.11.17. Added seven more puzzle levels, for twelve in all. A puzzle run now scores points for speed and few parts, can be sent to the shared score board, and has a high score board in the puzzle menu. Added a start screen with three modes, a hint on the first puzzle, a full screen button, and a rain detail setting that lowers itself on slow phones. Fixed layouts on wider screens.
+Latest change. Added twelve more puzzle levels, for twenty four in all, with fixed pieces, lower faucets, and a cup splitter level. Added velocity settings for how much drop size and speed change loudness, plus octave jump speed and an on or off switch. Added fall speed for lanes and a storm that stays on the beat. Settings are kept on the phone.
 
 Full history is in CHANGELOG.md.

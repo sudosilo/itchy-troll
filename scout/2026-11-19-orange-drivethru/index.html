@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lane Listener</title>
+<style>
+:root{--bg:#f6f4ef;--card:#fff;--ink:#1f2328;--mute:#6b7280;--line:#e3e0d8;--acc:#d9480f;--acc2:#2f6f4e;--soft:#fff4ec;--blue:#e8f0fe}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{display:flex;align-items:center;gap:6px;padding:10px 12px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+header h1{font-size:16px;margin:0;flex:1}
+.tab{border:1px solid var(--line);background:var(--card);padding:6px 10px;border-radius:8px;font-size:13px}
+.tab.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+main{padding:10px;max-width:760px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:10px}
+.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin:0 0 8px}
+.hidden{display:none}
+#chat{max-height:42vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+.b{padding:8px 10px;border-radius:10px;max-width:88%}
+.u{align-self:flex-end;background:var(--blue)}
+.l{align-self:flex-start;background:var(--soft)}
+.cmd{font:12px/1.3 ui-monospace,monospace;color:var(--acc2);margin-top:4px;word-break:break-word}
+.unk{font:12px ui-monospace,monospace;color:var(--acc)}
+.fb{margin-top:4px}
+.fb button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:2px 8px;margin-right:4px}
+.fb button.on{background:var(--acc2);color:#fff}
+.fb button.down.on{background:var(--acc)}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+input[type=text],select,textarea{font:inherit;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+#say{flex:1;min-width:0}
+.btn{border:1px solid var(--acc);background:var(--acc);color:#fff;padding:8px 12px;border-radius:8px;font:inherit}
+.btn.alt{background:#fff;color:var(--acc)}
+.chip{border:1px solid var(--line);background:#fff;padding:6px 9px;border-radius:999px;font-size:13px}
+.chip.on{background:var(--acc2);color:#fff;border-color:var(--acc2)}
+.item{border:1px solid var(--line);background:#fff;padding:8px;border-radius:8px;font-size:13px;text-align:left}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:6px}
+.lab{font-size:12px;color:var(--mute);margin:8px 0 4px}
+.tline{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dashed var(--line)}
+.tline small{color:var(--mute)}
+.x{border:none;background:none;color:var(--acc);font-size:16px}
+.tot{display:flex;justify-content:space-between;font-weight:600;padding-top:6px}
+#builder{font:12px ui-monospace,monospace;color:var(--acc2);margin:6px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td{border-bottom:1px solid var(--line);padding:4px}
+td.m{font-family:ui-monospace,monospace;color:var(--acc2)}
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.stat div{background:var(--soft);border-radius:8px;padding:8px;text-align:center}
+.stat b{display:block;font-size:20px}
+</style>
+</head>
+<body>
+<header>
+<h1>Lane Listener</h1>
+<button class="tab on" data-v="order">Order</button>
+<button class="tab" data-v="teach">Teach</button>
+<button class="tab" data-v="table">Table</button>
+</header>
+<main>
+
+<section id="v-order">
+<div class="card">
+<h2>Ticket</h2>
+<div id="ticket"></div>
+</div>
+<div class="card">
+<h2>Lane</h2>
+<div id="chat"></div>
+<div class="row" style="margin-top:8px">
+<input id="say" type="text" placeholder="Type or voice-type an order" autocomplete="off">
+<button id="mic" class="btn alt hidden">Mic</button>
+<button id="send" class="btn">Send</button>
+</div>
+<label class="row" style="margin-top:6px;font-size:13px"><input type="checkbox" id="speak"> Speak replies</label>
+</div>
+<div class="card">
+<h2>Tap mode</h2>
+<div class="lab">Quantity</div><div class="row" id="pq"></div>
+<div class="lab">Size</div><div class="row" id="ps"></div>
+<div class="lab">Options</div><div class="row" id="pm"></div>
+<div id="builder"></div>
+<div class="lab">Tap an item to add it</div><div class="grid" id="pi"></div>
+<div class="lab">Actions</div>
+<div class="row" id="pa"></div>
+</div>
+</section>
+
+<section id="v-teach" class="hidden">
+<div class="card">
+<h2>Unmatched words</h2>
+<div id="unkList"></div>
+</div>
+<div class="card">
+<h2>Teach a phrase</h2>
+<div class="row"><input id="tPhrase" type="text" placeholder="phrase heard" style="flex:1"></div>
+<div class="row" style="margin-top:6px"><select id="tTarget" style="flex:1"></select><button id="tSave" class="btn">Save</button></div>
+</div>
+<div class="card">
+<h2>Thumbs down turns</h2>
+<div id="badList"></div>
+</div>
+<div class="card">
+<h2>Your aliases</h2>
+<div id="customList"></div>
+</div>
+</section>
+
+<section id="v-table" class="hidden">
+<div class="card">
+<h2>Repository size</h2>
+<div class="stat" id="stats"></div>
+</div>
+<div class="card">
+<h2>Alias table</h2>
+<input id="aFilter" type="text" placeholder="filter" style="width:100%">
+<div style="max-height:45vh;overflow:auto;margin-top:6px"><table id="aTable"></table></div>
+</div>
+<div class="card">
+<h2>Backup</h2>
+<div class="row"><button id="bCopy" class="btn">Copy JSON</button><button id="bLoad" class="btn alt">Load pasted JSON</button><button id="bWipe" class="btn alt">Clear learned</button></div>
+<textarea id="bText" rows="5" style="width:100%;margin-top:6px" placeholder="Paste a backup here"></textarea>
+</div>
+</section>
+
+</main>
+<script>
+/* ---------- menu ---------- */
+const ITEMS={
+BURGER:{n:'Burger',c:'Entree',p:4.99},
+CHEESEBURGER:{n:'Cheeseburger',c:'Entree',p:5.49},
+DOUBLE:{n:'Double Burger',c:'Entree',p:6.99},
+CHICKEN:{n:'Chicken Sandwich',c:'Entree',p:5.99},
+WRAP:{n:'Chicken Wrap',c:'Entree',p:5.29},
+NUGGETS:{n:'Nuggets',c:'Entree',p:4.49},
+SALAD:{n:'Side Salad',c:'Side',p:3.49},
+FRIES:{n:'Fries',c:'Side',s:{S:1.99,M:2.49,L:2.99}},
+RINGS:{n:'Onion Rings',c:'Side',s:{S:2.29,M:2.79,L:3.29}},
+SODA:{n:'Soda',c:'Drink',s:{S:1.49,M:1.79,L:1.99}},
+TEA:{n:'Iced Tea',c:'Drink',s:{S:1.49,M:1.79,L:1.99}},
+SHAKE:{n:'Shake',c:'Drink',s:{S:3.49,M:3.99,L:4.49}},
+COFFEE:{n:'Coffee',c:'Drink',s:{S:1.29,M:1.59,L:1.89}},
+WATER:{n:'Water',c:'Drink',p:0},
+PIE:{n:'Apple Pie',c:'Dessert',p:1.49},
+COOKIE:{n:'Cookie',c:'Dessert',p:0.99}
+};
+const SIZES={S:'small',M:'medium',L:'large'};
+const ING=['ONION','PICKLE','TOMATO','LETTUCE','CHEESE','BACON','MAYO','KETCHUP','MUSTARD','SAUCE','ICE','JALAPENO'];
+const FLAVORS={COLA:'cola',LEMON_LIME:'lemon lime',ROOT_BEER:'root beer',ORANGE:'orange',CHOCOLATE:'chocolate',VANILLA:'vanilla',STRAWBERRY:'strawberry',SWEET:'sweet',UNSWEET:'unsweet',DECAF:'decaf',CREAM:'cream',SUGAR:'sugar'};
+const EXTRA_PRICE={CHEESE:0.5,BACON:1,JALAPENO:0.5};
+const COMBO_PRICE=3.0, TAX=0.08;
+const INTENTS=['REMOVE','CHANGE','TOTAL','REPEAT','DONE','CLEAR','YES','NO','HELLO'];
+
+/* ---------- alias table (recognize side) ---------- */
+const BASE={};
+function al(v,...ks){ks.forEach(k=>BASE[k]=v)}
+al('ITEM:BURGER','burger','hamburger','classic','classic burger','plain burger','regular burger');
+al('ITEM:CHEESEBURGER','cheeseburger','cheese burger','burger with cheese');
+al('ITEM:DOUBLE','double','double burger','double cheeseburger','double double','double patty','two patty');
+al('ITEM:CHICKEN','chicken sandwich','chicken burger','crispy chicken','chicken','spicy chicken');
+al('ITEM:WRAP','wrap','chicken wrap','wraps');
+al('ITEM:NUGGETS','nuggets','nugget','chicken nuggets','tenders','chicken tenders','strips','chicken strips','nugs');
+al('ITEM:SALAD','salad','side salad','garden salad');
+al('ITEM:FRIES','fries','fry','french fries','french fry','frys');
+al('ITEM:RINGS','onion rings','rings','onion ring');
+al('ITEM:SODA','soda','soft drink','pop','fountain drink','drink','soda pop');
+al('ITEM:SODA MOD:COLA','cola');
+al('ITEM:SODA MOD:LEMON_LIME','lemon lime','lemon lime soda');
+al('ITEM:SODA MOD:ROOT_BEER','root beer','rootbeer');
+al('ITEM:SODA MOD:ORANGE','orange soda');
+al('ITEM:TEA','tea','iced tea','ice tea');
+al('ITEM:TEA MOD:SWEET','sweet tea');
+al('ITEM:TEA MOD:UNSWEET','unsweet tea','unsweetened tea','unsweetened','unsweet');
+al('ITEM:SHAKE','shake','milkshake','milk shake','shakes');
+al('ITEM:COFFEE','coffee','cup of coffee','hot coffee','joe');
+al('ITEM:WATER','water','cup of water','water cup','ice water');
+al('ITEM:PIE','pie','apple pie','pies');
+al('ITEM:COOKIE','cookie','cookies','chocolate chip cookie');
+al('MOD:CHOCOLATE','chocolate','choc');al('MOD:VANILLA','vanilla');al('MOD:STRAWBERRY','strawberry');
+al('MOD:DECAF','decaf');al('MOD:CREAM','cream','creamer');al('MOD:SUGAR','sugar');al('MOD:SWEET','sweet');
+al('SIZE:S','small','little','kid','kids','kid size','smallest','sm','tiny','junior');
+al('SIZE:M','medium','regular','normal','med','mid','middle');
+al('SIZE:L','large','big','biggest','largest','lg','extra large','jumbo','huge','xl');
+al('COMBO','combo','meal','value meal','make it a combo','make it a meal','make that a combo','make that a meal','with fries and a drink','as a combo','as a meal','combo meal');
+al('NEG','no','without','hold','hold the','minus','skip','skip the','nix','leave off','leave off the','take off the','none of the');
+al('PLUS:EXTRA','extra','more','lots of','heavy','double the');
+al('PLUS:ADD','add','with','plus','put','throw on');
+al('PLUS:LIGHT','light','easy','easy on','easy on the','not much','a little');
+al('ING:ONION','onion','onions','raw onion');al('ING:PICKLE','pickle','pickles');al('ING:TOMATO','tomato','tomatoes');
+al('ING:LETTUCE','lettuce');al('ING:CHEESE','cheese','american cheese');al('ING:BACON','bacon');
+al('ING:MAYO','mayo','mayonnaise');al('ING:KETCHUP','ketchup','catsup');al('ING:MUSTARD','mustard');
+al('ING:SAUCE','sauce','special sauce','spread','house sauce');al('ING:ICE','ice');al('ING:JALAPENO','jalapeno','jalapenos','peppers','hot peppers');
+al('INTENT:REMOVE','remove','take off','take away','cancel the','delete','scratch','scratch the','get rid of','drop','drop the','never mind the','nevermind the','no more','forget the','lose the');
+al('INTENT:CHANGE','change','make that','make it','switch','switch the','swap','upgrade','change the','instead');
+al('INTENT:TOTAL','total','how much','whats my total','what is my total','what do i owe','how much is it','how much is that','price');
+al('INTENT:REPEAT','repeat','read back','read it back','what do i have','whats my order','what is my order','say that again','repeat my order','repeat that');
+al('INTENT:DONE','thats it','that is it','thats all','that is all','done','nothing else','im good','i am good','all set','finished','that will be it','thatll be it','thatll do','that will do','im done','that should do it');
+al('INTENT:CLEAR','start over','clear','reset','cancel order','cancel my order','cancel everything','cancel it all');
+al('INTENT:YES','yes','yeah','yep','yup','correct','sure','ok','okay','right','perfect','sounds good');
+al('INTENT:NO','nope','nah','no thanks','no thank you');
+al('INTENT:HELLO','hi','hello','hey','howdy','good morning','good afternoon','good evening','hiya');
+al('SEP','and','also','then','oh','comma','next');
+const NUMW={a:1,an:1,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,eleven:11,twelve:12,couple:2,'a couple':2,'a couple of':2,pair:2,'a pair of':2,dozen:12,'a dozen':12,single:1};
+Object.entries(NUMW).forEach(([k,v])=>BASE[k]='NUM:'+v);
+al('FILLER','um','uh','umm','uhh','hmm','can','could','i','id','i would','like','want','wanna','get','have','please','give','me','gimme','let','lemme','the','for','of','to','be','will','would','got','just','some','order','im','gonna','go','with a','is','it','that','so','well','yo','may','let me','ill','ill have','i will','i will have','can i','can i get','could i','could i get','id like','i want','i need','need','do','you','of the','also get','one of','them','those','thanks','thank you','please and thank you','my','what','does','come','on','in','um can');
+
+/* ---------- reply templates (respond side) ---------- */
+const T={
+ADD:['Got it, {x}. Anything else?','{x}, added. What else can I get you?','Okay, {x}. Anything else today?'],
+ASK_SIZE:['What size {x}? Small, medium, or large.','Small, medium, or large on the {x}?'],
+CHANGE:['Changed to {x}.','Okay, now {x}.','Updated, {x}.'],
+NO_TARGET:['Add an item first, then I can change it.'],
+REMOVE:['Removed {x}.','Okay, {x} is off the order.'],
+REMOVE_MISS:['I do not see {x} on the order.'],
+TOTAL:['Your total is {x}.','That comes to {x}.'],
+REPEAT:['You have {x}. Total {t}. Is that correct?','I have {x}. That is {t}. Sound right?'],
+EMPTY:['Nothing on the order yet. What can I get you?'],
+DONE:['Your total is {x}. Please pull forward to the window.','That will be {x}. Pull ahead to the window.'],
+CLEAR:['Order cleared. What can I get you?'],
+YES:['Great. Anything else?','Perfect.'],
+NO:['Okay. Anything else?','No problem.'],
+HELLO:['Welcome. What can I get you today?','Hi there. Order when you are ready.'],
+NO_COMBO:['Combos come with entrees, so I left that off the {x}.'],
+NOMATCH:['Sorry, I did not catch that. You can tap an option below.','Could you say that another way?']
+};
+
+/* ---------- storage ---------- */
+const store={get(k,d){try{const v=localStorage.getItem('lanel_'+k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem('lanel_'+k,JSON.stringify(v))}catch(e){}}};
+let CUSTOM=store.get('custom',{}), LOG=store.get('log',[]), UNK=store.get('unk',{});
+let S={lines:[],awaiting:null,nid:1};
+function save(){store.set('custom',CUSTOM);store.set('log',LOG.slice(-200));store.set('unk',UNK)}
+
+/* ---------- normalize + tokenize ---------- */
+function norm(t){return t.toLowerCase().replace(/[’']/g,'').replace(/&/g,' and ').replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim()}
+function look(p){
+  if(p in CUSTOM) return CUSTOM[p];
+  if(p in BASE) return BASE[p];
+  if(p.endsWith('es')&&BASE[p.slice(0,-2)]&&BASE[p.slice(0,-2)].startsWith('ITEM')) return BASE[p.slice(0,-2)];
+  if(p.endsWith('s')&&(BASE[p.slice(0,-1)]||CUSTOM[p.slice(0,-1)])) return CUSTOM[p.slice(0,-1)]||BASE[p.slice(0,-1)];
+  return undefined;
+}
+function tokenize(text){
+  const w=norm(text).split(' ').filter(Boolean), out=[], unk=[];
+  let i=0;
+  while(i<w.length){
+    let hit=false;
+    for(let n=Math.min(5,w.length-i);n>=1;n--){
+      const p=w.slice(i,i+n).join(' '), v=look(p);
+      if(v!==undefined){
+        if(v!=='FILLER') v.split(' ').forEach(x=>{const [t,val]=x.split(':');out.push({t,v:val,raw:p})});
+        i+=n;hit=true;break;
+      }
+    }
+    if(!hit){
+      const x=w[i];
+      if(/^\d+$/.test(x)) out.push({t:'NUM',v:x,raw:x});
+      else {unk.push(x);out.push({t:'UNK',v:x,raw:x})}
+      i++;
+    }
+  }
+  return {tokens:out,unk};
+}
+
+/* ---------- parse tokens into canonical commands ---------- */
+function parse(tokens){
+  const cmds=[];let intent=null,neg=null,cur=null;
+  const fresh=()=>({qty:null,size:null,mods:[],combo:false,touched:false});
+  let pend=fresh();
+  const mod=m=>{if(cur&&!pend.touched)cur.mods.push(m);else{pend.mods.push(m);pend.touched=true}};
+  for(const tk of tokens){
+    switch(tk.t){
+      case 'INTENT':
+        if(tk.v==='REMOVE'||tk.v==='CHANGE') intent=tk.v; else cmds.push({op:tk.v});
+        break;
+      case 'NUM': pend.qty=+tk.v;pend.weak=(tk.raw==='a'||tk.raw==='an');pend.touched=true;break;
+      case 'SIZE': if(cur&&!pend.touched&&!cur.size)cur.size=tk.v;else{pend.size=tk.v;pend.touched=true}break;
+      case 'COMBO': if(cur&&!pend.touched)cur.combo=true;else{pend.combo=true;pend.touched=true}break;
+      case 'MOD': mod(tk.v);break;
+      case 'NEG': neg='NO';break;
+      case 'PLUS': neg=tk.v;break;
+      case 'ING': mod((neg||'ADD')+'_'+tk.v);neg=null;break;
+      case 'SEP': cur=null;break;
+      case 'ITEM':{
+        if(intent==='REMOVE'||neg==='NO'){cmds.push({op:'REMOVE',item:tk.v,qty:pend.qty});pend=fresh();cur=null;neg=null;break}
+        const c={op:intent==='CHANGE'?'CHANGE':'ADD',item:tk.v,qty:pend.qty,size:pend.size,mods:[...pend.mods],combo:pend.combo};
+        cmds.push(c);cur=c;pend=fresh();break;
+      }
+    }
+  }
+  if(neg==='NO'&&!cmds.length&&!pend.touched) cmds.push({op:'NO'});
+  if(pend.touched){
+    const last=[...cmds].reverse().find(c=>c.op==='ADD'||c.op==='CHANGE');
+    if(last){if(pend.size&&!last.size)last.size=pend.size;last.mods.push(...pend.mods);if(pend.combo)last.combo=true;if(pend.qty&&!last.qty)last.qty=pend.qty}
+    else cmds.push({op:'CHANGE_LAST',qty:pend.weak?null:pend.qty,size:pend.size,mods:pend.mods,combo:pend.combo});
+  } else if(intent==='REMOVE'&&!cmds.some(c=>c.op==='REMOVE')) cmds.push({op:'REMOVE_LAST'});
+  return cmds;
+}
+function fmt(c){
+  let s=c.op;
+  if(c.qty)s+=' qty='+c.qty;
+  if(c.item)s+=' item='+c.item;
+  if(c.size)s+=' size='+c.size;
+  if(c.mods&&c.mods.length)s+=' mods='+c.mods.join(',');
+  if(c.combo)s+=' combo=Y';
+  if(c.id)s+=' line='+c.id;
+  return s;
+}
+
+/* ---------- pricing + descriptions ---------- */
+const money=n=>'$'+n.toFixed(2);
+function price(l){
+  const d=ITEMS[l.item];let p=d.s?(d.s[l.size||'M']):d.p;
+  if(l.combo)p+=COMBO_PRICE;
+  l.mods.forEach(m=>{const [a,i]=splitMod(m);if((a==='ADD'||a==='EXTRA')&&EXTRA_PRICE[i])p+=EXTRA_PRICE[i]});
+  return p*l.qty;
+}
+function splitMod(m){const k=m.indexOf('_');const a=m.slice(0,k);return ['NO','ADD','EXTRA','LIGHT'].includes(a)?[a,m.slice(k+1)]:[null,m]}
+function modText(m){const [a,i]=splitMod(m);if(!a)return FLAVORS[i]||i.toLowerCase();return {NO:'no',ADD:'add',EXTRA:'extra',LIGHT:'light'}[a]+' '+i.toLowerCase().replace('_',' ')}
+function desc(l){
+  const d=ITEMS[l.item];
+  const flav=l.mods.filter(m=>!splitMod(m)[0]).map(modText);
+  const rest=l.mods.filter(m=>splitMod(m)[0]).map(modText);
+  let s=(l.qty>1?l.qty+' ':'')+(d.s&&l.size?SIZES[l.size]+' ':'')+(flav.length?flav.join(' ')+' ':'')+d.n.toLowerCase()+(l.qty>1&&!/s$/.test(d.n)?'s':'');
+  if(l.combo)s+=' combo';
+  if(rest.length)s+=', '+rest.join(', ');
+  return s;
+}
+function totals(){const sub=S.lines.reduce((a,l)=>a+price(l),0);return{sub,tax:sub*TAX,tot:sub*(1+TAX)}}
+function pick(k,x,t){const a=T[k];return a[Math.floor(Math.random()*a.length)].replace('{x}',x||'').replace('{t}',t||'')}
+function listText(){const d=S.lines.map(desc);return d.length>1?d.slice(0,-1).join(', ')+' and '+d[d.length-1]:d[0]}
+function dedupe(m){const out=[];m.forEach(x=>{const [a,i]=splitMod(x);for(let j=out.length-1;j>=0;j--){const [b,k]=splitMod(out[j]);if(a&&b&&i===k)out.splice(j,1)}if(!out.includes(x))out.push(x)});return out}
+function fixDefaults(l){
+  const has=l.mods.some(m=>!splitMod(m)[0]);
+  if(l.item==='SODA'&&!has)l.mods.push('COLA');
+  if(l.item==='SHAKE'&&!has)l.mods.push('VANILLA');
+  l.mods=dedupe(l.mods);
+}
+
+/* ---------- execute commands against order state ---------- */
+function exec(cmds){
+  if(!cmds.length) return pick('NOMATCH');
+  const out=[],pre=[];const added=[];let ask=null;
+  const target=()=>S.lines.find(l=>l.id===S.awaiting)||S.lines[S.lines.length-1];
+  for(const c of cmds){
+    switch(c.op){
+      case 'ADD':{
+        const d=ITEMS[c.item];
+        const l={id:S.nid++,item:c.item,qty:c.qty||1,size:d.s?c.size:null,mods:[...c.mods],combo:false};
+        if(c.combo){if(d.c==='Entree')l.combo=true;else out.push(pick('NO_COMBO',d.n.toLowerCase()))}
+        fixDefaults(l);S.lines.push(l);
+        if(d.s&&!l.size&&!ask)ask=l;else added.push(desc(l));
+        break;}
+      case 'CHANGE':{
+        const l=[...S.lines].reverse().find(x=>x.item===c.item);
+        if(!l){exec([{...c,op:'ADD'}]);added.push(desc(S.lines[S.lines.length-1]));break}
+        applyChange(l,c);out.push(pick('CHANGE',desc(l)));break;}
+      case 'CHANGE_LAST':{
+        const l=target();
+        if(!l){out.push(pick('NO_TARGET'));break}
+        applyChange(l,c);
+        if(S.awaiting===l.id&&l.size){S.awaiting=null;out.push(pick('ADD',desc(l)))}
+        else out.push(pick('CHANGE',desc(l)));
+        break;}
+      case 'REMOVE':{
+        const l=[...S.lines].reverse().find(x=>x.item===c.item);
+        if(!l){out.push(pick('REMOVE_MISS',ITEMS[c.item].n.toLowerCase()));break}
+        if(c.qty&&l.qty>c.qty){l.qty-=c.qty;out.push(pick('CHANGE',desc(l)))}
+        else{S.lines=S.lines.filter(x=>x!==l);out.push(pick('REMOVE',desc(l)))}
+        if(S.awaiting===l.id)S.awaiting=null;
+        break;}
+      case 'REMOVE_ID':{const l=S.lines.find(x=>x.id===c.id);if(l){S.lines=S.lines.filter(x=>x!==l);out.push(pick('REMOVE',desc(l)))}if(S.awaiting===c.id)S.awaiting=null;break}
+      case 'REMOVE_LAST':{const l=S.lines.pop();out.push(l?pick('REMOVE',desc(l)):pick('EMPTY'));S.awaiting=null;break}
+      case 'TOTAL':out.push(S.lines.length?pick('TOTAL',money(totals().tot)):pick('EMPTY'));break;
+      case 'REPEAT':out.push(S.lines.length?pick('REPEAT',listText(),money(totals().tot)):pick('EMPTY'));break;
+      case 'DONE':out.push(S.lines.length?pick('DONE',money(totals().tot)):pick('EMPTY'));break;
+      case 'CLEAR':S.lines=[];S.awaiting=null;out.push(pick('CLEAR'));break;
+      case 'HELLO':pre.push(pick('HELLO'));break;
+      default:out.push(pick(c.op));
+    }
+  }
+  if(added.length)out.unshift(pick('ADD',added.join(' and ')));
+  if(ask){S.awaiting=ask.id;out.push(pick('ASK_SIZE',ITEMS[ask.item].n.toLowerCase()))}
+  return [...pre,...out].join(' ');
+}
+function applyChange(l,c){
+  const d=ITEMS[l.item];
+  if(c.size&&d.s)l.size=c.size;
+  if(c.qty)l.qty=c.qty;
+  if(c.combo&&d.c==='Entree')l.combo=true;
+  if(c.mods&&c.mods.length){
+    const newFlav=c.mods.some(m=>!splitMod(m)[0]);
+    if(newFlav)l.mods=l.mods.filter(m=>splitMod(m)[0]);
+    l.mods.push(...c.mods);
+  }
+  fixDefaults(l);
+}
+
+/* ---------- turns + feedback ---------- */
+const chat=document.getElementById('chat');
+function turn(text,source,cmds,unk){
+  const reply=exec(cmds);
+  const t={id:Date.now()+Math.random(),text,source,cmds:cmds.map(fmt),unk,reply,rating:null};
+  LOG.push(t);unk.forEach(u=>UNK[u]=(UNK[u]||0)+1);save();
+  const ub=document.createElement('div');ub.className='b u';
+  ub.innerHTML=esc(text)+'<div class="cmd">'+(t.cmds.length?t.cmds.map(esc).join('<br>'):'NO COMMAND')+'</div>'+(unk.length?'<div class="unk">unmatched: '+esc(unk.join(' '))+'</div>':'');
+  const lb=document.createElement('div');lb.className='b l';
+  lb.innerHTML=esc(reply)+'<div class="fb"><button class="up">\u{1F44D}</button><button class="down">\u{1F44E}</button></div>';
+  lb.querySelectorAll('.fb button').forEach(b=>b.onclick=()=>{
+    const up=b.classList.contains('up');t.rating=t.rating===(up?1:-1)?null:(up?1:-1);
+    lb.querySelector('.up').classList.toggle('on',t.rating===1);lb.querySelector('.down').classList.toggle('on',t.rating===-1);save();renderTeach();
+  });
+  chat.append(ub,lb);chat.scrollTop=chat.scrollHeight;
+  if(document.getElementById('speak').checked&&window.speechSynthesis){try{speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance(reply))}catch(e){}}
+  renderTicket();
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function sayText(){
+  const el=document.getElementById('say');const v=el.value.trim();if(!v)return;el.value='';
+  const {tokens,unk}=tokenize(v);turn(v,'words',parse(tokens),unk);
+}
+document.getElementById('send').onclick=sayText;
+document.getElementById('say').addEventListener('keydown',e=>{if(e.key==='Enter')sayText()});
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(SR){const m=document.getElementById('mic');m.classList.remove('hidden');m.onclick=()=>{const r=new SR();r.lang='en-US';r.onresult=e=>{document.getElementById('say').value=e.results[0][0].transcript;sayText()};r.start()}}
+
+/* ---------- ticket ---------- */
+function renderTicket(){
+  const el=document.getElementById('ticket');
+  if(!S.lines.length){el.innerHTML='<div style="color:var(--mute)">Empty</div>';return}
+  const t=totals();
+  el.innerHTML=S.lines.map(l=>'<div class="tline"><span>'+esc(desc(l))+(S.awaiting===l.id?' <small>(size?)</small>':'')+'</span><span>'+money(price(l))+' <button class="x" data-id="'+l.id+'">×</button></span></div>').join('')+
+  '<div class="tline"><small>Subtotal</small><small>'+money(t.sub)+'</small></div><div class="tline"><small>Tax</small><small>'+money(t.tax)+'</small></div><div class="tot"><span>Total</span><span>'+money(t.tot)+'</span></div>';
+  el.querySelectorAll('.x').forEach(b=>b.onclick=()=>{const id=+b.dataset.id;turn('Tap remove line '+id,'tap',[{op:'REMOVE_ID',id}],[])});
+}
+
+/* ---------- tap mode ---------- */
+let P={qty:1,size:null,mods:[],combo:false};
+const TAPMODS=['NO_ONION','NO_PICKLE','NO_TOMATO','NO_LETTUCE','NO_CHEESE','EXTRA_CHEESE','ADD_BACON','ADD_JALAPENO','NO_SAUCE','EXTRA_SAUCE','NO_ICE','LIGHT_ICE','CHOCOLATE','STRAWBERRY','ROOT_BEER','LEMON_LIME','SWEET','UNSWEET'];
+function chip(label,on,fn){const b=document.createElement('button');b.className='chip'+(on?' on':'');b.textContent=label;b.onclick=fn;return b}
+function renderPad(){
+  const q=document.getElementById('pq');q.innerHTML='';[1,2,3,4,5].forEach(n=>q.append(chip(n,P.qty===n,()=>{P.qty=n;renderPad()})));
+  const s=document.getElementById('ps');s.innerHTML='';Object.entries(SIZES).forEach(([k,v])=>s.append(chip(v,P.size===k,()=>{P.size=P.size===k?null:k;renderPad()})));
+  s.append(chip('combo',P.combo,()=>{P.combo=!P.combo;renderPad()}));
+  const m=document.getElementById('pm');m.innerHTML='';TAPMODS.forEach(k=>m.append(chip(modText(k),P.mods.includes(k),()=>{P.mods=P.mods.includes(k)?P.mods.filter(x=>x!==k):[...P.mods,k];renderPad()})));
+  document.getElementById('builder').textContent='NEXT: qty='+P.qty+(P.size?' size='+P.size:'')+(P.mods.length?' mods='+P.mods.join(','):'')+(P.combo?' combo=Y':'');
+}
+function buildItems(){
+  const g=document.getElementById('pi');g.innerHTML='';
+  Object.entries(ITEMS).forEach(([k,d])=>{const b=document.createElement('button');b.className='item';b.innerHTML=esc(d.n)+'<br><small style="color:var(--mute)">'+(d.s?money(d.s.S)+'+':money(d.p))+'</small>';
+    b.onclick=()=>{
+      const cmd={op:'ADD',item:k,qty:P.qty,size:P.size,mods:[...P.mods],combo:P.combo};
+      turn('Tap '+d.n,'tap',[cmd],[]);P={qty:1,size:null,mods:[],combo:false};renderPad();
+    };g.append(b)});
+  const a=document.getElementById('pa');a.innerHTML='';
+  [['Read back','REPEAT'],['Total','TOTAL'],['Undo last','REMOVE_LAST'],['Start over','CLEAR'],['Done','DONE']].forEach(([l,op])=>{const b=document.createElement('button');b.className='btn alt';b.textContent=l;b.onclick=()=>turn('Tap '+l,'tap',[{op}],[]);a.append(b)});
+  Object.entries(SIZES).forEach(([k,v])=>{const b=document.createElement('button');b.className='btn alt';b.textContent='Set '+v;b.onclick=()=>turn('Tap set '+v,'tap',[{op:'CHANGE_LAST',size:k,mods:[]}],[]);a.append(b)});
+}
+
+/* ---------- teach ---------- */
+function targets(){
+  const o=[];
+  Object.entries(ITEMS).forEach(([k,d])=>o.push(['ITEM:'+k,'Item: '+d.n]));
+  Object.entries(SIZES).forEach(([k,v])=>o.push(['SIZE:'+k,'Size: '+v]));
+  ING.forEach(i=>o.push(['ING:'+i,'Ingredient: '+i.toLowerCase()]));
+  Object.entries(FLAVORS).forEach(([k,v])=>o.push(['MOD:'+k,'Flavor: '+v]));
+  INTENTS.forEach(i=>o.push(['INTENT:'+i,'Command: '+i.toLowerCase()]));
+  o.push(['COMBO','Combo'],['NEG','Without (no)'],['PLUS:EXTRA','Extra'],['PLUS:ADD','Add'],['PLUS:LIGHT','Light'],['SEP','Separator (and)'],['FILLER','Ignore this word']);
+  for(let n=1;n<=12;n++)o.push(['NUM:'+n,'Number: '+n]);
+  return o;
+}
+function selHTML(){return targets().map(([v,l])=>'<option value="'+v+'">'+esc(l)+'</option>').join('')}
+document.getElementById('tTarget').innerHTML=selHTML();
+document.getElementById('tSave').onclick=()=>{const p=norm(document.getElementById('tPhrase').value);if(!p)return;CUSTOM[p]=document.getElementById('tTarget').value;delete UNK[p];document.getElementById('tPhrase').value='';save();renderTeach();renderTable()};
+function renderTeach(){
+  const u=Object.entries(UNK).filter(([w])=>look(w)===undefined).sort((a,b)=>b[1]-a[1]);
+  const ul=document.getElementById('unkList');
+  ul.innerHTML=u.length?'':'<div style="color:var(--mute)">None yet</div>';
+  u.slice(0,40).forEach(([w,n])=>{const r=document.createElement('div');r.className='row';r.style.marginBottom='6px';
+    r.innerHTML='<span class="unk" style="min-width:80px">'+esc(w)+' ('+n+')</span><select style="flex:1">'+selHTML()+'</select><button class="btn">Save</button>';
+    r.querySelector('button').onclick=()=>{CUSTOM[w]=r.querySelector('select').value;delete UNK[w];save();renderTeach();renderTable()};ul.append(r)});
+  const bl=document.getElementById('badList');const bad=LOG.filter(t=>t.rating===-1).slice(-20).reverse();
+  bl.innerHTML=bad.length?'':'<div style="color:var(--mute)">None yet</div>';
+  bad.forEach(t=>{const r=document.createElement('div');r.style.marginBottom='8px';
+    r.innerHTML='<div>'+esc(t.text)+'</div><div class="cmd">'+(t.cmds.map(esc).join('<br>')||'NO COMMAND')+'</div><div style="font-size:13px;color:var(--mute)">'+esc(t.reply)+'</div><button class="btn alt" style="margin-top:4px">Teach this phrase</button>';
+    r.querySelector('button').onclick=()=>{document.getElementById('tPhrase').value=norm(t.text);document.getElementById('tPhrase').scrollIntoView({behavior:'smooth'})};bl.append(r)});
+  const cl=document.getElementById('customList');const c=Object.entries(CUSTOM);
+  cl.innerHTML=c.length?'':'<div style="color:var(--mute)">None yet</div>';
+  c.forEach(([k,v])=>{const r=document.createElement('div');r.className='tline';r.innerHTML='<span>'+esc(k)+' <span class="cmd">'+esc(v)+'</span></span><button class="x">×</button>';r.querySelector('button').onclick=()=>{delete CUSTOM[k];save();renderTeach();renderTable()};cl.append(r)});
+}
+
+/* ---------- table view ---------- */
+function renderTable(){
+  const tpl=Object.values(T).reduce((a,x)=>a+x.length,0);
+  const bytes=new Blob([JSON.stringify({BASE,CUSTOM,T,ITEMS})]).size;
+  const st=[['Base aliases',Object.keys(BASE).length],['Learned',Object.keys(CUSTOM).length],['Items',Object.keys(ITEMS).length],['Ingredients',ING.length],['Commands',INTENTS.length+1],['Replies',tpl],['Turns logged',LOG.length],['Thumbs down',LOG.filter(t=>t.rating===-1).length],['Size KB',(bytes/1024).toFixed(1)]];
+  document.getElementById('stats').innerHTML=st.map(([l,n])=>'<div><b>'+n+'</b>'+l+'</div>').join('');
+  const f=norm(document.getElementById('aFilter').value||'');
+  const rows=Object.entries({...BASE,...CUSTOM}).filter(([k,v])=>!f||k.includes(f)||v.toLowerCase().includes(f)).slice(0,300);
+  document.getElementById('aTable').innerHTML=rows.map(([k,v])=>'<tr><td>'+esc(k)+(k in CUSTOM?' *':'')+'</td><td class="m">'+esc(v)+'</td></tr>').join('');
+}
+document.getElementById('aFilter').oninput=renderTable;
+document.getElementById('bCopy').onclick=()=>{const j=JSON.stringify({custom:CUSTOM,unk:UNK,log:LOG});document.getElementById('bText').value=j;try{navigator.clipboard.writeText(j)}catch(e){}};
+document.getElementById('bLoad').onclick=()=>{try{const j=JSON.parse(document.getElementById('bText').value);CUSTOM=j.custom||{};UNK=j.unk||{};LOG=j.log||[];save();renderTeach();renderTable()}catch(e){document.getElementById('bText').value='That JSON did not parse.'}};
+document.getElementById('bWipe').onclick=()=>{CUSTOM={};UNK={};LOG=[];save();renderTeach();renderTable()};
+
+/* ---------- tabs + boot ---------- */
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===b));
+  ['order','teach','table'].forEach(v=>document.getElementById('v-'+v).classList.toggle('hidden',v!==b.dataset.v));
+  if(b.dataset.v==='teach')renderTeach();if(b.dataset.v==='table')renderTable();
+});
+renderPad();buildItems();renderTicket();
+(function(){const lb=document.createElement('div');lb.className='b l';lb.textContent=pick('HELLO');chat.append(lb)})();
+</script>
+</body>
+</html>

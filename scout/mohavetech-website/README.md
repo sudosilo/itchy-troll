@@ -8,6 +8,6 @@ Live at mohavetech-website.vercel.app.
 
 This app is checked every morning by Control Troll.
 
-Latest change. Added a sticky notes view where a mannequin wears a fitted gown made of one note per app. Added wall, car, semi trailer, 747, and wind scenes for the notes. Sync now refreshes the Vercel login first and still deploys if the app list read fails.
+Latest change. Sticky notes can now be dragged anywhere, then arranged newest first, A to Z, or shuffled, and the layouts are saved. The five newest apps now sort to the top. The app list is now kept in sync with Vercel by GitHub every three hours.
 
 Full history is in CHANGELOG.md.

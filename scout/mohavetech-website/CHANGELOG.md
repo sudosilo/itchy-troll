@@ -1,5 +1,7 @@
 App Index changelog
 
+2026-11-19, v2026.11.19b. Sticky notes can now be dragged anywhere, then arranged newest first, A to Z, or shuffled, and the layouts are saved. The five newest apps now sort to the top. The app list is now kept in sync with Vercel by GitHub every three hours.
+
 2026-11-19, v2026.11.19. Added a sticky notes view where a mannequin wears a fitted gown made of one note per app. Added wall, car, semi trailer, 747, and wind scenes for the notes. Sync now refreshes the Vercel login first and still deploys if the app list read fails.
 
 2026-11-18, v2026.11.18. Apps that were unsorted now sit in categories. A new category was tried and then removed, and apps went back to their old spots. The menu now floats over the page in the retro and future looks, and the future look has stars behind the links and plain striped section titles. Sync now resets to GitHub first and only deploys after a good push.
