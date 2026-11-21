@@ -2,7 +2,7 @@
 import crypto from 'crypto';
 import {loadContrib, loadConfig, ID_RE} from '../scripts/load.mjs';
 
-export const REPO = 'sudosilo/2026-10-18-orange-testbed';
+export const REPO = 'sudosilo/conveyor-sim';
 export {loadContrib, loadConfig, ID_RE};
 
 export function cors(res) {

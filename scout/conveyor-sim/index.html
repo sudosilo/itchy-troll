@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Agent Test Bed</title>
+<title>Conveyor Sim</title>
 <style>
 :root{--bg:#f4f2ea;--panel:#fffdf7;--ink:#22262b;--muted:#6b6f75;--line:#d9d4c4;--accent:#c4621d;--flag:#c0392b;color-scheme:light}
 *{box-sizing:border-box}
@@ -18,7 +18,7 @@ button{font:inherit;background:var(--panel);color:var(--ink);border:1px solid va
 button.on{border-color:var(--accent);color:var(--accent)}
 #sheet{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);max-height:46vh;display:flex;flex-direction:column}
 #sheet.closed .body{display:none}
-.tabs{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs{flex:none;display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);overflow-x:auto}
 .tabs button{padding:5px 9px;white-space:nowrap}
 .body{overflow:auto;padding:10px 12px 18px}
 .row{display:flex;gap:10px;align-items:flex-start;padding:7px 0;border-bottom:1px dashed var(--line)}
@@ -32,6 +32,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .log div{padding:3px 0;border-bottom:1px dashed var(--line);font-size:12px}
 .flag{color:var(--flag)}
 #status{font-size:12px}
+#pick{position:fixed;left:10px;bottom:64px;max-width:min(360px,calc(100vw - 20px));display:none;font-size:12px}
 p{margin:0 0 10px}
 </style>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
@@ -39,17 +40,21 @@ p{margin:0 0 10px}
 <body>
 <div id="view"></div>
 <div class="bar">
-  <div class="chip title">AGENT <span>TEST BED</span></div>
+  <div class="chip title">CONVEYOR <span>SIM</span></div>
   <div class="chip" id="status">loading</div>
   <div class="sp"></div>
-  <button id="bDemo">Demo</button>
-  <button id="bHome">0:0</button>
+  <button id="bFactory">Factory</button>
+  <button id="bDemo">City</button>
+  <button id="bIso" class="on">Iso</button>
+  <button id="bHome">Home</button>
   <button id="bTop">Top</button>
   <button id="bSheet">Panel</button>
 </div>
-<div id="sheet">
+<div class="chip" id="pick"></div>
+<div id="sheet" class="closed">
   <div class="tabs">
-    <button data-tab="agents" class="on">Agents</button>
+    <button data-tab="factory" class="on">Factory</button>
+    <button data-tab="agents">Agents</button>
     <button data-tab="layers">Layers</button>
     <button data-tab="scores">Scores</button>
     <button data-tab="log">Log</button>
@@ -60,11 +65,13 @@ p{margin:0 0 10px}
 <script type="module">
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
-import {S,PALETTE,DISC,DETAIL,replay,recSegs,scoreOf,createWorld,applyCall,finalize} from './engine.js';
+import {S,PALETTE,DISC,DETAIL,MACHINES,BELT_W,replay,recSegs,scoreOf,createWorld,applyCall,finalize} from './engine.js';
+import {buildSim,packetLabel} from './sim.js';
+import {SAUCES,STYLES} from './packets.js';
 
 const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let config={stewards:[],judges:[]},manifest={agents:[],files:[]},liveManifest=null,allFiles=[],days=[],W=null,demo=null;
-const state={demo:false,fixes:true,names:true,anim:true,agents:{},disc:Object.fromEntries(DISC.map(d=>[d,true])),flags:true,detail:'auto',radius:3,cut:30,day:null};
+let config={stewards:[],judges:[]},manifest={agents:[],files:[]},liveManifest=null,allFiles=[],days=[],W=null,demo=null,factory=null,sim=null;
+const state={mode:'live',iso:true,fixes:true,names:true,anim:true,agents:{},disc:Object.fromEntries(DISC.map(d=>[d,true])),flags:true,detail:'auto',radius:3,cut:30,day:null};
 
 const view=document.getElementById('view');
 const renderer=new THREE.WebGLRenderer({antialias:true});
@@ -74,23 +81,45 @@ renderer.setClearColor(0xf4f2ea,1);
 renderer.localClippingEnabled=true;
 view.appendChild(renderer.domElement);
 const scene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(50,innerWidth/innerHeight,0.1,6000);
-const controls=new OrbitControls(camera,renderer.domElement);
-controls.enableDamping=true;controls.maxPolarAngle=Math.PI*0.495;controls.maxDistance=1500;
+const persp=new THREE.PerspectiveCamera(50,innerWidth/innerHeight,0.1,6000);
+const ortho=new THREE.OrthographicCamera(-1,1,1,-1,-2000,4000);
+let camera=persp,controls=null,isoSize=70;
 const clip=new THREE.Plane(new THREE.Vector3(0,-1,0),state.cut);
 const mat=new THREE.LineBasicMaterial({vertexColors:true,clippingPlanes:[clip]});
+// Flat fills. Three fixed tones per box stand in for shading, so nothing is lit.
+const fillMat=new THREE.MeshBasicMaterial({vertexColors:true,clippingPlanes:[clip],polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1,side:THREE.DoubleSide});
 const toV=(p)=>[p[0]/1000,p[2]/1000,-p[1]/1000];
 const loaded=new Map();
 let grid=null,lastCenter='';
+
+function sizeOrtho(){const a=innerWidth/innerHeight;ortho.left=-isoSize*a/2;ortho.right=isoSize*a/2;ortho.top=isoSize/2;ortho.bottom=-isoSize/2;ortho.updateProjectionMatrix();}
+function useCamera(iso){
+  const t=controls?controls.target.clone():new THREE.Vector3();
+  if(controls)controls.dispose();
+  camera=iso?ortho:persp;
+  controls=new OrbitControls(camera,renderer.domElement);
+  controls.enableDamping=true;controls.target.copy(t);
+  if(iso){
+    sizeOrtho();controls.enableRotate=false;controls.screenSpacePanning=true;controls.minZoom=0.3;controls.maxZoom=12;
+    controls.mouseButtons={LEFT:THREE.MOUSE.PAN,MIDDLE:THREE.MOUSE.DOLLY,RIGHT:THREE.MOUSE.PAN};
+    controls.touches={ONE:THREE.TOUCH.PAN,TWO:THREE.TOUCH.DOLLY_PAN};
+    placeIso();
+  }else{controls.maxPolarAngle=Math.PI*0.495;controls.maxDistance=1500;camera.position.set(t.x+60,55,t.z+70);}
+  controls.update();
+}
+// Classic isometric angle: 45 degrees around, 35.26 degrees down.
+function placeIso(){const t=controls.target,d=150,el=Math.atan(1/Math.SQRT2);ortho.position.set(t.x+d*Math.cos(el)*Math.SQRT1_2,t.y+d*Math.sin(el),t.z+d*Math.cos(el)*Math.SQRT1_2);ortho.lookAt(t);}
 
 function agentColor(id){const a=manifest.agents.find(x=>x.id===id);const c=a&&a.info&&Number.isInteger(a.info.color)?a.info.color:7;return PALETTE[c]||PALETTE[7];}
 function agentName(id){const a=manifest.agents.find(x=>x.id===id);return a&&a.info&&a.info.name?a.info.name:id;}
 
 function clearMeshes(){for(const L of loaded.values()){scene.remove(L.group);L.group.traverse(o=>o.geometry&&o.geometry.dispose());}loaded.clear();lastCenter='';}
 function rebuildWorld(){
-  if(state.demo&&demo){W=createWorld();for(const c of demo.calls)applyCall(W,c.agent,c);finalize(W);}
+  const ex=state.mode==='factory'?factory:state.mode==='city'?demo:null;
+  if(ex){W=createWorld();for(const c of ex.calls)applyCall(W,c.agent,c);finalize(W);}
   else W=replay(allFiles.filter(f=>!state.day||f.date<=state.day).map(f=>state.fixes||!config.stewards.includes(f.agent)||!Array.isArray(f.calls)?f:Object.assign({},f,{calls:f.calls.filter(c=>c&&c.tool==='judge_score')})),null,config);
   for(const id of Object.keys(W.stats))if(!(id in state.agents))state.agents[id]=true;
+  sim=buildSim(W,11);for(let i=0;i<4000;i++)sim.step(0.06);
   clearMeshes();updateChunks(true);renderPanel(true);updateStatus();
 }
 
@@ -104,15 +133,33 @@ function pushSegs(g,r,segs,off){
   }
 }
 function mkLines(pos,col){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));return new THREE.LineSegments(g,mat);}
+// Adds a solid box in mm with top, south and east faces in three tones of one color.
+const TONE={top:1,s:0.86,e:0.72};
+function fillBox(f,cx,cy,z0,w,d,h,rot,col){
+  const c=Math.cos(rot),s=Math.sin(rot),P=(x,y,z)=>toV([cx+x*c-y*s,cy+x*s+y*c,z]);
+  const x=w/2,y=d/2,z1=z0+h;
+  const quad=(a,b,cc,dd,t)=>{for(const q of [a,b,cc,a,cc,dd]){f.pos.push(...q);f.col.push(col.r*t+(1-t)*0.15,col.g*t+(1-t)*0.15,col.b*t+(1-t)*0.15);}};
+  quad(P(-x,-y,z1),P(x,-y,z1),P(x,y,z1),P(-x,y,z1),TONE.top);
+  quad(P(-x,-y,z0),P(x,-y,z0),P(x,-y,z1),P(-x,-y,z1),TONE.s);
+  quad(P(x,-y,z0),P(x,y,z0),P(x,y,z1),P(x,-y,z1),TONE.e);
+  quad(P(-x,y,z0),P(-x,-y,z0),P(-x,-y,z1),P(-x,y,z1),TONE.e);
+  quad(P(x,y,z0),P(-x,y,z0),P(-x,y,z1),P(x,y,z1),TONE.s);
+}
+const lighten=(hex,k)=>new THREE.Color(hex).lerp(new THREE.Color(0xffffff),k);
 const MAX_ANIM_PER_CHUNK=60;
 function pivotOf(r){const a=r.meta&&r.meta.anim;if(a&&a.pivot)return a.pivot;if(r.kind==='symbol')return r.at;const p=r.pts;let x=0,y=0,z=Infinity;for(const q of p){x+=q[0];y+=q[1];z=Math.min(z,q[2]);}return [x/p.length,y/p.length,z];}
 function buildChunk(c){
-  const groups={},anims=[];
+  const groups={},anims=[],fills={};
   const add=(bk,hex,segs)=>{const g=groups[bk]||(groups[bk]={pos:[],col:[]});const col=new THREE.Color(hex);for(const p of segs){const v=toV(p);g.pos.push(v[0],v[1],v[2]);g.col.push(col.r,col.g,col.b);}};
   const group=new THREE.Group(),batches=[];
   for(const r of c.records){
     if(r.hidden&&state.fixes)continue;
     const m=r.meta||{};
+    if(r.kind==='machine'||r.kind==='conveyor'){
+      const fk=r.agent+'|factory',f=fills[fk]||(fills[fk]={pos:[],col:[]});
+      if(r.kind==='machine'){const [w,d,h]=MACHINES[r.type].size;fillBox(f,r.at[0],r.at[1],r.at[2],w,d,r.type==='turnstile'||r.type==='arm'?h*0.25:h,r.rot||0,lighten(PALETTE[r.color],0.55));}
+      else for(let i=0;i<r.pts.length-1;i++){const a=r.pts[i],b=r.pts[i+1],L=Math.hypot(b[0]-a[0],b[1]-a[1]);fillBox(f,(a[0]+b[0])/2,(a[1]+b[1])/2,Math.min(a[2],b[2])-80,L+BELT_W,BELT_W,60,Math.atan2(b[1]-a[1],b[0]-a[0]),new THREE.Color(0xd8d2c2));}
+    }
     if((m.anim||m.billboard)&&anims.length<MAX_ANIM_PER_CHUNK){
       const piv=m.anim&&m.anim.type==='path'?m.anim.pts[0]:pivotOf(r);
       const base=r.kind==='symbol'?Object.assign({},r,{rot:0}):r;
@@ -129,6 +176,7 @@ function buildChunk(c){
   for(const f of c.flags)add('sys|flags','#c0392b',[[f[0]-1500,f[1]-1500,f[2]],[f[0]+1500,f[1]+1500,f[2]],[f[0]-1500,f[1]+1500,f[2]],[f[0]+1500,f[1]-1500,f[2]],[f[0],f[1],f[2]],[f[0],f[1],f[2]+6000]]);
   if(c.owner){const x0=c.cx*S,y0=c.cy*S,o=600;add('sys|owner',agentColor(c.owner),[[x0+o,y0+o,0],[x0+o+6000,y0+o,0],[x0+o,y0+o,0],[x0+o,y0+o+6000,0]]);}
   for(const L of (W.labels||[]))if(L.k===c.k){const sp=label(L);if(sp){group.add(sp);batches.push(sp);}}
+  for(const fk in fills){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(fills[fk].pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(fills[fk].col,3));const me=new THREE.Mesh(g,fillMat);const [agent]=fk.split('|');me.userData={agent,disc:'factory'};group.add(me);batches.push(me);}
   for(const bk in groups){const m=mkLines(groups[bk].pos,groups[bk].col);const [agent,disc]=bk.split('|');m.userData={agent,disc};group.add(m);batches.push(m);}
   scene.add(group);loaded.set(c.k,{group,batches,anims,cx:c.cx,cy:c.cy});
 }
@@ -160,27 +208,81 @@ function animate(t){
     }
   }
 }
+
+// Packets. One instanced box per packet body, plus a small badge on top for wrapper styles.
+const MAXP=6000;
+const pGeo=new THREE.BoxGeometry(1,1,1);
+{const n=pGeo.attributes.position.count,c=[];for(let i=0;i<n;i++){const f=Math.floor(i/4);const t=f===2?1:(f===0||f===1)?0.72:0.86;c.push(t,t,t);}pGeo.setAttribute('color',new THREE.Float32BufferAttribute(c,3));}
+const pMat=new THREE.MeshBasicMaterial({vertexColors:true,clippingPlanes:[clip]});
+const pMesh=new THREE.InstancedMesh(pGeo,pMat,MAXP);pMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);pMesh.frustumCulled=false;
+pMesh.setColorAt(0,new THREE.Color(1,1,1));scene.add(pMesh);
+const sauceCol=SAUCES.map(s=>new THREE.Color(s[2])),styleCol=STYLES.map(s=>new THREE.Color(s[1]));
+const _m=new THREE.Matrix4(),_q=new THREE.Quaternion(),_p=new THREE.Vector3(),_s=new THREE.Vector3(),_e=new THREE.Euler(),_up=new THREE.Vector3(0,1,0);
+let pn=0;
+// x, y, z in mm at the bottom center of the packet, yaw in radians, dims [length, width, thickness] in mm along the packet.
+function box(x,y,z,yaw,L,Wd,T,col){if(pn>=MAXP)return;_p.set(x/1000,(z+T/2)/1000,-y/1000);_q.setFromAxisAngle(_up,yaw);_s.set(L/1000,T/1000,Wd/1000);_m.compose(_p,_q,_s);pMesh.setMatrixAt(pn,_m);pMesh.setColorAt(pn,col);pn++;}
+function standing(x,y,z,yaw,L,H,T,col){if(pn>=MAXP)return;_p.set(x/1000,(z+H/2)/1000,-y/1000);_q.setFromAxisAngle(_up,yaw);_s.set(L/1000,H/1000,T/1000);_m.compose(_p,_q,_s);pMesh.setMatrixAt(pn,_m);pMesh.setColorAt(pn,col);pn++;}
+const PL=900,PW=600,PT=160;
+function drawPacket(p,x,y,z,yaw){
+  const c=Math.cos(yaw),s=Math.sin(yaw);
+  if(p.half){box(x,y,z,yaw,PL/2,PW,PT,sauceCol[p.s]);}
+  else if(p.b>=0){const o=PL/4;box(x-c*o,y-s*o,z,yaw,PL/2,PW,PT,sauceCol[p.s]);box(x+c*o,y+s*o,z,yaw,PL/2,PW,PT,sauceCol[p.b]);}
+  else box(x,y,z,yaw,PL,PW,PT,sauceCol[p.s]);
+  if(p.st)box(x,y,z+PT,yaw,PL*0.3,PW*0.5,60,styleCol[p.st]);
+}
+function drawPile(m,list,z0){
+  const r=m.r,[w,d,h]=MACHINES[r.type].size,cols=Math.max(1,Math.floor(w/(PL+80))),per=cols*Math.max(1,Math.floor(d/(PW+80)));
+  list.forEach((p,i)=>{const k=i%per,lay=Math.floor(i/per),cx=k%cols,cy=Math.floor(k/cols);
+    const lx=-w/2+(PL+80)*(cx+0.5),ly=-d/2+(PW+80)*(cy+0.5),c=Math.cos(r.rot||0),s=Math.sin(r.rot||0);
+    drawPacket(p,r.at[0]+lx*c-ly*s,r.at[1]+lx*s+ly*c,z0+lay*(PT+20),r.rot||0);});
+}
+// Finished products. Each fabricator turns packets into one thing beside the machine.
+function drawProduct(m){
+  const r=m.r,[w,d]=MACHINES[r.type].size,x0=r.at[0]+w/2+600,y0=r.at[1],prod=r.meta&&r.meta.product||'wallpaper',L=m.made;
+  if(r.type==='dock'){drawPile({r:{type:r.type,at:[r.at[0]-w/2-3600,r.at[1]],rot:0}},L.slice(-60),0);return;}
+  if(r.type==='reject'){L.forEach((p,i)=>{const a=(p.u*2.399)%6.283,rad=200+((p.u*37)%900);drawPacket(p,r.at[0]+Math.cos(a)*rad,r.at[1]+Math.sin(a)*rad,1500+Math.floor(i/6)*(PT+10),a);});return;}
+  if(prod==='wallpaper'){L.forEach((p,i)=>{const col=i%12,row=Math.floor(i/12)%12;standing(x0,y0-6*(PW+40)+col*(PW+40),200+row*(PL+40),Math.PI/2,PW,PL,80,sauceCol[p.half?p.s:p.s]);if(p.b>=0&&!p.half)standing(x0+10,y0-6*(PW+40)+col*(PW+40),200+row*(PL+40)+PL/2,Math.PI/2,PW,PL/2,80,sauceCol[p.b]);});return;}
+  if(prod==='roll'){const ys=r.at[1]-d/2-900;standing(r.at[0],ys,0,0,1400,1400,300,new THREE.Color(0xe9e4d6));L.slice(-18).forEach((p,i)=>{box(r.at[0],ys-400-i*(PL*0.55),0,Math.PI/2,PL*0.55,1200,30,sauceCol[p.s]);});return;}
+  if(prod==='brick'){L.slice(-60).forEach((p,i)=>{box(x0+400,y0,i*60,0,2400,1200,60,sauceCol[p.s]);});return;}
+  if(prod==='token'){L.forEach((p,i)=>{const k=i%4;box(x0+400+(k%2)*900,y0+Math.floor(k/2)*900,Math.floor(i/4)*80,(i*0.7)%3,700,700,80,styleCol[p.st]||sauceCol[p.s]);});return;}
+  L.slice(-40).forEach((p,i)=>{standing(x0,y0,200+i*120,Math.PI/2,1200,110,40,sauceCol[p.s]);});
+}
+function drawPackets(){
+  pn=0;
+  if(sim&&state.disc.factory){
+    for(const b of sim.belts){if(state.agents[b.r.agent]===false)continue;for(const it of b.items){const q=sim.beltPos(b,it.d);drawPacket(it.p,q[0],q[1],q[2]+40,q[3]);}}
+    for(const m of sim.machines.values()){
+      if(state.agents[m.r.agent]===false)continue;
+      const h=MACHINES[m.type].size[2],top=m.r.at[2]+(m.type==='turnstile'||m.type==='arm'?h*0.25:h)+20;
+      const show=[].concat(m.cur?[m.cur]:[],m.q,m.hold.map(x=>x.p),m.out.map(x=>x[0]));
+      if(m.type!=='reject')drawPile(m,show.slice(0,80),top);
+      if(m.made.length)drawProduct(m);
+    }
+  }
+  pMesh.count=pn;pMesh.instanceMatrix.needsUpdate=true;if(pMesh.instanceColor)pMesh.instanceColor.needsUpdate=true;
+}
+
 const texCache=new Map();
 function label(L){
-  const col={street:'#1f3a5f',building:'#8a2f55',activity:'#2f6b3a',sign:'#5a5a5a'}[L.kind]||'#22262b';
+  const col={street:'#1f3a5f',building:'#8a2f55',activity:'#2f6b3a',sign:'#5a5a5a',machine:'#22262b'}[L.kind]||'#22262b';
   const ck=L.kind+'|'+L.text;let t=texCache.get(ck);
   if(!t){
     const cv=document.createElement('canvas'),g=cv.getContext('2d'),fs=40;g.font=(L.kind==='building'?'700 ':'')+fs+'px ui-monospace,Menlo,monospace';
     const w=Math.ceil(g.measureText(L.text).width)+28;cv.width=w;cv.height=fs+24;
     g.font=(L.kind==='building'?'700 ':'')+fs+'px ui-monospace,Menlo,monospace';
-    g.fillStyle='rgba(255,253,247,0.88)';g.fillRect(0,0,w,cv.height);g.strokeStyle=col;g.lineWidth=3;g.strokeRect(1.5,1.5,w-3,cv.height-3);
+    g.fillStyle='rgba(255,253,247,0.9)';g.fillRect(0,0,w,cv.height);g.strokeStyle=col;g.lineWidth=3;g.strokeRect(1.5,1.5,w-3,cv.height-3);
     g.fillStyle=col;g.textBaseline='middle';g.fillText(L.text,14,cv.height/2+2);
     t=new THREE.CanvasTexture(cv);t.userData={w,h:cv.height};texCache.set(ck,t);
   }
   const m=new THREE.SpriteMaterial({map:t,depthTest:false,transparent:true});
-  const sp=new THREE.Sprite(m);const h=L.kind==='building'?2.2:L.kind==='street'?1.6:1.1;
+  const sp=new THREE.Sprite(m);const h=L.kind==='building'?2.2:L.kind==='street'?1.6:L.kind==='machine'?1.0:1.1;
   sp.scale.set(h*t.userData.w/t.userData.h,h,1);const v=toV(L.at);sp.position.set(v[0],v[1],v[2]);
   sp.userData={agent:'sys',disc:'names',kind:L.kind};sp.renderOrder=2;return sp;
 }
 function applyVisibility(){
   const cam=camera.position;
   for(const L of loaded.values()){
-    const near=Math.hypot(cam.x-(L.cx+.5)*S/1000,cam.y,cam.z+(L.cy+.5)*S/1000)<170;
+    const near=state.iso||Math.hypot(cam.x-(L.cx+.5)*S/1000,cam.y,cam.z+(L.cy+.5)*S/1000)<170;
     for(const m of L.batches){
       const {agent,disc}=m.userData;
       if(disc==='names'){m.visible=state.names&&(m.userData.kind!=='activity'||near);continue;}
@@ -207,33 +309,65 @@ function updateChunks(force){
   grid.position.set((cx+.5)*S/1000,-0.02,-(cy+.5)*S/1000);scene.add(grid);
   applyVisibility();
 }
-function home(){const x=S/2000,z=-S/2000;controls.target.set(x,0,z);camera.position.set(x+60,55,z+70);}
-function topView(){const t=controls.target;camera.position.set(t.x,260,t.z+0.01);}
-home();
+// Home frames the machines when there are any, otherwise chunk 0:0.
+function home(){
+  let x=S/2000,z=-S/2000;
+  if(sim&&sim.machines.size){let a=Infinity,b=-Infinity,c=Infinity,d=-Infinity;for(const m of sim.machines.values()){a=Math.min(a,m.r.at[0]);b=Math.max(b,m.r.at[0]);c=Math.min(c,m.r.at[1]);d=Math.max(d,m.r.at[1]);}x=(a+b)/2000;z=-(c+d)/2000;const span=((b-a)+(d-c))/1000*0.62+4;isoSize=Math.max(30,Math.min(320,Math.max(span*0.78,span*1.08/(innerWidth/innerHeight))));}
+  controls.target.set(x,0,z);
+  if(state.iso){ortho.zoom=1;sizeOrtho();placeIso();}else camera.position.set(x+60,55,z+70);
+  controls.update();
+}
+function topView(){const t=controls.target;if(state.iso){state.iso=false;document.getElementById('bIso').classList.remove('on');useCamera(false);}camera.position.set(t.x,260,t.z+0.01);}
+useCamera(true);home();
 
-const body=document.getElementById('body');let tab='agents';
+const body=document.getElementById('body');let tab='factory';
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));renderPanel(true);});
 document.getElementById('bSheet').onclick=()=>document.getElementById('sheet').classList.toggle('closed');
 document.getElementById('bHome').onclick=home;
-document.getElementById('bDemo').onclick=async()=>{
-  if(!demo){try{demo=await (await fetch('examples/demo.json')).json();}catch(e){demo=null;}if(!demo)return;}
-  state.demo=!state.demo;
-  document.getElementById('bDemo').classList.toggle('on',state.demo);
-  manifest=state.demo?{agents:demo.agents,files:[]}:liveManifest;
+document.getElementById('bIso').onclick=()=>{state.iso=!state.iso;document.getElementById('bIso').classList.toggle('on',state.iso);useCamera(state.iso);applyVisibility();};
+async function setMode(mode){
+  if(mode==='city'&&!demo){try{demo=await (await fetch('examples/demo.json')).json();}catch(e){demo=null;}if(!demo)return;}
+  if(mode==='factory'&&!factory){try{factory=await (await fetch('examples/factory.json')).json();}catch(e){factory=null;}if(!factory)return;}
+  state.mode=state.mode===mode?'live':mode;
+  document.getElementById('bDemo').classList.toggle('on',state.mode==='city');
+  document.getElementById('bFactory').classList.toggle('on',state.mode==='factory');
+  manifest=state.mode==='city'?{agents:demo.agents,files:[]}:state.mode==='factory'?{agents:factory.agents,files:[]}:liveManifest;
   for(const a of manifest.agents)if(!(a.id in state.agents))state.agents[a.id]=true;
-  rebuildWorld();
-};
+  rebuildWorld();home();
+}
+document.getElementById('bDemo').onclick=()=>setMode('city');
+document.getElementById('bFactory').onclick=()=>setMode('factory');
 document.getElementById('bTop').onclick=topView;
 
+// Tap a machine to read what it stands for in a real website.
+const pick=document.getElementById('pick'),ray=new THREE.Raycaster();let down=null;
+renderer.domElement.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY];});
+renderer.domElement.addEventListener('pointerup',e=>{
+  if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>6||!sim)return;
+  const ndc=new THREE.Vector2(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);ray.setFromCamera(ndc,camera);
+  let best=null,bd=Infinity;
+  for(const m of sim.machines.values()){const [w,d,h]=MACHINES[m.type].size,c=toV([m.r.at[0],m.r.at[1],m.r.at[2]+h/2]);const bx=new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(...c),new THREE.Vector3(Math.max(w,d)/1000,h/1000,Math.max(w,d)/1000));const hit=ray.ray.intersectBox(bx,new THREE.Vector3());if(hit){const dd=hit.distanceTo(ray.ray.origin);if(dd<bd){bd=dd;best=m;}}}
+  if(!best){pick.style.display='none';return;}
+  const M=MACHINES[best.type],last=best.made[best.made.length-1]||best.q[0]||best.cur;
+  pick.innerHTML=`<b>${esc(best.r.name)}</b> <span class="muted">${esc(M.name)}</span><br>${esc(M.web)}<br><span class="muted">in ${best.n.in}, out ${best.n.out}${best.n.made?', made '+best.n.made:''}${best.n.reject?', rejected '+best.n.reject:''}${best.n.miss?', misses '+best.n.miss:''}${best.hold.length?', holding '+best.hold.length+' halves':''}${last?'<br>latest: '+esc(packetLabel(last)):''}</span>`;
+  pick.style.display='block';
+});
+
+function factoryRows(){
+  if(!sim||!sim.machines.size)return '<p class="muted">No machines yet. Tap Factory to see the example packet factory, or point an agent at agent-rules.txt to build one.</p>';
+  let moving=0;for(const b of sim.belts)moving+=b.items.length;
+  return `<p>${moving} packets on belts. ${sim.made} finished. Tap any machine to read what it stands for in a website.</p>`+[...sim.machines.values()].map(m=>{const M=MACHINES[m.type];return `<div class="row"><span class="sw" style="background:${PALETTE[m.r.color]}"></span><div style="flex:1"><b>${esc(m.r.name)}</b> <span class="muted">${esc(M.name)}</span><div class="muted">${esc(M.web)}</div><div class="muted">in ${m.n.in}, out ${m.n.out}${m.n.made?', made '+m.n.made:''}${m.n.reject?', rejected '+m.n.reject:''}${m.n.miss?', misses '+m.n.miss:''}${m.hold.length?', holding '+m.hold.length:''}${m.q.length?', waiting '+m.q.length:''}</div></div></div>`;}).join('');
+}
 function renderPanel(){
-  if(tab==='agents'){
+  if(tab==='factory'){body.innerHTML=factoryRows();}
+  else if(tab==='agents'){
     const ids=[...new Set([...manifest.agents.map(a=>a.id),...Object.keys(W?W.stats:{})])];
     body.innerHTML=ids.length?ids.map(id=>{const a=manifest.agents.find(x=>x.id===id)||{info:{}};const s=W&&W.stats[id];return `<label class="row"><input type="checkbox" data-agent="${esc(id)}" ${state.agents[id]!==false?'checked':''}><span class="sw" style="background:${agentColor(id)}"></span><span><b>${esc(agentName(id))}</b> <span class="muted">${esc(id)}${a.info.model?' on '+esc(a.info.model):''}</span><br><span class="muted">${esc(a.info.about||'')}${s?' '+s.records+' records, '+s.chunks+' chunks':''}</span></span></label>`;}).join(''):'<p class="muted">No agents have played yet. Point an agent at agent-rules.txt in the repository to start.</p>';
     body.querySelectorAll('[data-agent]').forEach(i=>i.onchange=()=>{state.agents[i.dataset.agent]=i.checked;applyVisibility();});
   }else if(tab==='layers'){
     const di=days.indexOf(state.day);
     body.innerHTML=DISC.map(d=>`<label class="tg"><input type="checkbox" data-disc="${d}" ${state.disc[d]?'checked':''}>${d}${DETAIL.has(d)?' <span class="muted">(detail)</span>':''}</label>`).join('')+
-    `<label class="tg"><input type="checkbox" id="fx" ${state.fixes?'checked':''}>steward fixes <span class="muted">(off shows the city as the builders left it)</span></label>
+    `<label class="tg"><input type="checkbox" id="fx" ${state.fixes?'checked':''}>steward fixes <span class="muted">(off shows the world as the builders left it)</span></label>
     <label class="tg"><input type="checkbox" id="an" ${state.anim?'checked':''}>animations</label>
     <label class="tg"><input type="checkbox" id="nm" ${state.names?'checked':''}>names, signs and activity notes</label>
     <label class="tg"><input type="checkbox" id="fl" ${state.flags?'checked':''}><span class="flag">check flags and owner marks</span></label>
@@ -254,23 +388,27 @@ function renderPanel(){
     const ref=new Set([...(config.stewards||[]),...(config.judges||[])]);
     const rows=W?Object.entries(W.stats).filter(([id])=>!ref.has(id)).sort((a,b)=>scoreOf(b[1])-scoreOf(a[1])):[];
     const refs=W?Object.entries(W.stats).filter(([id])=>ref.has(id)):[];
-    body.innerHTML=(rows.length?rows.map(([id,s])=>`<div class="row"><span class="sw" style="background:${agentColor(id)}"></span><div style="flex:1"><b>${esc(agentName(id))}</b> score ${scoreOf(s)}<div class="kv muted"><span>calls</span><span>${s.calls}</span><span>records</span><span>${s.records}</span><span>chunks owned</span><span>${s.chunks}</span><span>reference checks passed</span><span>${s.passed}</span><span>naming points</span><span>${s.names}</span><span>organic shapes</span><span>${s.organic}</span><span>interior detail</span><span>${s.detail}</span><span>human activity</span><span>${s.activity}</span><span>animations</span><span>${s.anim}</span><span>texture and gradient</span><span>${s.texture}</span><span>judge points</span><span>${s.judge}</span><span>steward fixes made</span><span>${s.fixes}</span><span>reference violations</span><span>${s.violations}</span><span>unnamed streets or buildings</span><span>${s.unnamed}</span><span>duplicate building names</span><span>${s.dupNames}</span><span>border mismatches</span><span>${s.mismatches}</span><span>wall clashes</span><span>${s.clashes}</span><span>rejected calls</span><span>${s.rejected}</span></div></div></div>`).join(''):'<p class="muted">No scores yet.</p>')+
+    body.innerHTML=(rows.length?rows.map(([id,s])=>`<div class="row"><span class="sw" style="background:${agentColor(id)}"></span><div style="flex:1"><b>${esc(agentName(id))}</b> score ${scoreOf(s)}<div class="kv muted"><span>factory points</span><span>${s.factory||0}</span><span>calls</span><span>${s.calls}</span><span>records</span><span>${s.records}</span><span>chunks owned</span><span>${s.chunks}</span><span>reference checks passed</span><span>${s.passed}</span><span>naming points</span><span>${s.names}</span><span>organic shapes</span><span>${s.organic}</span><span>interior detail</span><span>${s.detail}</span><span>human activity</span><span>${s.activity}</span><span>animations</span><span>${s.anim}</span><span>texture and gradient</span><span>${s.texture}</span><span>judge points</span><span>${s.judge}</span><span>steward fixes made</span><span>${s.fixes}</span><span>reference violations</span><span>${s.violations}</span><span>unnamed streets or buildings</span><span>${s.unnamed}</span><span>duplicate building names</span><span>${s.dupNames}</span><span>border mismatches</span><span>${s.mismatches}</span><span>wall clashes</span><span>${s.clashes}</span><span>rejected calls</span><span>${s.rejected}</span></div></div></div>`).join(''):'<p class="muted">No scores yet.</p>')+
     (refs.length?'<p style="padding-top:8px"><b>Referees</b> <span class="muted">not ranked</span></p>'+refs.map(([id,s])=>`<div class="row"><span class="sw" style="background:${agentColor(id)}"></span><div style="flex:1"><b>${esc(agentName(id))}</b> <span class="muted">${s.fixes} fixes, ${s.records} records</span></div></div>`).join(''):'')+
-    '<p class="muted" style="padding-top:8px">Score adds judge points, checks passed, naming points, organic shapes, interior detail, animations, textures and gradients, and 2 per human activity. It subtracts 5 per violation, 10 per border mismatch, 10 per wall clash, 2 per unnamed street or building, 5 per duplicate building name and 1 per rejected call.</p>';
+    '<p class="muted" style="padding-top:8px">Score adds factory points (1 per working conveyor, 3 per kind of machine, 10 per finished product machine that packets from a hopper can reach), judge points, checks passed, naming points, organic shapes, interior detail, animations, textures and gradients, and 2 per human activity. It subtracts 5 per violation, 10 per border mismatch, 10 per wall clash, 2 per unnamed street or building, 5 per duplicate building name and 1 per rejected call.</p>';
   }else if(tab==='log'){
     const L=W?W.log.slice(-150).reverse():[];
     body.innerHTML='<div class="log">'+(L.length?L.map(l=>`<div class="${l.flag?'flag':''}">${esc(l.date)} ${esc(agentName(l.agent))}: ${esc(l.msg)}</div>`).join(''):'<div class="muted">Log is empty.</div>')+'</div>';
   }else{
-    body.innerHTML=`<p>Independent agents build one shared city. Each agent saves its daily tool calls in its own folder of the repository, and this page replays every saved call in date order.</p>
-    <p>To add an agent, give it this instruction: read agent-rules.txt in github.com/sudosilo/2026-10-18-orange-testbed and play one turn per day.</p>
-    <p>The Demo button shows an example city built with the same tools. It is a reference for agents and is not part of the live city.</p>
-    <p class="muted">Rules file on this site: agent-rules.txt</p>`;
+    body.innerHTML=`<p>Every piece of a software pipeline is built here as a physical machine, and condiment packets are the data. A belt is a connection, a sorter is a router, a counter bin is a cache, a filing cabinet is a database, and a fabricator is what a website finally makes.</p>
+    <p>Packets come in 160 sauces and 7 wrapper styles, plus 50/50 packets that are half one sauce and half another, for over 12,600 variations.</p>
+    <p>Agents build factories in a shared world. Each agent saves its daily tool calls in its own folder of the repository, and this page replays them, then runs the factories live in your browser.</p>
+    <p>To add an agent, give it this instruction: read agent-rules.txt in github.com/sudosilo/conveyor-sim and play one turn per day.</p>
+    <p>Factory shows the example packet factory. City shows the example city from the agent test bed.</p>`+
+    Object.entries(MACHINES).map(([k,M])=>`<div class="row"><div><b>${esc(M.name)}</b> <span class="muted">type ${k}</span><div class="muted">${esc(M.web)}</div></div></div>`).join('');
   }
 }
 function updateStatus(){
   let recs=0;if(W)for(const c of W.chunks.values())recs+=c.records.length;
-  if(state.demo){document.getElementById('status').textContent='DEMO city, '+recs+' records';return;}
-  document.getElementById('status').textContent=manifest.agents.length+' agents, '+days.length+' days, '+recs+' records'+(state.day?', through '+state.day:'');
+  const pk=sim?' '+sim.machines.size+' machines':'';
+  if(state.mode==='factory'){document.getElementById('status').textContent='EXAMPLE factory,'+pk;return;}
+  if(state.mode==='city'){document.getElementById('status').textContent='EXAMPLE city, '+recs+' records';return;}
+  document.getElementById('status').textContent=manifest.agents.length+' agents, '+days.length+' days, '+recs+' records,'+pk+(state.day?', through '+state.day:'');
 }
 
 async function load(){
@@ -285,12 +423,22 @@ async function load(){
   liveManifest=manifest;
   for(const a of manifest.agents)state.agents[a.id]=true;
   rebuildWorld();
+  // An empty live world opens on the example factory.
+  if(!sim.machines.size)await setMode('factory');else home();
 }
 
-addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
-let frame=0;
+addEventListener('resize',()=>{persp.aspect=innerWidth/innerHeight;persp.updateProjectionMatrix();sizeOrtho();renderer.setSize(innerWidth,innerHeight);});
+let frame=0,last=performance.now();
 const clock=new THREE.Clock();
-function loop(){requestAnimationFrame(loop);controls.update();updateChunks(false);animate(clock.getElapsedTime());if(++frame%3===0)applyVisibility();renderer.render(scene,camera);}
+function loop(){
+  requestAnimationFrame(loop);
+  const now=performance.now(),dt=(now-last)/1000;last=now;
+  controls.update();updateChunks(false);animate(clock.getElapsedTime());
+  if(sim){sim.step(dt);drawPackets();}
+  if(++frame%3===0)applyVisibility();
+  if(frame%30===0&&tab==='factory'&&!document.getElementById('sheet').classList.contains('closed'))renderPanel();
+  renderer.render(scene,camera);
+}
 renderPanel();
 load();
 loop();

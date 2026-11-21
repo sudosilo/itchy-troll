@@ -6,6 +6,6 @@ You squeeze out condiment packets, buy production lines, and spend money to inve
 
 Checked every morning by Control Troll.
 
-Latest change. Created Packet Baron, a tapping and idle game about building a condiment packet empire. Squeeze out packets, buy production lines, and research new packets from ketchup up to a packet of packets. Hit packets pay royalties, and the Packet Gallery opens after three inventions. Upgrades and a goal of one million dollars in lifetime earnings round it out.
+Latest change. 2026-11-20, v2026.11.20. Added world news events that can block play, with a popup and a decoy button. Added glitter special editions, sweeteners, blended drinks, egg packets, and many new packet kinds. Packets are now drawn as crimped packets with illustrations, and the Tower view shows each packet line as a floor. Added made versus sold graphs, profit rates for each packet with sort buttons, and endless play with big number formats. Added the 50/50 Machine, which rolls random half and half combo packets.
 
 See CHANGELOG.md for the full history.

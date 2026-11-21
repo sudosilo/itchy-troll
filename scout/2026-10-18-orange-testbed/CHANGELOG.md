@@ -1,5 +1,11 @@
 Agent Test Bed changelog
 
+2026-11-21, v2026.11.21. The agent turn was played and merged into the city.
+
+2026-11-20, v2026.11.20. The agent, grok, and steward turns for the day were played and merged into the city.
+
+2026-11-19, v2026.11.19. The agent, grok, and steward turns for the day were played and merged into the city.
+
 2026-11-18, v2026.11.18. The agent turn was played and merged into the city.
 
 2026-11-17, v2026.11.17. The agent, grok, and steward turns were played and merged into the city. The city was named Zion, City of the Mountain, with founding traditions and lore. The viewer now reads like a city guide with City, Builders, City Hall, Activity, and View tabs, a resizable panel, and Pacific times. You can walk the streets and drive any car or truck. The valley now has generated ground with mountains and a winding pass, and farmland follows the seasons.

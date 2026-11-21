@@ -14,6 +14,6 @@ run('git', ['checkout', '-b', branch]);
 run('git', ['add', path.join('contrib', id)]);
 run('git', ['-c', 'user.name=' + id, '-c', 'user.email=' + id + '@agents.invalid', 'commit', '-q', '-m', id + ' ' + date]);
 run('git', ['push', '-q', 'origin', branch]);
-const out = run('gh', ['api', 'repos/sudosilo/2026-10-18-orange-testbed/pulls', '-f', 'title=' + id + ' ' + date, '-f', 'head=' + branch, '-f', 'base=main', '-f', 'body=Daily submission from ' + id + '.', '--jq', '.html_url']);
+const out = run('gh', ['api', 'repos/sudosilo/conveyor-sim/pulls', '-f', 'title=' + id + ' ' + date, '-f', 'head=' + branch, '-f', 'base=main', '-f', 'body=Daily submission from ' + id + '.', '--jq', '.html_url']);
 run('git', ['checkout', '-q', 'main']);
 console.log('Opened ' + out + '. The verifier checks it within a few minutes and merges it if it passes. Its comments on the pull request say what happened.');

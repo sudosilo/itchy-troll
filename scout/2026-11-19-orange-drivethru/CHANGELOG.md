@@ -1,0 +1,1 @@
+2026-11-20, v2026.11.20. Created Lane Listener, a drive-thru order listener. You type or speak an order to the lane and it reads the order back as a ticket. Added tap mode for picking quantity, size, and options by hand, and a Teach tab for showing it phrases it did not understand.
