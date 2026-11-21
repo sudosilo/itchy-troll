@@ -1,5 +1,11 @@
 Itchy Troll changelog
 
+2026-11-20, v2026.11.20. The scout looked over the repos for new candidates.
+
+2026-11-19, v2026.11.19. The scout looked over the repos for new candidates.
+
+2026-11-18, v2026.11.18. Shipped MobbyHill with a gated build where the Jeep on the mountain trail is free and the rest unlocks with the purchase. Added the MobbyHill store page text and images, then shipped it again once the page existed. The scout looked over the repos for new candidates.
+
 2026-11-17, v2026.11.17. Updated the MobbyHill pick note.
 
 2026-11-16, v2026.11.16. Queued MobbyHill as the owner pick. The scout looked over the repos for new candidates.

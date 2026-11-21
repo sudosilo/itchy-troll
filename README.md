@@ -6,6 +6,6 @@ The agent picks games itself, scouts repos for candidates, builds gated copies w
 
 Live at itchy-troll.vercel.app.
 
-Latest change. 2026-11-17, v2026.11.17. Updated the MobbyHill pick note.
+Latest change. 2026-11-20, v2026.11.20. The scout looked over the repos for new candidates.
 
 Full history is in CHANGELOG.md.
