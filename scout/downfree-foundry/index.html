@@ -195,7 +195,7 @@ a.save{display:inline-block;margin-top:10px;color:var(--accent);font-weight:600}
 <section class="card">
 <h2>3. Build</h2>
 <div class="grid">
-<label>Length (seconds)<input id="dur" type="number" min="1" max="30" step="1" value="6"></label>
+<label>Length<select id="dur"><option value="6">6 seconds</option><option value="15">15 seconds</option><option value="30" selected>30 seconds</option><option value="60">1 minute</option><option value="120">2 minutes</option><option value="300">5 minutes</option><option value="full">as long as the clips allow</option></select></label>
 <label>Frames per second<input id="fps" type="number" min="2" max="15" step="1" value="8"></label>
 <label>Width (pixels)<select id="width"><option>480</option><option selected>640</option><option>854</option></select></label>
 <label>Detection strength<input id="conf" type="number" min="0.1" max="0.9" step="0.05" value="0.35"></label>
@@ -333,7 +333,7 @@ let selectedIdx = -1;
 let session = null;
 let frames = [];
 let outW = 0, outH = 0, outFps = 8;
-let busy = false;
+let busy = false, lengthNote = "";
 
 const work = document.createElement("canvas");
 const workCtx = work.getContext("2d", { willReadFrequently: true });
@@ -896,10 +896,15 @@ $("buildBtn").addEventListener("click", async () => {
     const layerBase = $("layerBase").checked;
     const base = clips[baseIdx];
     const H = evenSize(W, base);
-    let dur = parseFloat($("dur").value) || 6;
-    for (const c of clips) dur = Math.min(dur, (c.video.duration || 0) - c.offset - 0.1);
+    // every clip has to keep running for the whole build, so the clip with the least time left after its Start sets the limit
+    const want = $("dur").value === "full" ? 600 : (parseFloat($("dur").value) || 30);
+    let dur = want, limiter = -1;
+    clips.forEach((c, k) => { const left = (c.video.duration || 0) - c.offset - 0.1; if (left < dur){ dur = left; limiter = k; } });
     const n = Math.floor(dur * fps);
-    if (n < 2){ setStatus("Clips are too short after their start points."); return; }
+    if (n < 2){ setStatus("Clip " + (limiter + 1) + " has almost nothing left after its Start. Slide its Start earlier."); return; }
+    lengthNote = limiter >= 0 && dur < want - 0.5
+      ? " Built " + dur.toFixed(1) + "s, not " + ($("dur").value === "full" ? "more" : want + "s") + ": clip " + (limiter + 1) + " runs out " + dur.toFixed(1) + "s after its Start. Slide that clip's Start earlier for a longer build."
+      : "";
     work.width = W; work.height = H;
     outW = W; outH = H; outFps = fps;
     const counts = clips.map(() => 0);
@@ -938,6 +943,7 @@ $("buildBtn").addEventListener("click", async () => {
       frames.push(frame);
     }
     const secs = ((performance.now() - t0) / 1000).toFixed(0);
+    setTimeout(() => { if (lengthNote) setStatus($("status").textContent + lengthNote); }, 0);
     const kinds = Object.entries(byClass).sort((a, b) => b[1] - a[1]).map(([c, n]) => (CLASS_NAMES[c] || "class " + c) + " " + n).join(", ");
     setStatus("Done in " + secs + "s. Cutouts per clip: " + counts.map((c, k) => "clip " + (k + 1) + " " + c).join(", ") + ". By kind: " + (kinds || "none") + ".");
     showResult();

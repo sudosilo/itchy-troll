@@ -1,6 +1,6 @@
-// Packet factory simulation. Runs in the browser on top of a replayed world. Packets are never saved: every viewer
-// runs its own copy of the factory, so the saved data stays a plain list of machines and conveyors.
-import {MACHINES} from './engine.js';
+// Packet factory simulation. A plan is a list of machines and belts. Packets are never saved: the page runs the
+// factory live from the plan, so a plan stays small enough to share in a link.
+import {MACHINES,autoRoute} from './machines.js';
 import {SAUCES,STYLES} from './packets.js';
 
 export const GAP = 1100;
@@ -15,18 +15,15 @@ export function packetLabel(p){
   return st+SAUCES[p.s][1];
 }
 
-export function buildSim(W,seed){
+export function buildSim(plan,seed){
   const R=rng(seed||7);
   const machines=new Map(),belts=[];
-  for(const c of W.chunks.values())for(const r of c.records){
-    if(r.hidden)continue;
-    if(r.kind==='machine')machines.set(nk(r.name),{r,type:r.type,M:MACHINES[r.type],q:[],out:[],hold:[],made:[],t:0,rr:0,n:{in:0,out:0,made:0,reject:0,miss:0},outs:[],ins:[],cur:null});
-  }
-  for(const c of W.chunks.values())for(const r of c.records){
-    if(r.hidden||r.kind!=='conveyor')continue;
-    const A=machines.get(nk(r.from)),B=machines.get(nk(r.to));if(!A||!B)continue;
-    const d=[0];for(let i=1;i<r.pts.length;i++)d.push(d[i-1]+Math.hypot(r.pts[i][0]-r.pts[i-1][0],r.pts[i][1]-r.pts[i-1][1],r.pts[i][2]-r.pts[i-1][2]));
-    const b={r,A,B,out:r.out||'*',v:r.speed||1500,pts:r.pts,d,L:d[d.length-1]||1,items:[]};
+  for(const r of plan.machines)machines.set(nk(r.name),{r,type:r.type,M:MACHINES[r.type],q:[],out:[],hold:[],made:[],t:0,rr:0,n:{in:0,out:0,made:0,reject:0,miss:0},outs:[],ins:[],cur:null});
+  for(const r of plan.belts){
+    const A=machines.get(nk(r.from)),B=machines.get(nk(r.to));if(!A||!B||A===B)continue;
+    const pts=r.pts||autoRoute(A.r,B.r);
+    const d=[0];for(let i=1;i<pts.length;i++)d.push(d[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1],pts[i][2]-pts[i-1][2]));
+    const b={r,A,B,out:r.out||'*',v:A.type==='tube'?Math.max(r.speed||1500,4500):r.speed||1500,pts,d,L:d[d.length-1]||1,items:[]};
     belts.push(b);A.outs.push(b);B.ins.push(b);
   }
   let uid=1,pair=1;
@@ -58,16 +55,16 @@ export function buildSim(W,seed){
     b.items.push({p,d:0});m.n.out++;if(key==='reject')m.n.reject++;if(key==='miss')m.n.miss++;return true;
   };
   const flush=(m)=>{while(m.out.length){const [p,k]=m.out[0];if(!emit(m,p,k))break;m.out.shift();}};
-  const cap=(m)=>({hopper:8,spacer:30,rack:60,cabinet:200,clock:40,fabricator:6,dock:6,reject:999,bin:(m.r.meta&&m.r.meta.cap)||6}[m.type]||3);
+  const cap=(m)=>({hopper:8,spacer:30,rack:60,cabinet:200,locker:200,clock:40,queue:60,fabricator:6,showroom:6,dock:6,reject:999,ticker:999,gap:0,bin:(m.r.meta&&m.r.meta.cap)||6,vending:(m.r.meta&&m.r.meta.cap)||8}[m.type]??3);
 
   S.accept=(m,p)=>{
-    if(m.type==='bin'&&m.q.length>=cap(m)){if(m.out.length<4){m.out.push([p,'miss']);m.n.in++;return true;}return false;}
+    if((m.type==='bin'||m.type==='vending')&&m.q.length>=cap(m)){if(m.out.length<4){m.out.push([p,'miss']);m.n.in++;return true;}return false;}
     if(m.type==='rack'&&p.half){if(m.hold.length>=cap(m)){const old=m.hold.shift();m.out.push([old.p,'reject']);}m.hold.push({p,t:S.time});m.n.in++;return true;}
     if(m.q.length>=cap(m)||m.out.length>4)return false;
     m.q.push(p);m.n.in++;return true;
   };
   const opt=(m,k,d)=>{const v=m.r.meta&&m.r.meta[k];return v===undefined?d:v;};
-  const sinkKeep=(m,p)=>{m.made.push(p);m.n.made++;S.made++;if(m.made.length>(m.type==='reject'?40:144))m.made.shift();};
+  const sinkKeep=(m,p)=>{m.made.push(p);m.n.made++;S.made++;if(m.made.length>(m.type==='reject'||m.type==='ticker'?40:144))m.made.shift();};
 
   const TICK={
     hopper(m,dt){m.t-=dt;if(m.t<=0&&m.q.length<cap(m)){m.q.push(newPacket());m.n.in++;const r=opt(m,'rate',0.8);m.t=R()<0.3?r*0.15:r*(0.4+R()*1.6);}while(m.q.length&&emit(m,m.q[0],'*'))m.q.shift();},
@@ -87,13 +84,24 @@ export function buildSim(W,seed){
     clock(m,dt){m.t+=dt;const P=opt(m,'period',8);if(m.t>=P){m.t=0;m.open=true;m.n.made++;}if(m.open){while(m.q.length&&emit(m,m.q[0],'*'))m.q.shift();if(!m.q.length)m.open=false;}},
     turnstile(m){while(m.q.length){const p=m.q[0];if(!emit(m,p,p.st>=opt(m,'minStyle',1)?'*':'reject'))break;m.q.shift();}},
     window(m,dt){if(!m.cur&&m.q.length){m.cur=m.q.shift();m.t=0.6;}if(m.cur){m.t-=dt;if(m.t<=0){m.out.push([m.cur,m.cur.half?'reject':'*']);m.cur=null;}}flush(m);},
-    arm(m,dt){if(!m.cur&&m.q.length){m.cur=m.q.shift();m.t=0.9;}if(m.cur){m.t-=dt;if(m.t<=0){const ops=opt(m,'ops',['upgrade']),op=ops[m.rr++%ops.length],p=m.cur;
+    arm(m,dt){if(!m.cur&&m.q.length){m.cur=m.q.shift();m.t=opt(m,'every',0.9);}if(m.cur){m.t-=dt;if(m.t<=0){const ops=opt(m,'ops',['upgrade']),op=ops[m.rr++%ops.length],p=m.cur;
       if(op==='upgrade')p.st=Math.min(6,p.st+1);else if(op==='downgrade')p.st=Math.max(0,p.st-1);else if(op==='plain')p.st=0;else if(op==='glitter')p.st=1;else if(op==='flip'&&p.b>=0&&!p.half){const t=p.s;p.s=p.b;p.b=t;}
       m.out.push([p,'*']);m.cur=null;}}flush(m);},
     fabricator(m,dt){m.t-=dt;if(m.t<=0&&m.q.length){sinkKeep(m,m.q.shift());m.t=0.25;}},
     dock(m,dt){m.t-=dt;if(m.t<=0&&m.q.length){sinkKeep(m,m.q.shift());m.t=0.3;}},
-    reject(m){while(m.q.length){sinkKeep(m,m.q.shift());m.n.reject++;}}
+    reject(m){while(m.q.length){sinkKeep(m,m.q.shift());m.n.reject++;}},
+    showroom(m,dt){m.t-=dt;if(m.t<=0&&m.q.length){sinkKeep(m,m.q.shift());m.t=0.3;}},
+    ticker(m){while(m.q.length)sinkKeep(m,m.q.shift());},
+    gap(){},
+    queue(m){while(m.q.length&&emit(m,m.q[0],'*'))m.q.shift();},
+    tube(m){while(m.q.length&&emit(m,m.q[0],'*'))m.q.shift();},
+    arcade(m,dt){if(!m.cur&&m.q.length){m.cur=m.q.shift();m.t=1.6;}if(m.cur){m.t-=dt;if(m.t<=0){m.cur.st=6;m.out.push([m.cur,'*']);m.cur=null;}}flush(m);},
+    register(m,dt){if(!m.cur&&m.q.length){m.cur=m.q.shift();m.t=0.8;}if(m.cur){m.t-=dt;if(m.t<=0){m.made.push({u:uid++,s:m.cur.s,st:2,b:-1,half:0,pair:0});if(m.made.length>60)m.made.shift();m.n.made++;m.out.push([m.cur,'*']);m.cur=null;}}flush(m);},
+    bell(m){if(m.q.length&&!m.out.length){const p=m.q.shift();m.out.push([p,'*']);if(m.outs.some(o=>o.out==='copy'))m.out.push([{u:uid++,s:p.s,st:p.st,b:p.b,half:p.half,pair:p.pair},'copy']);}flush(m);},
+    ai(m,dt){if(!m.cur&&m.q.length){m.cur=m.q.shift();m.t=1.5;}if(m.cur){m.t-=dt;if(m.t<=0){m.cur.s=pickSauce();if(m.cur.b>=0&&!m.cur.half){m.cur.b=pickSauce();}m.out.push([m.cur,'*']);m.cur=null;}}flush(m);},
+    locker(m,dt){m.t-=dt;if(m.t<=0&&m.q.length&&emit(m,m.q[0],'*')){m.q.shift();m.t=opt(m,'every',4);}}
   };
+  TICK.vending=(m,dt)=>{flush(m);m.t-=dt;if(m.t<=0&&m.q.length&&emit(m,m.q[0],'*')){m.q.shift();m.t=opt(m,'every',0.2);}};
 
   S.step=(dt)=>{
     dt=Math.min(dt,0.1);S.time+=dt;

@@ -6,6 +6,6 @@ You squeeze out condiment packets, buy production lines, and spend money to inve
 
 Checked every morning by Control Troll.
 
-Latest change. 2026-11-20, v2026.11.20. Added world news events that can block play, with a popup and a decoy button. Added glitter special editions, sweeteners, blended drinks, egg packets, and many new packet kinds. Packets are now drawn as crimped packets with illustrations, and the Tower view shows each packet line as a floor. Added made versus sold graphs, profit rates for each packet with sort buttons, and endless play with big number formats. Added the 50/50 Machine, which rolls random half and half combo packets.
+Latest change. 2026-11-21, v2026.11.21. Tower floors now show stock as stacked pallets, one pallet per million packets. Added timed promos, a half off sale for the 50/50 Machine and a lab overtime that speeds up research. Added about twenty new packets, a Factory packet search box, and Hot Dog Day, Fry Day and Sushi Week holidays. Each packet now has its own market, so staples lose buyers fast at high prices while rare novelties hold them. Special editions lose their premium when too many are sold. Wholesale buyers grow with your production lines, fame boosts demand on a slow curve, and Gallery sales follow each packet's price setting. Packets can be stopped, held or run one at a time, and a 50/50 Lab researches half and half flavors on its own tab.
 
 See CHANGELOG.md for the full history.
