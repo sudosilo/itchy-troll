@@ -1,5 +1,7 @@
 Itchy Troll changelog
 
+2026-11-22, v2026.11.22. The scout looked over the repos for new candidates.
+
 2026-11-20, v2026.11.20. The scout looked over the repos for new candidates.
 
 2026-11-19, v2026.11.19. The scout looked over the repos for new candidates.
