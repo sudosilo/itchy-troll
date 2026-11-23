@@ -306,7 +306,7 @@ stairmaze:['free',0,'wander 0'+(', grow 40, turn 90, grow 30, turn -90'.repeat(2
 radiant:['free',0,'wander 120, grow 120, bubble, grow 80, fork 50, repeat'],
 reef:['up',1,'burst 5, grow 60, split 2, grow 50, bubble, repeat 3']};
 var PRESET_NAMES={tree:'Tree',pine:'Pine',roots:'Roots',coral:'Coral',vine:'Spiral vine',bubbles:'Bubbles',lattice:'Lattice',diamonds:'Diamond chain',fan:'Fan',cathedral:'Cathedral',stairs:'Staircase',zigzag:'Zigzag',lightning:'Lightning',honeycomb:'Honeycomb',tentacles:'Tentacles',rose:'Rose',circuit:'Circuit board',kelp:'Kelp forest',mycelium:'Mycelium',snowflake:'Snowflake',fireworks:'Fireworks',labyrinth:'Labyrinth',waves:'Waves',bloom:'Bloom',canopy:'Canopy',coil:'Coil',starburst:'Starburst',ribcage:'Ribcage',fern:'Fern',spine:'Spine',city:'City grid',nautilus:'Nautilus',willow:'Willow',crystal:'Crystal',neighborhood:'Neighborhood',cityscape:'Cityscape',highway:'Highway',interstate:'Interstate grid',roundabouts:'Roundabouts',basket:'Basket weave',crochet:'Crochet chain',lace:'Lace',doily:'Doily',stairburst:'Stair burst',stairmaze:'Stair maze',radiant:'Radiant pop',reef:'Reef',pattern:'Your pattern'};
-var editMode=true,rotateSec=0,rotT=0,presetWeave=null,stampKey='',FILLS=['rows','maze','spiral'],FILL_NAMES={rows:'Rows',maze:'Maze',spiral:'Spiral'},fillStyle='rows';
+var editMode=true,rotateSec=0,rotT=0,presetWeave=null,stampKey='',FILLS=['rows','maze','spiral','rules'],FILL_NAMES={rows:'Rows',maze:'Maze',spiral:'Spiral',rules:'Current rules'},fillStyle='rows';
 var POP=['#e53935','#fdd835','#1e88e5','#43a047','#ec407a','#fb8c00'],OCEANPAL=['#f6c9a8','#f7a8a8','#ffd6a5','#cde7b0','#b8e0d2'];
 function circ(cx,cy,r,n){n=n||24;var a=[];for(var i=0;i<=n;i++){var t=Math.PI*2*i/n;a.push([cx+r*Math.cos(t),cy+r*Math.sin(t)])}return a}
 function ell(cx,cy,rx,ry,n,t0,t1){n=n||28;t0=t0||0;t1=t1==null?Math.PI*2:t1;var a=[];for(var i=0;i<=n;i++){var t=t0+(t1-t0)*i/n;a.push([cx+rx*Math.cos(t),cy+ry*Math.sin(t)])}return a}
@@ -689,6 +689,7 @@ if(weaveMode==='cloth'){var cch=clothChoice(p,h);h.bundle=cch.bundle;applyChoice
 else applyChoice(p,weaveMode==='random'?coin():decideAlternate(p,h.best),h)}
 p.passing=h.ids.slice()}
 p.hx=nx;p.hy=ny;p.hw=nw;p.traveled+=len;p.headD+=len;p.sinceSplit+=len;p.runLen+=len;
+if(fillBox&&growing&&!p.route&&(nx<fillBox.x0-p.hw||nx>fillBox.x1+p.hw||ny<fillBox.y0-p.hw||ny>fillBox.y1+p.hw)){endPipeOf(p,true);return true}
 var last=p.pts[p.pts.length-1];
 if(Math.hypot(nx-last.x,ny-last.y)>=4||Math.abs(nw-last.w)>2)commit(p);
 if(recording&&rec&&p===active)rec.s.push([len,angDiff(p.dir,dir0),p.hw/rec.base]);
@@ -1099,6 +1100,7 @@ else if(flowMode==='water'){updateWater();dirty=true}
 if(rootMode){updateRoots();dirty=true}
 if(growing&&rotateSec>0&&performance.now()-rotT>rotateSec*1000){var rk=Object.keys(PRESETS).filter(function(k){return k!=='random'&&k!==$('rPreset').value&&(k!=='pattern'||pattern)}),nk=pick(rk);$('rPreset').value=nk;$('rPreset').onchange.call($('rPreset'));applyRules();setStatus('Rules switched to '+PRESET_NAMES[nk]+'.')}
 if(driving&&car){updateCar();dirty=true}
+if(fillBox&&frameNo%30===0)fillTopUp();
 if(memOn&&memRun){var left=MEMDUR[memRound]-(performance.now()-memT)/1000;
 if(left<=0)memEndRound();else if(frameNo%15===0)setStatus('Memory round '+(memRound+1)+' of '+MEMDUR.length+'. '+Math.ceil(left)+' seconds left. '+scars.length+' spots remembered.')}
 if(frameNo%15===0)$('bPlay').classList.toggle('on',!!(active&&active.play&&!active.play.cycles));
@@ -1152,6 +1154,7 @@ function fillCanvas(){
 var cs=[toWorld({x:0,y:0}),toWorld({x:cssW,y:0}),toWorld({x:0,y:cssH}),toWorld({x:cssW,y:cssH})],x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
 cs.forEach(function(q){x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y)});
 var w=+wid.value,gap=w*1.7,m=w*0.7;x0+=m;y0+=m;x1-=m;y1-=m;if(x1-x0<gap||y1-y0<gap){setStatus('Zoom out or make the pipe thinner to fill the canvas.');return}
+if(fillStyle==='rules'){fillWithRules(x0,y0,x1,y1,w);return}
 var route=[],i;
 if(fillStyle==='rows'){for(var y=y0,r=0;y<=y1+0.1;y+=gap,r++){if(r%2){route.push([x1,y]);route.push([x0,y])}else{route.push([x0,y]);route.push([x1,y])}}}
 else if(fillStyle==='spiral'){var l=x0,rt=x1,t=y0,b=y1;route.push([l,t]);
@@ -1162,6 +1165,27 @@ route.push([x0+(hx+0.5)/N*W,y0+(hy+0.5)/N*H])}}
 if(route.length<2)return;
 snapshot();var p=newPipe(route[0][0],route[0][1],w,Math.atan2(route[1][1]-route[0][1],route[1][0]-route[0][0]),++topL);
 p.route=route;p.ri=1;p.aimed=true;p.wander=0;active=p;target=null;dirty=true;setStatus('Filling the canvas from corner to corner.')}
+var fillBox=null,FILLPROBE={id:-1,family:[],headD:0,hw:0,traveled:1e9,grace:0};
+function fillSeed(x,y,w){var d=Math.random()*Math.PI*2;if(rightMode)d=snap(d);else if(isoLock)d=isoSnap(d);var p=newPipe(x,y,w,d,++topL);p.aimed=true;p.home=d;return p}
+function fillWithRules(x0,y0,x1,y1,w){
+snapshot();if(weaveMode==='ask'){weaveMode='cloth';$('bWeave').textContent=WEAVE_NAMES[weaveMode]}
+var S=Math.max(140,w*7);while(((x1-x0)/S+1)*((y1-y0)/S+1)>80)S*=1.25;
+var n=0;for(var y=y0+S/2;y<y1;y+=S)for(var x=x0+S/2;x<x1;x+=S){fillSeed(x+(Math.random()-0.5)*S*0.3,y+(Math.random()-0.5)*S*0.3,w);n++}
+var st=Math.max(w*2.2,30);while(((x1-x0)/st)*((y1-y0)/st)>2500)st*=1.3;
+fillBox={x0:x0,y0:y0,x1:x1,y1:y1,w:w,step:st,rounds:0};MAXHEADS=Math.min(500,Math.max(60,n*10));
+growOrigin={x:(x0+x1)/2,y:(y0+y1)/2};pickNextActive();growing=true;$('bGrow').classList.add('on');setEdit(false);dirty=true;
+setStatus('Filling the canvas with '+(PRESET_NAMES[$('rPreset').value]||'your rules')+'.')}
+function fillDone(msg){fillBox=null;MAXHEADS=60;setStatus(msg)}
+function fillTopUp(){
+var b=fillBox,empty=[],tot=0;
+for(var y=b.y0+b.step/2;y<b.y1;y+=b.step)for(var x=b.x0+b.step/2;x<b.x1;x+=b.step){tot++;if(!hits(FILLPROBE,x,y,b.step).ids.length)empty.push([x,y])}
+var cov=tot?1-empty.length/tot:1;
+if(cov>=0.985||b.rounds>=40){if(!aliveCount())fillDone('Canvas filled. Coverage '+Math.round(cov*100)+' percent.');return}
+if(aliveCount()>=Math.min(30,MAXHEADS/4))return;
+b.rounds++;empty.sort(function(){return Math.random()-0.5});
+var k=Math.min(empty.length,8);for(var i=0;i<k;i++)fillSeed(empty[i][0],empty[i][1],b.w);
+if(!growing){growing=true;$('bGrow').classList.add('on');setEdit(false)}
+setStatus('Filling gaps. Coverage '+Math.round(cov*100)+' percent.')}
 function firePending(){if(!pending)return;var s=pending.s;pending=null;activate(s)}
 
 cv.addEventListener('pointerdown',function(e){
@@ -1202,7 +1226,7 @@ if(growing){snapshot();
 pipes.forEach(function(p){if(p.alive)p.aimed=true});
 if(!growOrigin&&!rootMode){var a=pipes.filter(function(p){return p.alive})[0];if(a)growOrigin={x:a.hx,y:a.hy}}
 setStatus(aliveCount()?'Growing.':'Tap the paper to plant a pipe.')}
-else setStatus('Grow stopped. Drag to steer. Tap a blue dot to switch pipes.')};
+else{if(fillBox){fillBox=null;MAXHEADS=60}setStatus('Grow stopped. Drag to steer. Tap a blue dot to switch pipes.')}};
 $('bWeave').onclick=function(){weaveMode=weaveMode==='ask'?'random':weaveMode==='random'?'alternate':weaveMode==='alternate'?'cloth':weaveMode==='cloth'?'join':'ask';this.textContent=WEAVE_NAMES[weaveMode];if(weaveMode==='cloth')setStatus('Cloth weave. A pipe only goes over a single line it can pop back down from. Two or more lines in a row and it goes under and stays under.')};
 $('bAngle').onclick=function(){var nx=rightMode?'iso':isoLock?'curvy':'right';rightMode=nx==='right';isoLock=nx==='iso';
 this.textContent=rightMode?'Shape: Right angles':isoLock?'Shape: Isometric lock':'Shape: Curvy';this.classList.toggle('on',rightMode||isoLock);
@@ -1353,14 +1377,14 @@ if(weaveMode==='ask'||weaveMode==='alternate'){weaveMode='cloth';$('bWeave').tex
 snapshot();memStart=JSON.stringify({pipes:pipes,topL:topL,botL:botL,nextId:nextId});memSeed=(Math.random()*4294967296)>>>0;
 scars=[];memFix={};memRound=0;memOn=true;memRun=true;this.classList.add('on');memReset();
 setStatus('Memory round 1 of '+MEMDUR.length+'. Watch it grow, reset, and fix what collided.')};
-$('bFillStyle').onclick=function(){fillStyle=FILLS[(FILLS.indexOf(fillStyle)+1)%FILLS.length];this.textContent='Fill: '+FILL_NAMES[fillStyle]};
+$('bFillStyle').onclick=function(){fillStyle=FILLS[(FILLS.indexOf(fillStyle)+1)%FILLS.length];this.textContent='Fill: '+FILL_NAMES[fillStyle];if(fillStyle==='rules')setStatus('Fill canvas will now grow whatever preset is set in Rules until the screen is covered.')};
 $('bEnd').onclick=function(){if(!paused)endPipeOf(active,false)};
 $('bFlip').onclick=flip;
 $('bUndo').onclick=undo;
 $('aOver').onclick=function(){choose('over')};
 $('aUnder').onclick=function(){choose('under')};
 $('aJoin').onclick=function(){choose('join')};
-$('bClear').onclick=function(){if(!confirm('Clear the whole drawing?'))return;snapshot();if(driving)stopDrive();pipes=[];active=null;target=null;paused=null;growOrigin=null;critters=[];water={};waterScore=0;if(rootMode)makePockets();ask.style.display='none';grid=new Map();dirty=true;setStatus('Tap the paper to start a pipe.')};
+$('bClear').onclick=function(){if(!confirm('Clear the whole drawing?'))return;snapshot();fillBox=null;MAXHEADS=60;if(driving)stopDrive();pipes=[];active=null;target=null;paused=null;growOrigin=null;critters=[];water={};waterScore=0;if(rootMode)makePockets();ask.style.display='none';grid=new Map();dirty=true;setStatus('Tap the paper to start a pipe.')};
 $('bSave').onclick=function(){
 var minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
 pipes.forEach(function(p){pipePoints(p).forEach(function(q){var h=q.w/2+16,P=proj(q.x,q.y);minX=Math.min(minX,P.x-h);minY=Math.min(minY,P.y-h-(iso?q.w*2+30:0));maxX=Math.max(maxX,P.x+h);maxY=Math.max(maxY,P.y+h)})});

@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pipeline Builder</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Fraunces:opsz,wght@9..144,400;9..144,700;9..144,900&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f4f1ea;
+    --ink: #1a1a1a;
+    --paper: #ffffff;
+    --accent: #d94f04;
+    --accent2: #2e86ab;
+  }
+
+  body {
+    font-family: 'Fraunces', Georgia, serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  .header {
+    text-align: center;
+    padding: 16px 0 24px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 24px;
+  }
+
+  h1 {
+    font-size: clamp(24px, 5vw, 40px);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
+  .nav {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+
+  .nav a {
+    padding: 6px 14px;
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    border-radius: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink);
+    text-decoration: none;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .nav a.active {
+    background: var(--ink);
+    color: var(--bg);
+  }
+
+  .tabs {
+    max-width: 1400px;
+    margin: 0 auto 20px;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .tab-btn {
+    padding: 10px 18px;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .tab-btn:hover { background: var(--accent); color: var(--paper); }
+  .tab-btn.active {
+    background: var(--ink);
+    color: var(--bg);
+    box-shadow: 4px 4px 0 var(--accent);
+  }
+
+  .tab-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: none;
+  }
+
+  .tab-content.active { display: block; }
+
+  .panel {
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 4px 4px 0 var(--ink);
+  }
+
+  .panel h2 {
+    font-size: 22px;
+    font-weight: 900;
+    margin-bottom: 8px;
+  }
+
+  .panel .hint {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    opacity: 0.7;
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+
+  /* ============ BUILDER ============ */
+  .builder-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  @media (min-width: 900px) {
+    .builder-grid { grid-template-columns: 1fr 1fr; }
+  }
+
+  .category-block {
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px dashed var(--ink);
+  }
+
+  .category-block:last-child { border-bottom: none; }
+
+  .category-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 10px;
+  }
+
+  .cat-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1px solid var(--ink);
+  }
+
+  .tool-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px;
+    margin-bottom: 4px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .tool-row:hover { background: var(--bg); }
+  .tool-row.checked { background: var(--bg); border-left: 3px solid var(--accent); }
+
+  .tool-row input[type="checkbox"] {
+    margin-top: 3px;
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .tool-info { flex: 1; }
+
+  .tool-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .tool-desc {
+    font-size: 12px;
+    opacity: 0.75;
+    line-height: 1.4;
+    margin-top: 2px;
+  }
+
+  /* ============ STACK PREVIEW ============ */
+  .stack-preview {
+    position: sticky;
+    top: 20px;
+  }
+
+  .stack-name-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+
+  .stack-name-input {
+    flex: 1;
+    min-width: 160px;
+    padding: 8px 12px;
+    border: 2px solid var(--ink);
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    background: var(--bg);
+  }
+
+  .stack-name-input:focus {
+    outline: none;
+    box-shadow: 3px 3px 0 var(--accent);
+  }
+
+  .action-btn {
+    padding: 8px 14px;
+    background: var(--ink);
+    color: var(--bg);
+    border: 2px solid var(--ink);
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .action-btn:hover { background: var(--accent); border-color: var(--accent); }
+
+  .action-btn.secondary {
+    background: var(--paper);
+    color: var(--ink);
+  }
+
+  .action-btn.secondary:hover { background: var(--bg); }
+
+  .stack-list { margin-top: 12px; }
+
+  .stack-pill {
+    display: inline-block;
+    padding: 4px 10px;
+    margin: 3px 3px 3px 0;
+    background: var(--bg);
+    border: 1px solid var(--ink);
+    border-radius: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .empty-state {
+    padding: 20px;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    opacity: 0.5;
+    border: 2px dashed var(--ink);
+    border-radius: 8px;
+  }
+
+  /* ============ EXPORT ============ */
+  .export-box {
+    margin-top: 14px;
+    padding: 12px;
+    background: var(--bg);
+    border: 1px solid var(--ink);
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 280px;
+    overflow-y: auto;
+    display: none;
+  }
+
+  .export-box.visible { display: block; }
+
+  /* ============ RANDOMIZER ============ */
+  .random-result {
+    text-align: center;
+    padding: 30px 20px;
+    background: var(--ink);
+    color: var(--bg);
+    border-radius: 12px;
+    margin-bottom: 16px;
+  }
+
+  .random-name {
+    font-size: 36px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+
+  .random-subtitle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    opacity: 0.7;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+  }
+
+  .challenge-box {
+    margin-top: 16px;
+    padding: 14px;
+    background: var(--paper);
+    border: 1px solid var(--bg);
+    border-radius: 8px;
+    color: var(--ink);
+    font-size: 15px;
+    line-height: 1.5;
+    text-align: left;
+  }
+
+  .challenge-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    opacity: 0.6;
+    margin-bottom: 6px;
+  }
+
+  /* ============ DIAGRAM ============ */
+  .diagram-canvas {
+    background: var(--bg);
+    border: 2px solid var(--ink);
+    border-radius: 12px;
+    padding: 20px;
+    min-height: 400px;
+    overflow-x: auto;
+  }
+
+  .diagram-layer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    margin-bottom: 8px;
+    padding: 14px;
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    border-radius: 8px;
+    position: relative;
+  }
+
+  .diagram-layer-label {
+    position: absolute;
+    top: -10px;
+    left: 12px;
+    background: var(--ink);
+    color: var(--bg);
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  .diagram-node {
+    padding: 8px 14px;
+    background: var(--bg);
+    border: 2px solid var(--ink);
+    border-radius: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+
+  .diagram-arrow {
+    text-align: center;
+    font-size: 22px;
+    color: var(--accent);
+    font-weight: 900;
+    margin: 0;
+    line-height: 0.5;
+  }
+
+  /* ============ TEMPLATES ============ */
+  .template-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+
+  .template-card {
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    border-radius: 10px;
+    padding: 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+
+  .template-card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 5px 5px 0 var(--accent);
+  }
+
+  .template-name {
+    font-size: 16px;
+    font-weight: 900;
+    margin-bottom: 4px;
+  }
+
+  .template-desc {
+    font-size: 13px;
+    opacity: 0.8;
+    line-height: 1.4;
+    margin-bottom: 10px;
+  }
+
+  .template-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    opacity: 0.6;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  @media (max-width: 600px) {
+    body { padding: 12px; }
+    .random-name { font-size: 26px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Pipeline Builder</h1>
+  <div class="nav">
+    <a href="#" class="active">Pipeline Builder</a>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="builder">BUILDER</button>
+  <button class="tab-btn" data-tab="randomizer">RANDOMIZER</button>
+  <button class="tab-btn" data-tab="diagram">DIAGRAM</button>
+  <button class="tab-btn" data-tab="templates">TEMPLATES</button>
+</div>
+
+<!-- ============ BUILDER ============ -->
+<div class="tab-content active" id="tab-builder">
+  <div class="builder-grid">
+
+    <div>
+      <div class="panel">
+        <h2>Pick your tools</h2>
+        <div class="hint">Check items to build a custom stack. Watch the preview update on the right. Switch to DIAGRAM tab to see the flow.</div>
+        <div id="tool-list"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel stack-preview">
+        <h2>Your stack</h2>
+        <div class="stack-name-row">
+          <input type="text" class="stack-name-input" id="stack-name" placeholder="Name this stack..." value="My Stack">
+        </div>
+        <div class="stack-name-row">
+          <button class="action-btn" onclick="exportStack()">EXPORT</button>
+          <button class="action-btn secondary" onclick="copyStack()">COPY</button>
+          <button class="action-btn secondary" onclick="clearStack()">CLEAR</button>
+          <button class="action-btn secondary" onclick="openInConveyor()">OPEN IN CONVEYOR SIM</button>
+        </div>
+        <div class="stack-list" id="stack-list">
+          <div class="empty-state">No tools selected yet</div>
+        </div>
+        <div class="export-box" id="export-box"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============ RANDOMIZER ============ -->
+<div class="tab-content" id="tab-randomizer">
+  <div class="panel">
+    <h2>Stack randomizer</h2>
+    <div class="hint">
+      Generates a random coherent stack with a name and a build challenge. Use it to practice building something new with a fixed toolset. The "Apply to builder" button drops the random stack into the builder so you can refine and export it.
+    </div>
+
+    <div class="stack-name-row">
+      <button class="action-btn" onclick="randomize()">ROLL NEW STACK</button>
+      <button class="action-btn secondary" onclick="applyRandomToBuilder()" id="apply-random-btn" disabled>APPLY TO BUILDER</button>
+      <button class="action-btn secondary" onclick="exportRandom()" id="export-random-btn" disabled>EXPORT FOR CLAUDE</button>
+    </div>
+
+    <div class="random-result" id="random-result" style="display: none;">
+      <div class="random-subtitle">your random stack</div>
+      <div class="random-name" id="random-name">—</div>
+      <div id="random-tools"></div>
+      <div class="challenge-box">
+        <div class="challenge-label">CHALLENGE</div>
+        <div id="random-challenge">—</div>
+      </div>
+    </div>
+
+    <div class="export-box" id="random-export-box"></div>
+  </div>
+</div>
+
+<!-- ============ DIAGRAM ============ -->
+<div class="tab-content" id="tab-diagram">
+  <div class="panel">
+    <h2>Pipeline diagram</h2>
+    <div class="hint">
+      Visual flow of your current stack, grouped into the layers data moves through. Each layer is a tier in your architecture. The arrows show typical data flow.
+    </div>
+    <div class="diagram-canvas" id="diagram-canvas">
+      <div class="empty-state">Add tools in BUILDER to see the diagram</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TEMPLATES ============ -->
+<div class="tab-content" id="tab-templates">
+  <div class="panel">
+    <h2>Real-world stacks</h2>
+    <div class="hint">
+      These are realistic toolsets behind common kinds of websites and apps. Click any card to load it into the builder. Then check the DIAGRAM tab to see the architecture, and read the "why this stack" note to understand the reasoning.
+    </div>
+    <div class="template-grid" id="template-grid"></div>
+  </div>
+
+  <div class="panel" id="template-detail" style="display: none;">
+    <h2 id="template-detail-name">—</h2>
+    <div class="hint" id="template-detail-why">—</div>
+    <div class="stack-list" id="template-detail-tools"></div>
+    <div class="stack-name-row" style="margin-top: 14px;">
+      <button class="action-btn" onclick="loadTemplateToBuilder()">LOAD INTO BUILDER</button>
+      <button class="action-btn secondary" onclick="openTemplateInConveyor()">OPEN IN CONVEYOR SIM</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Shared vocabulary used by both index.html (mind map) and pipeline.html (builder)
+// Each tool has: id, name, category, description, role (what layer it fills)
+// "role" lets the randomizer pick one tool per role to build a coherent stack
+
+const VOCAB = {
+  frontend: [
+    { id: 'react', name: 'React (SPA)', role: 'ui_framework', desc: 'JS library for building interactive UIs as components' },
+    { id: 'nextjs', name: 'Next.js', role: 'ui_framework', desc: 'React framework with SSR, routing, and serverless built in' },
+    { id: 'vue', name: 'Vue', role: 'ui_framework', desc: 'Lightweight alternative to React' },
+    { id: 'svelte', name: 'Svelte', role: 'ui_framework', desc: 'Compiles to vanilla JS, no virtual DOM' },
+    { id: 'html_css', name: 'Plain HTML/CSS/JS', role: 'ui_framework', desc: 'No framework. Smallest possible footprint.' },
+    { id: 'tailwind', name: 'Tailwind CSS', role: 'styling', desc: 'Utility-first CSS framework' },
+    { id: 'threejs', name: 'Three.js', role: 'graphics', desc: '3D rendering in the browser' },
+    { id: 'pwa', name: 'PWA shell', role: 'app_type', desc: 'Installable, offline-capable web app' }
+  ],
+  backend: [
+    { id: 'express', name: 'Express (Node.js)', role: 'api_server', desc: 'Minimal Node web framework' },
+    { id: 'fastify', name: 'Fastify (Node.js)', role: 'api_server', desc: 'Fast modern Node framework' },
+    { id: 'fastapi', name: 'FastAPI (Python)', role: 'api_server', desc: 'Modern Python framework with auto docs' },
+    { id: 'django', name: 'Django (Python)', role: 'api_server', desc: 'Batteries-included Python framework' },
+    { id: 'rails', name: 'Ruby on Rails', role: 'api_server', desc: 'Opinionated full-stack Ruby framework' },
+    { id: 'go_chi', name: 'Go + chi', role: 'api_server', desc: 'High-performance Go API server' },
+    { id: 'serverless_fn', name: 'Serverless functions', role: 'api_server', desc: 'Pay-per-call functions on Vercel/Cloudflare' },
+    { id: 'worker', name: 'Background worker', role: 'worker', desc: 'Process jobs from a queue async' },
+    { id: 'cron', name: 'Cron jobs', role: 'scheduler', desc: 'Scheduled recurring tasks' }
+  ],
+  data: [
+    { id: 'sqlite', name: 'SQLite', role: 'primary_db', desc: 'File-based SQL DB. Zero config.' },
+    { id: 'postgres', name: 'PostgreSQL', role: 'primary_db', desc: 'Powerful open-source relational DB' },
+    { id: 'mysql', name: 'MySQL', role: 'primary_db', desc: 'Widely-used relational DB' },
+    { id: 'mongodb', name: 'MongoDB', role: 'primary_db', desc: 'Document/NoSQL database' },
+    { id: 'redis', name: 'Redis (Upstash)', role: 'cache', desc: 'In-memory key-value store. Cache or fast DB.' },
+    { id: 'pinecone', name: 'Pinecone (vector DB)', role: 'vector_db', desc: 'Vector search for AI features' },
+    { id: 'pgvector', name: 'pgvector', role: 'vector_db', desc: 'Vector search inside Postgres' },
+    { id: 's3', name: 'S3 / R2 blob storage', role: 'blob', desc: 'Bucket of files with URLs' },
+    { id: 'elasticsearch', name: 'Elasticsearch', role: 'search', desc: 'Full-text search engine' },
+    { id: 'meilisearch', name: 'Meilisearch', role: 'search', desc: 'Lightweight fast search' }
+  ],
+  auth: [
+    { id: 'oauth_google', name: 'OAuth via Google', role: 'auth', desc: 'Sign in with Google account' },
+    { id: 'oauth_github', name: 'OAuth via GitHub', role: 'auth', desc: 'Sign in with GitHub account' },
+    { id: 'magic_link', name: 'Magic link email', role: 'auth', desc: 'Passwordless email login' },
+    { id: 'jwt_local', name: 'Local JWT auth', role: 'auth', desc: 'Username/password with JWT tokens' },
+    { id: 'auth0', name: 'Auth0 (managed)', role: 'auth', desc: 'Hosted auth-as-a-service' },
+    { id: 'clerk', name: 'Clerk', role: 'auth', desc: 'Auth + user management as a service' },
+    { id: 'passkeys', name: 'Passkeys (WebAuthn)', role: 'auth', desc: 'Phishing-proof cryptographic login' }
+  ],
+  payments: [
+    { id: 'stripe', name: 'Stripe', role: 'payments', desc: 'Payment processing for cards, subscriptions' },
+    { id: 'paypal', name: 'PayPal', role: 'payments', desc: 'Alternate payment method' },
+    { id: 'square', name: 'Square', role: 'payments', desc: 'POS-friendly payments' },
+    { id: 'lemonsqueezy', name: 'Lemon Squeezy', role: 'payments', desc: 'Merchant-of-record for digital goods' }
+  ],
+  plumbing: [
+    { id: 'rest_api', name: 'REST API', role: 'api_style', desc: 'Standard HTTP API style' },
+    { id: 'graphql', name: 'GraphQL', role: 'api_style', desc: 'Client requests exact fields it wants' },
+    { id: 'websocket', name: 'WebSocket', role: 'realtime', desc: 'Two-way live connection' },
+    { id: 'webhook', name: 'Webhooks', role: 'event_in', desc: 'External services ping your URL on events' },
+    { id: 'mqtt', name: 'MQTT broker', role: 'pubsub', desc: 'IoT/event-driven pub-sub messaging' },
+    { id: 'queue_bullmq', name: 'BullMQ (Redis queue)', role: 'queue', desc: 'Job queue on top of Redis' },
+    { id: 'cloudflare_cdn', name: 'Cloudflare CDN', role: 'cdn', desc: 'Global edge cache, DDoS protection' }
+  ],
+  infra: [
+    { id: 'vercel', name: 'Vercel', role: 'hosting', desc: 'Frontend + serverless functions PaaS' },
+    { id: 'railway', name: 'Railway', role: 'hosting', desc: 'Backend + database hosting' },
+    { id: 'fly', name: 'Fly.io', role: 'hosting', desc: 'Global app hosting with VMs' },
+    { id: 'cf_workers', name: 'Cloudflare Workers', role: 'hosting', desc: 'Edge serverless functions' },
+    { id: 'docker', name: 'Docker', role: 'container', desc: 'Containerized deployment' },
+    { id: 'github_actions', name: 'GitHub Actions (CI)', role: 'ci_cd', desc: 'Run tests/builds on every push' }
+  ],
+  observability: [
+    { id: 'sentry', name: 'Sentry', role: 'errors', desc: 'Error tracking with stack traces' },
+    { id: 'posthog', name: 'PostHog', role: 'analytics', desc: 'Product analytics + feature flags' },
+    { id: 'plausible', name: 'Plausible', role: 'analytics', desc: 'Privacy-friendly web analytics' },
+    { id: 'datadog', name: 'Datadog', role: 'apm', desc: 'Logs, metrics, traces in one' },
+    { id: 'uptimerobot', name: 'UptimeRobot', role: 'uptime', desc: 'Pings your site, alerts if down' }
+  ],
+  ai: [
+    { id: 'claude_api', name: 'Claude API', role: 'llm', desc: 'Anthropic LLM for text generation' },
+    { id: 'openai_api', name: 'OpenAI API', role: 'llm', desc: 'GPT-family LLMs' },
+    { id: 'ollama_local', name: 'Ollama (local LLM)', role: 'llm', desc: 'Run open models locally' },
+    { id: 'elevenlabs', name: 'ElevenLabs TTS', role: 'tts', desc: 'High-quality text-to-speech' },
+    { id: 'whisper', name: 'Whisper STT', role: 'stt', desc: 'Speech-to-text' },
+    { id: 'rag_pattern', name: 'RAG pipeline', role: 'ai_pattern', desc: 'Retrieve docs, stuff in prompt' }
+  ],
+  realtime_game: [
+    { id: 'colyseus', name: 'Colyseus', role: 'game_server', desc: 'Authoritative multiplayer game server' },
+    { id: 'socketio', name: 'Socket.IO', role: 'realtime', desc: 'WebSocket abstraction for live apps' },
+    { id: 'phaser', name: 'Phaser', role: 'game_engine', desc: '2D HTML5 game framework' },
+    { id: 'canvas_api', name: 'Canvas API', role: 'graphics', desc: 'Browser 2D drawing' }
+  ]
+};
+
+// Categories metadata for coloring and grouping
+const CATEGORIES = {
+  frontend: { label: 'Frontend', color: '#e8b923' },
+  backend: { label: 'Backend', color: '#4a7c59' },
+  data: { label: 'Data', color: '#8b5a96' },
+  auth: { label: 'Auth', color: '#b33951' },
+  payments: { label: 'Payments', color: '#5b8c5a' },
+  plumbing: { label: 'Plumbing', color: '#c44569' },
+  infra: { label: 'Infra', color: '#c97b5a' },
+  observability: { label: 'Observability', color: '#4a90a4' },
+  ai: { label: 'AI', color: '#8a3324' },
+  realtime_game: { label: 'Realtime/Game', color: '#3a506b' }
+};
+
+// Preset templates: real-world site types with their typical stacks
+// Each template lists tool IDs from VOCAB
+const TEMPLATES = {
+  neopets_clone: {
+    name: 'Neopets-style virtual pet game',
+    desc: 'Long-running web game with persistent pets, mini-games, currency, trading, social features.',
+    why: 'Browser-based persistent state needs accounts, a database for pet stats, real-time mini-games, and a queue for slow background tasks like pet hunger ticking down.',
+    tools: ['nextjs', 'tailwind', 'phaser', 'fastify', 'postgres', 'redis', 'jwt_local', 'stripe', 'cron', 'queue_bullmq', 'vercel', 'railway', 'sentry']
+  },
+  hotel_booking: {
+    name: 'Hotel booking website',
+    desc: 'Search rooms by date, book, pay, receive confirmation, manage reservations.',
+    why: 'Calendar/availability logic is the core. Payments must be transactional. Email confirmations are async. Search needs filters.',
+    tools: ['nextjs', 'tailwind', 'fastapi', 'postgres', 'redis', 'stripe', 'oauth_google', 'meilisearch', 'webhook', 'queue_bullmq', 'vercel', 'railway', 'sentry', 'plausible']
+  },
+  apartment_listing: {
+    name: 'Apartment complex website',
+    desc: 'Property listings with photos, availability, tour scheduling, applications.',
+    why: 'Mostly read-heavy with a media-heavy frontend. Booking tours is the only interactive part. SEO matters so SSR/SSG.',
+    tools: ['nextjs', 'tailwind', 'fastify', 'postgres', 's3', 'oauth_google', 'webhook', 'cloudflare_cdn', 'vercel', 'plausible']
+  },
+  parts_ordering: {
+    name: 'Auto parts ordering site',
+    desc: 'Massive catalog, fitment lookups by vehicle, cart, checkout, shipping.',
+    why: 'Catalog search dominates. Inventory must be real-time accurate. Fitment data is a graph problem. Payments + shipping integrations critical.',
+    tools: ['nextjs', 'tailwind', 'fastapi', 'postgres', 'elasticsearch', 'redis', 's3', 'stripe', 'jwt_local', 'webhook', 'queue_bullmq', 'vercel', 'railway', 'sentry', 'cloudflare_cdn']
+  },
+  coffee_shop: {
+    name: 'Coffee shop / cafe website',
+    desc: 'Menu, location info, maybe online order ahead and loyalty.',
+    why: 'Mostly marketing site with light commerce. Order-ahead adds a real backend. Loyalty needs accounts.',
+    tools: ['nextjs', 'tailwind', 'serverless_fn', 'postgres', 'stripe', 'magic_link', 'cloudflare_cdn', 'vercel', 'plausible']
+  },
+  tshirt_store: {
+    name: 'T-shirt / print-on-demand store',
+    desc: 'Designs displayed on products, customer picks color/size, order printed and shipped.',
+    why: 'Print-on-demand provider handles the physical side via webhooks. You just need catalog, cart, payment, order tracking.',
+    tools: ['nextjs', 'tailwind', 'serverless_fn', 'postgres', 's3', 'stripe', 'webhook', 'magic_link', 'cloudflare_cdn', 'vercel', 'plausible', 'sentry']
+  },
+  multiplayer_game: {
+    name: 'Browser multiplayer game (.io style)',
+    desc: 'Real-time game with many players in shared world. Leaderboards, accounts optional.',
+    why: 'Game server is authoritative (not the client) to prevent cheating. WebSockets carry every tick. Stateless lobbies.',
+    tools: ['html_css', 'phaser', 'colyseus', 'socketio', 'redis', 'postgres', 'oauth_google', 'fly', 'sentry']
+  },
+  chat_app: {
+    name: 'Chat / messaging app',
+    desc: 'Real-time messaging, channels, DMs, file uploads, notifications.',
+    why: 'WebSockets for live messages, queues for push notifications, blob storage for files, full-text search for history.',
+    tools: ['nextjs', 'tailwind', 'fastify', 'socketio', 'postgres', 'redis', 's3', 'meilisearch', 'oauth_google', 'queue_bullmq', 'vercel', 'railway', 'sentry']
+  },
+  ai_chatbot: {
+    name: 'AI-powered Q&A app (RAG)',
+    desc: 'Upload docs, ask questions, get answers grounded in your data.',
+    why: 'Classic RAG pattern. Embeddings stored in vector DB. LLM call streams response back.',
+    tools: ['nextjs', 'tailwind', 'serverless_fn', 'postgres', 'pgvector', 's3', 'claude_api', 'rag_pattern', 'clerk', 'vercel', 'sentry']
+  },
+  pos_system: {
+    name: 'Restaurant POS system (your world)',
+    desc: 'Terminal rings up orders, sends to kitchen, handles payments, syncs to cloud.',
+    why: 'Must work offline. Local DB syncs to cloud. Hardware integrations (card reader, printer, KDS).',
+    tools: ['html_css', 'sqlite', 'fastify', 'postgres', 'redis', 'square', 'websocket', 'webhook', 'queue_bullmq', 'fly', 'sentry']
+  },
+  blog: {
+    name: 'Personal blog / publication',
+    desc: 'Articles, RSS, comments, search.',
+    why: 'Could be 100% static. SSG builds the whole site at deploy time. Comments via third-party.',
+    tools: ['nextjs', 'tailwind', 's3', 'cloudflare_cdn', 'vercel', 'plausible']
+  },
+  saas_dashboard: {
+    name: 'B2B SaaS dashboard',
+    desc: 'Login, team accounts, billing, analytics dashboard, settings.',
+    why: 'Auth and billing are most of the work. Multi-tenant data isolation matters. Webhooks from Stripe drive subscription state.',
+    tools: ['nextjs', 'tailwind', 'fastify', 'postgres', 'redis', 'clerk', 'stripe', 'webhook', 'cron', 'queue_bullmq', 'vercel', 'railway', 'sentry', 'posthog']
+  }
+};
+
+// Pipeline name generator: pulls from these arrays based on stack character
+const NAME_PARTS = {
+  prefixes: ['Project', 'Operation', 'System', 'Stack', 'Build', 'Forge', 'Engine', 'Core', 'Lab'],
+  ai_words: ['Oracle', 'Sage', 'Cortex', 'Mind', 'Whisper', 'Echo'],
+  realtime_words: ['Pulse', 'Beacon', 'Relay', 'Signal', 'Stream', 'Flux'],
+  commerce_words: ['Market', 'Ledger', 'Vault', 'Counter', 'Tender'],
+  data_words: ['Archive', 'Atlas', 'Lattice', 'Index', 'Cipher'],
+  game_words: ['Arena', 'Realm', 'Quest', 'Forge', 'Glyph'],
+  neutral_words: ['Foundry', 'Nexus', 'Outpost', 'Workshop', 'Anvil', 'Garden']
+};
+
+// Challenge prompts: given a random stack, suggest what to build
+const CHALLENGES = [
+  'Build a {type} using this stack. Document what each tool contributes.',
+  'Create a clone of a familiar app using only these tools. Pick something realistic for the stack.',
+  'Design a {type} where this exact tool set is the optimal choice. Justify each pick.',
+  'Build a minimum viable {type} in one weekend with this stack.'
+];
+
+const CHALLENGE_TYPES = [
+  'small game', 'productivity tool', 'social app', 'logging dashboard',
+  'AI assistant', 'inventory tracker', 'community forum', 'media player',
+  'note-taking app', 'recipe organizer', 'workout tracker', 'field service tool'
+];
+
+</script>
+<script>
+  // ===== STATE =====
+  let selected = new Set();
+  let lastRandomStack = null;
+  let activeTemplate = null;
+
+  // ===== TAB SWITCHING =====
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + tab).classList.add('active');
+      if (tab === 'diagram') renderDiagram();
+    });
+  });
+
+  // ===== BUILDER: render checkbox list =====
+  function renderToolList() {
+    const container = document.getElementById('tool-list');
+    container.innerHTML = '';
+
+    Object.entries(VOCAB).forEach(([catKey, tools]) => {
+      const meta = CATEGORIES[catKey];
+      const block = document.createElement('div');
+      block.className = 'category-block';
+
+      block.innerHTML = `
+        <div class="category-title">
+          <span class="cat-dot" style="background: ${meta.color}"></span>
+          ${meta.label}
+        </div>
+      `;
+
+      tools.forEach(tool => {
+        const row = document.createElement('label');
+        row.className = 'tool-row';
+        row.innerHTML = `
+          <input type="checkbox" data-id="${tool.id}" ${selected.has(tool.id) ? 'checked' : ''}>
+          <div class="tool-info">
+            <div class="tool-name">${tool.name}</div>
+            <div class="tool-desc">${tool.desc}</div>
+          </div>
+        `;
+        const cb = row.querySelector('input');
+        if (selected.has(tool.id)) row.classList.add('checked');
+
+        cb.addEventListener('change', () => {
+          if (cb.checked) {
+            selected.add(tool.id);
+            row.classList.add('checked');
+          } else {
+            selected.delete(tool.id);
+            row.classList.remove('checked');
+          }
+          renderStackPreview();
+        });
+
+        block.appendChild(row);
+      });
+
+      container.appendChild(block);
+    });
+  }
+
+  // ===== BUILDER: render preview =====
+  function renderStackPreview() {
+    const list = document.getElementById('stack-list');
+    if (selected.size === 0) {
+      list.innerHTML = '<div class="empty-state">No tools selected yet</div>';
+      return;
+    }
+
+    const grouped = {};
+    selected.forEach(id => {
+      const tool = findTool(id);
+      if (!tool) return;
+      if (!grouped[tool._cat]) grouped[tool._cat] = [];
+      grouped[tool._cat].push(tool);
+    });
+
+    let html = '';
+    Object.entries(grouped).forEach(([cat, tools]) => {
+      const meta = CATEGORIES[cat];
+      html += `<div style="margin-bottom:10px;">`;
+      html += `<div class="category-title"><span class="cat-dot" style="background:${meta.color}"></span>${meta.label}</div>`;
+      tools.forEach(t => {
+        html += `<span class="stack-pill">${t.name}</span>`;
+      });
+      html += `</div>`;
+    });
+    list.innerHTML = html;
+  }
+
+  // Helper: find a tool by id and attach its category
+  function findTool(id) {
+    for (const [cat, tools] of Object.entries(VOCAB)) {
+      const found = tools.find(t => t.id === id);
+      if (found) return { ...found, _cat: cat };
+    }
+    return null;
+  }
+
+  // ===== ACTIONS =====
+  function clearStack() {
+    selected.clear();
+    document.querySelectorAll('#tool-list input[type="checkbox"]').forEach(cb => {
+      cb.checked = false;
+      cb.closest('.tool-row').classList.remove('checked');
+    });
+    renderStackPreview();
+    document.getElementById('export-box').classList.remove('visible');
+  }
+
+  function buildExportText() {
+    const name = document.getElementById('stack-name').value || 'Unnamed Stack';
+    const tools = Array.from(selected).map(id => findTool(id)).filter(Boolean);
+
+    let text = `=== STACK: ${name} ===\n\n`;
+    const grouped = {};
+    tools.forEach(t => {
+      if (!grouped[t._cat]) grouped[t._cat] = [];
+      grouped[t._cat].push(t);
+    });
+
+    Object.entries(grouped).forEach(([cat, ts]) => {
+      text += `[${CATEGORIES[cat].label.toUpperCase()}]\n`;
+      ts.forEach(t => {
+        text += `  - ${t.name} (role: ${t.role}) :: ${t.desc}\n`;
+      });
+      text += '\n';
+    });
+
+    text += `\n=== QUESTION FOR CLAUDE ===\n`;
+    text += `Given this stack, what kinds of apps does it suit well? What is missing or redundant? `;
+    text += `What would you build first to prove the stack works end-to-end?\n`;
+
+    return text;
+  }
+
+  function exportStack() {
+    if (selected.size === 0) {
+      alert('Pick at least one tool first.');
+      return;
+    }
+    const box = document.getElementById('export-box');
+    box.textContent = buildExportText();
+    box.classList.add('visible');
+  }
+
+  function copyStack() {
+    if (selected.size === 0) return;
+    const text = buildExportText();
+    navigator.clipboard.writeText(text).then(() => {
+      const box = document.getElementById('export-box');
+      box.textContent = text + '\n\n[Copied to clipboard]';
+      box.classList.add('visible');
+    });
+  }
+
+  // ===== RANDOMIZER =====
+  function pickRandom(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  function randomize() {
+    // Strategy: pick one tool from each of several "must-have" roles,
+    // then sprinkle a few optional ones from random categories.
+    // This avoids the randomizer producing nonsense like 3 databases and no frontend.
+
+    const stack = new Set();
+    const mustHaveCategories = ['frontend', 'backend', 'data', 'infra'];
+    const optionalCategories = ['auth', 'payments', 'plumbing', 'observability', 'ai', 'realtime_game'];
+
+    mustHaveCategories.forEach(cat => {
+      const pool = VOCAB[cat];
+      if (pool && pool.length) {
+        stack.add(pickRandom(pool).id);
+      }
+    });
+
+    // Sprinkle 2-4 optional tools from random optional categories
+    const extraCount = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < extraCount; i++) {
+      const cat = pickRandom(optionalCategories);
+      const pool = VOCAB[cat];
+      if (pool && pool.length) {
+        stack.add(pickRandom(pool).id);
+      }
+    }
+
+    const tools = Array.from(stack).map(id => findTool(id)).filter(Boolean);
+    const name = generateStackName(tools);
+    const challenge = generateChallenge(tools);
+
+    lastRandomStack = { name, tools, challenge };
+
+    // Render
+    document.getElementById('random-result').style.display = 'block';
+    document.getElementById('random-name').textContent = name;
+    document.getElementById('random-tools').innerHTML =
+      tools.map(t => `<span class="stack-pill" style="background:${CATEGORIES[t._cat].color}30;border-color:${CATEGORIES[t._cat].color}">${t.name}</span>`).join('');
+    document.getElementById('random-challenge').textContent = challenge;
+    document.getElementById('apply-random-btn').disabled = false;
+    document.getElementById('export-random-btn').disabled = false;
+    document.getElementById('random-export-box').classList.remove('visible');
+  }
+
+  function generateStackName(tools) {
+    // Pick name flavor based on what is in the stack
+    const cats = new Set(tools.map(t => t._cat));
+    let flavorPool;
+    if (cats.has('ai')) flavorPool = NAME_PARTS.ai_words;
+    else if (cats.has('realtime_game')) flavorPool = NAME_PARTS.game_words;
+    else if (cats.has('payments')) flavorPool = NAME_PARTS.commerce_words;
+    else if (cats.has('plumbing') && tools.some(t => t.role === 'pubsub' || t.role === 'realtime')) flavorPool = NAME_PARTS.realtime_words;
+    else if (cats.has('data')) flavorPool = NAME_PARTS.data_words;
+    else flavorPool = NAME_PARTS.neutral_words;
+
+    return `${pickRandom(NAME_PARTS.prefixes)} ${pickRandom(flavorPool)}`;
+  }
+
+  function generateChallenge(tools) {
+    const template = pickRandom(CHALLENGES);
+    const type = pickRandom(CHALLENGE_TYPES);
+    return template.replace('{type}', type);
+  }
+
+  function applyRandomToBuilder() {
+    if (!lastRandomStack) return;
+    selected = new Set(lastRandomStack.tools.map(t => t.id));
+    document.getElementById('stack-name').value = lastRandomStack.name;
+    renderToolList();
+    renderStackPreview();
+    // Switch tab
+    document.querySelector('[data-tab="builder"]').click();
+  }
+
+  function exportRandom() {
+    if (!lastRandomStack) return;
+    let text = `=== RANDOMIZED STACK: ${lastRandomStack.name} ===\n\n`;
+    const grouped = {};
+    lastRandomStack.tools.forEach(t => {
+      if (!grouped[t._cat]) grouped[t._cat] = [];
+      grouped[t._cat].push(t);
+    });
+    Object.entries(grouped).forEach(([cat, ts]) => {
+      text += `[${CATEGORIES[cat].label.toUpperCase()}]\n`;
+      ts.forEach(t => {
+        text += `  - ${t.name} (role: ${t.role}) :: ${t.desc}\n`;
+      });
+      text += '\n';
+    });
+    text += `=== CHALLENGE ===\n${lastRandomStack.challenge}\n\n`;
+    text += `=== QUESTION FOR CLAUDE ===\n`;
+    text += `The randomizer suggested this stack. Is this a sensible combination? What would each tool contribute? `;
+    text += `Where are the weaknesses or gaps? Would you swap anything out?\n`;
+
+    const box = document.getElementById('random-export-box');
+    box.textContent = text;
+    box.classList.add('visible');
+    navigator.clipboard.writeText(text).catch(() => {});
+  }
+
+  // ===== DIAGRAM =====
+  function renderDiagram() {
+    const canvas = document.getElementById('diagram-canvas');
+    if (selected.size === 0) {
+      canvas.innerHTML = '<div class="empty-state">Add tools in BUILDER to see the diagram</div>';
+      return;
+    }
+
+    const tools = Array.from(selected).map(id => findTool(id)).filter(Boolean);
+
+    // Layer order: how data flows top to bottom
+    const layerOrder = [
+      { key: 'client', label: 'Client / User', cats: [] },
+      { key: 'frontend', label: 'Frontend', cats: ['frontend'] },
+      { key: 'edge', label: 'Edge / CDN', cats: [], filter: t => t.role === 'cdn' },
+      { key: 'auth', label: 'Auth Layer', cats: ['auth'] },
+      { key: 'api', label: 'API Layer', cats: ['plumbing'], filter: t => ['api_style', 'realtime', 'event_in'].includes(t.role) },
+      { key: 'backend', label: 'Backend Services', cats: ['backend'] },
+      { key: 'realtime_game', label: 'Realtime / Game', cats: ['realtime_game'] },
+      { key: 'queue', label: 'Queue / Pubsub', cats: [], filter: t => ['queue', 'pubsub'].includes(t.role) },
+      { key: 'ai', label: 'AI Services', cats: ['ai'] },
+      { key: 'data', label: 'Data Storage', cats: ['data'] },
+      { key: 'payments', label: 'Payments', cats: ['payments'] },
+      { key: 'observability', label: 'Observability', cats: ['observability'] },
+      { key: 'infra', label: 'Infrastructure', cats: ['infra'] }
+    ];
+
+    // Bucket each tool into a layer
+    const buckets = {};
+    layerOrder.forEach(l => buckets[l.key] = []);
+
+    tools.forEach(tool => {
+      let placed = false;
+      for (const layer of layerOrder) {
+        if (layer.filter && layer.filter(tool)) {
+          buckets[layer.key].push(tool);
+          placed = true;
+          break;
+        }
+        if (layer.cats.includes(tool._cat) && !layer.filter) {
+          buckets[layer.key].push(tool);
+          placed = true;
+          break;
+        }
+      }
+      // If nothing matched, dump into "Infrastructure" as a fallback
+      if (!placed) buckets.infra.push(tool);
+    });
+
+    // Always add a synthetic "Client" layer at top
+    buckets.client = [{ name: 'User (browser/device)', _cat: 'frontend', synthetic: true }];
+
+    // Render
+    let html = '';
+    let lastHadContent = false;
+    layerOrder.forEach((layer, idx) => {
+      const items = buckets[layer.key];
+      if (!items || items.length === 0) return;
+      if (lastHadContent) html += `<div class="diagram-arrow">↓</div>`;
+      html += `<div class="diagram-layer">`;
+      html += `<div class="diagram-layer-label">${layer.label}</div>`;
+      items.forEach(t => {
+        const color = t.synthetic ? '#1a1a1a' : (CATEGORIES[t._cat]?.color || '#999');
+        html += `<div class="diagram-node" style="border-color:${color}">${t.name}</div>`;
+      });
+      html += `</div>`;
+      lastHadContent = true;
+    });
+
+    canvas.innerHTML = html;
+  }
+
+  // ===== TEMPLATES =====
+  function renderTemplateGrid() {
+    const grid = document.getElementById('template-grid');
+    grid.innerHTML = '';
+    Object.entries(TEMPLATES).forEach(([key, tpl]) => {
+      const card = document.createElement('div');
+      card.className = 'template-card';
+      card.innerHTML = `
+        <div class="template-name">${tpl.name}</div>
+        <div class="template-desc">${tpl.desc}</div>
+        <div class="template-count">${tpl.tools.length} tools</div>
+      `;
+      card.addEventListener('click', () => showTemplateDetail(key));
+      grid.appendChild(card);
+    });
+  }
+
+  function showTemplateDetail(key) {
+    const tpl = TEMPLATES[key];
+    if (!tpl) return;
+    activeTemplate = key;
+
+    document.getElementById('template-detail').style.display = 'block';
+    document.getElementById('template-detail-name').textContent = tpl.name;
+    document.getElementById('template-detail-why').textContent = 'Why this stack: ' + tpl.why;
+
+    const grouped = {};
+    tpl.tools.forEach(id => {
+      const t = findTool(id);
+      if (!t) return;
+      if (!grouped[t._cat]) grouped[t._cat] = [];
+      grouped[t._cat].push(t);
+    });
+
+    let html = '';
+    Object.entries(grouped).forEach(([cat, ts]) => {
+      const meta = CATEGORIES[cat];
+      html += `<div style="margin-bottom:10px;">`;
+      html += `<div class="category-title"><span class="cat-dot" style="background:${meta.color}"></span>${meta.label}</div>`;
+      ts.forEach(t => {
+        html += `<span class="stack-pill">${t.name}</span>`;
+      });
+      html += `</div>`;
+    });
+    document.getElementById('template-detail-tools').innerHTML = html;
+
+    document.getElementById('template-detail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function loadTemplateToBuilder() {
+    if (!activeTemplate) return;
+    const tpl = TEMPLATES[activeTemplate];
+    selected = new Set(tpl.tools);
+    document.getElementById('stack-name').value = tpl.name;
+    renderToolList();
+    renderStackPreview();
+    document.querySelector('[data-tab="builder"]').click();
+  }
+
+  // ===== CONVEYOR SIM =====
+  // Opens Conveyor Sim with this stack, where each tool becomes a machine in a packet factory.
+  // The stack rides in the link as base64url JSON: title, about, and tools with category and name.
+  const CONVEYOR_URL = 'https://conveyor-sim.vercel.app/';
+  function conveyorLink(title, about, ids) {
+    const tools = ids.map(id => findTool(id)).filter(Boolean).map(t => ({ cat: (CATEGORIES[t._cat]?.label || t._cat).toLowerCase(), name: t.name }));
+    const json = JSON.stringify({ title, about, tools });
+    const b64 = btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return CONVEYOR_URL + '#stack=' + b64;
+  }
+  function openInConveyor() {
+    if (selected.size === 0) return;
+    window.open(conveyorLink(document.getElementById('stack-name').value || 'My Stack', '', Array.from(selected)), '_blank');
+  }
+  function openTemplateInConveyor() {
+    if (!activeTemplate) return;
+    const tpl = TEMPLATES[activeTemplate];
+    window.open(conveyorLink(tpl.name, tpl.why || '', tpl.tools), '_blank');
+  }
+
+  // ===== INITIAL RENDER =====
+  renderToolList();
+  renderStackPreview();
+  renderTemplateGrid();
+</script>
+
+</body>
+</html>

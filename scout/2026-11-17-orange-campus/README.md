@@ -8,7 +8,6 @@ Live at campus-ebutuoy.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change
-2026-11-17, v2026.11.17. Created Campus, a video learning tool where building counts more than watching. Added stumble mode, course mode, sources, a transcript with credits, education genres, profiles, and a fallback when a course will not embed.
+Latest change. 2026-11-23, v2026.11.23. Campus version 3. Home picks up where you left off and recommends a next video, with a bottom navigation bar and a new navy, green, and gold look. Recommendations now search your subject instead of your bucket name, and a Junk button removes bad picks. The player has a screen off mode and a fullscreen button for picture in picture.
 
 See CHANGELOG.md for the full history.

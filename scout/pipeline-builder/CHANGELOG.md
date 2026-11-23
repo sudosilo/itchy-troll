@@ -1,0 +1,1 @@
+2026-11-22, v2026.11.22. Added the Pipeline Builder source, a tool that builds a software stack from tool choices, with Builder, Randomizer, Diagram, and Templates tabs. Added Open in Conveyor Sim buttons to the builder and to templates.

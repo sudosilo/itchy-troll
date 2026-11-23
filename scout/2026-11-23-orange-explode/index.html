@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Explode</title>
+<style>
+  :root { --bg:#f6f4ef; --ink:#222; --soft:#8a857b; --line:#d9d4c8; --accent:#e8692c; }
+  * { box-sizing:border-box; }
+  html, body { overflow-x:clip; max-width:100%; }
+  html, body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui, sans-serif; }
+  body { padding-bottom:150px; }
+  header { padding:14px 16px 6px; }
+  h1 { margin:0; font-size:22px; letter-spacing:1px; }
+  #status { color:var(--soft); font-size:14px; margin-top:4px; min-height:18px; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; padding:8px 16px; }
+  button, label.btn, select { background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:15px; color:var(--ink); font-family:inherit; }
+  button:disabled { opacity:.45; }
+  label.btn.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  input[type=file] { display:none; }
+  .slider { display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; padding:4px 16px 10px; font-size:14px; color:var(--soft); }
+  .slider input { flex:1 1 60%; min-width:0; accent-color:var(--accent); }
+  .slider select { flex:1 1 40%; min-width:0; padding:8px 10px; font-size:14px; }
+  #wrap { padding:0 16px 20px; }
+  #view { position:relative; height:62vh; overflow:hidden; perspective:900px; touch-action:none; background:#efece5; border:1px solid var(--line); border-radius:10px; }
+  #zoom { position:absolute; right:8px; top:8px; display:flex; gap:6px; z-index:2500; }
+  #zoom button { padding:6px 12px; font-size:16px; }
+  #zl { position:absolute; left:10px; top:12px; font-size:12px; color:var(--soft); z-index:2500; pointer-events:none; }
+  #stage { position:absolute; left:0; top:0; transform-origin:0 0; transform-style:preserve-3d; }
+  #base { display:block; width:100%; height:100%; border-radius:6px; box-shadow:0 2px 10px rgba(0,0,0,.12); }
+  .piece { position:absolute; touch-action:none; transition:transform .25s ease-out, filter .25s ease-out; will-change:transform; transform-style:preserve-3d; }
+  .piece.drag, .playing .piece { transition:none; }
+  #base { transition:opacity .4s, filter .4s; }
+  .playing #base { transition:none; }
+  .piece > canvas, .callout { transition:opacity .4s; }
+  .piece.gone { opacity:0; pointer-events:none; transition:opacity .4s, transform .25s ease-out; }
+  .piece.shell > canvas, .piece.shell > .callout { opacity:0; }
+  .piece.focused > canvas { outline:2px solid var(--accent); outline-offset:3px; }
+  .piece > canvas { width:100%; height:100%; display:block; pointer-events:none; }
+  .callout { position:absolute; left:50%; top:50%; width:0; height:0; pointer-events:none; z-index:999; }
+  .callout svg { position:absolute; left:0; top:0; overflow:visible; width:1px; height:1px; }
+  .callout line { stroke:#222; stroke-width:1.5; transition:stroke-dashoffset .35s ease-out; }
+  .callout circle { fill:var(--accent); opacity:0; transition:opacity .15s; }
+  .callout .label { position:absolute; background:#fff; color:#222; border:1.5px solid #222; padding:4px 8px; font-size:12px; line-height:1.25; letter-spacing:1.5px; text-transform:uppercase; font-weight:600; white-space:pre-wrap; width:max-content; max-width:180px; opacity:0; transition:opacity .25s ease-out; }
+  .callout.show circle { opacity:1; }
+  .callout.show .label { opacity:1; transition-delay:.3s; }
+  .piece.editing > canvas { outline:2px dashed var(--accent); outline-offset:2px; }
+  .ping { position:absolute; width:18px; height:18px; margin:-9px 0 0 -9px; border-radius:50%; border:3px solid var(--accent); pointer-events:none; animation:ping .9s ease-out forwards; z-index:2000; }
+  @keyframes ping { to { transform:scale(2.4); opacity:0; } }
+  #empty { text-align:center; color:var(--soft); padding:60px 20px; font-size:15px; }
+  #tabs { position:fixed; left:0; right:0; bottom:0; display:flex; gap:8px; padding:10px 16px 14px; background:#fff; border-top:1px solid var(--line); z-index:3000; }
+  #tabs button { flex:1; }
+  #tabs button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  #editor { position:fixed; left:0; right:0; bottom:66px; background:#fff; border-top:1px solid var(--line); padding:10px 16px; z-index:3000; display:flex; flex-direction:column; gap:8px; }
+  #editor[hidden] { display:none; }
+  #editor textarea { width:100%; min-height:60px; border:1px solid var(--line); border-radius:10px; padding:8px; font-size:15px; font-family:inherit; background:var(--bg); color:var(--ink); }
+  #editor .row { display:flex; gap:8px; }
+  #editor .row button { flex:1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>EXPLODE</h1>
+  <div id="status">Loading model...</div>
+</header>
+<div class="bar">
+  <label class="btn primary">Photo<input id="file" type="file" accept="image/*"></label>
+  <button id="undo" disabled>Undo</button>
+  <button id="clear" disabled>Reset</button>
+  <button id="holes">Holes on</button>
+  <button id="bubbles">Bubbles on</button>
+  <button id="play">Play</button>
+  <select id="speed"><option value="0.6">Slow</option><option value="1" selected>Normal</option><option value="1.7">Fast</option></select>
+</div>
+<div class="slider">Explode <input id="explode" type="range" min="0" max="100" step="0.1" value="40">
+  <select id="mode"><option value="all">All at once</option><option value="seq">One by one</option></select>
+  <select id="dir"><option value="out">Spread out</option><option value="toward">Toward you</option><option value="away">Away from you</option></select></div>
+<div id="wrap">
+  <div id="empty">Pick a photo, then tap anything in it.</div>
+  <div id="view" hidden><div id="zl"></div><div id="zoom"><button id="zin">+</button><button id="zout">-</button><button id="zfit">Fit</button><button id="zup" hidden>Back</button></div><div id="stage"><canvas id="base"></canvas></div></div>
+</div>
+<div id="editor" hidden>
+  <textarea id="text" placeholder="Bubble text"></textarea>
+  <div class="row"><button id="save">Save</button><button id="remove">Remove</button><button id="close">Close</button></div>
+</div>
+<div id="tabs"><button id="tabCut" class="on">Cut</button><button id="tabBubble">Bubble</button><button id="tabFocus">Focus</button></div>
+
+<script type="module">
+import { SamModel, AutoProcessor, RawImage, Tensor, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2';
+env.allowLocalModels = false;
+
+const MODEL = 'Xenova/slimsam-77-uniform';
+const MAX = 1024;
+const $ = id => document.getElementById(id);
+const statusEl = $('status'), stage = $('stage'), baseCanvas = $('base');
+const say = t => { statusEl.textContent = t; };
+const tick = () => new Promise(r => setTimeout(r, 30));
+
+let model, processor, root = null;
+let focus = null;
+let pieces = [], busy = false, showHoles = true, showBubbles = true, tool = 'cut', editing = null;
+
+async function load() {
+  try {
+    [model, processor] = await Promise.all([
+      SamModel.from_pretrained(MODEL, { progress_callback: p => { if (p.status === 'progress' && p.file.endsWith('.onnx')) say('Loading model ' + Math.round(p.progress) + '%'); } }),
+      AutoProcessor.from_pretrained(MODEL)
+    ]);
+    say('Ready. Pick a photo.');
+    if (root) { busy = true; await embed(root); busy = false; say('Tap anything to cut it out.'); }
+  } catch (e) { say('Model failed to load: ' + e.message); }
+}
+
+$('file').onchange = async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const img = await createImageBitmap(f);
+  const s = Math.min(1, MAX / Math.max(img.width, img.height));
+  const W = Math.round(img.width * s), H = Math.round(img.height * s);
+  const src = document.createElement('canvas');
+  src.width = W; src.height = H;
+  src.getContext('2d').drawImage(img, 0, 0, W, H);
+  baseCanvas.width = W; baseCanvas.height = H;
+  pieces.forEach(p => p.el.remove());
+  pieces = [];
+  focus = null;
+  $('zup').hidden = true;
+  closeEditor();
+  root = { isRoot: true, src, w: W, h: H, el: stage, canvas: baseCanvas, children: [], emb: null };
+  $('empty').hidden = true;
+  $('view').hidden = false;
+  fit(true);
+  redraw(root);
+  buttons();
+  e.target.value = '';
+  if (model) { busy = true; say('Studying the photo...'); await tick(); await embed(root); busy = false; say('Tap anything to cut it out.'); }
+};
+
+async function embed(layer) {
+  if (layer.emb) return layer.emb;
+  const tmp = document.createElement('canvas');
+  tmp.width = layer.w; tmp.height = layer.h;
+  const c = tmp.getContext('2d');
+  c.fillStyle = '#ffffff';
+  c.fillRect(0, 0, layer.w, layer.h);
+  c.drawImage(layer.src, 0, 0);
+  const blob = await new Promise(r => tmp.toBlob(r, 'image/png'));
+  const raw = await RawImage.fromBlob(blob);
+  const inputs = await processor(raw);
+  const embeddings = await model.get_image_embeddings(inputs);
+  layer.emb = { inputs, embeddings };
+  return layer.emb;
+}
+
+const view = $('view');
+const cam = { z: 1, x: 0, y: 0 };
+function applyCam() {
+  stage.style.transform = `translate(${cam.x}px, ${cam.y}px) scale(${cam.z})`;
+  $('zl').textContent = Math.round(cam.z * 100) + '%';
+}
+function fit(resetCam) {
+  const vw = view.clientWidth, vh = view.clientHeight;
+  const s = Math.min((vw - 24) / root.w, (vh - 24) / root.h);
+  const sw = root.w * s, sh = root.h * s;
+  stage.style.width = sw + 'px';
+  stage.style.height = sh + 'px';
+  if (resetCam) { cam.z = 1; cam.x = (vw - sw) / 2; cam.y = (vh - sh) / 2; }
+  applyCam();
+  layout();
+}
+function zoomAt(vx, vy, nz) {
+  nz = Math.min(12, Math.max(0.3, nz));
+  const sx = (vx - cam.x) / cam.z, sy = (vy - cam.y) / cam.z;
+  cam.z = nz; cam.x = vx - sx * nz; cam.y = vy - sy * nz;
+  applyCam();
+}
+$('zin').onclick = () => zoomAt(view.clientWidth / 2, view.clientHeight / 2, cam.z * 1.5);
+$('zout').onclick = () => zoomAt(view.clientWidth / 2, view.clientHeight / 2, cam.z / 1.5);
+$('zfit').onclick = () => {
+  if (!focus) return fit(true);
+  const vr = view.getBoundingClientRect(), r = focus.el.querySelector('canvas').getBoundingClientRect();
+  const f = Math.min((vr.width - 60) / r.width, (vr.height - 60) / r.height);
+  const sx = (r.left + r.width / 2 - vr.left - cam.x) / cam.z, sy = (r.top + r.height / 2 - vr.top - cam.y) / cam.z;
+  cam.z = Math.min(12, Math.max(0.3, cam.z * f));
+  cam.x = vr.width / 2 - sx * cam.z; cam.y = vr.height / 2 - sy * cam.z;
+  applyCam();
+};
+view.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = view.getBoundingClientRect();
+  zoomAt(e.clientX - r.left, e.clientY - r.top, cam.z * Math.exp(-e.deltaY * 0.0015));
+}, { passive: false });
+window.addEventListener('resize', () => { if (root) fit(false); });
+
+function redraw(layer) {
+  const c = layer.canvas.getContext('2d');
+  c.clearRect(0, 0, layer.w, layer.h);
+  c.drawImage(layer.src, 0, 0);
+  if (showHoles) for (const ch of layer.children) c.drawImage(ch.hole, ch.x, ch.y);
+}
+function redrawAll() { if (!root) return; redraw(root); pieces.forEach(redraw); }
+
+function alphaAt(p, nx, ny) {
+  const x = Math.min(p.w - 1, Math.max(0, Math.floor(nx * p.w)));
+  const y = Math.min(p.h - 1, Math.max(0, Math.floor(ny * p.h)));
+  return p.alpha[y * p.w + x];
+}
+
+function hit(cx, cy) {
+  for (const el of document.elementsFromPoint(cx, cy)) {
+    if (el === baseCanvas) {
+      if (focus) return null;
+      const r = baseCanvas.getBoundingClientRect();
+      return { layer: root, nx: (cx - r.left) / r.width, ny: (cy - r.top) / r.height };
+    }
+    if (el.classList && el.classList.contains('piece')) {
+      const p = pieces.find(q => q.el === el);
+      if (!p) continue;
+      if (focus && p !== focus && !isUnder(p, focus)) continue;
+      const r = el.getBoundingClientRect();
+      const nx = (cx - r.left) / r.width, ny = (cy - r.top) / r.height;
+      if (alphaAt(p, nx, ny) > 0) return { layer: p, nx, ny };
+    }
+  }
+  return null;
+}
+
+let press = null, pinch = null;
+const pts = new Map();
+const viewPt = (x, y) => { const r = view.getBoundingClientRect(); return { x: x - r.left, y: y - r.top }; };
+function startPinch() {
+  const [a, b] = [...pts.values()];
+  const m = viewPt((a.x + b.x) / 2, (a.y + b.y) / 2);
+  pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: cam.z, sx: (m.x - cam.x) / cam.z, sy: (m.y - cam.y) / cam.z };
+}
+view.addEventListener('pointerdown', e => {
+  if (!root || e.target.closest('#zoom')) return;
+  e.preventDefault();
+  view.setPointerCapture(e.pointerId);
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pts.size === 2) {
+    if (press && !press.h.layer.isRoot) press.h.layer.el.classList.remove('drag');
+    press = null;
+    startPinch();
+    return;
+  }
+  if (pts.size > 2) return;
+  const h = hit(e.clientX, e.clientY);
+  press = { h, sx: e.clientX, sy: e.clientY, moved: false, cx: cam.x, cy: cam.y };
+  if (h && !h.layer.isRoot) { press.dx = h.layer.dx; press.dy = h.layer.dy; }
+});
+view.addEventListener('pointermove', e => {
+  if (!pts.has(e.pointerId)) return;
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && pts.size >= 2) {
+    const [a, b] = [...pts.values()];
+    const m = viewPt((a.x + b.x) / 2, (a.y + b.y) / 2);
+    const nz = Math.min(12, Math.max(0.3, pinch.z0 * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d0));
+    cam.z = nz; cam.x = m.x - pinch.sx * nz; cam.y = m.y - pinch.sy * nz;
+    applyCam();
+    return;
+  }
+  if (!press) return;
+  const mx = e.clientX - press.sx, my = e.clientY - press.sy;
+  if (!press.moved && Math.hypot(mx, my) > 8) press.moved = true;
+  if (!press.moved) return;
+  if (press.h && !press.h.layer.isRoot) {
+    const p = press.h.layer;
+    p.el.classList.add('drag');
+    p.dx = press.dx + mx / cam.z; p.dy = press.dy + my / cam.z;
+    layout();
+  } else {
+    cam.x = press.cx + mx; cam.y = press.cy + my;
+    applyCam();
+  }
+});
+const release = async e => {
+  pts.delete(e.pointerId);
+  if (pinch) { if (pts.size < 2) pinch = null; return; }
+  if (!press) return;
+  const pr = press; press = null;
+  if (pr.h && !pr.h.layer.isRoot) pr.h.layer.el.classList.remove('drag');
+  if (pr.moved || e.type === 'pointercancel' || !pr.h) return;
+  const { layer, nx, ny } = pr.h;
+  if (tool === 'bubble') { if (!layer.isRoot) openEditor(layer); else say('Tap a cut piece to give it a bubble.'); return; }
+  if (tool === 'focus') { if (!layer.isRoot) setFocus(layer); else say('Tap a cut piece to focus on it.'); return; }
+  await tapCut(layer, nx, ny, e.clientX, e.clientY);
+};
+view.addEventListener('pointerup', release);
+view.addEventListener('pointercancel', release);
+
+async function tapCut(layer, nx, ny, cx, cy) {
+  if (busy) return;
+  if (!model) { say('Model still loading...'); return; }
+  const sr = stage.getBoundingClientRect();
+  const ping = document.createElement('div');
+  ping.className = 'ping';
+  ping.style.left = ((cx - sr.left) / cam.z) + 'px'; ping.style.top = ((cy - sr.top) / cam.z) + 'px';
+  stage.appendChild(ping);
+  setTimeout(() => ping.remove(), 900);
+  busy = true;
+  try {
+    if (!layer.emb) { say(layer.isRoot ? 'Studying the photo...' : 'Studying this piece for a deeper cut...'); await tick(); await embed(layer); }
+    say('Cutting...'); await tick();
+    await cut(layer, nx, ny);
+  } catch (err) { say('Cut failed: ' + err.message); }
+  busy = false;
+}
+
+async function cut(layer, nx, ny) {
+  const { inputs, embeddings } = layer.emb;
+  const W = layer.w, H = layer.h;
+  const rs = inputs.reshaped_input_sizes[0];
+  const input_points = new Tensor('float32', [nx * rs[1], ny * rs[0]], [1, 1, 1, 2]);
+  const input_labels = new Tensor('int64', [1n], [1, 1, 1]);
+  const out = await model({ ...embeddings, input_points, input_labels });
+  const masks = await processor.post_process_masks(out.pred_masks, inputs.original_sizes, inputs.reshaped_input_sizes);
+  const scores = out.iou_scores.data;
+  const order = [...scores.keys()].sort((a, b) => scores[b] - scores[a]);
+  const m = masks[0].data;
+  const inside = (off, i) => m[off + i] && (layer.isRoot || layer.alpha[i] > 0);
+
+  let pick = -1, box;
+  for (const idx of order) {
+    const off = idx * W * H;
+    let x0 = W, y0 = H, x1 = -1, y1 = -1, count = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (inside(off, y * W + x)) { count++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    const total = layer.isRoot ? W * H : layer.solid;
+    if (count > 0 && (layer.isRoot || count < total * 0.92)) { pick = idx; box = { x0, y0, x1, y1 }; break; }
+  }
+  if (pick < 0) { say(layer.isRoot ? 'Nothing found there. Tap again.' : 'Could not split that piece further there. Try another spot.'); return; }
+  const off = pick * W * H;
+  const { x0, y0, x1, y1 } = box;
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+
+  const src = layer.src.getContext('2d').getImageData(x0, y0, w, h);
+  const alpha = new Uint8Array(w * h);
+  let solid = 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x);
+    if (!inside(off, (y + y0) * W + (x + x0))) src.data[i * 4 + 3] = 0;
+    alpha[i] = src.data[i * 4 + 3];
+    if (alpha[i]) solid++;
+  }
+  const srcCanvas = document.createElement('canvas');
+  srcCanvas.width = w; srcCanvas.height = h;
+  srcCanvas.getContext('2d').putImageData(src, 0, 0);
+
+  const hole = document.createElement('canvas');
+  hole.width = w; hole.height = h;
+  const hc = hole.getContext('2d');
+  hc.drawImage(srcCanvas, 0, 0);
+  hc.globalCompositeOperation = 'source-in';
+  hc.fillStyle = '#e4e0d6';
+  hc.fillRect(0, 0, w, h);
+
+  const el = document.createElement('div');
+  el.className = 'piece';
+  el.style.left = (x0 / W * 100) + '%';
+  el.style.top = (y0 / H * 100) + '%';
+  el.style.width = (w / W * 100) + '%';
+  el.style.height = (h / H * 100) + '%';
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  el.appendChild(cv);
+  const bubble = document.createElement('div');
+  bubble.className = 'callout';
+  bubble.innerHTML = '<svg><line x1="0" y1="0"/><circle cx="0" cy="0" r="3.5"/></svg><div class="label"></div>';
+  el.appendChild(bubble);
+  layer.el.appendChild(el);
+
+  const depth = layer.isRoot ? 1 : layer.depth + 1;
+  const p = { src: srcCanvas, canvas: cv, hole, alpha, solid, w, h, x: x0, y: y0, cx: (x0 + w / 2) / W, cy: (y0 + h / 2) / H, dx: 0, dy: 0, el, bubble, text: '', parent: layer, children: [], emb: null, depth, n: layer.children.length + 1 };
+  layer.children.push(p);
+  pieces.push(p);
+  redraw(p);
+  redraw(layer);
+  layout();
+  buttons();
+  say(pieces.length + ' piece' + (pieces.length > 1 ? 's' : '') + (depth > 1 ? ', level ' + depth + ' cut.' : '.') + ' Tap a piece to cut deeper.');
+}
+
+function isUnder(p, anc) { for (let q = p.parent; q && !q.isRoot; q = q.parent) if (q === anc) return true; return false; }
+function activePieces() { return focus ? pieces.filter(p => isUnder(p, focus)) : pieces; }
+function layout() {
+  const K = $('explode').value / 100;
+  const seq = $('mode').value === 'seq';
+  const act = activePieces();
+  const n = act.length;
+  const span = n > 1 ? 0.6 / (n - 1) : 0;
+  const dir = $('dir').value;
+  baseCanvas.style.opacity = focus ? 0 : 1 - 0.82 * K;
+  baseCanvas.style.filter = `grayscale(${focus ? 1 : Math.min(1, K * 1.2)})`;
+  pieces.forEach(p => {
+    const ai = act.indexOf(p);
+    let k;
+    if (ai >= 0) k = seq && n > 1 ? Math.min(1, Math.max(0, (K - ai * span) / 0.4)) : K;
+    else k = p.kFrozen ?? K;
+    p.k = k;
+    const pw = p.parent.el.clientWidth, ph = p.parent.el.clientHeight;
+    const reach = p.depth === 1 ? 0.8 : 1.1;
+    const spread = dir === 'out' ? 1 : 0;
+    const ox = (p.cx - 0.5) * pw * reach * k * spread + p.dx;
+    const oy = (p.cy - 0.5) * ph * reach * k * spread + p.dy;
+    const z = dir === 'out' ? (20 + p.n * 18) * k + 6 : 6 + p.n;
+    const sc = dir === 'toward' ? 1 + 1.2 * k : dir === 'away' ? 1 - 0.6 * k : 1;
+    p.el.style.transform = `translate3d(${ox}px, ${oy}px, ${z}px) scale(${sc})`;
+    p.el.style.filter = `drop-shadow(0 ${4 + 14 * k}px ${6 + 12 * k}px rgba(0,0,0,${0.18 + 0.15 * k}))`;
+    p.el.style.zIndex = 10 + p.n;
+    const related = !focus || p === focus || ai >= 0;
+    const shell = focus && isUnder(focus, p);
+    p.el.classList.toggle('gone', !!focus && !related && !shell);
+    p.el.classList.toggle('shell', !!shell);
+    p.el.classList.toggle('focused', p === focus);
+    const show = !!p.text && related && (editing === p || (showBubbles && k >= 0.97));
+    callout(p, show);
+  });
+}
+function setFocus(p) {
+  if (stage.classList.contains('playing')) stopPlay();
+  pieces.forEach(q => { q.kFrozen = undefined; });
+  focus = p;
+  if (p) {
+    layoutFreeze();
+    $('explode').value = 0;
+  }
+  $('zup').hidden = !p;
+  layout();
+  say(p ? 'Focused. Slide to explode its parts. Cut tab cuts deeper inside it. Back goes up a level.' : 'Showing the whole photo.');
+}
+function layoutFreeze() {
+  const act = activePieces();
+  pieces.forEach(q => { if (!act.includes(q)) q.kFrozen = q.k ?? 0; });
+}
+function callout(p, show) {
+  const top = topOf(p);
+  let vx = top.cx - 0.5, vy = top.cy - 0.5;
+  const d = Math.hypot(vx, vy) || 1;
+  vx /= d; vy /= d;
+  if (Math.abs(vx) < 0.2 && Math.abs(vy) < 0.2) { vx = 0.7; vy = -0.7; }
+  const L = 70 + p.depth * 20;
+  const ex = vx * L, ey = vy * L;
+  const line = p.bubble.querySelector('line');
+  line.setAttribute('x2', ex); line.setAttribute('y2', ey);
+  line.style.strokeDasharray = L;
+  line.style.strokeDashoffset = show ? 0 : L;
+  const lab = p.bubble.querySelector('.label');
+  if (!show) { clearInterval(p.typer); p.typer = null; p.typedFor = null; lab.textContent = ''; }
+  else if (editing === p) { clearInterval(p.typer); p.typer = null; p.typedFor = p.text; lab.textContent = p.text; }
+  else if (p.typedFor !== p.text) {
+    p.typedFor = p.text;
+    clearInterval(p.typer);
+    let i = 0;
+    lab.textContent = '';
+    p.typer = setTimeout(() => {
+      p.typer = setInterval(() => {
+        i++;
+        lab.textContent = p.text.slice(0, i);
+        if (i >= p.text.length) { clearInterval(p.typer); p.typer = null; }
+      }, TYPE_MS);
+    }, 350);
+  }
+  lab.style.left = ex + 'px'; lab.style.top = ey + 'px';
+  lab.style.transform = `translate(${vx >= 0 ? '4px' : 'calc(-100% - 4px)'}, -50%)`;
+  p.bubble.classList.toggle('show', show);
+}
+const TYPE_MS = 45;
+let playToken = 0;
+const typeTime = p => p.text ? 350 + p.text.length * TYPE_MS + 1300 : 0;
+function animateK(from, to, ms, tok) {
+  return new Promise(res => {
+    const t0 = performance.now();
+    const step = now => {
+      if (tok !== playToken) return res(false);
+      const u = Math.min(1, (now - t0) / ms);
+      const e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+      $('explode').value = (from + (to - from) * e) * 100;
+      layout();
+      if (u < 1) requestAnimationFrame(step); else res(true);
+    };
+    requestAnimationFrame(step);
+  });
+}
+const waitMs = (ms, tok) => new Promise(r => setTimeout(() => r(tok === playToken), ms));
+async function playLoop(tok) {
+  while (tok === playToken) {
+    const sp = +$('speed').value;
+    const act = activePieces();
+    const n = act.length;
+    const seq = $('mode').value === 'seq' && n > 1;
+    if (seq) {
+      const span = 0.6 / (n - 1);
+      let prev = 0;
+      for (let i = 0; i < n; i++) {
+        const end = Math.min(1, i * span + 0.4);
+        if (!await animateK(prev, end, 900 / sp, tok)) return;
+        prev = end;
+        if (act[i].text && !await waitMs(typeTime(act[i]) / sp, tok)) return;
+      }
+      if (!await waitMs(500 / sp, tok)) return;
+      if (!await animateK(1, 0, (600 + n * 350) / sp, tok)) return;
+    } else {
+      if (!await animateK(0, 1, 1500 / sp, tok)) return;
+      const hold = Math.max(800, ...act.map(typeTime));
+      if (!await waitMs(hold / sp, tok)) return;
+      if (!await animateK(1, 0, 1500 / sp, tok)) return;
+    }
+    if (!await waitMs(700 / sp, tok)) return;
+  }
+}
+function stopPlay() {
+  playToken++;
+  $('play').textContent = 'Play';
+  stage.classList.remove('playing');
+}
+$('play').onclick = () => {
+  if ($('play').textContent === 'Stop') { stopPlay(); return; }
+  if (!activePieces().length) { say(focus ? 'Cut parts inside this piece first.' : 'Cut something first.'); return; }
+  const tok = ++playToken;
+  $('play').textContent = 'Stop';
+  stage.classList.add('playing');
+  playLoop(tok);
+};
+$('explode').addEventListener('pointerdown', () => { if (stage.classList.contains('playing')) stopPlay(); });
+function topOf(p) { while (!p.parent.isRoot) p = p.parent; return p; }
+$('explode').oninput = layout;
+$('mode').onchange = layout;
+$('dir').onchange = layout;
+
+function openEditor(p) {
+  if (editing) editing.el.classList.remove('editing');
+  editing = p;
+  p.el.classList.add('editing');
+  $('text').value = p.text;
+  $('editor').hidden = false;
+  $('text').focus();
+  layout();
+}
+function closeEditor() {
+  if (editing) editing.el.classList.remove('editing');
+  editing = null;
+  $('editor').hidden = true;
+  layout();
+}
+$('save').onclick = () => { if (editing) { editing.text = $('text').value.trim(); layout(); } closeEditor(); };
+$('remove').onclick = () => { if (editing) { editing.text = ''; layout(); } closeEditor(); };
+$('close').onclick = closeEditor;
+
+function setTool(t) {
+  tool = t;
+  $('tabCut').classList.toggle('on', t === 'cut');
+  $('tabBubble').classList.toggle('on', t === 'bubble');
+  $('tabFocus').classList.toggle('on', t === 'focus');
+  if (t === 'cut') closeEditor();
+  say({ cut: 'Cut: tap the photo or tap a piece to cut deeper.', bubble: 'Bubble: tap a cut piece to write its label. Labels show while you slide forward.', focus: 'Focus: tap a piece. Everything else fades away.' }[t] || '');
+  layout();
+}
+$('tabCut').onclick = () => setTool('cut');
+$('tabBubble').onclick = () => setTool('bubble');
+$('tabFocus').onclick = () => setTool('focus');
+$('zup').onclick = () => { const p = focus && !focus.parent.isRoot ? focus.parent : null; setFocus(p); };
+
+function buttons() {
+  $('undo').disabled = !pieces.length;
+  $('clear').disabled = !pieces.length;
+}
+$('undo').onclick = () => {
+  const p = pieces.pop();
+  if (!p) return;
+  if (editing === p) closeEditor();
+  if (focus && (focus === p || isUnder(focus, p))) setFocus(p.parent.isRoot ? null : p.parent);
+  p.el.remove();
+  p.parent.children = p.parent.children.filter(c => c !== p);
+  redraw(p.parent);
+  layout();
+  buttons();
+};
+$('clear').onclick = () => {
+  closeEditor();
+  if (focus) setFocus(null);
+  pieces.forEach(p => p.el.remove());
+  pieces = [];
+  root.children = [];
+  redraw(root);
+  buttons();
+  say('Tap anything to cut it out.');
+};
+$('holes').onclick = () => { showHoles = !showHoles; $('holes').textContent = showHoles ? 'Holes on' : 'Holes off'; redrawAll(); };
+$('bubbles').onclick = () => { showBubbles = !showBubbles; $('bubbles').textContent = showBubbles ? 'Bubbles on' : 'Bubbles off'; layout(); };
+
+load();
+</script>
+</body>
+</html>

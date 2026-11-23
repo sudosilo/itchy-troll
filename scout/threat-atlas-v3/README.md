@@ -8,6 +8,6 @@ Live at threat-atlas-two.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. Data refresh. Added incidents from 2025 and 2026 including Bybit, Poland grid, Stryker, Iranian PLC attacks and ShinyHunters campaigns. Added new countries, conferences, firms, bases, satellites and state entries. Year slider now reaches 2026 and filters the other layers.
+Latest change. 2026-11-23, v2026.11.23. Story mode. A new STORY tab walks the incidents in order as twenty seven chapters, rotating the globe and building the map year by year. Intel list now marks which incidents are in the story. Corrected the Triton attribution to Russia.
 
 See CHANGELOG.md for the full history.

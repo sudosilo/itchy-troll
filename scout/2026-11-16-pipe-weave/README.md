@@ -8,6 +8,6 @@ Live at 2026-11-16-pipe-weave.vercel.app
 
 This app is checked every morning by Control Troll, an automated test system that loads every app and clicks through its features.
 
-Latest change. Added a full screen button. Pipes can now have their own colors and lines can shift color as they grow. Added an isometric lock shape mode. Added a memory mode that replays rounds and learns from collisions. Cloth weave now goes over only single lines and under or stays under for bundles.
+Latest change. 2026-11-22, v2026.11.22. Fill canvas now works with any preset. It keeps growing pipes until the screen is covered, tops up gaps, and reports the coverage. The fill style has a new Current rules choice.
 
 Full history is in CHANGELOG.md.

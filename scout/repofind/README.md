@@ -8,6 +8,6 @@ Live at repofind-delta.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. Added the Teardown tab. Roll or pick one of 61 well known products and see how it is built layer by layer, each layer marked known or inferred, with a rebuild using builder tools and the open alternatives that exist, linked into the catalog. Filters hide big tech alternatives or skip big tech products. Merged Pipeline Builder in as the Builder tab, with build, randomize, diagram and templates modes, Supabase and more tools added, and the current stack saved in backup.
+Latest change. 2026-11-22, v2026.11.22. Added Conveyor Sim links. Each teardown can open in Conveyor Sim two ways, as built from its layers or as the rebuild, and the builder stack, rolled stacks and templates each have an open in conveyor sim button. Layers with no machine yet show up as gaps there. Info banners now start closed behind an i button. Tap the i to open or close one.
 
 See CHANGELOG.md for the full history.

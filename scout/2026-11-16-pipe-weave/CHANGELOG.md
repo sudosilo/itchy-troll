@@ -1,5 +1,7 @@
 Pipe Weave changelog
 
+2026-11-22, v2026.11.22. Fill canvas now works with any preset. It keeps growing pipes until the screen is covered, tops up gaps, and reports the coverage. The fill style has a new Current rules choice.
+
 2026-11-19, v2026.11.19. Added a full screen button. Pipes can now have their own colors and lines can shift color as they grow. Added an isometric lock shape mode. Added a memory mode that replays rounds and learns from collisions. Cloth weave now goes over only single lines and under or stays under for bundles.
 
 2026-11-18, v2026.11.18. Added highways, roundabouts, intersections, fabric weaves, stair presets, a stair skin, and picture stamps. Added a Cityscape preset and a Join weave mode.

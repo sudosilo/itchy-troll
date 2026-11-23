@@ -836,6 +836,7 @@ button:disabled{ opacity:0.55 !important; }
     <div class="btn-row">
       <button class="btn-ghost" id="pb-copy">copy for claude</button>
       <button class="btn-ghost" id="pb-clear">clear</button>
+      <button class="btn-ghost" id="pb-conveyor">open in conveyor sim</button>
     </div>
     <div class="status" id="pb-status"></div>
     <textarea id="pb-export" class="pb-export" readonly style="display:none"></textarea>
@@ -3838,6 +3839,17 @@ function pbRenderToolList(){
   box.innerHTML = html || '<div class="empty">nothing matches that filter.</div>';
 }
 
+/* conveyor sim. sends a stack or a teardown to conveyor-sim.vercel.app, which draws it as a packet factory.
+   the stack rides in the link as base64url json: title, about, and tools with cat, name and an optional detail. */
+function rfConveyor(title, about, tools){
+  var json = JSON.stringify({ title: title, about: about || '', tools: tools });
+  var b64 = btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  window.open('https://conveyor-sim.vercel.app/#stack=' + b64, '_blank');
+}
+function rfConveyorIds(title, about, ids){
+  rfConveyor(title, about, ids.filter(function(id){ return PB_TOOLS[id]; }).map(function(id){ var t = PB_TOOLS[id]; return { cat: t.cat, name: t.name }; }));
+}
+
 function pbSetIds(ids, name){
   pbSel = new Set(ids.filter(function(id){ return PB_TOOLS[id]; }));
   pbName = name || '';
@@ -3933,7 +3945,8 @@ function pbRoll(){
     Object.keys(PB_CATS).filter(function(c){ return g[c]; }).map(function(c){
       return '<div class="alert-meta">' + escapeHtml(PB_CATS[c]) + ': ' + g[c].map(function(t){ return escapeHtml(t.name); }).join(', ') + '</div>';
     }).join('') +
-    '<div class="btn-row"><button class="btn-ghost" id="pb-roll-apply">load into stack</button><button class="btn-ghost" id="pb-roll-copy">copy for claude</button></div></div>';
+    '<div class="btn-row"><button class="btn-ghost" id="pb-roll-apply">load into stack</button><button class="btn-ghost" id="pb-roll-copy">copy for claude</button><button class="btn-ghost" id="pb-roll-conveyor">open in conveyor sim</button></div></div>';
+  document.getElementById('pb-roll-conveyor').addEventListener('click', function(){ rfConveyorIds(pbLastRoll.name, pbLastRoll.challenge, pbLastRoll.ids); });
   document.getElementById('pb-roll-apply').addEventListener('click', function(){
     pbSetIds(pbLastRoll.ids, pbLastRoll.name);
     pbSetMode('build');
@@ -3952,7 +3965,7 @@ function pbRenderTemplates(){
       '<div class="alert-msg">' + escapeHtml(tp.desc) + '</div>' +
       '<div class="alert-meta">why this stack: ' + escapeHtml(tp.why) + '</div>' +
       '<div class="alert-meta">' + tp.tools.map(function(id){ return escapeHtml(PB_TOOLS[id].name); }).join(', ') + '</div>' +
-      '<div class="btn-row"><button class="btn-ghost" data-pbtpl="' + i + '">load into stack</button></div></div>';
+      '<div class="btn-row"><button class="btn-ghost" data-pbtpl="' + i + '">load into stack</button><button class="btn-ghost" data-pbtplconv="' + i + '">open in conveyor sim</button></div></div>';
   }).join('');
 }
 
@@ -4081,6 +4094,8 @@ function tdShow(p){
   var selfHit = tdCatalogHit(p.n);
   html += '<div class="btn-row">' +
     '<button class="btn-ghost" id="td-apply">load rebuild into builder</button>' +
+    '<button class="btn-ghost" id="td-conv-built">see how it is built in conveyor sim</button>' +
+    '<button class="btn-ghost" id="td-conv-rebuild">see the rebuild in conveyor sim</button>' +
     (selfHit ? '<button class="btn-ghost" data-tdcat="' + escapeHtml(selfHit) + '">see equivalents in catalog</button>' : '') +
     '<button class="btn-ghost" id="td-copy">copy for claude</button>' +
     '</div><div class="status" id="td-status"></div>';
@@ -4092,6 +4107,10 @@ function tdShow(p){
     tdGoView('builder');
     pbSay('loaded the rebuild of ' + p.n);
   });
+  document.getElementById('td-conv-built').addEventListener('click', function(){
+    rfConveyor(p.n + ', as built', p.what, p.L.map(function(l){ return { cat: l[0], name: l[0].charAt(0).toUpperCase() + l[0].slice(1), detail: l[1] + (l[2] ? '' : ' (inferred)') }; }));
+  });
+  document.getElementById('td-conv-rebuild').addEventListener('click', function(){ rfConveyorIds('Rebuild of ' + p.n, p.why, p.R); });
   document.getElementById('td-copy').addEventListener('click', function(){
     var txt = 'TEARDOWN: ' + p.n + ' (' + p.by + ', ' + p.y + ')\n' + p.what + '\n\nHOW IT IS BUILT\n' +
       p.L.map(function(l){ return '  ' + l[0] + ': ' + l[1] + (l[2] ? ' [known]' : ' [inferred]'); }).join('\n') +
@@ -4153,8 +4172,14 @@ function tdOpenCatalog(name){
     pbCopy(pbStackText(pbName, Array.from(pbSel)));
   });
   document.getElementById('pb-clear').addEventListener('click', function(){ pbSetIds([], ''); pbSay('cleared'); });
+  document.getElementById('pb-conveyor').addEventListener('click', function(){
+    if(!pbSel.size){ pbSay('add some tools first'); return; }
+    rfConveyorIds(pbName || 'My stack', '', Array.from(pbSel));
+  });
   document.getElementById('pb-roll').addEventListener('click', pbRoll);
   document.getElementById('pb-templates').addEventListener('click', function(e){
+    var cv = e.target.closest('[data-pbtplconv]');
+    if(cv){ var tc = PB_TEMPLATES[+cv.getAttribute('data-pbtplconv')]; rfConveyorIds(tc.name, tc.why, tc.tools); return; }
     var b = e.target.closest('[data-pbtpl]');
     if(!b) return;
     var tp = PB_TEMPLATES[+b.getAttribute('data-pbtpl')];
@@ -4195,6 +4220,28 @@ function tdOpenCatalog(name){
   if(typeof oldRefresh === 'function'){
     window.baRefreshEverything = function(){ oldRefresh(); pbLoad(); pbRenderAll(); };
   }
+})();
+</script>
+<style>
+.banner.hid{display:none}
+.info-btn{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;margin:0 0 10px;border:3px solid #111;border-radius:50%;background:#ffd43b;color:#111;font:800 18px/1 Georgia,serif;font-style:italic;cursor:pointer;box-shadow:2px 2px 0 #111}
+</style>
+<script>
+/* every info banner starts closed behind an i button. tap the i to open or close it. */
+(function(){
+  document.querySelectorAll('.banner').forEach(function(b){
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'info-btn';
+    btn.textContent = 'i';
+    btn.setAttribute('aria-label', 'show info');
+    b.classList.add('hid');
+    b.parentNode.insertBefore(btn, b);
+    btn.addEventListener('click', function(){
+      var open = b.classList.toggle('hid') === false;
+      btn.setAttribute('aria-label', open ? 'hide info' : 'show info');
+    });
+  });
 })();
 </script>
 </body>

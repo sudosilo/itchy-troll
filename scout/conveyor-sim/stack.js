@@ -4,7 +4,7 @@
 
 // Category names the way the pipeline builder writes them.
 export const CATS = ['frontend','realtime/game','backend','data','auth','payments','plumbing','infra','observability','ai'];
-const CAT_ALIAS = {'realtime':'realtime/game','game':'realtime/game','realtime / game':'realtime/game','database':'data','databases':'data','infrastructure':'infra','hosting':'infra','monitoring':'observability','analytics':'observability','ml':'ai','api':'plumbing'};
+const CAT_ALIAS = {'observe':'observability','media':'realtime/game','realtime':'realtime/game','game':'realtime/game','realtime / game':'realtime/game','database':'data','databases':'data','infrastructure':'infra','hosting':'infra','monitoring':'observability','analytics':'observability','ml':'ai','api':'plumbing'};
 export const normCat = (c)=>{const k=String(c||'').trim().toLowerCase();return CATS.includes(k)?k:CAT_ALIAS[k]||null;};
 
 // Tool name patterns to machine kinds, checked in order. A kind says which machine stands in for the tool.
@@ -33,7 +33,17 @@ const RULES = [
   [/vercel|railway|fly\.io|fly|netlify|render|heroku|cloudflare workers|aws|gcp|azure|digitalocean|hetzner|vps|github pages/i,'host'],
   [/express|fastify|fastapi|django|rails|flask|hono|koa|nest|laravel|spring|\bgo\b|\bchi\b|\bgin\b|node|deno|bun|serverless|lambda|function/i,'backend']
 ];
-export function kindOf(name){for(const [re,k] of RULES)if(re.test(name))return k;return null;}
+// When a tool's name says nothing, its category or layer decides. Teardowns from Repo Find send layers
+// like server, client or data, with the description as detail.
+const CAT_KIND = {frontend:'frontend',client:'frontend',native:'frontend',ui:'styler',backend:'backend',server:'backend',servers:'backend',api:'api',architecture:'backend',
+  data:'sql',database:'sql',storage:'storage',files:'storage',assets:'storage',saves:'storage',auth:'auth',accounts:'auth',payments:'pay',rails:'pay',banking:'pay',
+  plumbing:'api',protocol:'api',live:'live',realtime:'live',media:'live',netcode:'live','realtime/game':'game',game:'game',games:'game',engine:'game',graphics:'game',rendering:'game',physics:'game',
+  infra:'host',hosting:'host',observability:'watch',observe:'watch',analytics:'watch',ai:'ai',ml:'ai',search:'search',queue:'queue',jobs:'queue',cdn:'cdn',email:'mail',notifications:'mail'};
+export function kindOf(name,detail,cat){
+  for(const [re,k] of RULES)if(re.test(name))return k;
+  if(detail)for(const [re,k] of RULES)if(re.test(detail))return k;
+  const c=String(cat||'').trim().toLowerCase();return CAT_KIND[c]||CAT_KIND[String(name).trim().toLowerCase()]||null;
+}
 
 // What each kind is built as, and the line of the factory it sits on.
 export const KIND = {
@@ -68,10 +78,10 @@ export function parseStack(text){
 // splits work onto side lines: data, game, payments, AI and background jobs. Lines meet again at the
 // front end. Hosts color the floor under the machines they run.
 export function stackToPlan(stack){
-  const X=12000,Y0=0,tools=stack.tools.map(t=>Object.assign({},t,{kind:kindOf(t.name)}));
+  const X=12000,Y0=0,tools=stack.tools.map(t=>Object.assign({},t,{kind:kindOf(t.name,t.detail,t.cat)}));
   const machines=[],belts=[],used=new Set(),report=[];
   const nameFor=(t)=>{let n=t.name.slice(0,40),k=1;while(used.has(n.toLowerCase()))n=t.name.slice(0,36)+' '+(++k);used.add(n.toLowerCase());return n;};
-  const add=(t,type,x,y,meta)=>{const m={type,name:nameFor(t),at:[x,y,0],meta:meta||{},tool:t.name,cat:t.cat};machines.push(m);return m;};
+  const add=(t,type,x,y,meta)=>{const m={type,name:nameFor(t),at:[x,y,0],meta:meta||{},tool:t.name,cat:t.cat};if(t.detail)m.detail=t.detail;machines.push(m);return m;};
   const belt=(a,b,out,pts)=>{if(!a||!b)return;const r={from:a.name,to:b.name};if(out&&out!=='*')r.out=out;if(pts)r.pts=pts.map(p=>[p[0],p[1],900]);belts.push(r);};
   const by=(k)=>tools.filter(t=>t.kind===k);
   const hosts=by('host');
@@ -169,7 +179,7 @@ export function stackToPlan(stack){
 
   for(const t of tools){
     const m=machines.find(mm=>mm.tool===t.name);
-    report.push({cat:t.cat,name:t.name,kind:t.kind,machine:m?m.name:null,type:m?m.type:t.kind==='host'?'host':null});
+    report.push({cat:t.cat,name:t.name,detail:t.detail||'',kind:t.kind,machine:m?m.name:null,type:m?m.type:t.kind==='host'?'host':null});
   }
   return {title:stack.title||'Stack',about:stack.about||'',machines,belts,hosts:hosts.map(h=>h.name),report,stack:{title:stack.title,tools:stack.tools}};
 }

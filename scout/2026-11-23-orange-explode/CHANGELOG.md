@@ -1,0 +1,1 @@
+2026-11-23, v2026.11.23. Created Explode, a photo app. Pick a photo, tap anything in it to cut that object out as a piece, then slide to explode the pieces apart and drag them around. Undo, Reset, and a Holes toggle are included.

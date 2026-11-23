@@ -1,3 +1,5 @@
+2026-11-22, v2026.11.22. The Composite length is now a picker from 6 seconds up to 5 minutes, or as long as the clips allow, with 30 seconds as the default instead of 6. When a clip limits the length, the status says which clip it is and how to get a longer build.
+
 2026-11-12, v2026.11.12. Composite can now copy a clip to stack a recording with itself, remove clips, and turn sideways footage upright, in the Road tab too. Record reads the phone tilt to know which way is up, saves it with each recording, and turns clips automatically in Composite and Road. The Record button now sits under the camera. Every card folds open and closed and remembers it, and settings have their own card.
 
 2026-11-09, v2026.11.09. Added a Music tab to Road Layers. It finds kick, snare, and hi-hat hits in a song, and cutouts pop in on the hits with the song playing in the composite and in recordings. Play and pause are more reliable, dragging to pan no longer pulls you back, and each kind of cutout gets a color coded drum.

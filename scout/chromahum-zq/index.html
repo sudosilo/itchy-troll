@@ -21,7 +21,7 @@ h1 span{color:var(--blue)}
 .modes{padding-bottom:10px}
 .stage{position:relative;margin:0 16px;border-radius:14px;overflow:hidden;background:#dfe8fa;aspect-ratio:4/3;border:2px solid var(--blue2)}
 .stage.tall{aspect-ratio:auto;height:70vh}
-#v{position:absolute;width:2px;height:2px;opacity:0;pointer-events:none}
+#v{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;pointer-events:none;background:#dfe8fa}
 #tiles{position:absolute;inset:0;width:100%;height:100%;border:0;display:none;background:#f4ede2}
 .stage.tall #tiles{display:block}
 #screen{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none;z-index:2}
@@ -136,6 +136,7 @@ footer span{color:var(--blue)}
 <div class="row"><label>Wave</label><select id="wave"><option value="sawtooth">Saw</option><option value="square">Square</option><option value="triangle">Triangle</option><option value="sine">Sine</option></select></div>
 <div class="toggle">
 <button id="inv">Dark is loud</button>
+<button id="camBtn" class="only-cam">Restart camera</button>
 <button id="flip" class="only-cam">Flip camera</button>
 <button id="hold" class="only-cam">Freeze</button>
 <button id="spin" class="only-pat only-my">Spin</button>
@@ -149,7 +150,7 @@ footer span{color:var(--blue)}
 </div>
 <p class="hint" id="hint"></p>
 </div>
-<footer>ChromaHum <span>v9</span></footer>
+<footer>ChromaHum <span>v11</span></footer>
 <script>
 const BANDS=12,W=96,H=72,PW=640,PH=480;
 const v=document.getElementById('v');
@@ -159,7 +160,7 @@ const an=document.createElement('canvas');an.width=W;an.height=H;
 const actx=an.getContext('2d',{willReadFrequently:true});
 const $=id=>document.getElementById(id);
 const vol=$('vol'),spd=$('spd'),scaleSel=$('scale'),rootEl=$('root'),waveSel=$('wave'),patSel=$('pat'),stage=$('stage'),tf=$('tiles');
-let mode='sweep',source='camera',ac=null,master=null,voices=[],invert=false,facing='environment',frozen=false,stream=null,started=false,spinOn=false,spinA=0;
+let mode='sweep',source='camera',ac=null,master=null,voices=[],invert=false,facing='environment',frozen=false,stream=null,started=false,camState='off',camMsg='Camera off. Tap Restart camera below.',camBusy=false,camGen=0,spinOn=false,spinA=0;
 let pxPrev=new Float32Array(W*H),pxValid=false;
 function resetMotion(){pxValid=false}
 let prevLum=new Array(BANDS).fill(-1),sweepX=0,last=0,levels=new Array(BANDS).fill(0);
@@ -198,7 +199,8 @@ waveSel.onchange=()=>voices.forEach(vc=>vc.osc.type=waveSel.value);
 vol.oninput=()=>{if(master)master.gain.setTargetAtTime(+vol.value,ac.currentTime,0.05)};
 $('inv').onclick=e=>{invert=!invert;e.target.classList.toggle('on',invert)};
 $('hold').onclick=e=>{frozen=!frozen;e.target.classList.toggle('on',frozen);frozen?v.pause():v.play()};
-$('flip').onclick=async()=>{facing=facing==='environment'?'user':'environment';if(source==='camera')await startCam()};
+$('flip').onclick=()=>{facing=facing==='environment'?'user':'environment';if(source==='camera')cameraOn()};
+$('camBtn').onclick=()=>{cameraOn()};
 $('spin').onclick=e=>{spinOn=!spinOn;e.target.classList.toggle('on',spinOn)};
 function startAudio(){
 ac=new (window.AudioContext||window.webkitAudioContext)();
@@ -221,8 +223,13 @@ voices.push({osc,filt,g,pan});
 function stopCam(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}}
 async function startCam(){
 stopCam();
-stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:640},height:{ideal:480}}});
-v.srcObject=stream;await v.play();frozen=false;$('hold').classList.remove('on');
+if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('nocam');
+try{stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:640},height:{ideal:480}}})}
+catch(e){if(e&&(e.name==='NotAllowedError'||e.name==='SecurityError'))throw e;stream=await navigator.mediaDevices.getUserMedia({audio:false,video:true})}
+v.setAttribute('playsinline','');v.muted=true;v.srcObject=stream;
+await Promise.race([v.play().catch(()=>{}),new Promise(r=>setTimeout(r,1500))]);
+frozen=false;$('hold').classList.remove('on');
+stream.getVideoTracks().forEach(t=>t.onended=()=>{if(source==='camera'&&started&&!document.hidden)cameraOn()});
 }
 function crop(){
 const vw=v.videoWidth,vh=v.videoHeight;const target=4/3;
@@ -611,6 +618,7 @@ resetMotion();
 $('arr').onchange=()=>{taps={};drawMyTiles()};
 $('shuf').onclick=()=>{shufSeed=Math.floor(Math.random()*1e6);taps={};const N=across.mytile,rows=Math.ceil(PH/(PW/N));const R=rng(shufSeed);for(let r=0;r<rows;r++)for(let c=-1;c<=N;c++)taps[c+','+r]=Math.floor(R()*4);drawMyTiles()};
 stage.addEventListener('click',e=>{
+if(source==='camera'&&started&&camState!=='on'&&camState!=='starting'){cameraOn();return}
 if(source!=='mytile'||!started)return;
 const b=stage.getBoundingClientRect(),X=(e.clientX-b.left)/b.width*PW,Y=(e.clientY-b.top)/b.height*PH;
 const N=across.mytile,cell=PW/N,r=Math.floor(Y/cell),s=arrangement(0,r),c=Math.floor((X+(s.shift?cell/2:0))/cell);
@@ -679,22 +687,45 @@ showAcross();
 if(s==='patterns')drawPattern();
 if(s==='mytile')drawMyTiles();
 if(s==='tiles'){setTimeout(()=>{try{tf.contentWindow.dispatchEvent(new Event('resize'))}catch(e){}},50);setTimeout(queueTiles,400)}
+v.style.display=s==='camera'?'block':'none';
 if(s!=='canvas'&&rec)stopVoice();
-if(s!=='camera')stopCam();
-else if(started){try{await startCam()}catch(e){camBlocked()}}
+if(s!=='camera'){camGen++;stopCam()}
+else if(started)cameraOn();
+else{camState='off';camMsg='Tap Start sound, then the camera comes on.'}
 }
-function camBlocked(){
-$('start').style.display='flex';
-$('startMsg').textContent='Camera blocked. Allow camera access for this site in the browser and tap start again, or switch to Patterns or Tiles above.';
+function camBlocked(e){window._camErr=e&&(e.name+' '+e.message);
+camState='error';
+const n=e&&e.name;
+camMsg=n==='NotAllowedError'||n==='SecurityError'?'Camera blocked. Allow the camera for this site in the browser, then tap Restart camera.':n==='NotReadableError'||n==='AbortError'?'Another app is using the camera. Close it, then tap Restart camera.':n==='NotFoundError'||n==='OverconstrainedError'?'No camera found. Tap Flip camera or Restart camera.':'Camera did not start. Tap here or Restart camera.';
+}
+function cameraOn(){
+const gen=++camGen;camState='starting';camMsg='Starting camera';
+startCam().then(()=>{
+if(gen!==camGen||source!=='camera'){if(source!=='camera')stopCam();return}
+let tries=0;
+const watch=()=>{if(gen!==camGen||source!=='camera')return;
+if(v.videoWidth&&v.readyState>=2){camState='on';return}
+if(++tries===20){v.play().catch(()=>{})}
+if(tries<40){setTimeout(watch,100);return}
+camState='error';camMsg='Camera opened but sent no picture. Tap Restart camera.'};
+watch();
+}).catch(e=>{if(gen===camGen)camBlocked(e)});
+}
+function unlockAudio(){
+if(!ac)return;
+if(ac.state!=='running')ac.resume().catch(()=>{});
+try{const b=ac.createBuffer(1,1,ac.sampleRate),s0=ac.createBufferSource();s0.buffer=b;s0.connect(ac.destination);s0.start(0)}catch(e){}
+master.gain.cancelScheduledValues(ac.currentTime);master.gain.setTargetAtTime(rec?0:+vol.value,ac.currentTime,0.08);
 }
 $('go').onclick=async()=>{
 if(!ac)startAudio();
-if(ac.state==='suspended')await ac.resume();
+unlockAudio();
 started=true;
-if(source==='camera'){try{await startCam()}catch(err){camBlocked();return}}
 $('start').style.display='none';
 if(!last)requestAnimationFrame(loop);
+if(source==='camera')cameraOn();
 };
+document.addEventListener('pointerdown',()=>{if(ac&&started&&ac.state!=='running')unlockAudio()},true);
 
 /* ---------- main loop ---------- */
 function hsv(r,g,b){
@@ -711,7 +742,14 @@ const cw=Math.round(scr.clientWidth*dpr),ch=Math.round(scr.clientHeight*dpr);
 if(scr.width!==cw||scr.height!==ch){scr.width=cw;scr.height=ch}
 let ox=0,oy=0,ow=cw,oh=ch;
 if(source==='camera'){
-if(v.readyState<2||!v.videoWidth)return;
+if(v.readyState<2||!v.videoWidth){
+sctx.setTransform(1,0,0,1,0,0);sctx.fillStyle='#eef3ff';sctx.fillRect(0,0,cw,ch);
+sctx.fillStyle='#1e6bff';sctx.font=`600 ${Math.round(15*dpr)}px system-ui,sans-serif`;sctx.textAlign='center';sctx.textBaseline='middle';
+const words=(camState==='on'?'Waiting for camera picture':camMsg).split(' ');let line='',lines=[];
+for(const w of words){const t=line?line+' '+w:w;if(sctx.measureText(t).width>cw*0.82&&line){lines.push(line);line=w}else line=t}lines.push(line);
+lines.forEach((l,k)=>sctx.fillText(l,cw/2,ch/2+(k-(lines.length-1)/2)*20*dpr));
+voices.forEach(vc=>vc.g.gain.setTargetAtTime(0,ac.currentTime,0.05));
+return;}
 const [sx,sy,sw,sh]=crop();const mirror=facing==='user';
 sctx.save();if(mirror){sctx.translate(cw,0);sctx.scale(-1,1)}
 sctx.drawImage(v,sx,sy,sw,sh,0,0,cw,ch);sctx.restore();
@@ -793,7 +831,8 @@ sctx.restore();
 }
 document.addEventListener('visibilitychange',async()=>{if(!ac)return;
 if(document.hidden){master.gain.setTargetAtTime(0,ac.currentTime,0.02);setTimeout(()=>{if(document.hidden)ac.suspend()},120)}
-else{await ac.resume();master.gain.cancelScheduledValues(ac.currentTime);master.gain.setValueAtTime(0,ac.currentTime);master.gain.setTargetAtTime(+vol.value,ac.currentTime+0.05,0.08)}});
+else{ac.resume().catch(()=>{});master.gain.cancelScheduledValues(ac.currentTime);master.gain.setValueAtTime(0,ac.currentTime);master.gain.setTargetAtTime(rec?0:+vol.value,ac.currentTime+0.05,0.08);
+if(source==='camera'&&started&&(!stream||stream.getVideoTracks().every(t=>t.readyState==='ended')))cameraOn()}});
 </script>
 </body>
 </html>

@@ -29,8 +29,11 @@ button.sm{padding:3px 8px;font-size:12px}
 .sw{width:14px;height:14px;border-radius:3px;flex:none;margin-top:3px;border:1px solid rgba(0,0,0,.15)}
 .muted{color:var(--muted);font-size:12px}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
-#card{position:fixed;left:10px;right:10px;bottom:64px;max-width:440px;display:none;font-size:12px;max-height:42vh;overflow:auto}
+#card{position:fixed;left:0;top:0;width:min(300px,78vw);display:none;font-size:12px;transform-origin:50% 100%;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.12)}
 #card b{font-size:13px}
+#card button{pointer-events:auto}
+#card::after{content:'';position:absolute;left:var(--ax,50%);bottom:-7px;width:12px;height:12px;margin-left:-6px;background:var(--panel);border-right:1px solid var(--line);border-bottom:1px solid var(--line);transform:rotate(45deg)}
+#card .x{float:right;margin:-2px -4px 0 6px}
 textarea{width:100%;min-height:120px;font:inherit;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:8px;background:#fff;color:var(--ink)}
 .gap{color:#b4442c}
 p{margin:0 0 10px}
@@ -66,6 +69,12 @@ import {buildSim,packetLabel} from './sim.js';
 import {SAUCES,STYLES} from './packets.js';
 import {PRESETS} from './presets.js';
 import {STACKS,parseStack,stackToPlan,HOST_COLORS} from './stack.js';
+// What each machine is in software. This leads every label; the factory picture comes second.
+const PRODUCT_ROLE={wallpaper:'Gallery page',roll:'Feed',brick:'Archive or backup',receipt:'Dashboard',token:'Login or payment token'};
+const typeRole=(k)=>k==='fabricator'?'Finished product':k==='gap'?'Unbuilt part':MACHINES[k].web.split('.')[0];
+const typeDesc=(k)=>MACHINES[k].web.split('. ').slice(1).join('. ')||MACHINES[k].web;
+const roleOf=(m)=>m.type==='fabricator'?(PRODUCT_ROLE[m.meta&&m.meta.product]||'Finished product'):typeRole(m.type);
+const realName=(m)=>m.tool||roleOf(m);
 
 const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const nk=(s)=>String(s).trim().toLowerCase();
@@ -143,7 +152,7 @@ function drawWorld(){
     segs(machineSegs(Object.assign({rot:0},m)),sel?'#c4621d':col);
     fillBox(F,m.at[0],m.at[1],0,w,d,short(m.type)?h*0.25:h,m.rot||0,lighten(col,0.55));
     if(sel){const x=w/2+700,y=d/2+700;segs([[m.at[0]-x,m.at[1]-y,10],[m.at[0]+x,m.at[1]-y,10],[m.at[0]+x,m.at[1]-y,10],[m.at[0]+x,m.at[1]+y,10],[m.at[0]+x,m.at[1]+y,10],[m.at[0]-x,m.at[1]+y,10],[m.at[0]-x,m.at[1]+y,10],[m.at[0]-x,m.at[1]-y,10]],'#c4621d');}
-    world.add(label(m.name,[m.at[0],m.at[1],h+1300],sel));
+    world.add(label(realName(m),[m.at[0],m.at[1],h+1300],sel));
   }
   const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.Float32BufferAttribute(L.pos,3));lg.setAttribute('color',new THREE.Float32BufferAttribute(L.col,3));world.add(new THREE.LineSegments(lg,lineMat));
   const fg=new THREE.BufferGeometry();fg.setAttribute('position',new THREE.Float32BufferAttribute(F.pos,3));fg.setAttribute('color',new THREE.Float32BufferAttribute(F.col,3));world.add(new THREE.Mesh(fg,fillMat));
@@ -260,8 +269,8 @@ const outName=(m,o)=>m.type==='sorter'&&(m.meta.by==='style')&&o!=='*'?STYLES[+o
 function hint(text){
   let t=text;
   if(!t){
-    if(ui.build&&ui.place)t='Tap open floor to place a '+MACHINES[ui.place].name+'.';
-    else if(ui.build&&ui.connect)t='Tap the machine that '+ui.connect.from+' feeds.';
+    if(ui.build&&ui.place)t='Tap open floor to place a '+typeRole(ui.place)+' ('+MACHINES[ui.place].name+').';
+    else if(ui.build&&ui.connect){const f=plan.machines.find(x=>nk(x.name)===nk(ui.connect.from));t='Tap the machine that '+(f?realName(f):ui.connect.from)+' feeds.';}
     else if(ui.build)t='Build mode. Pick a machine in Machines, or tap one to edit it.';
     else t=(plan.title||'My build')+'. Tap a machine.';
   }
@@ -278,23 +287,24 @@ function renderCard(){
   const m=ui.sel&&plan.machines.find(x=>nk(x.name)===nk(ui.sel));
   if(!m){card.style.display='none';return;}
   const M=MACHINES[m.type];
-  let h=`<b>${esc(m.name)}</b> <span class="muted">${esc(M.name)}</span><br>${esc(M.web)}`;
-  if(m.tool)h+=`<br><span class="muted">Stands in for ${esc(m.tool)}${m.cat?' ('+esc(m.cat)+')':''}${m.host?', runs on '+esc(m.host):''}</span>`;
+  let h=`<button class="sm x" data-act="close">x</button><b>${esc(realName(m))}</b>${m.tool?` <span class="muted">${esc(roleOf(m))}</span>`:''}<br>${esc(typeDesc(m.type))}<br><span class="muted">Shown as ${esc(m.name)}${nk(m.name)!==nk(M.name)?', a '+esc(M.name):''}</span>`;
+  if(m.tool)h+=`<br><span class="muted">Stands in for ${esc(m.tool)}${m.cat&&nk(m.cat)!==nk(m.tool)?' ('+esc(m.cat)+')':''}${m.detail?': '+esc(m.detail):''}${m.host?', runs on '+esc(m.host):''}</span>`;
   h+=`<br><span class="muted" id="cnt">${counts(m)}</span>`;
   if(ui.build){
     const outs=outsOf(m),feeds=plan.belts.map((b,i)=>[b,i]).filter(([b])=>nk(b.from)===nk(m.name));
     if(m.type==='sorter')h+=`<div class="chips">Sorts by ${['combo','style','tier','sauce'].map(v=>`<button class="sm ${m.meta.by===v?'on':''}" data-by="${v}">${v}</button>`).join('')}</div>`;
     if(m.type==='fabricator')h+=`<div class="chips">Makes ${PRODUCTS.map(v=>`<button class="sm ${m.meta.product===v?'on':''}" data-prod="${v}">${v}</button>`).join('')}</div>`;
     if(outs.length)h+=`<div class="chips">Connect ${outs.map(o=>`<button class="sm" data-out="${esc(o)}">${esc(outName(m,o))}</button>`).join('')}</div>`;
-    if(feeds.length)h+='<div class="chips">'+feeds.map(([b,i])=>`<button class="sm" data-unbelt="${i}">remove belt to ${esc(b.to)}${b.out&&b.out!=='*'?' ('+esc(outName(m,b.out))+')':''}</button>`).join('')+'</div>';
+    if(feeds.length)h+='<div class="chips">'+feeds.map(([b,i])=>`<button class="sm" data-unbelt="${i}">remove belt to ${esc((t=>t?realName(t):b.to)(plan.machines.find(x=>nk(x.name)===nk(b.to))))}${b.out&&b.out!=='*'?' ('+esc(outName(m,b.out))+')':''}</button>`).join('')+'</div>';
     h+=`<div class="chips"><button class="sm" data-act="rename">Rename</button><button class="sm" data-act="delete">Delete</button></div>`;
   }
-  card.innerHTML=h;card.style.display='block';
+  card.innerHTML=h;card.style.display='block';placeCard();
   card.querySelectorAll('[data-by]').forEach(b=>b.onclick=()=>{m.meta.by=b.dataset.by;edited();});
   card.querySelectorAll('[data-prod]').forEach(b=>b.onclick=()=>{m.meta.product=b.dataset.prod;edited();});
   card.querySelectorAll('[data-out]').forEach(b=>b.onclick=()=>{ui.connect={from:m.name,out:b.dataset.out};hint();});
   card.querySelectorAll('[data-unbelt]').forEach(b=>b.onclick=()=>{plan.belts.splice(+b.dataset.unbelt,1);edited();});
   card.querySelectorAll('[data-act]').forEach(b=>b.onclick=()=>{
+    if(b.dataset.act==='close'){ui.sel=null;ui.connect=null;drawWorld();renderCard();hint();return;}
     if(b.dataset.act==='delete'){plan.machines=plan.machines.filter(x=>x!==m);plan.belts=plan.belts.filter(x=>nk(x.from)!==nk(m.name)&&nk(x.to)!==nk(m.name));ui.sel=null;edited();return;}
     const name=(prompt('New name',m.name)||'').trim().slice(0,40);
     if(!name||nk(name)===nk(m.name))return;
@@ -304,6 +314,22 @@ function renderCard(){
   });
 }
 
+// The card floats above the tapped machine and grows or shrinks with the view's zoom.
+const _cv=new THREE.Vector3();
+function placeCard(){
+  const m=ui.sel&&plan.machines.find(x=>nk(x.name)===nk(ui.sel));
+  if(!m||card.style.display==='none')return;
+  const h=MACHINES[m.type].size[2];
+  _cv.set(...toV([m.at[0],m.at[1],h+2600])).project(camera);
+  const sx=(_cv.x+1)/2*innerWidth,sy=(1-_cv.y)/2*innerHeight;
+  // Follows zoom, but never grows past a readable size or past 90 percent of the screen width or 30 percent of its height.
+  const k=Math.max(0.35,Math.min(1.15,camera.zoom,innerWidth*0.9/card.offsetWidth,innerHeight*0.3/card.offsetHeight));
+  // Keep the card on screen; the arrow slides so it still points at the machine.
+  const vw=card.offsetWidth*k,cx=Math.max(4+vw/2,Math.min(innerWidth-4-vw/2,sx));
+  card.style.setProperty('--ax',Math.max(14,Math.min(card.offsetWidth-14,card.offsetWidth/2+(sx-cx)/k)).toFixed(1)+'px');
+  card.style.transform=`translate(${(cx-card.offsetWidth/2).toFixed(1)}px,${(sy-card.offsetHeight-8).toFixed(1)}px) scale(${k.toFixed(3)})`;
+  card.style.visibility=(sx<-200||sx>innerWidth+200||sy<-40||sy>innerHeight+400)?'hidden':'visible';
+}
 const body=document.getElementById('body'),sheet=document.getElementById('sheet');
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{ui.tab=b.dataset.tab;document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));sheet.classList.remove('closed');renderPanel();});
 document.getElementById('bSheet').onclick=()=>sheet.classList.toggle('closed');
@@ -317,7 +343,7 @@ function renderPanel(){
       const gaps=rep.filter(r=>!r.kind);
       h+=`<p><b>${esc(plan.title)}</b><br><span class="muted">${rep.length} tools, ${rep.length-gaps.length} shown as machines or hosts, ${gaps.length} gaps.</span></p>`;
       if(plan.hosts&&plan.hosts.length)h+='<div class="chips">'+plan.hosts.map((n,i)=>`<span class="chip" style="background:${HOST_COLORS[i%HOST_COLORS.length]};padding:3px 8px;font-size:12px">${esc(n)} floor</span>`).join('')+'</div>';
-      h+=rep.map(r=>`<div class="row"><span class="sw" style="background:${r.kind?r.type==='host'?'#fffdf7':PALETTE[DEFAULT_COLOR[r.type]]:'#ffffff'}"></span><div><b>${esc(r.name)}</b> <span class="muted">${esc(r.cat)}</span><div class="muted ${r.kind?'':'gap'}">${!r.kind?'Gap. No machine stands for this yet. It waits in the gap row.':r.type==='host'?'Host. Colors the floor under the machines it runs.':esc(MACHINES[r.type].name)+', '+esc(MACHINES[r.type].web.split('.')[0])+'.'}</div></div></div>`).join('');
+      h+=rep.map(r=>`<div class="row"><span class="sw" style="background:${r.kind?r.type==='host'?'#fffdf7':PALETTE[DEFAULT_COLOR[r.type]]:'#ffffff'}"></span><div><b>${esc(r.name)}</b> <span class="muted">${nk(r.cat)!==nk(r.name)?esc(r.cat):''}</span>${r.detail?`<div class="muted">${esc(r.detail)}</div>`:''}<div class="muted ${r.kind?'':'gap'}">${!r.kind?'Gap. No machine stands for this yet. It waits in the gap row.':r.type==='host'?'Host. Colors the floor under the machines it runs.':esc(typeRole(r.type))+'. Shown as '+esc(MACHINES[r.type].name)+'.'}</div></div></div>`).join('');
     }else h+='<p class="muted">This factory was not built from a stack. Load one below or paste one.</p>';
     h+='<p style="padding-top:8px"><b>Example stacks</b></p>'+STACKS.map((st,i)=>`<div class="row tap" data-stack="${i}"><span class="sw"></span><div><b>${esc(st.title)}</b><div class="muted">${esc(st.about)}</div></div></div>`).join('');
     h+=`<p style="padding-top:8px"><b>Paste a stack</b><br><span class="muted">Copy the stack text from the pipeline builder, or write lines like Frontend: Next.js, Tailwind CSS</span></p><textarea id="paste" placeholder="Frontend: Next.js, Tailwind CSS"></textarea><div class="chips"><button id="buildStack">Build this stack</button></div>`;
@@ -334,11 +360,11 @@ function renderPanel(){
     body.querySelectorAll('[data-blank]').forEach(r=>r.onclick=()=>{if(savedPlan()&&!confirm('Replace your saved build with a blank floor?'))return;setPlan({title:'My build',machines:[],belts:[]},'mine');try{localStorage.setItem(STORE,JSON.stringify(plan));}catch(e){}if(!ui.build)document.getElementById('bBuild').click();});
   }else if(ui.tab==='machines'){
     body.innerHTML=(ui.build?'<p class="muted">Tap a machine, then tap open floor to place it.</p>':'<p class="muted">Turn on Build to place these.</p>')+
-    Object.entries(MACHINES).map(([k,M])=>`<div class="row ${ui.build?'tap':''}" data-place="${k}"><span class="sw" style="background:${ui.place===k?'#c4621d':PALETTE[DEFAULT_COLOR[k]]}"></span><div><b>${esc(M.name)}</b><div class="muted">${esc(M.web)}</div></div></div>`).join('');
+    Object.entries(MACHINES).map(([k,M])=>`<div class="row ${ui.build?'tap':''}" data-place="${k}"><span class="sw" style="background:${ui.place===k?'#c4621d':PALETTE[DEFAULT_COLOR[k]]}"></span><div><b>${esc(typeRole(k))}</b> <span class="muted">shown as ${esc(M.name)}</span><div class="muted">${esc(typeDesc(k))}</div></div></div>`).join('');
     if(ui.build)body.querySelectorAll('[data-place]').forEach(r=>r.onclick=()=>{ui.place=r.dataset.place;ui.connect=null;ui.sel=null;sheet.classList.add('closed');drawWorld();renderCard();hint();});
   }else if(ui.tab==='live'){
     let moving=0;for(const b of sim.belts)moving+=b.items.length;
-    body.innerHTML=`<p>${moving} packets on belts. ${sim.made} finished.</p>`+[...sim.machines.values()].map(m=>`<div class="row"><span class="sw" style="background:${PALETTE[m.r.color]}"></span><div><b>${esc(m.r.name)}</b> <span class="muted">${esc(m.M.name)}</span><div class="muted">in ${m.n.in}, out ${m.n.out}${m.n.made?', made '+m.n.made:''}${m.n.reject?', rejected '+m.n.reject:''}${m.n.miss?', misses '+m.n.miss:''}${m.hold.length?', holding '+m.hold.length:''}${m.q.length?', waiting '+m.q.length:''}</div></div></div>`).join('');
+    body.innerHTML=`<p>${moving} packets on belts. ${sim.made} finished.</p>`+[...sim.machines.values()].map(m=>`<div class="row"><span class="sw" style="background:${PALETTE[m.r.color]}"></span><div><b>${esc(realName(m.r))}</b> <span class="muted">shown as ${esc(m.r.name)}</span><div class="muted">in ${m.n.in}, out ${m.n.out}${m.n.made?', made '+m.n.made:''}${m.n.reject?', rejected '+m.n.reject:''}${m.n.miss?', misses '+m.n.miss:''}${m.hold.length?', holding '+m.hold.length:''}${m.q.length?', waiting '+m.q.length:''}</div></div></div>`).join('');
   }else{
     body.innerHTML=`<p>Packets come in 160 sauces and 7 wrapper styles, plus 50/50 packets that are half one sauce and half another, for over 12,600 variations. Each machine stands for one piece of a website.</p>
     <p>The link below holds the whole plan on screen, so whoever opens it sees the same factory running.</p>
@@ -352,7 +378,7 @@ let last=performance.now(),frame=0;
 function loop(){
   requestAnimationFrame(loop);
   const now=performance.now(),dt=(now-last)/1000;last=now;
-  controls.update();sim.step(dt);drawPackets();
+  controls.update();sim.step(dt);drawPackets();placeCard();
   if(++frame%30===0){const c=document.getElementById('cnt'),m=ui.sel&&plan.machines.find(x=>nk(x.name)===nk(ui.sel));if(c&&m)c.innerHTML=counts(m);if(ui.tab==='live'&&!sheet.classList.contains('closed'))renderPanel();}
   renderer.render(scene,camera);
 }
