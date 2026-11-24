@@ -8,6 +8,6 @@ Live at virality-snapshot.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change: Created the signal snapshot panel with live, graded, and report views.
+Latest change. 2026-11-24, v2026.11.24. The panel now talks to the live snapshot engine, so it loads instead of being blocked.
 
 See CHANGELOG.md for the full history.

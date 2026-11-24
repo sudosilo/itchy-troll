@@ -138,13 +138,19 @@ canvas#viz { display:block; width:100%; height:420px; }
 }
 
 @media(max-width:600px){ canvas#viz{ height:300px; } }
+
+/* Mic button */
+.mic-btn { background:#1a4fd6; }
+.mic-btn:hover { background:#3a6ae6; }
+.mic-btn.live { background:#d61a1a; }
+
 </style>
 </head>
 <body>
 
 <header>
   <h1>Spectral Engine</h1>
-  <div class="sub">12 visualizers · 31-edo aware · web audio api · band sync v2</div>
+  <div class="sub">12 visualizers · 31-edo aware · web audio api · band sync v2 · mic</div>
 </header>
 
 <div class="main">
@@ -157,6 +163,7 @@ canvas#viz { display:block; width:100%; height:420px; }
 
   <div class="transport">
     <button class="play-btn" id="playBtn" disabled onclick="togglePlay()">▶ PLAY</button>
+    <button class="play-btn mic-btn" id="micBtn" onclick="toggleMic()">MIC</button>
     <div class="time-display" id="timeDisplay">0:00 / 0:00</div>
     <div class="vol-wrap">
       VOL <input type="range" id="volSlider" min="0" max="1" step="0.01" value="1" oninput="setVolume(this.value)">
@@ -277,6 +284,7 @@ function resetModeState() {
   ribbonPoints = [];
   constellationNodes = [];
   gridHistory = [];
+  window.pendulumTrail = [];
   if (trailCtx) trailCtx.clearRect(0, 0, W, H);
 }
 
@@ -305,7 +313,65 @@ let bufferSource = null;    // Currently playing BufferSource
 let playStartCtxTime = 0;   // audioCtx.currentTime when play began
 let playStartOffset = 0;    // offset into track when play began
 
+function ensureAnalyser() {
+  if (analyser && analyser.connect) return;
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0.82;
+  gainNode = audioCtx.createGain();
+  gainNode.gain.value = parseFloat(document.getElementById('volSlider').value);
+  analyser.connect(gainNode);
+  gainNode.connect(audioCtx.destination);
+}
+
+// MIC: the microphone feeds the analyser for every visualizer. The speakers are muted while it is live so it never feeds back.
+let micOn = false, micStream = null, micSource = null, micSavedOffset = 0;
+async function toggleMic() {
+  const btn = document.getElementById('micBtn');
+  if (micOn) { stopMic(); return; }
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  await audioCtx.resume();
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  } catch (e) {
+    btn.textContent = 'MIC BLOCKED';
+    setTimeout(() => { if (!micOn) btn.textContent = 'MIC'; }, 2500);
+    return;
+  }
+  if (isPlaying) { micSavedOffset = currentT(); stopSource(); }
+  else micSavedOffset = playStartOffset;
+  ensureAnalyser();
+  bufLen = analyser.frequencyBinCount;
+  freqData = new Uint8Array(bufLen);
+  timeData = new Uint8Array(bufLen);
+  micSource = audioCtx.createMediaStreamSource(micStream);
+  micSource.connect(analyser);
+  gainNode.gain.value = 0;
+  micOn = true;
+  isPlaying = true;
+  playStartOffset = 0;
+  playStartCtxTime = audioCtx.currentTime;
+  bpmEst = 0; beatHistory = []; lastBeat = 0;
+  btn.textContent = 'MIC LIVE';
+  btn.classList.add('live');
+  document.getElementById('playBtn').textContent = '▶ PLAY';
+  if (animId) cancelAnimationFrame(animId);
+  loop();
+}
+function stopMic() {
+  if (micSource) { try { micSource.disconnect(); } catch (e) {} micSource = null; }
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  if (gainNode) gainNode.gain.value = parseFloat(document.getElementById('volSlider').value);
+  micOn = false;
+  isPlaying = false;
+  playStartOffset = micSavedOffset;
+  const btn = document.getElementById('micBtn');
+  btn.textContent = 'MIC';
+  btn.classList.remove('live');
+}
+
 function loadFile(file) {
+  if (micOn) stopMic();
   const label = document.getElementById('fileName');
   label.textContent = '⏳ Decoding ' + file.name + '...';
   document.getElementById('playBtn').disabled = true;
@@ -329,16 +395,7 @@ function loadFile(file) {
         duration = buf.duration;
         bpmEst = 0; beatHistory = [];
 
-        // Build analyser once
-        if (!analyser) {
-          analyser = audioCtx.createAnalyser();
-          analyser.fftSize = 2048;
-          analyser.smoothingTimeConstant = 0.82;
-          gainNode = audioCtx.createGain();
-          gainNode.gain.value = parseFloat(document.getElementById('volSlider').value);
-          analyser.connect(gainNode);
-          gainNode.connect(audioCtx.destination);
-        }
+        ensureAnalyser();
 
         bufLen = analyser.frequencyBinCount;
         freqData = new Uint8Array(bufLen);
@@ -386,6 +443,7 @@ function startSource(offset) {
 }
 
 function togglePlay() {
+  if (micOn) stopMic();
   if (!decodedBuffer) return;
   audioCtx.resume().then(() => {
     if (isPlaying) {
@@ -413,12 +471,17 @@ function seekTo(e) {
   updateTime(offset);
 }
 
-function setVolume(v) { if (gainNode) gainNode.gain.value = parseFloat(v); }
+function setVolume(v) { if (gainNode && !micOn) gainNode.gain.value = parseFloat(v); }
 function currentT() {
   if (!audioCtx || !isPlaying) return playStartOffset;
   return playStartOffset + (audioCtx.currentTime - playStartCtxTime);
 }
 function updateTime(t) {
+  if (micOn) {
+    document.getElementById('timeDisplay').textContent = 'MIC LIVE';
+    document.getElementById('progressFill').style.width = '0%';
+    return;
+  }
   const f = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
   document.getElementById('timeDisplay').textContent = `${f(Math.max(0,t))} / ${f(duration||0)}`;
   document.getElementById('progressFill').style.width = duration ? `${Math.min(100,(t/duration)*100)}%` : '0%';
@@ -1027,7 +1090,7 @@ function pendulum() {
   }
   const tip=joints[joints.length-1];
   // Record tip trail
-  if(!pendulumTrail) window.pendulumTrail=[];
+  if(!window.pendulumTrail) window.pendulumTrail=[];
   window.pendulumTrail.push({x:tip.x,y:tip.y,hue:120+bands[0]*180,e:rms});
   if(window.pendulumTrail.length>600) window.pendulumTrail.shift();
   // Draw trail

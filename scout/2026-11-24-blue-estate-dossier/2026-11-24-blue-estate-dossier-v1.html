@@ -1,0 +1,2647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#fffaf0">
+<title>Estate Dossier</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+  :root {
+    --bg: #f4ede0;
+    --paper: #fffaf0;
+    --ink: #1a1410;
+    --muted: #5a4d3f;
+    --rule: #d4c5a8;
+    --accent: #b8420a;
+    --vault: #7c1f0d;
+    --blue: #1d4ed8;
+    --blue-soft: #dbeafe;
+    --protag: #fde047;
+    --serif: 'Didot', 'Bodoni MT', 'Iowan Old Style', Georgia, serif;
+    --body: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+    --mono: 'Courier New', Courier, monospace;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 14px;
+    background-image:
+      radial-gradient(circle at 18% 8%, rgba(29, 78, 216, 0.05) 0, transparent 38%),
+      radial-gradient(circle at 82% 62%, rgba(124, 31, 13, 0.05) 0, transparent 40%);
+  }
+  button { font-family: inherit; color: inherit; }
+
+  /* top bar */
+  .topbar {
+    flex: 0 0 54px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px;
+    background: var(--paper);
+    border-bottom: 3px solid var(--blue);
+  }
+  .icon-btn {
+    flex: 0 0 40px;
+    height: 40px;
+    border: 1px solid var(--ink);
+    border-radius: 3px;
+    background: var(--blue);
+    color: #fff;
+    font-size: 19px;
+    box-shadow: 1px 1px 0 var(--ink);
+    cursor: pointer;
+    padding: 0;
+  }
+  .icon-btn:active { transform: translate(1px, 1px); box-shadow: none; }
+  .title-wrap { flex: 1; min-width: 0; }
+  .t1 { font-family: var(--serif); font-size: 18px; line-height: 1.05; white-space: nowrap; }
+  .t1 b { font-family: var(--mono); font-size: 9px; color: var(--blue); font-weight: bold; margin-left: 4px; vertical-align: middle; }
+  .t2 {
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 3px;
+  }
+  .status-chip {
+    flex: 0 0 88px;
+    text-align: center;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    border: 1px solid var(--ink); border-radius: 12px; padding: 5px 0;
+    background: #bef264;
+  }
+  .status-chip.declining { background: #fcd34d; }
+  .status-chip.deceased { background: #d4d4d4; color: var(--vault); font-weight: bold; }
+
+  /* tabs */
+  .tabs {
+    flex: 0 0 42px;
+    display: flex;
+    background: var(--bg);
+    border-bottom: 1px solid var(--ink);
+  }
+  .tab {
+    flex: 1;
+    position: relative;
+    border: none;
+    border-right: 1px solid var(--rule);
+    border-bottom: 3px solid transparent;
+    background: transparent;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    cursor: pointer;
+    padding: 0;
+  }
+  .tab:last-child { border-right: none; }
+  .tab.active { background: var(--paper); border-bottom-color: var(--blue); font-weight: bold; }
+  .tab .badge {
+    position: absolute; top: 3px; right: 3px;
+    min-width: 15px; height: 15px; line-height: 13px;
+    border-radius: 8px; border: 1px solid var(--ink);
+    background: var(--accent); color: #fff;
+    font-size: 8px; padding: 0 3px; display: none;
+  }
+  .tab .badge.show { display: block; }
+
+  main { flex: 1; position: relative; overflow: hidden; }
+  .view { position: absolute; inset: 0; overflow-y: auto; display: none; -webkit-overflow-scrolling: touch; }
+  .view.active { display: block; }
+  #view-map { overflow: hidden; }
+
+  /* generic controls */
+  .btn {
+    border: 1px solid var(--ink);
+    background: var(--paper);
+    border-radius: 3px;
+    padding: 9px 11px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    box-shadow: 1px 1px 0 var(--ink);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn:active { transform: translate(1px, 1px); box-shadow: none; }
+  .btn.blue { background: var(--blue); color: #fff; }
+  .btn.yellow { background: var(--protag); }
+  .btn.red { background: #fecaca; }
+  .btn.sm { padding: 6px 9px; font-size: 10px; }
+  .btn:disabled { opacity: 0.3; cursor: default; box-shadow: none; transform: none; }
+  input, select, textarea {
+    width: 100%;
+    border: 1px solid var(--ink);
+    border-radius: 2px;
+    background: var(--bg);
+    padding: 8px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--ink);
+  }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--blue); outline-offset: 0; }
+  textarea { min-height: 70px; font-family: var(--mono); font-size: 12px; }
+  .chip {
+    display: inline-block;
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.05em;
+    border: 1px solid var(--ink); border-radius: 9px; padding: 1px 6px;
+    background: var(--bg); white-space: nowrap; vertical-align: middle;
+  }
+  .swatch { width: 11px; height: 11px; border-radius: 50%; border: 1px solid var(--ink); flex: 0 0 11px; display: inline-block; }
+  .muted { color: var(--muted); }
+  .mono { font-family: var(--mono); }
+
+  /* sticky toolbar shared by list, triage, tasks, intake */
+  .toolbar {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--paper);
+    border-bottom: 1px solid var(--ink);
+    padding: 8px;
+  }
+  .tool-row { display: flex; gap: 6px; }
+  .tool-row + .tool-row { margin-top: 6px; }
+  .tool-row input, .tool-row select { padding: 7px; font-size: 12px; }
+  .chip-row {
+    display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px;
+  }
+  .chip-row::-webkit-scrollbar { display: none; }
+  .fchip {
+    flex: 0 0 auto;
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid var(--ink); border-radius: 14px;
+    background: var(--bg);
+    padding: 5px 10px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase;
+    cursor: pointer;
+  }
+  .fchip.on { background: var(--blue); color: #fff; }
+  .fchip.on .swatch { border-color: #fff; }
+
+  .card {
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    border-radius: 3px;
+    box-shadow: 2px 2px 0 rgba(26, 20, 16, 0.1);
+    margin: 10px;
+    padding: 12px;
+  }
+  .card h3 {
+    margin: 0 0 8px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent);
+  }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  @media (max-width: 480px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+  .tile {
+    text-align: center;
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+    border: 1px dotted var(--rule); border-radius: 2px; padding: 6px 2px;
+  }
+  .tile strong { display: block; font-family: var(--serif); font-weight: 500; font-size: 18px; color: var(--ink); margin-bottom: 2px; }
+  .tile.blue strong { color: var(--blue); }
+  .tile.red strong { color: var(--vault); }
+  .bar { height: 8px; border: 1px solid var(--ink); border-radius: 2px; background: var(--bg); overflow: hidden; }
+  .bar > div { height: 100%; background: var(--blue); }
+  .bar-label { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 10px; color: var(--muted); margin: 8px 0 3px; }
+
+  /* rows */
+  .group-head {
+    display: flex; align-items: center; gap: 6px;
+    margin: 14px 10px 4px;
+    font-family: var(--serif); font-size: 15px;
+  }
+  .group-head .mono { font-size: 10px; color: var(--muted); }
+  .rows { margin: 0 10px; border: 1px solid var(--ink); border-radius: 3px; background: var(--paper); overflow: hidden; }
+  .row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 10px;
+    border-bottom: 1px dotted var(--rule);
+    cursor: pointer;
+    min-height: 44px;
+  }
+  .row:last-child { border-bottom: none; }
+  .row:active { background: var(--blue-soft); }
+  .row .dot { width: 11px; height: 11px; border-radius: 50%; border: 1px solid var(--ink); flex: 0 0 11px; }
+  .row .dot.dead { opacity: 0.45; border-style: dashed; }
+  .row .main { flex: 1; min-width: 0; }
+  .row .name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row.dead .name { color: var(--muted); text-decoration: line-through; }
+  .row .sub { font-family: var(--mono); font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .badges { display: flex; gap: 3px; flex-wrap: wrap; justify-content: flex-end; max-width: 48%; }
+  .row .side { flex: 0 0 auto; }
+  .empty { padding: 36px 20px; text-align: center; font-style: italic; color: var(--muted); }
+
+  /* map */
+  #map-wrap { position: absolute; inset: 0; }
+  #map-svg { width: 100%; height: 100%; display: block; touch-action: none; }
+  .map-ui { position: absolute; z-index: 4; }
+  .map-key { top: 8px; left: 8px; max-width: 170px; }
+  .key-toggle {
+    border: 1px solid var(--ink); background: rgba(255, 250, 240, 0.96); border-radius: 3px;
+    padding: 6px 9px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    box-shadow: 1px 1px 0 var(--ink); cursor: pointer;
+  }
+  .key-body {
+    display: none;
+    margin-top: 4px;
+    background: rgba(255, 250, 240, 0.97); border: 1px solid var(--ink); border-radius: 3px;
+    padding: 6px; box-shadow: 2px 2px 0 rgba(26, 20, 16, 0.15);
+    max-height: 55vh; overflow-y: auto;
+  }
+  .map-key.open .key-body { display: block; }
+  .key-item {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 10px; padding: 3px 4px; border-radius: 2px; cursor: pointer;
+  }
+  .key-item.on { background: var(--ink); color: var(--paper); }
+  .map-color { top: 8px; right: 8px; }
+  .map-color select {
+    width: auto; padding: 6px; font-family: var(--mono); font-size: 10px; text-transform: uppercase;
+    background: rgba(255, 250, 240, 0.96); box-shadow: 1px 1px 0 var(--ink);
+  }
+  .map-crumb {
+    top: 17px; left: 64px; right: 156px; pointer-events: none;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .map-crumb b { color: var(--blue); }
+  .map-zoom { right: 8px; bottom: 10px; display: flex; flex-direction: column; gap: 5px; }
+  .map-zoom button, .map-brokers {
+    width: 40px; height: 40px;
+    border: 1px solid var(--ink); background: var(--paper); border-radius: 3px;
+    font-family: var(--mono); font-size: 16px; box-shadow: 1px 1px 0 var(--ink); cursor: pointer; padding: 0;
+  }
+  .map-brokers {
+    left: 8px; bottom: 10px; width: auto; height: 40px; padding: 0 10px;
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    background: #2dd4bf; display: none;
+  }
+  .map-brokers.show { display: block; }
+  .map-empty {
+    left: 50%; top: 62%; transform: translateX(-50%);
+    text-align: center; display: none; width: 240px;
+    background: var(--paper); border: 1px solid var(--ink); border-radius: 3px; padding: 12px;
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+  .map-empty.show { display: block; }
+  .map-empty p { margin: 0 0 10px; font-style: italic; color: var(--muted); }
+
+  .link { fill: none; stroke-opacity: 0.35; stroke-width: 1px; transition: stroke-opacity 0.2s; }
+  .link.dim { stroke-opacity: 0.05; }
+  .link.lit { stroke-opacity: 0.9; stroke-width: 1.6px; }
+  .node { cursor: pointer; }
+  .node .hit { fill: transparent; }
+  .node .dot { stroke: var(--ink); stroke-width: 1px; transition: opacity 0.2s; }
+  .node.cat .dot { stroke-width: 1.5px; }
+  .node.dead .dot { fill-opacity: 0.45; stroke-dasharray: 2 2; }
+  .node.dim .dot { opacity: 0.14; }
+  .node.dim text { opacity: 0.08; }
+  .node.sib .dot { opacity: 0.35; }
+  .node.sib text { opacity: 0.22; }
+  .node .done-mark { fill: var(--ink); display: none; pointer-events: none; }
+  .node.done .done-mark { display: block; }
+  .node.focus .dot { stroke: var(--blue); stroke-width: 2.5px; }
+  .leaf-label { font-family: var(--mono); font-size: 8.5px; fill: var(--ink); opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  .node.show-label .leaf-label { opacity: 1; }
+  .node.dead .leaf-label { fill: var(--muted); text-decoration: line-through; }
+  .cat-name { font-family: var(--mono); font-size: 8px; font-weight: bold; pointer-events: none; }
+  .cat-count { font-family: var(--mono); font-size: 7px; fill: var(--muted); pointer-events: none; }
+  .center { cursor: pointer; }
+  .center-dot { fill: var(--protag); stroke: var(--ink); stroke-width: 2; }
+  .center-ring { fill: none; stroke: var(--blue); stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; }
+  .center-name { font-family: var(--serif); font-weight: 600; font-size: 10.5px; text-anchor: middle; pointer-events: none; }
+  .center-meta { font-family: var(--mono); font-size: 7px; fill: var(--muted); text-anchor: middle; pointer-events: none; }
+  .meta-link { fill: none; stroke-dasharray: 3 3; stroke-opacity: 0.75; }
+  .meta-node circle { stroke: var(--ink); stroke-width: 0.8px; }
+  .meta-node text { font-family: var(--mono); font-size: 7.5px; fill: var(--ink); pointer-events: none; }
+  .meta-node text.meta-key { font-size: 6.5px; fill: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+  .broker-node { cursor: pointer; }
+  .broker-node .dot { stroke: var(--ink); stroke-width: 1px; }
+  .broker-node .relist { fill: none; stroke: var(--vault); stroke-width: 1.4px; stroke-dasharray: 2 2; }
+  .broker-node.focus .dot { stroke: var(--blue); stroke-width: 2.5px; }
+  .broker-label { font-family: var(--mono); font-size: 8px; fill: var(--ink); pointer-events: none; }
+
+  /* drawer */
+  .scrim { position: fixed; inset: 0; background: rgba(26, 20, 16, 0.35); z-index: 55; display: none; }
+  .scrim.show { display: block; }
+  #sheet-scrim { z-index: 39; }
+  .drawer {
+    position: fixed; top: 0; left: 0; bottom: 0;
+    width: min(310px, 84vw);
+    background: var(--paper);
+    border-right: 3px solid var(--blue);
+    z-index: 60;
+    transform: translateX(-105%);
+    transition: transform 0.22s;
+    display: flex; flex-direction: column;
+    box-shadow: 4px 0 0 rgba(26, 20, 16, 0.12);
+  }
+  .drawer.open { transform: none; }
+  .drawer-head {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+    padding: 10px; border-bottom: 1px solid var(--ink);
+  }
+  .drawer-head .t1 { flex: 1; }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 6px 10px 20px; }
+  .drawer details { border-bottom: 1px dotted var(--rule); padding: 6px 0; }
+  .drawer summary {
+    list-style: none; cursor: pointer; padding: 8px 2px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--blue);
+    display: flex; justify-content: space-between;
+  }
+  .drawer summary::-webkit-details-marker { display: none; }
+  .drawer summary::after { content: "+"; color: var(--muted); }
+  .drawer details[open] summary::after { content: "-"; }
+  .menu-item {
+    display: block; width: 100%; text-align: left;
+    border: 1px solid transparent; background: transparent; border-radius: 2px;
+    padding: 9px 8px; font-size: 14px; cursor: pointer;
+  }
+  .menu-item:active { background: var(--blue-soft); }
+  .menu-item small { display: block; font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.05em; margin-top: 2px; }
+  .menu-item.on { border-color: var(--ink); background: var(--blue-soft); }
+  .drawer-foot { flex: 0 0 auto; padding: 8px 10px; border-top: 1px solid var(--rule); font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.05em; }
+
+  /* bottom sheet */
+  .sheet {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    background: var(--paper);
+    border-top: 3px solid var(--blue);
+    border-radius: 8px 8px 0 0;
+    z-index: 40;
+    transform: translateY(105%);
+    transition: transform 0.22s;
+    display: flex; flex-direction: column;
+    box-shadow: 0 -3px 0 rgba(26, 20, 16, 0.12);
+    max-height: 88dvh;
+  }
+  .sheet.peek { max-height: 46dvh; }
+  .sheet.open { transform: none; }
+  .sheet-head {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
+    padding: 9px 10px; border-bottom: 1px solid var(--ink);
+  }
+  .sheet-title { flex: 1; min-width: 0; font-family: var(--serif); font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sheet-actions { display: flex; gap: 5px; flex: 0 0 auto; }
+  .sheet-close {
+    flex: 0 0 34px; height: 34px; border: 1px solid var(--ink); border-radius: 50%;
+    background: var(--bg); font-size: 16px; cursor: pointer; padding: 0;
+  }
+  .sheet-body { flex: 1; overflow-y: auto; padding: 10px 12px 18px; }
+  .seg-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin: 4px 0 4px; }
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-bottom: 10px; }
+  .seg button {
+    border: 1px solid var(--ink); background: var(--bg); border-radius: 3px;
+    padding: 8px 4px; font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;
+  }
+  .seg button.on { background: var(--blue); color: #fff; font-weight: bold; }
+  .seg button.on .swatch { border-color: #fff; }
+  .seg button:disabled { opacity: 0.3; }
+  dl.dl { display: grid; grid-template-columns: 96px 1fr; gap: 5px 10px; margin: 6px 0 0; font-size: 13px; }
+  dl.dl dt { font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); padding-top: 3px; }
+  dl.dl dd { margin: 0; word-break: break-word; }
+  dl.dl a { color: var(--blue); }
+  .hist { font-family: var(--mono); font-size: 10px; border-left: 2px solid var(--blue); padding-left: 8px; margin-top: 4px; }
+  .hist div { padding: 2px 0; }
+  .note { font-size: 12px; font-style: italic; color: var(--muted); margin: 4px 0 10px; }
+  .warn { background: #fee2e2; border: 1px solid var(--vault); border-radius: 2px; padding: 6px 8px; font-size: 12px; margin-bottom: 10px; color: var(--vault); }
+  pre.json {
+    background: var(--bg); border: 1px solid var(--ink); border-radius: 2px; padding: 8px;
+    font-family: var(--mono); font-size: 10px; white-space: pre-wrap; word-break: break-all; margin: 0;
+  }
+
+  /* forms */
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .adder { display: flex; gap: 6px; }
+  .adder input { flex: 1; }
+  .adder .btn { flex: 0 0 64px; }
+  .tags { margin-top: 6px; }
+  .tag {
+    display: inline-block; vertical-align: top;
+    border: 1px solid var(--ink); border-radius: 12px; background: var(--bg);
+    padding: 3px 4px 3px 9px; margin: 0 5px 5px 0; font-size: 12px; max-width: 100%;
+  }
+  .tag span { vertical-align: middle; word-break: break-word; }
+  .tag button { display: inline-block; vertical-align: middle; width: 22px; height: 22px; margin-left: 6px; border-radius: 50%; border: 1px solid var(--vault); background: transparent; color: var(--vault); cursor: pointer; padding: 0; font-size: 12px; }
+
+  /* intake */
+  .istep { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--blue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dots { display: flex; gap: 3px; margin: 7px 0; }
+  .dots button { flex: 1; height: 8px; border: 1px solid var(--ink); border-radius: 1px; background: var(--bg); padding: 0; cursor: pointer; }
+  .dots button.done { background: var(--protag); }
+  .dots button.cur { background: var(--blue); }
+  .inav { display: flex; gap: 6px; }
+  .inav .btn { flex: 1; }
+  .step-title { font-family: var(--serif); font-size: 22px; margin: 2px 0 4px; }
+  .step-hint { font-style: italic; color: var(--muted); font-size: 12.5px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px dotted var(--rule); }
+  .ck-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .ck-head .mono { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .ck {
+    display: flex; align-items: stretch;
+    border: 1px solid var(--ink); border-radius: 3px; background: var(--bg);
+    margin-bottom: 5px; overflow: hidden;
+  }
+  .ck.on { background: #ecfccb; }
+  .ck-main {
+    flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px;
+    border: none; background: transparent; text-align: left; padding: 9px 10px; cursor: pointer;
+  }
+  .ck-box {
+    flex: 0 0 20px; height: 20px; border: 1.5px solid var(--ink); border-radius: 2px; background: var(--paper);
+    display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: bold; font-size: 13px;
+  }
+  .ck.on .ck-box { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .ck-text { min-width: 0; }
+  .ck-text b { display: block; font-size: 13px; font-weight: 600; }
+  .ck-text small { display: block; font-family: var(--mono); font-size: 9.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ck-edit {
+    flex: 0 0 46px; border: none; border-left: 1px dotted var(--rule);
+    background: transparent; font-size: 15px; cursor: pointer; color: var(--blue);
+  }
+  .ck-edit:disabled { color: transparent; cursor: default; }
+  .review-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 4px 0; border-bottom: 1px dotted var(--rule); }
+  .review-row:last-child { border-bottom: none; }
+  .review-row .k { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .review-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px; }
+  .review-actions .btn { flex: 1 1 140px; }
+
+  /* tasks */
+  .task { cursor: default; }
+  .task .tick {
+    flex: 0 0 32px; height: 32px; border: 1.5px solid var(--ink); border-radius: 3px; background: var(--paper);
+    font-family: var(--mono); font-size: 15px; font-weight: bold; cursor: pointer; padding: 0;
+  }
+  .task.isdone .tick { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .task.isdone .name { text-decoration: line-through; color: var(--muted); }
+  .task .outs { display: flex; gap: 4px; flex: 0 0 auto; }
+  .task .outs .btn { padding: 6px 7px; font-size: 9px; }
+  .chip.overdue { background: #fecaca; border-color: var(--vault); color: var(--vault); }
+  .chip.dueday { background: var(--protag); }
+
+  /* triage */
+  .prog-btn {
+    flex: 0 0 64px; height: 30px; border: 1px solid var(--ink); border-radius: 3px; background: var(--bg);
+    font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; padding: 0;
+  }
+  .prog-btn.doing { background: var(--protag); }
+  .prog-btn.done { background: var(--blue); color: #fff; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    background: var(--ink); color: var(--paper);
+    padding: 10px 16px; border-radius: 3px; border-left: 4px solid var(--blue);
+    font-family: var(--mono); font-size: 12px; z-index: 90;
+    opacity: 0; pointer-events: none; transition: opacity 0.25s; max-width: 90vw;
+  }
+  .toast.show { opacity: 1; }
+  .toast.err { background: var(--vault); border-left-color: #fecaca; }
+
+
+  /* account gate */
+  .gate {
+    position: fixed; inset: 0; z-index: 100;
+    background: var(--bg);
+    background-image: radial-gradient(circle at 20% 10%, rgba(29, 78, 216, 0.10) 0, transparent 45%), radial-gradient(circle at 85% 80%, rgba(124, 31, 13, 0.06) 0, transparent 40%);
+    display: flex; align-items: flex-start; justify-content: center; padding: 12vh 16px 16px; overflow-y: auto;
+  }
+  .gate.hide { display: none; }
+  .gate-card {
+    width: 100%; max-width: 380px; background: var(--paper);
+    border: 1px solid var(--ink); border-top: 4px solid var(--blue); border-radius: 4px;
+    box-shadow: 3px 3px 0 var(--ink); padding: 18px;
+  }
+  .gate-card .t1 { font-size: 26px; margin-bottom: 6px; }
+  .gate-sub { font-style: italic; color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .gate-msg { min-height: 36px; margin-top: 10px; font-size: 12px; color: var(--vault); }
+  .gate-msg.ok { color: var(--blue); }
+  .sync-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--ink); background: var(--blue); margin-left: 6px; vertical-align: middle; }
+  .sync-dot.pending { background: var(--protag); }
+  .sync-dot.error { background: #f87171; }
+
+  #print-root { display: none; }
+  @media print {
+    body { display: block; height: auto; overflow: visible; background: #fff; }
+    body > *:not(#print-root) { display: none !important; }
+    #print-root { display: block; color: #000; font-family: Georgia, serif; font-size: 11pt; }
+    #print-root h1 { font-size: 20pt; margin: 0 0 4pt; }
+    #print-root h2 { font-size: 13pt; border-bottom: 1.5pt solid #1d4ed8; margin: 16pt 0 6pt; padding-bottom: 2pt; }
+    #print-root table { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+    #print-root th, #print-root td { border: 0.5pt solid #999; padding: 3pt 4pt; text-align: left; vertical-align: top; }
+    #print-root th { background: #eef2ff; }
+    #print-root .meta { font-family: 'Courier New', monospace; font-size: 9pt; color: #444; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <button class="icon-btn" id="menu-btn" aria-label="Menu">&#9776;</button>
+  <div class="title-wrap">
+    <div class="t1">Estate Dossier <b>v1</b><span class="sync-dot" id="sync-dot" title="saved"></span></div>
+    <div class="t2" id="profile-line">no profile</div>
+  </div>
+  <div class="status-chip" id="status-chip">living</div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab active" data-view="map">Map</button>
+  <button class="tab" data-view="list">List</button>
+  <button class="tab" data-view="triage">Triage</button>
+  <button class="tab" data-view="tasks">Tasks<span class="badge" id="task-badge"></span></button>
+  <button class="tab" data-view="intake">Intake</button>
+</nav>
+
+<main>
+  <section class="view active" id="view-map">
+    <div id="map-wrap"><svg id="map-svg"></svg></div>
+    <div class="map-ui map-key" id="map-key">
+      <button class="key-toggle" id="key-toggle">Key</button>
+      <div class="key-body" id="key-body"></div>
+    </div>
+    <div class="map-ui map-color">
+      <select id="color-by" aria-label="Color by">
+        <option value="category">color: category</option>
+        <option value="disposition">color: disposition</option>
+        <option value="status">color: status</option>
+      </select>
+    </div>
+    <div class="map-ui map-crumb" id="map-crumb">All</div>
+    <button class="map-ui map-brokers" id="map-brokers">Brokers</button>
+    <div class="map-ui map-zoom">
+      <button id="zoom-in" aria-label="Zoom in">+</button>
+      <button id="zoom-out" aria-label="Zoom out">&minus;</button>
+      <button id="zoom-reset" aria-label="Reset view">&#8857;</button>
+    </div>
+    <div class="map-ui map-empty" id="map-empty">
+      <p>No accounts on this profile yet.</p>
+      <button class="btn blue" id="empty-intake">Start intake</button>
+    </div>
+  </section>
+  <section class="view" id="view-list"></section>
+  <section class="view" id="view-triage"></section>
+  <section class="view" id="view-tasks"></section>
+  <section class="view" id="view-intake"></section>
+</main>
+
+<div class="scrim" id="drawer-scrim"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-head">
+    <div class="t1">Estate Dossier</div>
+    <button class="sheet-close" id="drawer-close" aria-label="Close menu">&times;</button>
+  </div>
+  <div class="drawer-body" id="drawer-body"></div>
+  <div class="drawer-foot">Everything saves to your account, encrypted on the server. Export full backup for an offline copy.</div>
+</aside>
+
+<div class="scrim" id="sheet-scrim"></div>
+<div class="sheet" id="sheet">
+  <div class="sheet-head">
+    <div class="sheet-title" id="sheet-title"></div>
+    <div class="sheet-actions" id="sheet-actions"></div>
+    <button class="sheet-close" id="sheet-close" aria-label="Close">&times;</button>
+  </div>
+  <div class="sheet-body" id="sheet-body"></div>
+</div>
+
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <div class="t1">Estate Dossier <b>v1</b></div>
+    <div class="gate-sub">Sign in to open your dossiers. Everything you enter saves to your account.</div>
+    <div class="seg" style="grid-template-columns:1fr 1fr">
+      <button data-mode="in" class="on">Sign in</button>
+      <button data-mode="up">Create account</button>
+    </div>
+    <div class="field"><label>Email</label><input id="g-email" type="email" autocomplete="username" inputmode="email"></div>
+    <div class="field"><label>Password</label><input id="g-pass" type="password" autocomplete="current-password"></div>
+    <div class="field" id="g-pass2-wrap" style="visibility:hidden"><label>Confirm password</label><input id="g-pass2" type="password" autocomplete="new-password"></div>
+    <button class="btn blue" id="g-go" style="width:100%">Sign in</button>
+    <div class="gate-msg" id="g-msg"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<input type="file" id="file-scan" accept="application/json,.json" hidden>
+<input type="file" id="file-backup" accept="application/json,.json" hidden>
+<div id="print-root"></div>
+
+<script>
+"use strict";
+// ============================================================
+//  CONSTANTS
+// ============================================================
+const SAMPLE_SCAN_URL = "2026-11-24-blue-estate-dossier-v1-sample-exposure.json";
+
+const CATS = [
+  { key: "email",    name: "Email",         short: "Email",    color: "#fb923c" },
+  { key: "social",   name: "Social",        short: "Social",   color: "#a78bfa" },
+  { key: "fin",      name: "Financial",     short: "Money",  color: "#f87171" },
+  { key: "work",     name: "Work / Dev",    short: "Work",     color: "#22d3ee" },
+  { key: "commerce", name: "Commerce",      short: "Shop", color: "#f472b6" },
+  { key: "media",    name: "Media",         short: "Media",    color: "#c084fc" },
+  { key: "legacy",   name: "Legacy",        short: "Legacy",   color: "#94a3b8" },
+  { key: "regional", name: "Regional",      short: "Region", color: "#fb7185" },
+  { key: "subs",     name: "Subscriptions", short: "Subs",     color: "#fbbf24" },
+  { key: "liab",     name: "Liabilities",   short: "Debt",     color: "#dc2626" }
+];
+const CAT = Object.fromEntries(CATS.map(c => [c.key, c]));
+
+const DISPOS = [
+  { key: "undecided",   name: "Undecided",   color: "#e5e7eb" },
+  { key: "archive",     name: "Archive",     color: "#86efac" },
+  { key: "close",       name: "Close",       color: "#f87171" },
+  { key: "handoff",     name: "Handoff",     color: "#facc15" },
+  { key: "memorialize", name: "Memorialize", color: "#f0abfc" },
+  { key: "keep",        name: "Keep live",   color: "#93c5fd" }
+];
+const DISPO = Object.fromEntries(DISPOS.map(d => [d.key, d]));
+
+const STATUSES = [
+  { key: "active",  name: "Active",  color: "#bef264" },
+  { key: "dormant", name: "Dormant", color: "#d4d4d4" },
+  { key: "closed",  name: "Closed",  color: "#a8a29e" },
+  { key: "ghost",   name: "Ghost",   color: "#c4b5fd" }
+];
+const STATUS = Object.fromEntries(STATUSES.map(s => [s.key, s]));
+const PROGRESS = ["todo", "doing", "done"];
+
+const BSTAT = {
+  pending:   { name: "Pending",   color: "#e5e7eb" },
+  found:     { name: "Found",     color: "#fca5a5" },
+  submitted: { name: "Submitted", color: "#fcd34d" },
+  clean:     { name: "Clean",     color: "#86efac" },
+  skip:      { name: "Skip",      color: "#cbd5e1" }
+};
+const TRANSITIONS = {
+  pending: ["found", "clean", "skip"],
+  found: ["submitted", "skip"],
+  submitted: ["clean"],
+  clean: ["found"],
+  skip: []
+};
+const REQ_VOCAB = {
+  email_confirm: "confirmation email must be clicked",
+  phone_call: "requires a phone call to the broker",
+  phone_code: "broker calls with a verification code",
+  phone_optional: "phone fallback if other channels fail",
+  id_possible: "may request government ID upload",
+  dob: "date of birth required",
+  legal_name: "legal name required",
+  captcha: "human verification challenge",
+  multi_step: "more than one submission or email exchange",
+  free_account: "must create a free account on the broker",
+  recognized_email: "only accepts mainstream email providers",
+  paid_check: "free search may hide full exposure"
+};
+const PRIORITY_RANK = { crucial: 0, high: 1, normal: 2 };
+
+const TEMPLATES = {
+  email: [
+    ["Gmail (primary)", "most likely root account"], ["Gmail (secondary)", "spam catch-all, side projects"],
+    ["Yahoo Mail", "old shopping signups"], ["Outlook / Hotmail", "MS ecosystem, Xbox"],
+    ["iCloud / me.com", "Apple ID anchor"], ["AOL", "still receives mail"], ["ProtonMail", "security-aware users"],
+    ["Fastmail", "tech-aware migrants"], ["Custom domain", "vanity address"], ["Regional webmail", "GMX, yahoo.co.jp, hotmail.co.uk"]
+  ],
+  social: [
+    ["Facebook", ""], ["LinkedIn (main)", ""], ["LinkedIn (ghost)", "auto-created wrong-email accounts"], ["Twitter / X", ""],
+    ["Instagram", ""], ["Threads", ""], ["Bluesky", ""], ["Mastodon", ""], ["Reddit", ""], ["YouTube (creator)", "monetized?"],
+    ["TikTok", ""], ["Pinterest", ""], ["Snapchat", ""], ["Discord", "how many servers?"], ["WhatsApp", ""], ["Telegram", ""],
+    ["Signal", ""], ["Mixi (JP)", "if lived in Japan"], ["Xing (DE)", "if lived in Germany"], ["VK", ""], ["LINE", ""], ["WeChat", ""], ["Naver", ""]
+  ],
+  fin: [
+    ["Chase", ""], ["Bank of America", ""], ["Wells Fargo", ""], ["Citi", ""], ["Capital One", ""], ["Credit union", ""],
+    ["Fidelity", ""], ["Schwab", ""], ["Vanguard", ""], ["E*Trade", ""], ["Robinhood", ""], ["Coinbase", ""], ["Kraken", ""],
+    ["Gemini", ""], ["Binance", ""], ["Hardware wallet", "seed phrase location?"], ["Hot wallet", "MetaMask etc"],
+    ["UK bank", ""], ["DE bank", ""], ["JP bank", ""], ["Wise / Revolut", ""], ["PayPal", ""], ["Venmo", ""], ["Zelle", ""],
+    ["Stripe (biz)", ""], ["Square (biz)", ""], ["QuickBooks", ""]
+  ],
+  work: [
+    ["GitHub", "repos and IP"], ["GitLab", ""], ["Bitbucket", ""], ["AWS (personal)", ""], ["AWS (business)", ""], ["GCP", ""],
+    ["Azure", ""], ["Slack", "how many workspaces?"], ["Notion", ""], ["Confluence", ""], ["Jira", ""], ["Linear", ""],
+    ["Zoom", ""], ["Teams", ""], ["Dropbox", ""], ["Box", ""], ["Cloud drive", ""], ["DocuSign", ""], ["Adobe CC", ""],
+    ["Password manager", "master vault location?"]
+  ],
+  commerce: [
+    ["Amazon (US)", ""], ["Amazon (intl)", ""], ["eBay", ""], ["Etsy", ""], ["Walmart", ""], ["Target", ""], ["Costco", ""],
+    ["Rakuten (JP)", ""], ["Shopify store", "how many?"], ["Uber", ""], ["Lyft", ""], ["DoorDash", ""], ["Instacart", ""],
+    ["Airbnb (guest)", ""], ["Airbnb (host)", "listings?"], ["Booking.com", ""], ["Airline programs", "miles carry value"]
+  ],
+  media: [
+    ["Steam", "library size?"], ["Epic Games", ""], ["GOG", ""], ["PlayStation Network", ""], ["Xbox", ""], ["Nintendo", ""],
+    ["Netflix", ""], ["Disney+", ""], ["Hulu", ""], ["Max", ""], ["Apple TV+", ""], ["Spotify", ""], ["Apple Music", ""],
+    ["YouTube Music", ""], ["Kindle", "export before closing"], ["Audible", "export before closing"], ["News subscriptions", ""],
+    ["Patreon", ""], ["Substack", ""]
+  ],
+  legacy: [
+    ["MySpace", ""], ["Friendster", ""], ["LiveJournal", ""], ["Xanga", ""], ["GeoCities", ""], ["Angelfire / Tripod", ""],
+    ["ICQ", "short UINs carry value"], ["AIM", ""], ["MSN Messenger", ""], ["Yahoo Messenger", ""], ["Flickr", "photo count?"],
+    ["Photobucket", ""], ["Last.fm", ""], ["Delicious", ""], ["Digg", ""], ["Orkut", ""], ["Yahoo Groups", ""], ["Google Groups", ""]
+  ],
+  regional: [
+    ["GOV.UK", ""], ["HMRC", "UK tax"], ["NHS login", ""], ["DVLA", "UK driving"], ["Companies House", "UK business"],
+    ["ELSTER", "DE tax"], ["Schufa", "DE credit"], ["My Number", "JP id"], ["Japan Post Bank", ""], ["Suica / JR", ""],
+    ["Kakao", ""], ["WeChat Pay", ""], ["Alipay", ""]
+  ],
+  subs: [
+    ["Primary mobile line", "2FA backbone, keep alive"], ["Secondary mobile line", ""], ["International mobile line", ""],
+    ["Home internet", ""], ["Starlink", ""], ["VPN", ""], ["Apple One / iCloud+", ""], ["Google One", ""],
+    ["AI subscriptions", "Claude, ChatGPT"], ["Image / video generators", ""], ["Adult subscription", "billing descriptor often obscured"],
+    ["Gym / fitness", ""], ["Dating apps", ""], ["Domain registrar", ""], ["Web hosting", ""], ["Email hosting", ""]
+  ],
+  liab: [
+    ["Amex", ""], ["Bank credit card", ""], ["Store card", ""], ["Auto loan", ""], ["Mortgage", ""], ["HELOC", ""],
+    ["Student loans", ""], ["Personal loan", ""], ["Private lender", "bridge or balloon terms"], ["Business credit", ""],
+    ["BNPL", "Affirm, Klarna, Afterpay"], ["Medical debt", ""], ["Foreign credit card", ""], ["Collections", ""]
+  ]
+};
+
+const CAT_HINTS = {
+  email: "Every email is a recovery vector for dozens of other accounts. Check the password manager, old phone contacts and tax records for forgotten addresses.",
+  social: "Mainstream, messaging and regional platforms. LinkedIn ghosts auto-create when someone signs in with the wrong email.",
+  fin: "Banks, brokerages, crypto. Highest priority for executor handoff: document credentials and 2FA for every one.",
+  work: "Critical when the subject was technical or ran a business. Skip when there was no developer or IT background.",
+  commerce: "Anywhere a card is stored. Airline programs and seller accounts carry value.",
+  media: "Game libraries can be worth real money. Ebook and audiobook libraries do not transfer easily, export first.",
+  legacy: "The early internet. Mostly dead now, but reused passwords still open live accounts elsewhere.",
+  regional: "Only when the subject has tax, residency or banking exposure abroad.",
+  subs: "The hidden bleed. Pull the last card statement, the phone bill and the app store subscription lists.",
+  liab: "Auto-debits keep firing after death. Closing the source card stops the bleed faster than formal closure."
+};
+
+// ============================================================
+//  HELPERS
+// ============================================================
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const uuid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+  : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 3 | 8)).toString(16); });
+const nowISO = () => new Date().toISOString();
+function localDate(d) { const z = n => String(n).padStart(2, "0"); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; }
+const today = () => localDate(new Date());
+function addDays(iso, n) { const d = new Date((iso || today()) + "T12:00:00"); if (isNaN(d)) return today(); d.setDate(d.getDate() + n); return localDate(d); }
+function money(n) {
+  if (n === null || n === undefined || n === "") return "";
+  const v = Number(n); if (isNaN(v)) return String(n);
+  return (v < 0 ? "-$" : "$") + Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+function moneyK(n) {
+  const v = Math.abs(Number(n) || 0); const sign = Number(n) < 0 ? "-" : "";
+  if (v >= 1e6) return sign + "$" + (v / 1e6).toFixed(1) + "M";
+  if (v >= 1e3) return sign + "$" + Math.round(v / 1e3) + "k";
+  return sign + "$" + Math.round(v);
+}
+function num(v) {
+  if (v === null || v === undefined) return null;
+  const s = String(v).replace(/[$,\s]/g, ""); if (s === "") return null;
+  const n = Number(s); return isNaN(n) ? null : n;
+}
+function shortName(n) {
+  const p = String(n || "").trim().split(/\s+/).filter(Boolean);
+  if (p.length < 2) return p[0] || "";
+  const s = p[0][0] + ". " + p.slice(1).join(" ");
+  return s.length > 18 ? s.slice(0, 17) + "." : s;
+}
+function safeUrl(u) { return /^https?:\/\//i.test(String(u || "")) ? String(u) : null; }
+function fmtDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso.length <= 10 ? iso + "T12:00:00" : iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+function isDead(a) { return a.status && a.status !== "active"; }
+function download(name, text, type) {
+  const blob = new Blob([text], { type: type || "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+function fileSafe(s) { return String(s || "subject").trim().replace(/\s+/g, "_").replace(/[^\w-]/g, "") || "subject"; }
+let toastTimer = null;
+function toast(msg, kind) {
+  const t = $("#toast"); t.textContent = msg; t.className = "toast show" + (kind === "err" ? " err" : "");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 3200);
+}
+
+// ============================================================
+//  STATE
+// ============================================================
+function blankState() {
+  return { version: 1, persons: [], contracts: [], subjects: [], accounts: [], exposures: [], tasks: [], audit: [], active: null };
+}
+function validState(s) {
+  return s && s.version === 1 && ["persons", "contracts", "subjects", "accounts", "exposures", "tasks", "audit"].every(k => Array.isArray(s[k]));
+}
+let S = blankState();
+
+// ============================================================
+//  ACCOUNT AND SYNC
+// ============================================================
+const API = "/api";
+const AUTH_KEY = "estate_dossier_auth";
+const LEGACY_KEY = "estate_dossier_v1";
+let AUTH = (() => { try { return JSON.parse(localStorage.getItem(AUTH_KEY)) || {}; } catch (e) { return {}; } })();
+const SYNC = { rev: 0, timer: null, inflight: false, dirty: false, ready: false };
+let persistTimer = null;
+
+async function api(method, path, body, opts) {
+  const headers = { "Content-Type": "application/json" };
+  if (AUTH.token) headers.Authorization = "Bearer " + AUTH.token;
+  let r;
+  try { r = await fetch(API + path, { method, headers, body: body ? JSON.stringify(body) : undefined, keepalive: !!(opts && opts.keepalive), cache: "no-store" }); }
+  catch (e) { const err = new Error("Server not reachable"); err.status = 0; throw err; }
+  let j = null; try { j = await r.json(); } catch (e) { /* non json */ }
+  if (!r.ok) { const err = new Error((j && j.error) || (r.status === 404 ? "Server not connected yet" : "Server error " + r.status)); err.status = r.status; err.body = j; throw err; }
+  return j;
+}
+function cacheKey() { return "estate_dossier_cache_" + (AUTH.user_id || "none"); }
+function cacheWrite(dirty) {
+  try { localStorage.setItem(cacheKey(), JSON.stringify({ rev: SYNC.rev, dirty: !!dirty, state: S })); } catch (e) { /* storage full */ }
+}
+function cacheRead() { try { const c = JSON.parse(localStorage.getItem(cacheKey())); return c && validState(c.state) ? c : null; } catch (e) { return null; } }
+function setSync(st) {
+  const d = document.getElementById("sync-dot"); if (!d) return;
+  d.className = "sync-dot" + (st === "saved" ? "" : " " + st);
+  d.title = st === "saved" ? "saved to account" : st === "pending" ? "saving" : "not saved yet, retrying";
+}
+function persist() {
+  if (!SYNC.ready) return;
+  SYNC.dirty = true; cacheWrite(true); setSync("pending");
+  clearTimeout(SYNC.timer); SYNC.timer = setTimeout(pushState, 900);
+}
+function persistSoon() { clearTimeout(persistTimer); persistTimer = setTimeout(persist, 350); }
+async function pushState() {
+  if (!SYNC.ready || !SYNC.dirty) return;
+  if (SYNC.inflight) { clearTimeout(SYNC.timer); SYNC.timer = setTimeout(pushState, 600); return; }
+  SYNC.inflight = true; SYNC.dirty = false;
+  try {
+    const j = await api("PUT", "/state", { rev: SYNC.rev, state: S });
+    SYNC.rev = j.rev; cacheWrite(SYNC.dirty); if (!SYNC.dirty) setSync("saved");
+  } catch (e) {
+    if (e.status === 409 && e.body && validState(e.body.state)) {
+      S = e.body.state; SYNC.rev = e.body.rev; cacheWrite(false); setSync("saved");
+      renderAll(); toast("Loaded newer changes from another device");
+    } else if (e.status === 401) { signOut(true); toast("Signed out, sign in again", "err"); }
+    else { SYNC.dirty = true; setSync("error"); clearTimeout(SYNC.timer); SYNC.timer = setTimeout(pushState, 5000); }
+  } finally { SYNC.inflight = false; }
+}
+function flushNow() {
+  if (!SYNC.ready || !SYNC.dirty || SYNC.inflight) return;
+  clearTimeout(SYNC.timer); pushState();
+}
+
+function cur() {
+  let subject = S.subjects.find(x => x.subject_id === S.active) || S.subjects[0];
+  if (!subject) return null;
+  S.active = subject.subject_id;
+  const person = S.persons.find(p => p.person_id === subject.person_id) || {};
+  const contract = S.contracts.find(c => c.contract_id === subject.contract_id) || {};
+  return { subject, person, contract, sid: subject.subject_id };
+}
+const accountsOf = sid => S.accounts.filter(a => a.subject_id === sid);
+const tasksOf = sid => S.tasks.filter(t => t.subject_id === sid);
+function brokersOf(sid) {
+  const sub = S.subjects.find(x => x.subject_id === sid);
+  return sub && sub.brokers ? Object.values(sub.brokers).sort((a, b) =>
+    (PRIORITY_RANK[a.priority] ?? 3) - (PRIORITY_RANK[b.priority] ?? 3) || String(a.name).localeCompare(String(b.name))) : [];
+}
+function log(action, detail) {
+  const c = cur();
+  S.audit.push({ at: nowISO(), operator: (c && c.contract.operator) || "", subject_id: c ? c.sid : null, action, detail: detail || {} });
+  if (S.audit.length > 3000) S.audit.splice(0, S.audit.length - 3000);
+}
+
+function makeAccount(sid, category, name, o) {
+  o = o || {};
+  return {
+    account_id: uuid(), subject_id: sid, category, name,
+    tmpl: o.tmpl || null,
+    identifier: o.identifier || "",
+    status: o.status || "active",
+    born: o.born ?? null, died: o.died ?? null,
+    balance: o.balance ?? null, fee: o.fee ?? null,
+    cred: o.cred || "", twofa: o.twofa || "", recovery: o.recovery || "",
+    notes: o.notes || "",
+    disposition: o.disposition || "undecided",
+    progress: o.progress || "todo",
+    updated_at: nowISO()
+  };
+}
+
+function createProfile(s, data) {
+  data = data || {};
+  const person_id = uuid(), contract_id = uuid(), subject_id = uuid();
+  const d = today();
+  s.persons.push(Object.assign({
+    full_legal_name: "New profile", dob: "", aliases: [], known_addresses: [], known_phones: [],
+    known_emails: [], known_relatives: [], death_status: "living"
+  }, data.person || {}, { person_id }));
+  s.contracts.push(Object.assign({
+    start_date: d, end_date: addDays(d, 365), scope: "", authorizing_party: "self", operator: ""
+  }, data.contract || {}, { contract_id, person_id, created_at: nowISO() }));
+  s.subjects.push(Object.assign({
+    case_id: "CASE-" + d.replace(/-/g, "") + "-" + Math.random().toString(36).slice(2, 6).toUpperCase(),
+    city: "", state: "", operator_notes: "", demo: false
+  }, data.subject || {}, { subject_id, person_id, contract_id, brokers: {} }));
+  return subject_id;
+}
+
+function seedDemo(s) {
+  const sid = createProfile(s, {
+    person: {
+      full_legal_name: "Marcus Chen-Whitfield", dob: "08/14/1958", aliases: ["MCW", "Marcus W."],
+      known_addresses: ["1100 N Stone Ave, Tucson AZ", "44 Cromwell Rd, London UK", "Torstrasse 12, Berlin DE"],
+      known_phones: ["+1-520-555-0142", "+44-20-7946-0918"],
+      known_emails: ["mchenwhitfield@gmail.com", "marcus.cw@protonmail.com"],
+      known_relatives: ["Diana Whitfield (spouse)", "Hannah Chen-Whitfield (daughter)"]
+    },
+    contract: {
+      start_date: "2026-05-01", end_date: "2027-05-01",
+      scope: "pre-mortem audit, broker scrub, ongoing monitoring", authorizing_party: "self", operator: "blue@scrub.local"
+    },
+    subject: { case_id: "MCW-2026-001", city: "Tucson", state: "AZ", operator_notes: "Demo profile. Retired CTO with exposure in four countries.", demo: true }
+  });
+  s.active = sid;
+  const DEF = { email: "close", social: "close", fin: "handoff", work: "close", commerce: "close", media: "close", legacy: "close", regional: "close", subs: "close", liab: "handoff" };
+  const R = [
+    ["email", "Gmail primary", { identifier: "mchenwhitfield@gmail.com", born: 2004, cred: "pE/pP", twofa: "TOTP+SMS", recovery: "+1 US line", disposition: "keep" }],
+    ["email", "ProtonMail", { identifier: "marcus.cw@protonmail.com", born: 2017, cred: "pE/sP", twofa: "YubiKey", recovery: "gmail", disposition: "keep" }],
+    ["email", "chenwhitfield.io", { born: 2011, cred: "alias", notes: "forwards to gmail, domain renews 2026", disposition: "handoff" }],
+    ["email", "Yahoo (old)", { born: 2001, cred: "pE/sP", notes: "years of receipts", disposition: "archive" }],
+    ["email", "Outlook", { born: 2008, cred: "sE/sP", twofa: "MS Authenticator" }],
+    ["email", "iCloud", { born: 2011, cred: "sE/sP", twofa: "Apple device", disposition: "archive" }],
+    ["email", "AOL relic", { status: "dormant", born: 1996, cred: "?/?", notes: "still receives mail" }],
+    ["email", "Hotmail UK", { status: "dormant", born: 2008 }],
+    ["email", "GMX.de", { born: 2013, cred: "sE/sP" }],
+    ["email", "Fastmail", { status: "closed", born: 2018, died: 2019, notes: "migration aborted", progress: "done" }],
+    ["email", "me.com", { born: 2009, cred: "alias" }],
+    ["email", "yahoo.co.jp", { born: 2017, cred: "sE/sP", notes: "linked to JP bank" }],
+    ["social", "Facebook", { born: 2007, cred: "pE/pP", disposition: "memorialize" }],
+    ["social", "LinkedIn main", { born: 2006, cred: "pE/pP", twofa: "TOTP", disposition: "memorialize" }],
+    ["social", "LinkedIn ghost A", { status: "ghost", born: 2014, notes: "auto-created", progress: "done" }],
+    ["social", "LinkedIn ghost B", { status: "ghost", born: 2019 }],
+    ["social", "Twitter / X", { born: 2009, cred: "pE/sP", disposition: "memorialize" }],
+    ["social", "Instagram", { born: 2012, disposition: "memorialize" }],
+    ["social", "Bluesky", { born: 2024 }],
+    ["social", "Mastodon main", { born: 2022, disposition: "memorialize" }],
+    ["social", "Mastodon alt", { born: 2023 }],
+    ["social", "Reddit", { born: 2010 }],
+    ["social", "Threads", { born: 2023 }],
+    ["social", "YouTube creator", { born: 2008, notes: "monetized", disposition: "archive" }],
+    ["social", "TikTok", { status: "dormant", born: 2021 }],
+    ["social", "Pinterest", { status: "dormant", born: 2014 }],
+    ["social", "Snapchat", { status: "dormant", born: 2016 }],
+    ["social", "Discord", { born: 2017, notes: "14 servers" }],
+    ["social", "WhatsApp biz", { born: 2015 }],
+    ["social", "Telegram", { born: 2018 }],
+    ["social", "Signal", { born: 2019 }],
+    ["fin", "Chase", { born: 1998, cred: "pE/sP", balance: 47820, fee: 0, twofa: "SMS+app", recovery: "gmail" }],
+    ["fin", "Bank of America", { born: 2002, cred: "sE/sP", balance: 12400, fee: 12, twofa: "SMS" }],
+    ["fin", "Wells Fargo", { born: 2005, cred: "sE/sP", balance: 3200, fee: 0, twofa: "SMS", notes: "barely used" }],
+    ["fin", "Fidelity", { born: 2010, cred: "pE/sP", balance: 845000, twofa: "TOTP", progress: "doing" }],
+    ["fin", "Schwab", { born: 2012, cred: "pE/sP", balance: 312000, twofa: "TOTP+SMS" }],
+    ["fin", "Vanguard", { born: 2008, cred: "sE/sP", balance: 1240000, twofa: "SMS", notes: "401k rollovers" }],
+    ["fin", "Coinbase", { born: 2017, cred: "pE/sP", balance: 84000, twofa: "YubiKey" }],
+    ["fin", "Kraken", { born: 2018, cred: "sE/sP", balance: 41000, twofa: "YubiKey" }],
+    ["fin", "Ledger HW wallet", { born: 2020, cred: "seed phrase", balance: 215000, notes: "seed stored offline" }],
+    ["fin", "Barclays UK", { born: 2008, cred: "sE/sP", balance: 4200, twofa: "SMS UK line" }],
+    ["fin", "Deutsche Bank DE", { born: 2014, cred: "sE/sP", balance: 18900, fee: 8, twofa: "photoTAN" }],
+    ["fin", "SMBC JP", { born: 2017, cred: "sE/sP", balance: 15600, twofa: "SMS JP line", notes: "held in JPY" }],
+    ["work", "GitHub", { born: 2009, notes: "147 repos", twofa: "YubiKey", disposition: "handoff" }],
+    ["work", "GitLab", { born: 2016 }],
+    ["work", "AWS x4", { born: 2011, fee: 210, notes: "personal plus three business", disposition: "handoff" }],
+    ["work", "GCP", { born: 2018, fee: 45 }],
+    ["work", "Azure", { born: 2019, fee: 30 }],
+    ["work", "Slack", { born: 2014, notes: "23 workspaces" }],
+    ["work", "Notion", { born: 2019, fee: 10, disposition: "archive" }],
+    ["work", "Jira", { born: 2015 }],
+    ["work", "Zoom", { born: 2018, fee: 15 }],
+    ["work", "DocuSign", { born: 2013, disposition: "archive" }],
+    ["work", "Dropbox", { born: 2008, fee: 12, disposition: "archive" }],
+    ["work", "1Password biz", { born: 2017, fee: 8, notes: "master vault", disposition: "handoff" }],
+    ["commerce", "Amazon US", { born: 2001 }],
+    ["commerce", "Amazon UK", { born: 2008 }],
+    ["commerce", "Amazon DE", { born: 2014 }],
+    ["commerce", "Amazon JP", { born: 2017 }],
+    ["commerce", "eBay", { status: "dormant", born: 2003 }],
+    ["commerce", "Rakuten JP", { born: 2018 }],
+    ["commerce", "Etsy", { born: 2015 }],
+    ["commerce", "Shopify x2", { born: 2019, notes: "two live stores", disposition: "handoff" }],
+    ["commerce", "Uber", { born: 2014, progress: "done" }],
+    ["commerce", "Airbnb host", { born: 2016, notes: "one listing", disposition: "handoff" }],
+    ["commerce", "Airline programs", { born: 1995, notes: "UA, BA, ANA, LH miles", disposition: "handoff" }],
+    ["media", "Steam", { born: 2003, notes: "340 games", disposition: "handoff" }],
+    ["media", "Epic Games", { born: 2018 }],
+    ["media", "GOG", { born: 2010 }],
+    ["media", "PSN", { born: 2008, fee: 18 }],
+    ["media", "Xbox", { born: 2006, fee: 20 }],
+    ["media", "Nintendo", { born: 2017 }],
+    ["media", "Netflix", { born: 2007, fee: 23 }],
+    ["media", "Disney+", { born: 2019, fee: 28 }],
+    ["media", "Spotify", { born: 2011, fee: 17 }],
+    ["media", "Apple Music", { born: 2015 }],
+    ["media", "Kindle", { born: 2009, disposition: "archive" }],
+    ["media", "Audible", { born: 2010, fee: 15, disposition: "archive" }],
+    ["legacy", "MySpace", { status: "dormant", born: 2004 }],
+    ["legacy", "Friendster", { status: "closed", born: 2003, died: 2015, progress: "done" }],
+    ["legacy", "LiveJournal", { status: "dormant", born: 2002, disposition: "archive" }],
+    ["legacy", "GeoCities", { status: "closed", born: 1997, died: 2009, progress: "done" }],
+    ["legacy", "ICQ", { status: "dormant", born: 1998, notes: "7-digit UIN" }],
+    ["legacy", "AIM", { status: "closed", born: 1999, died: 2017, progress: "done" }],
+    ["legacy", "Yahoo Groups", { status: "closed", born: 2001, died: 2020, progress: "done" }],
+    ["legacy", "Flickr", { status: "dormant", born: 2005, notes: "8K photos", disposition: "archive" }],
+    ["legacy", "Last.fm", { status: "dormant", born: 2005 }],
+    ["legacy", "Delicious", { status: "closed", born: 2004, died: 2017, progress: "done" }],
+    ["legacy", "Digg", { status: "dormant", born: 2006 }],
+    ["legacy", "Orkut", { status: "closed", born: 2004, died: 2014, progress: "done" }],
+    ["regional", "GOV.UK", { born: 2009 }],
+    ["regional", "HMRC", { born: 2009, notes: "self assessment", disposition: "handoff" }],
+    ["regional", "NHS login", { born: 2008 }],
+    ["regional", "ELSTER", { born: 2014, notes: "DE tax filing", disposition: "handoff" }],
+    ["regional", "Schufa", { born: 2014, notes: "DE credit bureau" }],
+    ["regional", "My Number JP", { born: 2017, disposition: "handoff" }],
+    ["regional", "Japan Post Bank", { born: 2017 }],
+    ["regional", "LINE", { born: 2017 }],
+    ["regional", "WeChat", { born: 2016 }],
+    ["regional", "Naver", { status: "dormant", born: 2018 }],
+    ["subs", "Verizon primary", { fee: 95, notes: "2FA backbone", disposition: "keep" }],
+    ["subs", "Verizon second line", { fee: 45 }],
+    ["subs", "O2 UK line", { fee: 28, notes: "UK 2FA", disposition: "keep" }],
+    ["subs", "Starlink residential", { fee: 120, disposition: "undecided" }],
+    ["subs", "Starlink roam", { fee: 165 }],
+    ["subs", "Netflix", { fee: 23, progress: "done" }],
+    ["subs", "Disney bundle", { fee: 28 }],
+    ["subs", "Spotify family", { fee: 17, disposition: "undecided" }],
+    ["subs", "Apple One", { fee: 37 }],
+    ["subs", "Google Play", { fee: 15, disposition: "undecided" }],
+    ["subs", "Claude Pro", { fee: 20 }],
+    ["subs", "ChatGPT Plus", { fee: 20 }],
+    ["subs", "Runway", { fee: 95 }],
+    ["subs", "Midjourney", { fee: 60 }],
+    ["subs", "Adult subscription", { fee: 30, notes: "billed as GBL ENT LLC" }],
+    ["subs", "WoW + FFXIV", { fee: 30 }],
+    ["subs", "PSN Plus", { fee: 18 }],
+    ["subs", "Game Pass", { fee: 20 }],
+    ["subs", "Railway", { fee: 35, disposition: "undecided", notes: "check what is hosted" }],
+    ["subs", "AWS personal", { fee: 210, disposition: "undecided" }],
+    ["subs", "GitHub Pro", { fee: 24, disposition: "handoff" }],
+    ["subs", "1Password", { fee: 8, disposition: "handoff" }],
+    ["subs", "NYT + WSJ + FT", { fee: 72 }],
+    ["subs", "Audible + KU", { fee: 30 }],
+    ["subs", "Patreon x12", { fee: 85 }],
+    ["subs", "Substack x8", { fee: 96 }],
+    ["subs", "Dropbox 2TB", { fee: 12, disposition: "archive" }],
+    ["subs", "Domains x14", { fee: 18, disposition: "undecided", notes: "some carry value" }],
+    ["liab", "Amex Platinum", { balance: -8000, fee: 695, notes: "annual fee" }],
+    ["liab", "Chase Sapphire", { balance: -12000, fee: 550, notes: "annual fee, main sub card" }],
+    ["liab", "Tesla loan", { balance: -21800, fee: 640, notes: "34 months left" }],
+    ["liab", "HELOC", { balance: -185000, fee: 1840, notes: "variable rate" }],
+    ["liab", "Bridge loan", { balance: -340000, fee: 3200, notes: "balloon 2027, private lender" }],
+    ["liab", "Brex", { balance: -4200, fee: 0, notes: "board company card" }],
+    ["liab", "Affirm x3", { balance: -1820, fee: 280 }],
+    ["liab", "Barclaycard UK", { status: "dormant", balance: -2900, fee: 0 }]
+  ];
+  R.forEach(([cat, name, o]) => s.accounts.push(makeAccount(sid, cat, name, Object.assign({ disposition: DEF[cat] }, o))));
+}
+
+// ============================================================
+//  TASKS AND BROKERS
+// ============================================================
+function addTask(sid, t) {
+  const dup = S.tasks.find(x => x.subject_id === sid && x.status === "open" && x.type === t.type && (x.ref || null) === (t.ref || null));
+  if (dup) return dup;
+  const task = { task_id: uuid(), subject_id: sid, type: t.type, title: t.title, due: t.due || today(), ref: t.ref || null, notes: t.notes || "", status: "open", created_at: nowISO(), done_at: null };
+  S.tasks.push(task); return task;
+}
+function closeTasks(sid, type, ref) {
+  S.tasks.forEach(t => { if (t.subject_id === sid && t.status === "open" && t.type === type && t.ref === ref) { t.status = "done"; t.done_at = nowISO(); } });
+}
+function scheduleRechecks(sid, b) {
+  const base = b.submission_date || today();
+  [30, 90, 180].forEach(d => addTask(sid, { type: "recheck_" + d + "d", title: `Re-check ${b.name} (${d} day)`, due: addDays(base, d), ref: b.id }));
+}
+function brokerTransition(sid, bid, to, opts) {
+  opts = opts || {};
+  const sub = S.subjects.find(x => x.subject_id === sid); if (!sub || !sub.brokers || !sub.brokers[bid]) return false;
+  const b = sub.brokers[bid]; const from = b.status;
+  if (!(TRANSITIONS[from] || []).includes(to)) { toast(`Not allowed: ${from} to ${to}`, "err"); return false; }
+  const p = S.persons.find(x => x.person_id === sub.person_id) || {};
+  if (to === "submitted" && p.death_status === "deceased") { toast("Locked: subject is deceased. Use the deceased packet workflow.", "err"); return false; }
+  b.status = to;
+  b.history = b.history || [];
+  b.history.push({ at: nowISO(), status: to, source: opts.source || "operator" });
+  if (to === "submitted") {
+    b.submission_date = opts.date || today();
+    if (opts.ref !== undefined && opts.ref !== null) b.confirmation_ref = opts.ref;
+    scheduleRechecks(sid, b);
+    closeTasks(sid, "submit_optout", bid); closeTasks(sid, "relist", bid);
+  }
+  if (to === "found") {
+    if (from === "clean") {
+      b.relisted = true;
+      addTask(sid, { type: "relist", title: `Re-list detected: ${b.name}, submit opt-out again`, due: today(), ref: bid });
+    } else addTask(sid, { type: "submit_optout", title: `Submit opt-out: ${b.name}`, due: today(), ref: bid });
+  }
+  if (to === "clean") { b.relisted = false; closeTasks(sid, "relist", bid); }
+  if (to === "skip") closeTasks(sid, "submit_optout", bid);
+  log("broker_status", { broker: bid, from, to });
+  return true;
+}
+
+function setDeathStatus(c, val) {
+  const prev = c.person.death_status || "living";
+  if (prev === val) return true;
+  if (val === "deceased") {
+    if (!confirm("Record a death event for " + (c.person.full_legal_name || "this subject") + "? This locks new opt-out submissions and adds the post-mortem playbook to Tasks.")) return false;
+    c.person.death_status = "deceased"; c.person.death_recorded_at = nowISO();
+    runDeathPlaybook(c);
+    log("death_event", { from: prev });
+    toast("Death event recorded. Playbook added to Tasks.");
+  } else {
+    c.person.death_status = val;
+    log("death_status", { from: prev, to: val });
+  }
+  persist(); return true;
+}
+function runDeathPlaybook(c) {
+  const sid = c.sid, d = today();
+  [
+    ["death_cert", "Order certified copies of the death certificate", d],
+    ["death_2fa", "Keep the primary phone line active for 2FA recovery", d],
+    ["death_scrub", "Switch Module 01 to the deceased packet workflow", addDays(d, 2)],
+    ["death_ssa", "Notify the Social Security Administration", addDays(d, 3)],
+    ["death_irs56", "File IRS Form 56, notice of fiduciary relationship", addDays(d, 7)],
+    ["death_eq", "Deceased flag request: Equifax", addDays(d, 7)],
+    ["death_ex", "Deceased flag request: Experian", addDays(d, 7)],
+    ["death_tu", "Deceased flag request: TransUnion", addDays(d, 7)]
+  ].forEach(([type, title, due]) => addTask(sid, { type, title, due }));
+  const accts = accountsOf(sid);
+  accts.filter(a => a.disposition === "memorialize" && a.progress !== "done").forEach(a =>
+    addTask(sid, { type: "memorialize", title: `Memorialize: ${a.name}`, due: addDays(d, 14), ref: a.account_id }));
+  accts.filter(a => a.category === "subs" && a.disposition === "close" && a.progress !== "done" && Number(a.fee) > 0).forEach(a =>
+    addTask(sid, { type: "cancel_sub", title: `Cancel: ${a.name} (${money(a.fee)}/mo)`, due: addDays(d, 5), ref: a.account_id }));
+  const names = accts.map(a => a.name.toLowerCase()).join(" | ");
+  if (/hmrc|gov\.uk|nhs/.test(names)) addTask(sid, { type: "death_uk", title: "Notify HMRC and UK services (Tell Us Once)", due: addDays(d, 14) });
+  if (/elster|schufa/.test(names)) addTask(sid, { type: "death_de", title: "Notify Finanzamt and Schufa (DE)", due: addDays(d, 14) });
+  if (/my number|japan post|smbc/.test(names)) addTask(sid, { type: "death_jp", title: "Notify JP tax office and My Number office", due: addDays(d, 14) });
+}
+
+// ============================================================
+//  MAP
+// ============================================================
+const M = { svg: null, g: null, metaG: null, zoom: null, root: null, W: 0, H: 0, R: 0,
+  t: d3.zoomIdentity, cat: null, leafId: null, broker: false, brokerId: null, colorBy: "category", keyOpen: false };
+
+function polar(angle, r) { return [Math.cos(angle - Math.PI / 2) * r, Math.sin(angle - Math.PI / 2) * r]; }
+function normAngle(a) { const T = Math.PI * 2; return ((a % T) + T) % T; }
+function catKeyOf(n) { return n.depth === 1 ? n.data.cat.key : n.parent.data.cat.key; }
+function leafColor(a) {
+  if (M.colorBy === "disposition") return (DISPO[a.disposition] || DISPO.undecided).color;
+  if (M.colorBy === "status") return (STATUS[a.status] || STATUS.active).color;
+  return CAT[a.category].color;
+}
+
+function buildMap() {
+  const wrap = $("#map-wrap"); const rect = wrap.getBoundingClientRect();
+  if (rect.width < 20 || rect.height < 20) return;
+  const W = rect.width, H = rect.height; M.W = W; M.H = H;
+  const svg = d3.select("#map-svg"); svg.selectAll("*").remove();
+  svg.attr("viewBox", [-W / 2, -H / 2, W, H]);
+  M.svg = svg;
+  const g = svg.append("g"); M.g = g;
+  const linkG = g.append("g");
+  const nodeG = g.append("g");
+  M.metaG = g.append("g");
+
+  const c = cur();
+  const accts = c ? accountsOf(c.sid) : [];
+  const groups = CATS.map(k => ({ cat: k, children: accts.filter(a => a.category === k.key).map(a => ({ a })) })).filter(x => x.children.length);
+  const empty = $("#map-empty");
+  empty.classList.toggle("show", SYNC.ready && accts.length === 0);
+  empty.querySelector("p").textContent = c ? "No accounts on this profile yet." : "No profiles on this account yet.";
+  $("#empty-intake").textContent = c ? "Start intake" : "Create profile";
+  if (M.cat && !groups.find(x => x.cat.key === M.cat)) { M.cat = null; M.leafId = null; }
+  if (M.leafId && !accts.find(a => a.account_id === M.leafId)) M.leafId = null;
+
+  const R = Math.max(90, Math.min(W, H) / 2 - 34); M.R = R;
+  const root = d3.hierarchy({ children: groups });
+  if (groups.length) {
+    d3.cluster().size([2 * Math.PI, R * 0.82]).separation((a, b) => a.parent === b.parent ? 1 : 1.8)(root);
+    root.children.forEach(n => { n.y = R * 0.5; });
+  }
+  M.root = root;
+
+  if (groups.length) {
+    linkG.selectAll("path").data(root.links()).join("path")
+      .attr("class", "link")
+      .attr("stroke", d => CAT[catKeyOf(d.target)].color)
+      .attr("d", d3.linkRadial().angle(d => d.x).radius(d => d.y));
+
+    const nodes = nodeG.selectAll("g").data(root.descendants().filter(d => d.depth > 0)).join("g")
+      .attr("class", d => d.depth === 1 ? "node cat"
+        : "node leaf" + (isDead(d.data.a) ? " dead" : "") + (d.data.a.progress === "done" ? " done" : ""))
+      .attr("transform", d => `rotate(${d.x * 180 / Math.PI - 90}) translate(${d.y},0)`);
+
+    nodes.filter(d => d.depth === 1).each(function (d) {
+      const s = d3.select(this);
+      s.append("circle").attr("class", "hit").attr("r", 21);
+      s.append("circle").attr("class", "dot").attr("r", 15.5).attr("fill", d.data.cat.color);
+      const tg = s.append("g").attr("transform", `rotate(${90 - d.x * 180 / Math.PI})`);
+      tg.append("text").attr("class", "cat-name").attr("text-anchor", "middle").attr("dy", "-0.05em").text(d.data.cat.short);
+      tg.append("text").attr("class", "cat-count").attr("text-anchor", "middle").attr("dy", "1.2em").text(d.children.length);
+    }).on("click", (e, d) => { e.stopPropagation(); focusCat(d.data.cat.key, true); });
+
+    nodes.filter(d => d.depth === 2).each(function (d) {
+      const s = d3.select(this);
+      s.append("circle").attr("class", "hit").attr("r", 11);
+      s.append("circle").attr("class", "dot").attr("r", 4.5).attr("fill", leafColor(d.data.a));
+      s.append("circle").attr("class", "done-mark").attr("r", 1.7);
+      const left = d.x >= Math.PI;
+      s.append("text").attr("class", "leaf-label").attr("dy", "0.32em")
+        .attr("x", left ? -9 : 9).attr("text-anchor", left ? "end" : "start")
+        .attr("transform", left ? "rotate(180)" : null).text(d.data.a.name);
+    }).on("click", (e, d) => { e.stopPropagation(); focusLeaf(d.data.a.account_id, true); });
+  }
+
+  // protagonist
+  const brokers = c ? brokersOf(c.sid) : [];
+  const center = g.append("g").attr("class", "center").on("click", e => { e.stopPropagation(); centerTap(); });
+  center.append("circle").attr("class", "center-dot").attr("r", 36);
+  if (brokers.length) {
+    const counts = {}; brokers.forEach(b => { counts[b.status] = (counts[b.status] || 0) + 1; });
+    let a0 = 0;
+    Object.keys(BSTAT).forEach(st => {
+      const n = counts[st] || 0; if (!n) return;
+      const a1 = a0 + n / brokers.length * Math.PI * 2;
+      center.append("path").attr("d", d3.arc().innerRadius(40).outerRadius(46).startAngle(a0).endAngle(a1)())
+        .attr("fill", BSTAT[st].color).attr("stroke", "#1a1410").attr("stroke-width", 0.5).style("pointer-events", "none");
+      a0 = a1;
+    });
+    center.append("circle").attr("cx", 29).attr("cy", -29).attr("r", 10).attr("fill", "#2dd4bf").attr("stroke", "#1a1410");
+    center.append("text").attr("x", 29).attr("y", -26).attr("text-anchor", "middle")
+      .style("font-family", "Courier New, monospace").style("font-size", "8.5px").style("font-weight", "bold").style("pointer-events", "none")
+      .text(brokers.length);
+  } else {
+    center.append("circle").attr("class", "center-ring").attr("r", 42);
+  }
+  center.append("text").attr("class", "center-name").attr("y", -1).text(c ? shortName(c.person.full_legal_name) : "No profile");
+  center.append("text").attr("class", "center-meta").attr("y", 11).text(c ? (c.subject.case_id || "") : "");
+
+  const mb = $("#map-brokers");
+  mb.classList.toggle("show", brokers.length > 0);
+  mb.textContent = "Brokers " + brokers.length;
+
+  M.zoom = d3.zoom().scaleExtent([0.45, 5]).on("zoom", e => { M.t = e.transform; g.attr("transform", e.transform); });
+  svg.call(M.zoom).on("dblclick.zoom", null);
+  svg.call(M.zoom.transform, M.t);
+  svg.on("click", e => { if (e.target === svg.node()) clearFocus(); });
+
+  if (M.broker && !brokers.length) { M.broker = false; M.brokerId = null; }
+  applyFocus();
+}
+
+function applyFocus() {
+  if (!M.g) return;
+  const { cat, leafId, broker } = M;
+  M.g.selectAll(".link")
+    .classed("dim", d => broker || (!!cat && catKeyOf(d.target) !== cat))
+    .classed("lit", d => !broker && !!cat && catKeyOf(d.target) === cat);
+  M.g.selectAll(".node")
+    .classed("dim", d => broker || (!!cat && catKeyOf(d) !== cat))
+    .classed("sib", d => !broker && !!leafId && d.depth === 2 && catKeyOf(d) === cat && d.data.a.account_id !== leafId)
+    .classed("focus", d => !broker && d.depth === 2 && d.data.a.account_id === leafId)
+    .classed("show-label", d => !broker && !!cat && d.depth === 2 && catKeyOf(d) === cat);
+  M.metaG.selectAll("*").remove();
+  if (broker) drawBrokerRing(); else if (leafId) drawLeafMeta();
+  renderKey(); renderCrumb();
+}
+
+function findLeaf(id) { return M.root ? M.root.leaves().find(n => n.depth === 2 && n.data.a.account_id === id) : null; }
+
+function accountMetas(a) {
+  const out = [];
+  out.push({ k: "status", v: a.status + (a.died ? " d." + a.died : ""), c: (STATUS[a.status] || STATUS.active).color });
+  out.push({ k: "plan", v: (DISPO[a.disposition] || DISPO.undecided).name + " / " + a.progress, c: (DISPO[a.disposition] || DISPO.undecided).color });
+  if (a.born) out.push({ k: "born", v: "b. " + a.born, c: "#e9d5ff" });
+  if (a.balance !== null && a.balance !== undefined) out.push({ k: "balance", v: money(a.balance), c: Number(a.balance) >= 0 ? "#bbf7d0" : "#fecaca" });
+  if (Number(a.fee) > 0) out.push({ k: "fee", v: money(a.fee) + "/mo", c: "#fed7aa" });
+  if (a.cred) out.push({ k: "cred", v: a.cred, c: "#e0f2fe" });
+  if (a.twofa) out.push({ k: "2fa", v: a.twofa, c: "#c7d2fe" });
+  if (a.recovery) out.push({ k: "recovery", v: a.recovery, c: "#fef08a" });
+  return out;
+}
+function brokerMetas(b) {
+  const out = [{ k: "status", v: b.status, c: BSTAT[b.status].color }];
+  if (b.priority) out.push({ k: "priority", v: b.priority, c: "#e9d5ff" });
+  if (b.submission_date) out.push({ k: "submitted", v: b.submission_date, c: "#fef08a" });
+  if (b.confirmation_ref) out.push({ k: "ref", v: b.confirmation_ref, c: "#e0f2fe" });
+  if (b.requirements && b.requirements.length) out.push({ k: "reqs", v: b.requirements.slice(0, 2).join("+"), c: "#c7d2fe" });
+  if (b.relisted) out.push({ k: "alert", v: "re-listed", c: "#fca5a5" });
+  return out;
+}
+
+function drawFan(ax, ay, baseAngle, metas, radius) {
+  if (!metas.length) return;
+  const span = Math.min(Math.PI * 0.95, 0.18 * metas.length + 0.45);
+  const start = baseAngle - span / 2;
+  const step = metas.length > 1 ? span / (metas.length - 1) : 0;
+  metas.forEach((m, i) => {
+    const ang = normAngle(metas.length > 1 ? start + step * i : baseAngle);
+    const [dx, dy] = polar(ang, radius);
+    const mx = ax + dx, my = ay + dy;
+    M.metaG.append("path").attr("class", "meta-link").attr("stroke", m.c).attr("d", `M${ax},${ay}L${mx},${my}`);
+    const grp = M.metaG.append("g").attr("class", "meta-node").attr("transform", `translate(${mx},${my})`);
+    grp.append("circle").attr("r", 5).attr("fill", m.c);
+    const left = ang >= Math.PI;
+    const lg = grp.append("g").attr("transform", `rotate(${ang * 180 / Math.PI - 90 + (left ? 180 : 0)})`);
+    const tx = left ? -10 : 10, anchor = left ? "end" : "start";
+    lg.append("text").attr("class", "meta-key").attr("x", tx).attr("y", -1).attr("text-anchor", anchor).text(m.k);
+    lg.append("text").attr("x", tx).attr("y", 7).attr("text-anchor", anchor).text(m.v);
+  });
+}
+
+function drawLeafMeta() {
+  const n = findLeaf(M.leafId); if (!n) return;
+  const [ax, ay] = polar(n.x, n.y);
+  drawFan(ax, ay, n.x, accountMetas(n.data.a), 78);
+}
+
+function brokerRadius() { return Math.min(112, M.R * 0.62); }
+function drawBrokerRing() {
+  const c = cur(); if (!c) return;
+  const list = brokersOf(c.sid); if (!list.length) return;
+  const rb = brokerRadius();
+  list.forEach((b, i) => {
+    const ang = i / list.length * Math.PI * 2;
+    const [x, y] = polar(ang, rb);
+    M.metaG.append("path").attr("class", "meta-link").attr("stroke", BSTAT[b.status].color).attr("d", `M0,0L${x},${y}`);
+    const grp = M.metaG.append("g").attr("class", "broker-node" + (b.id === M.brokerId ? " focus" : ""))
+      .attr("transform", `translate(${x},${y})`)
+      .on("click", e => { e.stopPropagation(); focusBroker(b.id, true); });
+    grp.append("circle").attr("r", 13).attr("fill", "transparent");
+    if (b.relisted) grp.append("circle").attr("class", "relist").attr("r", 9.5);
+    grp.append("circle").attr("class", "dot").attr("r", 6).attr("fill", BSTAT[b.status].color);
+    const left = ang > Math.PI;
+    const [lx, ly] = polar(ang, rb + 13);
+    M.metaG.append("text").attr("class", "broker-label")
+      .attr("transform", `translate(${lx},${ly}) rotate(${ang * 180 / Math.PI - 90 + (left ? 180 : 0)})`)
+      .attr("text-anchor", left ? "end" : "start").attr("dy", "0.32em")
+      .style("opacity", M.brokerId && M.brokerId !== b.id ? 0.3 : 1)
+      .text(b.name);
+    if (b.id === M.brokerId) drawFan(x, y, ang, brokerMetas(b), 56);
+  });
+}
+
+function zoomTo(px, py, k, ty) {
+  if (!M.svg) return;
+  const t = d3.zoomIdentity.translate(-k * px, ty - k * py).scale(k);
+  M.svg.transition().duration(420).call(M.zoom.transform, t);
+}
+function zoomReset() { if (M.svg) M.svg.transition().duration(380).call(M.zoom.transform, d3.zoomIdentity); }
+
+function focusCat(key, zoom) {
+  M.cat = key; M.leafId = null; M.broker = false; M.brokerId = null;
+  closeSheet(true);
+  applyFocus();
+  if (zoom && M.root) {
+    const leaves = M.root.leaves().filter(n => n.depth === 2 && catKeyOf(n) === key);
+    if (leaves.length) {
+      const mean = leaves.reduce((s, n) => s + n.x, 0) / leaves.length;
+      const [px, py] = polar(mean, M.R * 0.55);
+      zoomTo(px, py, 1.25, 0);
+    }
+  }
+}
+function focusLeaf(id, zoom) {
+  const n = findLeaf(id); if (!n) return;
+  M.cat = catKeyOf(n); M.leafId = id; M.broker = false; M.brokerId = null;
+  applyFocus();
+  openAccountSheet(id, { peek: true });
+  if (zoom) { const [px, py] = polar(n.x, n.y + 40); zoomTo(px, py, 1.55, -M.H * 0.2); }
+}
+function enterBrokers() {
+  M.broker = true; M.cat = null; M.leafId = null; M.brokerId = null;
+  applyFocus(); zoomReset(); openBrokerOverview();
+}
+function focusBroker(id, zoom) {
+  const c = cur(); const list = brokersOf(c.sid); const i = list.findIndex(b => b.id === id); if (i < 0) return;
+  M.broker = true; M.cat = null; M.leafId = null; M.brokerId = id;
+  applyFocus();
+  openBrokerSheet(id, { peek: true });
+  if (zoom) { const ang = i / list.length * Math.PI * 2; const [px, py] = polar(ang, brokerRadius() + 30); zoomTo(px, py, 1.6, -M.H * 0.2); }
+}
+function clearFocus() {
+  M.cat = null; M.leafId = null; M.broker = false; M.brokerId = null;
+  closeSheet(true); applyFocus(); zoomReset();
+}
+function centerTap() {
+  const c = cur(); if (!c) return;
+  if (brokersOf(c.sid).length) enterBrokers();
+  else { M.cat = null; M.leafId = null; applyFocus(); openSubjectSheet(); }
+}
+
+function renderKey() {
+  const body = $("#key-body"); if (!body) return;
+  $("#map-key").classList.toggle("open", M.keyOpen);
+  let html = "";
+  const c = cur(); const accts = c ? accountsOf(c.sid) : [];
+  if (M.broker) {
+    html = Object.entries(BSTAT).map(([k, v]) => `<div class="key-item"><span class="swatch" style="background:${v.color}"></span>${v.name}</div>`).join("");
+  } else if (M.colorBy === "category") {
+    html = CATS.filter(k => accts.some(a => a.category === k.key)).map(k =>
+      `<div class="key-item ${M.cat === k.key ? "on" : ""}" data-cat="${k.key}"><span class="swatch" style="background:${k.color}"></span>${esc(k.name)} (${accts.filter(a => a.category === k.key).length})</div>`).join("");
+  } else if (M.colorBy === "disposition") {
+    html = DISPOS.map(d => `<div class="key-item"><span class="swatch" style="background:${d.color}"></span>${d.name} (${accts.filter(a => a.disposition === d.key).length})</div>`).join("");
+  } else {
+    html = STATUSES.map(s => `<div class="key-item"><span class="swatch" style="background:${s.color}"></span>${s.name} (${accts.filter(a => a.status === s.key).length})</div>`).join("");
+  }
+  body.innerHTML = html || `<div class="key-item muted">empty</div>`;
+  body.querySelectorAll("[data-cat]").forEach(el => el.onclick = () => focusCat(el.dataset.cat, true));
+}
+function renderCrumb() {
+  const el = $("#map-crumb"); if (!el) return;
+  const parts = ["All"];
+  if (M.broker) { parts.push("Brokers"); const c = cur(); const b = M.brokerId && c && brokersOf(c.sid).find(x => x.id === M.brokerId); if (b) parts.push(b.name); }
+  else if (M.cat) { parts.push(CAT[M.cat].name); const n = M.leafId && findLeaf(M.leafId); if (n) parts.push(n.data.a.name); }
+  el.innerHTML = parts.map((p, i) => i === parts.length - 1 ? `<b>${esc(p)}</b>` : esc(p)).join(" &rsaquo; ");
+}
+
+// ============================================================
+//  SHEET
+// ============================================================
+let sheetOnClose = null;
+function openSheet(o) {
+  const sh = $("#sheet");
+  sh.classList.toggle("peek", !!o.peek);
+  $("#sheet-title").innerHTML = esc(o.title || "") + (o.chip ? ` <span class="chip" style="background:${o.chip.color || "#f4ede0"}">${esc(o.chip.text)}</span>` : "");
+  const act = $("#sheet-actions"); act.innerHTML = "";
+  (o.actions || []).forEach(a => {
+    const b = document.createElement("button");
+    b.className = "btn sm " + (a.cls || ""); b.textContent = a.label; b.onclick = a.onClick;
+    act.appendChild(b);
+  });
+  const body = $("#sheet-body");
+  body.innerHTML = o.body || "";
+  if (!o.keepScroll) body.scrollTop = 0;
+  sh.classList.add("open");
+  $("#sheet-scrim").classList.toggle("show", !o.peek);
+  sheetOnClose = o.onClose || null;
+  return body;
+}
+function closeSheet(silent) {
+  const sh = $("#sheet");
+  if (!sh.classList.contains("open")) return;
+  sh.classList.remove("open");
+  $("#sheet-scrim").classList.remove("show");
+  const cb = sheetOnClose; sheetOnClose = null;
+  if (cb && !silent) cb();
+}
+function sheetIsOpen() { return $("#sheet").classList.contains("open"); }
+
+// ============================================================
+//  ACCOUNT SHEETS
+// ============================================================
+function accountViewHTML(a) {
+  const dispoBtns = DISPOS.map(d => `<button data-dispo="${d.key}" class="${a.disposition === d.key ? "on" : ""}"><span class="swatch" style="background:${d.color}"></span>${d.name}</button>`).join("");
+  const progBtns = PROGRESS.map(p => `<button data-prog="${p}" class="${a.progress === p ? "on" : ""}">${p}</button>`).join("");
+  const rows = [];
+  const r = (k, v) => { if (v !== null && v !== undefined && v !== "") rows.push(`<dt>${k}</dt><dd>${v}</dd>`); };
+  r("category", esc(CAT[a.category].name));
+  r("identifier", esc(a.identifier));
+  r("status", esc(a.status) + (a.died ? " (closed " + esc(a.died) + ")" : ""));
+  r("born", esc(a.born));
+  if (a.balance !== null && a.balance !== undefined && a.balance !== "") r("balance", money(a.balance));
+  if (Number(a.fee) > 0) r("fee", money(a.fee) + " / month");
+  r("credentials", esc(a.cred));
+  r("2FA", esc(a.twofa));
+  r("recovery", esc(a.recovery));
+  r("notes", esc(a.notes));
+  r("updated", fmtDate(a.updated_at));
+  return `<div class="seg-label">Disposition</div><div class="seg">${dispoBtns}</div>
+    <div class="seg-label">Progress</div><div class="seg">${progBtns}</div>
+    <dl class="dl">${rows.join("")}</dl>`;
+}
+function openAccountSheet(id, opts) {
+  opts = opts || {};
+  const a = S.accounts.find(x => x.account_id === id);
+  if (!a) { closeSheet(true); return; }
+  const body = openSheet({
+    title: a.name,
+    chip: { text: CAT[a.category].short, color: CAT[a.category].color },
+    peek: !!opts.peek,
+    keepScroll: !!opts.keepScroll,
+    actions: [{ label: "Edit", cls: "blue", onClick: () => openAccountEditor(id, { returnPeek: !!opts.peek }) }],
+    onClose: opts.peek ? () => { M.leafId = null; applyFocus(); } : null,
+    body: accountViewHTML(a)
+  });
+  body.querySelectorAll("[data-dispo]").forEach(b => b.onclick = () => {
+    a.disposition = b.dataset.dispo; a.updated_at = nowISO();
+    log("disposition", { account: a.name, to: a.disposition });
+    afterAccountChange(id, opts);
+  });
+  body.querySelectorAll("[data-prog]").forEach(b => b.onclick = () => {
+    a.progress = b.dataset.prog; a.updated_at = nowISO();
+    log("progress", { account: a.name, to: a.progress });
+    afterAccountChange(id, opts);
+  });
+}
+function afterAccountChange(id, opts) {
+  persist();
+  refreshUnderSheet();
+  openAccountSheet(id, Object.assign({}, opts, { keepScroll: true }));
+}
+function refreshUnderSheet() {
+  renderChrome();
+  if (VIEW === "map") buildMap(); else renderView();
+}
+
+function openAccountEditor(id, opts) {
+  opts = opts || {};
+  const c = cur(); if (!c) return;
+  const isNew = !id;
+  const a = isNew ? makeAccount(c.sid, opts.category || "email", "", {}) : S.accounts.find(x => x.account_id === id);
+  if (!a) return;
+  const opt = (list, val) => list.map(x => `<option value="${x.key}" ${x.key === val ? "selected" : ""}>${esc(x.name)}</option>`).join("");
+  const v = x => esc(x ?? "");
+  const body = openSheet({
+    title: isNew ? "New account" : "Edit " + a.name,
+    actions: [
+      ...(isNew ? [] : [{ label: "Delete", cls: "red", onClick: () => {
+        if (!confirm("Delete " + a.name + " from this dossier?")) return;
+        S.accounts = S.accounts.filter(x => x.account_id !== a.account_id);
+        if (M.leafId === a.account_id) M.leafId = null;
+        log("account_deleted", { account: a.name });
+        persist(); closeSheet(true); refreshUnderSheet(); if (VIEW === "map") applyFocus();
+        toast("Deleted " + a.name);
+      } }]),
+      { label: "Save", cls: "blue", onClick: save }
+    ],
+    body: `
+      <div class="field"><label>Account name</label><input id="ae-name" value="${v(a.name)}" placeholder="Chase checking"></div>
+      <div class="grid2">
+        <div class="field"><label>Category</label><select id="ae-cat">${opt(CATS, a.category)}</select></div>
+        <div class="field"><label>Status</label><select id="ae-status">${opt(STATUSES, a.status)}</select></div>
+      </div>
+      <div class="field"><label>Identifier (email, handle, last four)</label><input id="ae-ident" value="${v(a.identifier)}"></div>
+      <div class="grid2">
+        <div class="field"><label>Year opened</label><input id="ae-born" inputmode="numeric" value="${v(a.born)}"></div>
+        <div class="field"><label>Year closed</label><input id="ae-died" inputmode="numeric" value="${v(a.died)}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Balance (owed is negative)</label><input id="ae-bal" inputmode="decimal" value="${v(a.balance)}"></div>
+        <div class="field"><label>Monthly fee</label><input id="ae-fee" inputmode="decimal" value="${v(a.fee)}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Credentials (abbr)</label><input id="ae-cred" value="${v(a.cred)}" placeholder="pE/sP"></div>
+        <div class="field"><label>2FA method</label><input id="ae-2fa" value="${v(a.twofa)}" placeholder="TOTP / SMS / key"></div>
+      </div>
+      <div class="field"><label>Recovery email or phone</label><input id="ae-rec" value="${v(a.recovery)}"></div>
+      <div class="grid2">
+        <div class="field"><label>Disposition</label><select id="ae-dispo">${opt(DISPOS, a.disposition)}</select></div>
+        <div class="field"><label>Progress</label><select id="ae-prog">${PROGRESS.map(p => `<option ${p === a.progress ? "selected" : ""}>${p}</option>`).join("")}</select></div>
+      </div>
+      <div class="field"><label>Notes</label><textarea id="ae-notes">${v(a.notes)}</textarea></div>
+      <div class="note">Credentials are abbreviations only (which email, which password). Real passwords stay in the password manager.</div>`
+  });
+  setTimeout(() => { if (isNew) { const n = body.querySelector("#ae-name"); if (n) n.focus(); } }, 250);
+  function save() {
+    const name = body.querySelector("#ae-name").value.trim();
+    if (!name) { toast("Account name is required", "err"); return; }
+    const yr = x => { const n = num(x); return n === null ? null : Math.round(n); };
+    Object.assign(a, {
+      name,
+      category: body.querySelector("#ae-cat").value,
+      status: body.querySelector("#ae-status").value,
+      identifier: body.querySelector("#ae-ident").value.trim(),
+      born: yr(body.querySelector("#ae-born").value),
+      died: yr(body.querySelector("#ae-died").value),
+      balance: num(body.querySelector("#ae-bal").value),
+      fee: num(body.querySelector("#ae-fee").value),
+      cred: body.querySelector("#ae-cred").value.trim(),
+      twofa: body.querySelector("#ae-2fa").value.trim(),
+      recovery: body.querySelector("#ae-rec").value.trim(),
+      disposition: body.querySelector("#ae-dispo").value,
+      progress: body.querySelector("#ae-prog").value,
+      notes: body.querySelector("#ae-notes").value.trim(),
+      updated_at: nowISO()
+    });
+    if (isNew) S.accounts.push(a);
+    log(isNew ? "account_added" : "account_edited", { account: a.name });
+    persist();
+    closeSheet(true);
+    refreshUnderSheet();
+    toast((isNew ? "Added " : "Saved ") + a.name);
+    if (VIEW === "map" && opts.returnPeek) focusLeaf(a.account_id, false);
+    if (typeof opts.after === "function") opts.after(a);
+  }
+}
+
+// ============================================================
+//  SUBJECT AND BROKER SHEETS
+// ============================================================
+function openSubjectSheet() {
+  const c = cur(); if (!c) return;
+  const p = c.person, k = c.contract, s = c.subject;
+  const list = arr => (arr || []).filter(Boolean).map(esc).join("<br>") || "<span class='muted'>none</span>";
+  const accts = accountsOf(c.sid);
+  openSheet({
+    title: p.full_legal_name || "Subject",
+    chip: { text: p.death_status || "living", color: p.death_status === "deceased" ? "#d4d4d4" : p.death_status === "declining" ? "#fcd34d" : "#bef264" },
+    peek: VIEW === "map",
+    onClose: null,
+    actions: [{ label: "Edit", cls: "blue", onClick: () => { closeSheet(true); intakeStep = 0; setView("intake"); } }],
+    body: `<dl class="dl">
+      <dt>case</dt><dd>${esc(s.case_id)}</dd>
+      <dt>dob</dt><dd>${esc(p.dob) || "<span class='muted'>unknown</span>"}</dd>
+      <dt>location</dt><dd>${esc([s.city, s.state].filter(Boolean).join(", "))}</dd>
+      <dt>aliases</dt><dd>${list(p.aliases)}</dd>
+      <dt>addresses</dt><dd>${list(p.known_addresses)}</dd>
+      <dt>phones</dt><dd>${list(p.known_phones)}</dd>
+      <dt>emails</dt><dd>${list(p.known_emails)}</dd>
+      <dt>relatives</dt><dd>${list(p.known_relatives)}</dd>
+      <dt>contract</dt><dd>${esc(fmtDate(k.start_date))} to ${esc(fmtDate(k.end_date))}</dd>
+      <dt>scope</dt><dd>${esc(k.scope)}</dd>
+      <dt>authorized</dt><dd>${esc(k.authorizing_party)}</dd>
+      <dt>operator</dt><dd>${esc(k.operator)}</dd>
+      <dt>accounts</dt><dd>${accts.length}</dd>
+      <dt>notes</dt><dd>${esc(s.operator_notes)}</dd></dl>`
+  });
+}
+function openBrokerOverview() {
+  const c = cur(); if (!c) return;
+  const list = brokersOf(c.sid);
+  const counts = {}; list.forEach(b => counts[b.status] = (counts[b.status] || 0) + 1);
+  const last = S.exposures.filter(e => e.subject_id === c.sid).sort((a, b) => String(b.imported_at).localeCompare(String(a.imported_at)))[0];
+  const body = openSheet({
+    title: "Broker exposure",
+    chip: { text: list.length + " brokers", color: "#2dd4bf" },
+    peek: true,
+    onClose: () => { M.broker = false; M.brokerId = null; applyFocus(); },
+    actions: [],
+    body: `<div class="tiles">${Object.keys(BSTAT).map(k => `<div class="tile"><strong>${counts[k] || 0}</strong>${BSTAT[k].name}</div>`).join("")}
+      <div class="tile red"><strong>${list.filter(b => b.relisted).length}</strong>re-listed</div></div>
+      <div class="note">${last ? "Last scan " + esc(fmtDate(last.generated_at)) + " · " + S.exposures.filter(e => e.subject_id === c.sid).length + " scans on file" : ""}</div>
+      <div class="rows" style="margin:0">${list.map(b => `<div class="row" data-b="${esc(b.id)}"><span class="dot" style="background:${BSTAT[b.status].color}"></span><div class="main"><div class="name">${esc(b.name)}</div><div class="sub">${esc(b.priority || "")}${b.relisted ? " · re-listed" : ""}</div></div><span class="chip" style="background:${BSTAT[b.status].color}">${b.status}</span></div>`).join("")}</div>`
+  });
+  body.querySelectorAll("[data-b]").forEach(el => el.onclick = () => {
+    if (VIEW === "map") focusBroker(el.dataset.b, true); else openBrokerSheet(el.dataset.b, {});
+  });
+}
+function openBrokerSheet(id, opts) {
+  opts = opts || {};
+  const c = cur(); if (!c) return;
+  const b = (c.subject.brokers || {})[id]; if (!b) return;
+  const deceased = c.person.death_status === "deceased";
+  const allowed = TRANSITIONS[b.status] || [];
+  const all = ["found", "submitted", "clean", "skip", "pending"];
+  const btns = all.filter(s => s !== "pending").map(s => {
+    const ok = allowed.includes(s) && !(s === "submitted" && deceased);
+    return `<button data-to="${s}" ${ok ? "" : "disabled"} class="${b.status === s ? "on" : ""}"><span class="swatch" style="background:${BSTAT[s].color}"></span>${BSTAT[s].name}</button>`;
+  }).join("");
+  const link = (u, label) => { const s = safeUrl(u); return s ? `<a href="${esc(s)}" target="_blank" rel="noopener noreferrer">${esc(label || s)}</a>` : (u ? esc(u) : ""); };
+  const rows = [];
+  const r = (k, v) => { if (v) rows.push(`<dt>${k}</dt><dd>${v}</dd>`); };
+  r("priority", esc(b.priority));
+  r("profile", link(b.profile_url));
+  r("opt-out", link(b.optout_url));
+  r("search", link(b.search_url));
+  r("submitted", esc(b.submission_date));
+  r("reference", esc(b.confirmation_ref));
+  r("needs", (b.requirements || []).map(q => `<b class="mono">${esc(q)}</b> ${esc(REQ_VOCAB[q] || "")}`).join("<br>"));
+  r("notes", esc(b.broker_notes));
+  const hist = (b.history || []).slice(-12).reverse().map(h => `<div>${esc(fmtDate(h.at))} · ${esc(h.status)} · ${esc(h.source)}</div>`).join("");
+  const body = openSheet({
+    title: b.name,
+    chip: { text: b.status, color: BSTAT[b.status].color },
+    peek: !!opts.peek,
+    keepScroll: !!opts.keepScroll,
+    onClose: opts.peek ? () => { M.brokerId = null; applyFocus(); } : null,
+    actions: [],
+    body: `${b.relisted ? `<div class="warn">Re-listed after it was clean or submitted. Submit the opt-out again.</div>` : ""}
+      ${deceased ? `<div class="warn">Subject is deceased. New opt-out submissions are locked; use the deceased packet workflow.</div>` : ""}
+      <div class="seg-label">Move status to</div><div class="seg">${btns}</div>
+      <dl class="dl">${rows.join("")}</dl>
+      ${hist ? `<div class="seg-label" style="margin-top:12px">History</div><div class="hist">${hist}</div>` : ""}`
+  });
+  body.querySelectorAll("[data-to]").forEach(btn => btn.onclick = () => {
+    const to = btn.dataset.to; let ref;
+    if (to === "submitted") { ref = prompt("Confirmation reference from the broker (optional)", b.confirmation_ref || ""); if (ref === null) return; }
+    if (brokerTransition(c.sid, id, to, { ref })) {
+      persist(); refreshUnderSheet();
+      openBrokerSheet(id, Object.assign({}, opts, { keepScroll: true }));
+      toast(`${b.name}: ${to}`);
+    }
+  });
+}
+
+// ============================================================
+//  VIEWS
+// ============================================================
+let VIEW = "map";
+function setView(v) {
+  VIEW = v;
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === v));
+  document.querySelectorAll(".view").forEach(el => el.classList.toggle("active", el.id === "view-" + v));
+  closeSheet(true);
+  if (v !== "map") { M.leafId = null; M.brokerId = null; }
+  if (v === "tasks") recentlyDone.clear();
+  renderView();
+}
+function renderView() {
+  if (VIEW === "map") requestAnimationFrame(buildMap);
+  else if (VIEW === "list") renderList();
+  else if (VIEW === "triage") renderTriage();
+  else if (VIEW === "tasks") renderTasks();
+  else if (VIEW === "intake") renderIntake();
+}
+function renderChrome() {
+  const c = cur();
+  $("#profile-line").textContent = c ? (c.person.full_legal_name || "Unnamed") + " · " + (c.subject.case_id || "no case") + (c.subject.demo ? " · demo" : "") : "no profile";
+  const st = c ? (c.person.death_status || "living") : "living";
+  const chip = $("#status-chip"); chip.textContent = st; chip.className = "status-chip " + st;
+  const open = c ? tasksOf(c.sid).filter(t => t.status === "open").length : 0;
+  const badge = $("#task-badge"); badge.textContent = open > 99 ? "99+" : open; badge.classList.toggle("show", open > 0);
+}
+function renderAll() { renderChrome(); renderView(); }
+
+function summarize(sid) {
+  const accts = accountsOf(sid);
+  let fees = 0, assets = 0, liabs = 0;
+  accts.forEach(a => {
+    if (Number(a.fee) > 0 && a.status === "active") fees += Number(a.fee);
+    if (a.balance !== null && a.balance !== undefined && a.balance !== "") { const b = Number(a.balance); if (b > 0) assets += b; else liabs += Math.abs(b); }
+  });
+  const brokers = brokersOf(sid);
+  return {
+    total: accts.length, active: accts.filter(a => !isDead(a)).length, dead: accts.filter(isDead).length,
+    fees, assets, liabs, found: brokers.filter(b => b.status === "found").length, brokers: brokers.length,
+    open: tasksOf(sid).filter(t => t.status === "open").length
+  };
+}
+
+// ---------- LIST ----------
+const LS = { q: "", filter: "all", sort: "category", cat: "all" };
+function renderList() {
+  const el = $("#view-list"); const c = cur();
+  if (!c) { el.innerHTML = `<div class="empty">No profile.</div>`; return; }
+  const sid = c.sid;
+  const accts = accountsOf(sid);
+  const brokers = brokersOf(sid);
+  const catChips = [`<button class="fchip ${LS.cat === "all" ? "on" : ""}" data-c="all">All ${accts.length}</button>`]
+    .concat(CATS.filter(k => accts.some(a => a.category === k.key)).map(k =>
+      `<button class="fchip ${LS.cat === k.key ? "on" : ""}" data-c="${k.key}"><span class="swatch" style="background:${k.color}"></span>${esc(k.short)} ${accts.filter(a => a.category === k.key).length}</button>`))
+    .concat(brokers.length ? [`<button class="fchip ${LS.cat === "brokers" ? "on" : ""}" data-c="brokers"><span class="swatch" style="background:#2dd4bf"></span>Brokers ${brokers.length}</button>`] : []);
+  const sm = summarize(sid);
+  el.innerHTML = `
+    <div class="toolbar">
+      <div class="tool-row"><input type="search" id="ls-q" placeholder="search accounts" value="${esc(LS.q)}"></div>
+      <div class="tool-row">
+        <select id="ls-filter">
+          ${[["all", "all"], ["active", "active only"], ["dead", "closed or dormant"], ["paid", "has a fee"], ["balance", "has a balance"], ["twofa", "has 2FA"], ["ghost", "ghost accounts"], ["undecided", "undecided plan"]]
+            .map(([k, l]) => `<option value="${k}" ${LS.filter === k ? "selected" : ""}>${l}</option>`).join("")}
+        </select>
+        <select id="ls-sort">
+          ${[["category", "sort: category"], ["name", "sort: name"], ["fee", "sort: fee"], ["balance", "sort: balance"], ["born", "sort: oldest"]]
+            .map(([k, l]) => `<option value="${k}" ${LS.sort === k ? "selected" : ""}>${l}</option>`).join("")}
+        </select>
+        <button class="btn sm blue" id="ls-add">+ Add</button>
+      </div>
+      <div class="tool-row chip-row">${catChips.join("")}</div>
+    </div>
+    <div class="card"><div class="tiles">
+      <div class="tile"><strong>${sm.total}</strong>accounts</div>
+      <div class="tile"><strong>${sm.active}</strong>active</div>
+      <div class="tile"><strong>${sm.dead}</strong>dead or ghost</div>
+      <div class="tile red"><strong>${moneyK(sm.fees)}</strong>per month</div>
+      <div class="tile blue"><strong>${moneyK(sm.assets)}</strong>assets</div>
+      <div class="tile red"><strong>${moneyK(sm.liabs)}</strong>owed</div>
+      <div class="tile"><strong>${sm.found}/${sm.brokers}</strong>brokers found</div>
+      <div class="tile"><strong>${sm.open}</strong>open tasks</div>
+    </div></div>
+    <div id="ls-body"></div><div style="height:30px"></div>`;
+  el.querySelector("#ls-q").oninput = e => { LS.q = e.target.value; renderListBody(); };
+  el.querySelector("#ls-filter").onchange = e => { LS.filter = e.target.value; renderListBody(); };
+  el.querySelector("#ls-sort").onchange = e => { LS.sort = e.target.value; renderListBody(); };
+  el.querySelector("#ls-add").onclick = () => openAccountEditor(null, { category: CAT[LS.cat] ? LS.cat : "email" });
+  el.querySelectorAll("[data-c]").forEach(b => b.onclick = () => {
+    LS.cat = b.dataset.c;
+    el.querySelectorAll("[data-c]").forEach(x => x.classList.toggle("on", x.dataset.c === LS.cat));
+    renderListBody();
+  });
+  renderListBody();
+}
+function acctMatches(a) {
+  const q = LS.q.trim().toLowerCase();
+  if (q) {
+    const hay = [a.name, a.identifier, a.cred, a.twofa, a.recovery, a.notes, a.status, a.disposition, a.born, a.balance, a.fee, CAT[a.category].name].join(" ").toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
+  switch (LS.filter) {
+    case "active": return !isDead(a);
+    case "dead": return isDead(a);
+    case "paid": return Number(a.fee) > 0;
+    case "balance": return a.balance !== null && a.balance !== undefined && a.balance !== "";
+    case "twofa": return !!a.twofa;
+    case "ghost": return a.status === "ghost";
+    case "undecided": return a.disposition === "undecided";
+    default: return true;
+  }
+}
+function acctRow(a, showCat) {
+  const d = DISPO[a.disposition] || DISPO.undecided;
+  const badges = [];
+  if (a.balance !== null && a.balance !== undefined && a.balance !== "") badges.push(`<span class="chip" style="background:${Number(a.balance) >= 0 ? "#bbf7d0" : "#fecaca"}">${money(a.balance)}</span>`);
+  if (Number(a.fee) > 0) badges.push(`<span class="chip" style="background:#fed7aa">${money(a.fee)}/mo</span>`);
+  if (a.twofa) badges.push(`<span class="chip" style="background:#c7d2fe">2FA</span>`);
+  badges.push(`<span class="chip" style="background:${d.color}">${d.name}${a.progress === "done" ? " ✓" : ""}</span>`);
+  const sub = [showCat ? CAT[a.category].short : "", a.identifier, a.status !== "active" ? a.status : "", a.born ? "b. " + a.born : ""].filter(Boolean).join(" · ");
+  return `<div class="row ${isDead(a) ? "dead" : ""}" data-a="${a.account_id}">
+    <span class="dot ${isDead(a) ? "dead" : ""}" style="background:${CAT[a.category].color}"></span>
+    <div class="main"><div class="name">${esc(a.name)}</div><div class="sub">${esc(sub)}</div></div>
+    <div class="badges">${badges.join("")}</div></div>`;
+}
+function renderListBody() {
+  const box = $("#ls-body"); if (!box) return;
+  const c = cur(); const sid = c.sid;
+  let html = "";
+  if (LS.cat === "brokers") {
+    const q = LS.q.trim().toLowerCase();
+    const list = brokersOf(sid).filter(b => !q || (b.name + " " + b.status + " " + (b.priority || "")).toLowerCase().includes(q));
+    html = list.length ? `<div class="rows">${list.map(b => `<div class="row" data-b="${esc(b.id)}"><span class="dot" style="background:${BSTAT[b.status].color}"></span><div class="main"><div class="name">${esc(b.name)}</div><div class="sub">${esc(b.priority || "")}${b.submission_date ? " · submitted " + esc(b.submission_date) : ""}${b.relisted ? " · re-listed" : ""}</div></div><div class="badges"><span class="chip" style="background:${BSTAT[b.status].color}">${b.status}</span></div></div>`).join("")}</div>`
+      : `<div class="empty">No brokers match.</div>`;
+  } else {
+    let list = accountsOf(sid).filter(a => (LS.cat === "all" || a.category === LS.cat) && acctMatches(a));
+    const catIdx = k => CATS.findIndex(x => x.key === k);
+    const sorters = {
+      category: (x, y) => catIdx(x.category) - catIdx(y.category) || x.name.localeCompare(y.name),
+      name: (x, y) => x.name.localeCompare(y.name),
+      fee: (x, y) => (Number(y.fee) || 0) - (Number(x.fee) || 0),
+      balance: (x, y) => Math.abs(Number(y.balance) || 0) - Math.abs(Number(x.balance) || 0),
+      born: (x, y) => (Number(x.born) || 9999) - (Number(y.born) || 9999)
+    };
+    list.sort(sorters[LS.sort] || sorters.category);
+    if (!list.length) html = `<div class="empty">No accounts match.</div>`;
+    else if (LS.sort === "category") {
+      CATS.forEach(k => {
+        const part = list.filter(a => a.category === k.key); if (!part.length) return;
+        html += `<div class="group-head"><span class="swatch" style="background:${k.color}"></span>${esc(k.name)} <span class="mono">${part.length}</span></div><div class="rows">${part.map(a => acctRow(a, false)).join("")}</div>`;
+      });
+    } else html = `<div style="height:8px"></div><div class="rows">${list.map(a => acctRow(a, true)).join("")}</div>`;
+  }
+  box.innerHTML = html;
+  box.querySelectorAll("[data-a]").forEach(r => r.onclick = () => openAccountSheet(r.dataset.a, {}));
+  box.querySelectorAll("[data-b]").forEach(r => r.onclick = () => openBrokerSheet(r.dataset.b, {}));
+}
+
+// ---------- TRIAGE ----------
+let TRI = "undecided";
+function renderTriage() {
+  const el = $("#view-triage"); const c = cur();
+  if (!c) { el.innerHTML = `<div class="empty">No profile.</div>`; return; }
+  const accts = accountsOf(c.sid);
+  const decided = accts.filter(a => a.disposition !== "undecided");
+  const done = decided.filter(a => a.progress === "done");
+  const closeFees = accts.filter(a => a.disposition === "close" && Number(a.fee) > 0);
+  const stopped = closeFees.filter(a => a.progress === "done").reduce((s, a) => s + Number(a.fee), 0);
+  const closeTotal = closeFees.reduce((s, a) => s + Number(a.fee), 0);
+  const handoffAssets = accts.filter(a => a.disposition === "handoff" && Number(a.balance) > 0).reduce((s, a) => s + Number(a.balance), 0);
+  const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
+  const bucket = accts.filter(a => a.disposition === TRI)
+    .sort((x, y) => PROGRESS.indexOf(x.progress) - PROGRESS.indexOf(y.progress) || CATS.findIndex(k => k.key === x.category) - CATS.findIndex(k => k.key === y.category));
+  const bDone = bucket.filter(a => a.progress === "done").length;
+  const bFees = bucket.reduce((s, a) => s + (Number(a.fee) || 0), 0);
+  const bBal = bucket.reduce((s, a) => s + (Number(a.balance) || 0), 0);
+  el.innerHTML = `
+    <div class="toolbar"><div class="chip-row">${DISPOS.map(d => `<button class="fchip ${TRI === d.key ? "on" : ""}" data-t="${d.key}"><span class="swatch" style="background:${d.color}"></span>${d.name} ${accts.filter(a => a.disposition === d.key).length}</button>`).join("")}</div></div>
+    <div class="card">
+      <h3>Triage progress</h3>
+      <div class="bar-label"><span>plan decided</span><span>${decided.length} of ${accts.length}</span></div>
+      <div class="bar"><div style="width:${pct(decided.length, accts.length)}%"></div></div>
+      <div class="bar-label"><span>actions done</span><span>${done.length} of ${decided.length}</span></div>
+      <div class="bar"><div style="width:${pct(done.length, decided.length)}%"></div></div>
+      <div class="bar-label"><span>monthly bleed stopped</span><span>${money(stopped)} of ${money(closeTotal)}</span></div>
+      <div class="bar"><div style="width:${pct(stopped, closeTotal)}%"></div></div>
+      <div class="tiles" style="margin-top:10px">
+        <div class="tile blue"><strong>${moneyK(handoffAssets)}</strong>to hand off</div>
+        <div class="tile"><strong>${bucket.length}</strong>in ${esc(DISPO[TRI].name)}</div>
+        <div class="tile"><strong>${bDone}</strong>done here</div>
+        <div class="tile ${bBal < 0 ? "red" : ""}"><strong>${bFees ? moneyK(bFees) + "/mo" : moneyK(bBal)}</strong>${bFees ? "fees here" : "balance here"}</div>
+      </div>
+    </div>
+    ${bucket.length ? `<div class="rows">${bucket.map(a => `<div class="row ${isDead(a) ? "dead" : ""}">
+        <span class="dot ${isDead(a) ? "dead" : ""}" style="background:${CAT[a.category].color}"></span>
+        <div class="main" data-a="${a.account_id}"><div class="name">${esc(a.name)}</div><div class="sub">${esc([CAT[a.category].short, Number(a.fee) > 0 ? money(a.fee) + "/mo" : "", a.balance !== null && a.balance !== undefined && a.balance !== "" ? money(a.balance) : ""].filter(Boolean).join(" · "))}</div></div>
+        <button class="prog-btn ${a.progress}" data-p="${a.account_id}">${a.progress}</button></div>`).join("")}</div>`
+      : `<div class="empty">Nothing in ${esc(DISPO[TRI].name)}.</div>`}
+    <div style="height:30px"></div>`;
+  el.querySelectorAll("[data-t]").forEach(b => b.onclick = () => { TRI = b.dataset.t; renderTriage(); });
+  el.querySelectorAll("[data-a]").forEach(r => r.onclick = () => openAccountSheet(r.dataset.a, {}));
+  el.querySelectorAll("[data-p]").forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const a = S.accounts.find(x => x.account_id === b.dataset.p); if (!a) return;
+    a.progress = PROGRESS[(PROGRESS.indexOf(a.progress) + 1) % PROGRESS.length]; a.updated_at = nowISO();
+    log("progress", { account: a.name, to: a.progress }); persist();
+    b.className = "prog-btn " + a.progress; b.textContent = a.progress;
+    renderChrome();
+  });
+}
+
+// ---------- TASKS ----------
+let TF = "open";
+const recentlyDone = new Set();
+function renderTasks() {
+  const el = $("#view-tasks"); const c = cur();
+  if (!c) { el.innerHTML = `<div class="empty">No profile.</div>`; return; }
+  const all = tasksOf(c.sid);
+  let list = all.filter(t => TF === "all" || (TF === "open" ? (t.status === "open" || recentlyDone.has(t.task_id)) : t.status === "done"));
+  list.sort((a, b) => String(a.due).localeCompare(String(b.due)));
+  const td = today();
+  const openN = all.filter(t => t.status === "open").length;
+  const overdue = all.filter(t => t.status === "open" && t.due < td).length;
+  el.innerHTML = `
+    <div class="toolbar"><div class="tool-row">
+      <div class="chip-row" style="flex:1">${[["open", "Open " + openN], ["done", "Done"], ["all", "All"]].map(([k, l]) => `<button class="fchip ${TF === k ? "on" : ""}" data-f="${k}">${l}</button>`).join("")}</div>
+      <button class="btn sm blue" id="tk-add">+ Task</button></div></div>
+    ${overdue ? `<div class="card" style="border-color:var(--vault)"><b style="color:var(--vault)">${overdue} overdue</b> <span class="muted">task${overdue === 1 ? "" : "s"} past due.</span></div>` : ""}
+    ${list.length ? `<div class="rows" style="margin-top:10px">${list.map(t => taskRow(t, td)).join("")}</div>` : `<div class="empty">${TF === "open" ? "No open tasks. Broker imports and death events add tasks here." : "Nothing here."}</div>`}
+    <div style="height:30px"></div>`;
+  el.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { TF = b.dataset.f; recentlyDone.clear(); renderTasks(); });
+  el.querySelector("#tk-add").onclick = openTaskEditor;
+  el.querySelectorAll("[data-tick]").forEach(b => b.onclick = () => toggleTask(b.dataset.tick));
+  el.querySelectorAll("[data-out]").forEach(b => b.onclick = () => recheckOutcome(b.dataset.id, b.dataset.out));
+  el.querySelectorAll("[data-open]").forEach(r => r.onclick = () => {
+    const t = S.tasks.find(x => x.task_id === r.dataset.open); if (!t || !t.ref) return;
+    if (c.subject.brokers && c.subject.brokers[t.ref]) openBrokerSheet(t.ref, {});
+    else if (S.accounts.find(a => a.account_id === t.ref)) openAccountSheet(t.ref, {});
+  });
+}
+function taskRow(t, td) {
+  const isRecheck = /^recheck_/.test(t.type) && t.status === "open";
+  const dueCls = t.status === "open" && t.due < td ? "overdue" : t.status === "open" && t.due === td ? "dueday" : "";
+  const kind = t.type.replace(/_/g, " ").replace(/^death /, "post-mortem ");
+  return `<div class="row task ${t.status === "done" ? "isdone" : ""}">
+    <button class="tick" data-tick="${t.task_id}">${t.status === "done" ? "✓" : ""}</button>
+    <div class="main" data-open="${t.task_id}"><div class="name">${esc(t.title)}</div>
+      <div class="sub"><span class="chip ${dueCls}">${t.status === "done" ? "done " + esc(fmtDate(t.done_at)) : "due " + esc(fmtDate(t.due))}</span> ${esc(kind)}</div></div>
+    ${isRecheck ? `<div class="outs"><button class="btn" data-out="clean" data-id="${t.task_id}">Clean</button><button class="btn red" data-out="found" data-id="${t.task_id}">Listed</button></div>` : ""}
+  </div>`;
+}
+function toggleTask(id) {
+  const t = S.tasks.find(x => x.task_id === id); if (!t) return;
+  if (t.status === "open") { t.status = "done"; t.done_at = nowISO(); recentlyDone.add(id); log("task_done", { task: t.title }); }
+  else { t.status = "open"; t.done_at = null; recentlyDone.delete(id); log("task_reopened", { task: t.title }); }
+  persist(); renderChrome(); renderTasks();
+}
+function recheckOutcome(id, out) {
+  const c = cur(); const t = S.tasks.find(x => x.task_id === id); if (!t) return;
+  const b = c.subject.brokers && c.subject.brokers[t.ref];
+  if (b) {
+    if (out === "clean" && b.status === "submitted") brokerTransition(c.sid, b.id, "clean", { source: "recheck" });
+    if (out === "found") {
+      if (b.status === "submitted") {
+        b.status = "found"; b.relisted = true;
+        b.history = (b.history || []).concat([{ at: nowISO(), status: "found", source: "recheck" }]);
+        addTask(c.sid, { type: "relist", title: `Still listed after opt-out: ${b.name}, submit again`, due: today(), ref: b.id });
+      } else if (b.status === "clean") brokerTransition(c.sid, b.id, "found", { source: "recheck" });
+    }
+  }
+  t.status = "done"; t.done_at = nowISO(); t.outcome = out; recentlyDone.add(id);
+  log("recheck", { broker: t.ref, outcome: out });
+  persist(); renderChrome(); renderTasks();
+  toast(out === "clean" ? "Marked clean" : "Re-list logged, new opt-out task added");
+}
+function openTaskEditor() {
+  const c = cur(); if (!c) return;
+  const body = openSheet({
+    title: "New task",
+    actions: [{ label: "Save", cls: "blue", onClick: () => {
+      const title = body.querySelector("#tk-title").value.trim();
+      if (!title) { toast("Task needs a title", "err"); return; }
+      addTask(c.sid, { type: "custom_" + uuid().slice(0, 8), title, due: body.querySelector("#tk-due").value || today(), notes: body.querySelector("#tk-notes").value.trim() });
+      log("task_added", { task: title }); persist(); closeSheet(true); renderChrome(); renderTasks(); toast("Task added");
+    } }],
+    body: `<div class="field"><label>Task</label><input id="tk-title" placeholder="Call Chase estate services"></div>
+      <div class="field"><label>Due</label><input id="tk-due" type="date" value="${today()}"></div>
+      <div class="field"><label>Notes</label><textarea id="tk-notes"></textarea></div>`
+  });
+}
+
+// ============================================================
+//  INTAKE
+// ============================================================
+const BASIC_STEPS = [
+  { id: "basics", label: "Profile basics", hint: "Start with the person. Everything else hangs off this record. Edits save as you type.",
+    fields: [
+      { t: "person", key: "full_legal_name", label: "Legal name", type: "text", ph: "Full legal name" },
+      { t: "person", key: "dob", label: "Date of birth", type: "text", ph: "MM/DD/YYYY" },
+      { t: "person", key: "death_status", label: "Subject status", type: "select", options: ["living", "declining", "deceased"] },
+      { t: "person", key: "aliases", label: "Nicknames, maiden names, AKAs", type: "list", ph: "add an alias" }
+    ] },
+  { id: "contact", label: "Contact identifiers", hint: "Brokers cross-reference addresses, phones and relatives. More identifiers mean a sharper broker sweep. Include prior addresses.",
+    fields: [
+      { t: "person", key: "known_addresses", label: "Addresses, current and prior", type: "list", ph: "street, city, state" },
+      { t: "person", key: "known_phones", label: "Phone numbers", type: "list", ph: "+1 555 555 0100" },
+      { t: "person", key: "known_emails", label: "Email addresses", type: "list", ph: "name@example.com" },
+      { t: "person", key: "known_relatives", label: "Close relatives", type: "list", ph: "name (relationship)" }
+    ] },
+  { id: "contract", label: "Engagement contract", hint: "Scope and authorization. Pre-mortem the subject authorizes, when incapacitated a POA, after death an executor with letters testamentary.",
+    fields: [
+      { t: "subject", key: "case_id", label: "Case ID", type: "text", ph: "ABC-2026-001" },
+      { t: "subject", key: "city", label: "City", type: "text" },
+      { t: "subject", key: "state", label: "State or region", type: "text" },
+      { t: "contract", key: "start_date", label: "Contract start", type: "date" },
+      { t: "contract", key: "end_date", label: "Contract end", type: "date" },
+      { t: "contract", key: "scope", label: "Scope of work", type: "text", ph: "audit, broker scrub, monitoring" },
+      { t: "contract", key: "authorizing_party", label: "Authorizing party", type: "select", options: ["self", "POA", "executor", "spouse", "other"] },
+      { t: "contract", key: "operator", label: "Operator", type: "text", ph: "operator email" },
+      { t: "subject", key: "operator_notes", label: "Operator notes", type: "textarea" }
+    ] }
+];
+const STEPS = BASIC_STEPS.map(s => Object.assign({ kind: "form" }, s))
+  .concat(CATS.map(k => ({ id: k.key, kind: "cat", cat: k.key, label: k.name, hint: CAT_HINTS[k.key] })))
+  .concat([{ id: "review", kind: "review", label: "Review", hint: "Everything saves as you go. This page is the summary and the jumping-off point." }]);
+let intakeStep = 0;
+
+function renderIntake() {
+  const el = $("#view-intake"); const c = cur();
+  if (!c) { el.innerHTML = `<div class="empty">No profile. Open the menu and create one.</div>`; return; }
+  intakeStep = Math.max(0, Math.min(STEPS.length - 1, intakeStep));
+  const step = STEPS[intakeStep];
+  el.innerHTML = `
+    <div class="toolbar">
+      <div class="istep">Step ${intakeStep + 1} of ${STEPS.length} · ${esc(step.label)}</div>
+      <div class="dots">${STEPS.map((s, i) => `<button data-i="${i}" class="${i < intakeStep ? "done" : i === intakeStep ? "cur" : ""}" aria-label="${esc(s.label)}"></button>`).join("")}</div>
+      <div class="inav"><button class="btn" id="in-back" ${intakeStep === 0 ? "disabled" : ""}>Back</button>
+        <button class="btn blue" id="in-next">${intakeStep === STEPS.length - 1 ? "Open map" : "Next"}</button></div>
+    </div>
+    <div class="card"><div class="step-title">${esc(step.label)}</div><div class="step-hint">${esc(step.hint)}</div><div id="in-body"></div></div>
+    <div style="height:40px"></div>`;
+  el.querySelectorAll("[data-i]").forEach(b => b.onclick = () => { intakeStep = +b.dataset.i; renderIntake(); el.scrollTop = 0; });
+  el.querySelector("#in-back").onclick = () => { intakeStep--; renderIntake(); el.scrollTop = 0; };
+  el.querySelector("#in-next").onclick = () => {
+    if (intakeStep === STEPS.length - 1) { setView("map"); return; }
+    intakeStep++; renderIntake(); el.scrollTop = 0;
+  };
+  const body = el.querySelector("#in-body");
+  if (step.kind === "form") buildFormStep(body, step, c);
+  else if (step.kind === "cat") buildCatStep(body, step, c);
+  else buildReview(body, c);
+}
+
+function buildFormStep(body, step, c) {
+  const targets = { person: c.person, contract: c.contract, subject: c.subject };
+  step.fields.forEach(f => {
+    const tgt = targets[f.t];
+    const wrap = document.createElement("div"); wrap.className = "field";
+    wrap.innerHTML = `<label>${esc(f.label)}</label>`;
+    if (f.type === "list") {
+      if (!Array.isArray(tgt[f.key])) tgt[f.key] = [];
+      const adder = document.createElement("div"); adder.className = "adder";
+      adder.innerHTML = `<input placeholder="${esc(f.ph || "")}"><button class="btn sm blue">Add</button>`;
+      const tags = document.createElement("div"); tags.className = "tags";
+      const drawTags = () => {
+        tags.innerHTML = tgt[f.key].map((v, i) => `<span class="tag"><span>${esc(v)}</span><button data-x="${i}" aria-label="Remove">&times;</button></span>`).join("");
+        tags.querySelectorAll("[data-x]").forEach(b => b.onclick = () => { tgt[f.key].splice(+b.dataset.x, 1); persistSoon(); drawTags(); });
+      };
+      const input = adder.querySelector("input");
+      const add = () => {
+        const v = input.value.trim(); if (!v) return;
+        tgt[f.key].push(v); input.value = ""; persistSoon(); drawTags(); input.focus();
+      };
+      adder.querySelector("button").onclick = add;
+      input.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); add(); } };
+      wrap.appendChild(adder); wrap.appendChild(tags); drawTags();
+    } else if (f.type === "select") {
+      const sel = document.createElement("select");
+      sel.innerHTML = f.options.map(o => `<option ${tgt[f.key] === o ? "selected" : ""}>${o}</option>`).join("");
+      sel.onchange = () => {
+        if (f.key === "death_status") {
+          if (!setDeathStatus(c, sel.value)) sel.value = c.person.death_status || "living";
+          renderChrome(); return;
+        }
+        tgt[f.key] = sel.value; log("profile_edit", { field: f.key }); persistSoon();
+      };
+      wrap.appendChild(sel);
+    } else {
+      const inp = document.createElement(f.type === "textarea" ? "textarea" : "input");
+      if (f.type === "date") inp.type = "date";
+      inp.value = tgt[f.key] || ""; inp.placeholder = f.ph || "";
+      inp.oninput = () => { tgt[f.key] = inp.value; persistSoon(); if (f.key === "full_legal_name" || f.key === "case_id") renderChrome(); };
+      inp.onchange = () => log("profile_edit", { field: f.key });
+      wrap.appendChild(inp);
+    }
+    body.appendChild(wrap);
+  });
+}
+
+function buildCatStep(body, step, c) {
+  const head = document.createElement("div"); head.className = "ck-head";
+  head.innerHTML = `<span class="mono">Tap what they have</span><button class="btn sm blue">+ Add other</button>`;
+  head.querySelector("button").onclick = () => openAccountEditor(null, { category: step.cat, after: () => renderIntake() });
+  body.appendChild(head);
+  const listEl = document.createElement("div"); body.appendChild(listEl);
+  const tmpls = TEMPLATES[step.cat] || [];
+  const tmplNames = new Set(tmpls.map(t => t[0]));
+  const norm = s => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  let adopted = false;
+  tmpls.forEach(([name]) => {
+    if (accountsOf(c.sid).some(a => a.category === step.cat && a.tmpl === name)) return;
+    const match = accountsOf(c.sid).find(a => a.category === step.cat && !a.tmpl && norm(a.name) === norm(name));
+    if (match) { match.tmpl = name; adopted = true; }
+  });
+  if (adopted) persistSoon();
+  tmpls.forEach(([name, hint]) => listEl.appendChild(ckRow(c, step.cat, name, hint)));
+  accountsOf(c.sid).filter(a => a.category === step.cat && !(a.tmpl && tmplNames.has(a.tmpl)))
+    .forEach(a => listEl.appendChild(ckRow(c, step.cat, null, "", a.account_id)));
+}
+function ckSummary(a) {
+  return [a.identifier, Number(a.fee) > 0 ? money(a.fee) + "/mo" : "", a.balance !== null && a.balance !== undefined && a.balance !== "" ? money(a.balance) : "",
+    a.status !== "active" ? a.status : "", (DISPO[a.disposition] || DISPO.undecided).name].filter(Boolean).join(" · ");
+}
+function ckRow(c, cat, tmplName, hint, accountId) {
+  const find = () => accountId ? S.accounts.find(x => x.account_id === accountId)
+    : S.accounts.find(x => x.subject_id === c.sid && x.category === cat && x.tmpl === tmplName);
+  const el = document.createElement("div");
+  const draw = () => {
+    const a = find();
+    el.className = "ck" + (a ? " on" : "");
+    el.innerHTML = `<button class="ck-main"><span class="ck-box">${a ? "✓" : ""}</span><span class="ck-text"><b>${esc(a ? a.name : tmplName)}</b><small>${esc(a ? ckSummary(a) : hint)}</small></span></button>
+      <button class="ck-edit" ${a ? "" : "disabled"} aria-label="Edit">&#9998;</button>`;
+    el.querySelector(".ck-main").onclick = () => {
+      const cur2 = find();
+      if (cur2) {
+        const blankish = !cur2.identifier && !cur2.cred && !cur2.twofa && !cur2.notes && cur2.balance === null && cur2.fee === null;
+        if (!blankish && !confirm("Remove " + cur2.name + " and its details?")) return;
+        S.accounts = S.accounts.filter(x => x.account_id !== cur2.account_id);
+        log("account_deleted", { account: cur2.name });
+        if (accountId) { persist(); renderChrome(); el.remove(); return; }
+      } else {
+        S.accounts.push(makeAccount(c.sid, cat, tmplName, { tmpl: tmplName }));
+        log("account_added", { account: tmplName });
+      }
+      persist(); renderChrome(); draw();
+    };
+    el.querySelector(".ck-edit").onclick = () => { const x = find(); if (x) openAccountEditor(x.account_id, { after: draw }); };
+  };
+  draw();
+  return el;
+}
+
+function buildReview(body, c) {
+  const p = c.person, k = c.contract, s = c.subject;
+  const accts = accountsOf(c.sid);
+  const sm = summarize(c.sid);
+  const rr = (key, val) => `<div class="review-row"><span class="k">${key}</span><span>${val}</span></div>`;
+  const nonEmpty = arr => (arr || []).filter(Boolean).length;
+  body.innerHTML = `
+    <h3 class="mono" style="font-size:10px;letter-spacing:.18em;color:var(--accent);margin:0 0 4px">PERSON</h3>
+    ${rr("name", esc(p.full_legal_name) || "missing")}${rr("dob", esc(p.dob) || "missing")}${rr("status", esc(p.death_status))}
+    ${rr("aliases", nonEmpty(p.aliases))}${rr("addresses", nonEmpty(p.known_addresses))}${rr("phones", nonEmpty(p.known_phones))}
+    ${rr("emails", nonEmpty(p.known_emails))}${rr("relatives", nonEmpty(p.known_relatives))}
+    <h3 class="mono" style="font-size:10px;letter-spacing:.18em;color:var(--accent);margin:14px 0 4px">CONTRACT</h3>
+    ${rr("case", esc(s.case_id))}${rr("location", esc([s.city, s.state].filter(Boolean).join(", ")) || "missing")}
+    ${rr("term", esc(k.start_date || "?") + " to " + esc(k.end_date || "?"))}${rr("authorized", esc(k.authorizing_party))}${rr("operator", esc(k.operator) || "missing")}
+    <h3 class="mono" style="font-size:10px;letter-spacing:.18em;color:var(--accent);margin:14px 0 4px">ACCOUNTS</h3>
+    ${CATS.map(x => rr(esc(x.name), accts.filter(a => a.category === x.key).length)).join("")}
+    ${rr("<b>total</b>", "<b>" + accts.length + "</b>")}${rr("monthly fees", money(sm.fees))}${rr("assets", money(sm.assets))}${rr("owed", money(-sm.liabs))}
+    ${rr("undecided plans", accts.filter(a => a.disposition === "undecided").length)}`;
+  const actions = document.createElement("div"); actions.className = "review-actions"; actions.style.margin = "12px 0 0";
+  actions.innerHTML = `<button class="btn" data-go="triage">Open triage</button><button class="btn" data-go="list">Open list</button>
+    <button class="btn" id="rv-csv">Export CSV</button><button class="btn" id="rv-m01">Module 01 export</button>`;
+  actions.querySelectorAll("[data-go]").forEach(b => b.onclick = () => setView(b.dataset.go));
+  actions.querySelector("#rv-csv").onclick = exportCSV;
+  actions.querySelector("#rv-m01").onclick = openModule01Export;
+  body.appendChild(actions);
+}
+
+// ============================================================
+//  MENU
+// ============================================================
+function openDrawer() { renderDrawer(); $("#drawer").classList.add("open"); $("#drawer-scrim").classList.add("show"); }
+function closeDrawer() { $("#drawer").classList.remove("open"); $("#drawer-scrim").classList.remove("show"); }
+let drawerOpenSections = new Set(["profiles"]);
+function renderDrawer() {
+  const c = cur();
+  const profiles = S.subjects.map(s => {
+    const p = S.persons.find(x => x.person_id === s.person_id) || {};
+    const n = accountsOf(s.subject_id).length;
+    return `<button class="menu-item ${c && s.subject_id === c.sid ? "on" : ""}" data-prof="${s.subject_id}">${esc(p.full_legal_name || "Unnamed")}<small>${esc(s.case_id || "")} · ${n} accounts · ${esc(p.death_status || "living")}${s.demo ? " · demo" : ""}</small></button>`;
+  }).join("");
+  const acct = `<div class="menu-item" style="cursor:default">${esc(AUTH.email || "")}<small>signed in · ${S.subjects.length} profile${S.subjects.length === 1 ? "" : "s"} saved to this account</small></div>`;
+  const sec = (id, title, inner) => `<details data-sec="${id}" ${drawerOpenSections.has(id) ? "open" : ""}><summary>${title}</summary>${inner}</details>`;
+  const item = (act, label, sub) => `<button class="menu-item" data-act="${act}">${label}${sub ? `<small>${sub}</small>` : ""}</button>`;
+  $("#drawer-body").innerHTML =
+    sec("account", "Account", acct +
+      item("signout", "Sign out", "saves first, then locks the app") +
+      item("delacct", "Delete account", "erases the account and every dossier on it")) +
+    sec("profiles", "Profiles", (profiles || `<div class="menu-item muted" style="cursor:default">No profiles yet</div>`) +
+      item("new", "+ New profile", "starts the intake wizard") +
+      item("dup", "Duplicate active profile", "copies identity and accounts") +
+      item("del", "Delete active profile", "removes it from this account")) +
+    sec("data", "Import and export",
+      item("m01", "Module 01 identity export", "scrub.subject_identity.v1 JSON") +
+      item("scan", "Import broker scan", "scrub.exposure_checklist.v1 JSON") +
+      item("sample", "Load sample broker scan", "demo scan for the active profile") +
+      item("csv", "Export CSV", "accounts, brokers, contacts, tasks, audit") +
+      item("print", "Print executor packet", "save as PDF from the print dialog") +
+      item("backup", "Export full backup", "every profile, JSON") +
+      item("restore", "Restore backup", "replaces everything on this account")) +
+    sec("records", "Records",
+      item("profile", "Subject summary", "identity and contract at a glance") +
+      item("contract", "Edit contract", "jumps to the intake contract step") +
+      item("audit", "Audit log", "every operator action")) +
+    sec("proto", "Demo",
+      item("demo", "Load demo profile", "adds the Marcus Chen-Whitfield sample"));
+  $("#drawer-body").querySelectorAll("details").forEach(d => d.ontoggle = () => {
+    if (d.open) drawerOpenSections.add(d.dataset.sec); else drawerOpenSections.delete(d.dataset.sec);
+  });
+  $("#drawer-body").querySelectorAll("[data-prof]").forEach(b => b.onclick = () => {
+    S.active = b.dataset.prof; M.cat = null; M.leafId = null; M.broker = false; M.brokerId = null; M.t = d3.zoomIdentity;
+    log("profile_switched", {}); persist(); closeDrawer(); closeSheet(true); renderAll();
+    toast("Active: " + (cur().person.full_legal_name || "profile"));
+  });
+  $("#drawer-body").querySelectorAll("[data-act]").forEach(b => b.onclick = () => { closeDrawer(); menuAction(b.dataset.act); });
+}
+function menuAction(act) {
+  const c = cur();
+  switch (act) {
+    case "new": {
+      const sid = createProfile(S, {}); S.active = sid; log("profile_created", {}); persist();
+      M.cat = null; M.leafId = null; M.broker = false; M.t = d3.zoomIdentity;
+      intakeStep = 0; renderChrome(); setView("intake"); toast("New profile created"); break;
+    }
+    case "dup": {
+      if (!c) return;
+      const sid = createProfile(S, {
+        person: Object.assign(JSON.parse(JSON.stringify(c.person)), { full_legal_name: (c.person.full_legal_name || "Profile") + " (copy)" }),
+        contract: JSON.parse(JSON.stringify(c.contract)),
+        subject: { case_id: (c.subject.case_id || "CASE") + "-COPY", city: c.subject.city, state: c.subject.state, operator_notes: c.subject.operator_notes }
+      });
+      accountsOf(c.sid).forEach(a => S.accounts.push(Object.assign({}, a, { account_id: uuid(), subject_id: sid, updated_at: nowISO() })));
+      S.active = sid; log("profile_duplicated", { from: c.sid }); persist(); renderAll(); toast("Duplicated"); break;
+    }
+    case "del": {
+      if (!c) return;
+      if (!confirm("Delete " + (c.person.full_legal_name || "this profile") + " with all accounts, brokers and tasks?")) return;
+      const sid = c.sid;
+      S.subjects = S.subjects.filter(x => x.subject_id !== sid);
+      if (!S.subjects.some(x => x.person_id === c.subject.person_id)) S.persons = S.persons.filter(x => x.person_id !== c.subject.person_id);
+      S.contracts = S.contracts.filter(x => x.contract_id !== c.subject.contract_id);
+      S.accounts = S.accounts.filter(x => x.subject_id !== sid);
+      S.tasks = S.tasks.filter(x => x.subject_id !== sid);
+      S.exposures = S.exposures.filter(x => x.subject_id !== sid);
+      S.active = S.subjects[0] ? S.subjects[0].subject_id : null;
+      log("profile_deleted", { subject_id: sid }); persist();
+      M.cat = null; M.leafId = null; M.broker = false; M.t = d3.zoomIdentity;
+      renderAll(); toast("Profile deleted"); break;
+    }
+    case "m01": openModule01Export(); break;
+    case "scan": $("#file-scan").click(); break;
+    case "sample": loadSampleScan(); break;
+    case "csv": exportCSV(); break;
+    case "print": printPacket(); break;
+    case "backup": exportBackup(); break;
+    case "restore": $("#file-backup").click(); break;
+    case "profile": if (VIEW !== "map") setView("map"); setTimeout(openSubjectSheet, 50); break;
+    case "contract": intakeStep = 2; setView("intake"); break;
+    case "audit": openAudit(); break;
+    case "demo": {
+      seedDemo(S); log("demo_loaded", {}); persist();
+      M.cat = null; M.leafId = null; M.broker = false; M.brokerId = null; M.t = d3.zoomIdentity;
+      renderAll(); toast("Demo profile added"); break;
+    }
+    case "signout": signOut(false); break;
+    case "delacct": {
+      const pw = prompt("Type your password to delete this account and every dossier on it");
+      if (!pw) return;
+      api("DELETE", "/account", { password: pw })
+        .then(() => { signOut(true); gMsg("Account deleted.", true); })
+        .catch(e => toast(e.message, "err"));
+      break;
+    }
+  }
+}
+
+// ============================================================
+//  EXPORT AND IMPORT
+// ============================================================
+function module01Payload(c) {
+  const p = c.person, k = c.contract, s = c.subject;
+  return {
+    schema: "scrub.subject_identity.v1",
+    generated_at: nowISO(),
+    subject_id: s.subject_id, person_id: p.person_id, contract_id: k.contract_id, case_id: s.case_id,
+    subject: {
+      full_legal_name: p.full_legal_name || "", dob: p.dob || "", city: s.city || "", state: s.state || "",
+      death_status: p.death_status || "living",
+      known_addresses: (p.known_addresses || []).filter(Boolean), known_phones: (p.known_phones || []).filter(Boolean),
+      known_emails: (p.known_emails || []).filter(Boolean), known_relatives: (p.known_relatives || []).filter(Boolean),
+      known_aliases: (p.aliases || []).filter(Boolean)
+    },
+    contract_terms: { start_date: k.start_date || "", end_date: k.end_date || "", scope: k.scope || "", authorizing_party: k.authorizing_party || "" },
+    operator: k.operator || "",
+    operator_notes: s.operator_notes || ""
+  };
+}
+function openModule01Export() {
+  const c = cur(); if (!c) return;
+  const payload = module01Payload(c);
+  const text = JSON.stringify(payload, null, 2);
+  const fname = `subject_${fileSafe(payload.subject.full_legal_name)}_${today()}.json`;
+  openSheet({
+    title: "Module 01 export",
+    chip: { text: "subject_identity.v1", color: "#dbeafe" },
+    actions: [
+      { label: "Copy", onClick: () => { (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => toast("Copied"), () => toast("Copy blocked, use Download", "err")); } },
+      { label: "Download", cls: "blue", onClick: () => { download(fname, text, "application/json"); log("module01_export", {}); persist(); toast("Saved " + fname); } }
+    ],
+    body: `${payload.subject.death_status === "deceased" ? `<div class="warn">Subject is deceased. Module 01 should run the deceased packet workflow, not living opt-outs.</div>` : ""}<pre class="json">${esc(text)}</pre>`
+  });
+}
+
+function importScan(payload) {
+  if (!payload || payload.schema !== "scrub.exposure_checklist.v1" || !Array.isArray(payload.brokers)) {
+    toast("Not a scrub.exposure_checklist.v1 file", "err"); return;
+  }
+  const ps = payload.subject || {};
+  let sub = null;
+  if (payload.subject_id) sub = S.subjects.find(s => s.subject_id === payload.subject_id);
+  if (!sub && ps.case) sub = S.subjects.find(s => String(s.case_id || "").toLowerCase() === String(ps.case).toLowerCase());
+  if (!sub && ps.name) {
+    const p = S.persons.find(x => String(x.full_legal_name || "").toLowerCase() === String(ps.name).toLowerCase());
+    if (p) sub = S.subjects.find(s => s.person_id === p.person_id);
+  }
+  if (!sub) {
+    const c = cur(); if (!c) return;
+    if (!confirm(`No profile matches "${ps.name || ps.case || "this scan"}". Attach it to ${c.person.full_legal_name || "the active profile"}?`)) return;
+    sub = c.subject;
+  }
+  const sid = sub.subject_id;
+  S.active = sid;
+  sub.brokers = sub.brokers || {};
+  const at = payload.generated_at || nowISO();
+  let relists = 0, added = 0;
+  S.exposures.push({ exposure_id: uuid(), subject_id: sid, generated_at: at, imported_at: nowISO(), operator: payload.operator || "", broker_count: payload.brokers.length, brokers: payload.brokers });
+  payload.brokers.forEach(raw => {
+    if (!raw || !raw.id) return;
+    const id = String(raw.id).toLowerCase().replace(/\s+/g, "");
+    const prev = sub.brokers[id];
+    const st = BSTAT[raw.status] ? raw.status : "pending";
+    const b = Object.assign({}, prev || {}, {
+      id, name: raw.name || (prev && prev.name) || id,
+      priority: raw.priority || (prev && prev.priority) || "normal",
+      search_url: raw.search_url || "", optout_url: raw.optout_url || "",
+      requirements: Array.isArray(raw.requirements) ? raw.requirements.map(String) : [],
+      profile_url: raw.profile_url || (prev && prev.profile_url) || "",
+      submission_date: raw.submission_date || (prev && prev.submission_date) || "",
+      confirmation_ref: raw.confirmation_ref || (prev && prev.confirmation_ref) || "",
+      broker_notes: raw.broker_notes || "",
+      status: st,
+      history: ((prev && prev.history) || []).concat([{ at, status: st, source: "scan" }])
+    });
+    if (prev && (prev.status === "clean" || prev.status === "submitted") && st === "found") {
+      b.relisted = true; relists++;
+      addTask(sid, { type: "relist", title: `Re-list detected: ${b.name}, submit opt-out again`, due: today(), ref: id });
+    } else if (st === "clean") b.relisted = false;
+    if (!prev) added++;
+    sub.brokers[id] = b;
+    if (st === "found" && !b.relisted) addTask(sid, { type: "submit_optout", title: `Submit opt-out: ${b.name}`, due: today(), ref: id });
+    if (st === "submitted" && b.submission_date) scheduleRechecks(sid, b);
+    if (st !== "found") closeTasks(sid, "submit_optout", id);
+  });
+  log("scan_imported", { brokers: payload.brokers.length, relists, added });
+  persist();
+  M.broker = true; M.cat = null; M.leafId = null; M.brokerId = null; M.t = d3.zoomIdentity;
+  if (VIEW !== "map") setView("map"); else renderAll();
+  renderChrome();
+  setTimeout(openBrokerOverview, 80);
+  toast(`Scan imported · ${payload.brokers.length} brokers${relists ? " · " + relists + " re-listed" : ""}`);
+}
+function readJsonFile(file, cb) {
+  const r = new FileReader();
+  r.onload = e => { let j; try { j = JSON.parse(e.target.result); } catch (err) { toast("Could not read JSON: " + err.message, "err"); return; } cb(j); };
+  r.readAsText(file);
+}
+function loadSampleScan() {
+  const c = cur(); if (!c) return;
+  fetch(SAMPLE_SCAN_URL, { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(j => {
+      j.subject = Object.assign({}, j.subject || {}, { name: c.person.full_legal_name, case: c.subject.case_id });
+      j.subject_id = c.sid; j.generated_at = nowISO();
+      importScan(j);
+    })
+    .catch(() => toast("Sample scan is only available on the deployed site", "err"));
+}
+
+function csvCell(v) { if (v === null || v === undefined) return ""; const s = String(v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+function exportCSV() {
+  const c = cur(); if (!c) return;
+  const L = []; const row = arr => L.push(arr.map(csvCell).join(","));
+  row(["section", "field", "value"]);
+  [["generated_at", nowISO()], ["subject_id", c.sid], ["person_id", c.person.person_id], ["contract_id", c.contract.contract_id],
+   ["case_id", c.subject.case_id], ["name", c.person.full_legal_name], ["dob", c.person.dob], ["death_status", c.person.death_status],
+   ["contract_start", c.contract.start_date], ["contract_end", c.contract.end_date], ["scope", c.contract.scope],
+   ["authorizing_party", c.contract.authorizing_party], ["operator", c.contract.operator]].forEach(([k, v]) => row(["subject", k, v]));
+  L.push("");
+  row(["accounts", "category", "name", "identifier", "status", "born", "died", "balance_usd", "monthly_fee_usd", "credentials", "twofa", "recovery", "disposition", "progress", "notes", "updated_at"]);
+  accountsOf(c.sid).forEach(a => row(["account", CAT[a.category].name, a.name, a.identifier, a.status, a.born, a.died, a.balance, a.fee, a.cred, a.twofa, a.recovery, a.disposition, a.progress, a.notes, a.updated_at]));
+  const brokers = brokersOf(c.sid);
+  if (brokers.length) {
+    L.push("");
+    row(["brokers", "broker_id", "name", "priority", "status", "relisted", "profile_url", "optout_url", "search_url", "submission_date", "confirmation_ref", "requirements", "notes"]);
+    brokers.forEach(b => row(["broker", b.id, b.name, b.priority, b.status, b.relisted ? "yes" : "", b.profile_url, b.optout_url, b.search_url, b.submission_date, b.confirmation_ref, (b.requirements || []).join("|"), b.broker_notes]));
+  }
+  L.push("");
+  row(["contacts", "type", "value"]);
+  [["alias", "aliases"], ["address", "known_addresses"], ["phone", "known_phones"], ["email", "known_emails"], ["relative", "known_relatives"]]
+    .forEach(([t, k]) => (c.person[k] || []).filter(Boolean).forEach(v => row(["contact", t, v])));
+  const tasks = tasksOf(c.sid);
+  if (tasks.length) {
+    L.push("");
+    row(["tasks", "task_id", "type", "title", "due", "status", "done_at"]);
+    tasks.forEach(t => row(["task", t.task_id, t.type, t.title, t.due, t.status, t.done_at]));
+  }
+  const audit = S.audit.filter(a => a.subject_id === c.sid).slice(-200);
+  if (audit.length) {
+    L.push("");
+    row(["audit", "at", "operator", "action", "detail"]);
+    audit.forEach(a => row(["audit", a.at, a.operator, a.action, JSON.stringify(a.detail || {})]));
+  }
+  const fname = `dossier_${fileSafe(c.person.full_legal_name)}_${today()}.csv`;
+  download(fname, "﻿" + L.join("\r\n"), "text/csv;charset=utf-8");
+  log("csv_export", { rows: L.length }); persist();
+  toast("Saved " + fname);
+}
+function exportBackup() {
+  const text = JSON.stringify(Object.assign({ exported_at: nowISO(), app: "estate-dossier" }, S), null, 1);
+  const fname = `estate_dossier_backup_${today()}.json`;
+  download(fname, text, "application/json");
+  toast("Saved " + fname);
+}
+function restoreBackup(j) {
+  if (!validState(j)) { toast("Not an Estate Dossier backup", "err"); return; }
+  if (!confirm(`Replace everything on this account with the backup (${j.subjects.length} profiles)?`)) return;
+  delete j.exported_at; delete j.app;
+  S = j; log("backup_restored", { profiles: j.subjects.length }); persist();
+  M.cat = null; M.leafId = null; M.broker = false; M.brokerId = null; M.t = d3.zoomIdentity;
+  renderAll(); toast("Backup restored");
+}
+
+function openAudit() {
+  const c = cur();
+  const items = S.audit.slice(-250).reverse();
+  openSheet({
+    title: "Audit log",
+    chip: { text: items.length + " shown", color: "#dbeafe" },
+    actions: [],
+    body: items.length ? `<div class="hist" style="font-size:11px">${items.map(a => {
+      const sub = S.subjects.find(s => s.subject_id === a.subject_id);
+      const p = sub && S.persons.find(x => x.person_id === sub.person_id);
+      const d = a.detail && Object.keys(a.detail).length ? " · " + Object.entries(a.detail).map(([k, v]) => k + " " + v).join(", ") : "";
+      return `<div><b>${esc(a.action.replace(/_/g, " "))}</b>${esc(d)}<br><span class="muted">${esc(new Date(a.at).toLocaleString())}${p ? " · " + esc(p.full_legal_name) : ""}${a.operator ? " · " + esc(a.operator) : ""}</span></div>`;
+    }).join("")}</div>` : `<div class="empty">No actions logged yet.</div>`
+  });
+}
+
+function printPacket() {
+  const c = cur(); if (!c) return;
+  const accts = accountsOf(c.sid);
+  const p = c.person, k = c.contract, s = c.subject;
+  const tbl = (head, rows) => rows.length ? `<table><tr>${head.map(h => `<th>${esc(h)}</th>`).join("")}</tr>${rows.map(r => `<tr>${r.map(x => `<td>${esc(x ?? "")}</td>`).join("")}</tr>`).join("")}</table>` : `<p class="meta">None.</p>`;
+  const by = d => accts.filter(a => a.disposition === d);
+  const acctRows = list => list.map(a => [a.name, CAT[a.category].name, a.identifier, a.balance !== null && a.balance !== undefined && a.balance !== "" ? money(a.balance) : "", Number(a.fee) > 0 ? money(a.fee) : "", a.cred, a.twofa, a.recovery, a.progress]);
+  const head = ["Account", "Category", "Identifier", "Balance", "Fee/mo", "Creds", "2FA", "Recovery", "Progress"];
+  $("#print-root").innerHTML = `
+    <h1>Executor packet: ${esc(p.full_legal_name)}</h1>
+    <div class="meta">Case ${esc(s.case_id)} · status ${esc(p.death_status)} · printed ${esc(new Date().toLocaleString())} · operator ${esc(k.operator)}</div>
+    <h2>Identity and contract</h2>
+    ${tbl(["Field", "Value"], [["Legal name", p.full_legal_name], ["Date of birth", p.dob], ["Location", [s.city, s.state].filter(Boolean).join(", ")],
+      ["Aliases", (p.aliases || []).join("; ")], ["Addresses", (p.known_addresses || []).join("; ")], ["Phones", (p.known_phones || []).join("; ")],
+      ["Emails", (p.known_emails || []).join("; ")], ["Relatives", (p.known_relatives || []).join("; ")],
+      ["Contract", (k.start_date || "") + " to " + (k.end_date || "")], ["Scope", k.scope], ["Authorized by", k.authorizing_party]])}
+    <h2>Hand off to executor</h2>${tbl(head, acctRows(by("handoff")))}
+    <h2>Keep live</h2>${tbl(head, acctRows(by("keep")))}
+    <h2>Archive, then close</h2>${tbl(head, acctRows(by("archive")))}
+    <h2>Memorialize</h2>${tbl(head, acctRows(by("memorialize")))}
+    <h2>Close</h2>${tbl(head, acctRows(by("close")))}
+    <h2>Undecided</h2>${tbl(head, acctRows(by("undecided")))}
+    <h2>Broker exposure</h2>${tbl(["Broker", "Priority", "Status", "Submitted", "Reference"], brokersOf(c.sid).map(b => [b.name, b.priority, b.status + (b.relisted ? " (re-listed)" : ""), b.submission_date, b.confirmation_ref]))}
+    <h2>Open tasks</h2>${tbl(["Task", "Due"], tasksOf(c.sid).filter(t => t.status === "open").sort((a, b) => String(a.due).localeCompare(String(b.due))).map(t => [t.title, t.due]))}
+    <p class="meta">Credentials are abbreviations only. Real passwords live in the password manager.</p>`;
+  log("packet_printed", {}); persist();
+  setTimeout(() => window.print(), 60);
+}
+
+// ============================================================
+//  WIRING AND BOOT
+// ============================================================
+$("#menu-btn").onclick = openDrawer;
+$("#drawer-close").onclick = closeDrawer;
+$("#drawer-scrim").onclick = closeDrawer;
+$("#sheet-close").onclick = () => closeSheet();
+$("#sheet-scrim").onclick = () => closeSheet();
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => setView(t.dataset.view));
+$("#key-toggle").onclick = () => { M.keyOpen = !M.keyOpen; renderKey(); };
+$("#color-by").onchange = e => { M.colorBy = e.target.value; buildMap(); };
+$("#zoom-in").onclick = () => M.svg && M.svg.transition().duration(250).call(M.zoom.scaleBy, 1.35);
+$("#zoom-out").onclick = () => M.svg && M.svg.transition().duration(250).call(M.zoom.scaleBy, 1 / 1.35);
+$("#zoom-reset").onclick = clearFocus;
+$("#map-brokers").onclick = enterBrokers;
+$("#empty-intake").onclick = () => { if (!cur()) { menuAction("new"); return; } intakeStep = 3; setView("intake"); };
+$("#file-scan").onchange = e => { const f = e.target.files[0]; if (f) readJsonFile(f, importScan); e.target.value = ""; };
+$("#file-backup").onchange = e => { const f = e.target.files[0]; if (f) readJsonFile(f, restoreBackup); e.target.value = ""; };
+window.addEventListener("afterprint", () => { $("#print-root").innerHTML = ""; });
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeSheet(); closeDrawer(); } });
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("drop", e => {
+  e.preventDefault();
+  const f = e.dataTransfer && e.dataTransfer.files[0]; if (!f) return;
+  readJsonFile(f, j => { if (validState(j)) restoreBackup(j); else importScan(j); });
+});
+let resizeTimer = null;
+new ResizeObserver(() => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (VIEW === "map") buildMap(); }, 160); }).observe($("#map-wrap"));
+// ============================================================
+//  SIGN IN GATE
+// ============================================================
+let gateMode = "in";
+function gMsg(t, ok) { const m = $("#g-msg"); m.textContent = t || ""; m.className = "gate-msg" + (ok ? " ok" : ""); }
+function showGate(msg) { $("#gate").classList.remove("hide"); gMsg(msg || ""); }
+function hideGate() { $("#gate").classList.add("hide"); gMsg(""); }
+document.querySelectorAll("#gate [data-mode]").forEach(b => b.onclick = () => {
+  gateMode = b.dataset.mode;
+  document.querySelectorAll("#gate [data-mode]").forEach(x => x.classList.toggle("on", x === b));
+  $("#g-pass2-wrap").style.visibility = gateMode === "up" ? "visible" : "hidden";
+  $("#g-go").textContent = gateMode === "up" ? "Create account" : "Sign in";
+  $("#g-pass").setAttribute("autocomplete", gateMode === "up" ? "new-password" : "current-password");
+  gMsg("");
+});
+["#g-email", "#g-pass", "#g-pass2"].forEach(s => $(s).onkeydown = e => { if (e.key === "Enter") submitGate(); });
+$("#g-go").onclick = submitGate;
+async function submitGate() {
+  const email = $("#g-email").value.trim(), pw = $("#g-pass").value;
+  if (!email || !pw) { gMsg("Enter your email and password."); return; }
+  if (gateMode === "up") {
+    if (pw.length < 10) { gMsg("Password needs at least 10 characters."); return; }
+    if (pw !== $("#g-pass2").value) { gMsg("Passwords do not match."); return; }
+  }
+  const btn = $("#g-go"); btn.disabled = true; gMsg("Working on it...", true);
+  try {
+    const j = await api("POST", gateMode === "up" ? "/signup" : "/login", { email, password: pw });
+    AUTH = { token: j.token, user_id: j.user_id, email: j.email };
+    localStorage.setItem(AUTH_KEY, JSON.stringify(AUTH));
+    $("#g-pass").value = ""; $("#g-pass2").value = "";
+    await loadAccount();
+  } catch (e) { gMsg(e.message); }
+  finally { btn.disabled = false; }
+}
+async function loadAccount() {
+  let remote = null;
+  try { remote = await api("GET", "/state"); }
+  catch (e) { if (e.status === 401) { signOut(true); gMsg("Session expired. Sign in again."); return; } }
+  const cache = cacheRead();
+  if (remote) {
+    SYNC.rev = remote.rev;
+    if (cache && cache.dirty && cache.rev === remote.rev) { S = cache.state; SYNC.ready = true; persist(); }
+    else if (remote.state && validState(remote.state)) { S = remote.state; SYNC.ready = true; cacheWrite(false); setSync("saved"); }
+    else {
+      let legacy = null;
+      try { const l = JSON.parse(localStorage.getItem(LEGACY_KEY)); if (validState(l)) legacy = l; } catch (e) { /* none */ }
+      S = legacy || blankState(); SYNC.ready = true;
+      if (legacy) { localStorage.removeItem(LEGACY_KEY); toast("Moved this browser's dossiers into your account"); }
+      persist();
+    }
+  } else if (cache) {
+    S = cache.state; SYNC.rev = cache.rev; SYNC.ready = true; SYNC.dirty = !!cache.dirty;
+    setSync(cache.dirty ? "error" : "saved"); toast("Offline, showing the saved copy", "err");
+    if (SYNC.dirty) SYNC.timer = setTimeout(pushState, 5000);
+  } else { showGate("Server not reachable. Try again in a moment."); return; }
+  M.cat = null; M.leafId = null; M.broker = false; M.brokerId = null; M.t = d3.zoomIdentity;
+  hideGate(); renderChrome(); setView(VIEW || "map");
+}
+async function signOut(silent) {
+  if (!silent && SYNC.ready && SYNC.dirty) { clearTimeout(SYNC.timer); await pushState(); }
+  if (!silent) { try { await api("POST", "/logout"); } catch (e) { /* offline */ } }
+  try { localStorage.removeItem(cacheKey()); } catch (e) { /* ignore */ }
+  AUTH = {}; localStorage.removeItem(AUTH_KEY);
+  SYNC.ready = false; SYNC.dirty = false; SYNC.rev = 0; clearTimeout(SYNC.timer);
+  S = blankState(); closeSheet(true); closeDrawer(); renderChrome(); setSync("saved");
+  showGate("");
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden) { clearTimeout(persistTimer); if (SYNC.ready) { persist(); flushNow(); } } });
+window.addEventListener("beforeunload", () => {
+  clearTimeout(persistTimer);
+  if (!SYNC.ready) return;
+  cacheWrite(true);
+  const body = JSON.stringify({ rev: SYNC.rev, state: S });
+  if (body.length < 60000 && AUTH.token) {
+    try { fetch(API + "/state", { method: "PUT", keepalive: true, headers: { "Content-Type": "application/json", Authorization: "Bearer " + AUTH.token }, body }); } catch (e) { /* best effort */ }
+  }
+});
+
+renderChrome();
+if (AUTH.token) { gMsg("Loading your dossiers...", true); loadAccount(); }
+else showGate("");
+</script>
+</body>
+</html>

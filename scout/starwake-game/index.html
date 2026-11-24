@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Starwake</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Cpath d=%27M28 16 L6 27 L10 16 L6 5 Z%27 fill=%27%23e4572e%27 stroke=%27%2318202e%27 stroke-width=%272%27/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: a survey captain's logbook, wry and urgent
+IDEA: a printed star chart from a survey office, ink on white paper
+PICTURE: the live chart itself, with a grey bloom eating across it
+COLOUR and TYPE: white, ink, coral for the player, violet grey for the Bloom; Chakra Petch over IBM Plex Sans
+LAYOUT: chart large on the left, logbook panel on the right, stacked on phones */
+:root{color-scheme:light;--bg:#f6f5f0;--paper:#fff;--ink:#18202e;--mute:#5d6472;--line:#dcd8cc;--coral:#e4572e;--bloom:#7a6ea3}
+*{box-sizing:border-box;min-width:0}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 "IBM Plex Sans",system-ui,sans-serif;overflow-x:clip}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:6px 20px;padding:10px 16px;border-bottom:2px solid var(--ink);background:var(--paper)}
+h1{font:700 28px/1 "Chakra Petch",sans-serif;margin:0}
+.stats{display:flex;flex-wrap:wrap;gap:2px 16px;font-size:14px}
+.st{white-space:nowrap;color:var(--mute)}.st b{color:var(--ink);font-weight:600}
+.st.warn,.st.warn b,.warn{color:var(--coral)}
+main{display:grid;grid-template-columns:minmax(0,1fr) 380px;min-height:calc(100vh - 54px)}
+.stage{position:relative;min-height:480px;background:var(--paper);border-right:1px solid var(--line)}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+#panel{padding:16px 18px 28px;overflow:auto;max-height:calc(100vh - 54px)}
+h2{font:700 24px/1.1 "Chakra Petch",sans-serif;margin:0 0 4px;text-wrap:balance}
+h3{font:600 16px/1.2 "Chakra Petch",sans-serif;margin:0 0 6px}
+p{margin:6px 0}
+.sub{color:var(--mute);font-size:14px}
+.card{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:12px 0;background:var(--paper)}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+button{font:600 15px "IBM Plex Sans",sans-serif;min-height:44px;padding:8px 14px;border:2px solid var(--ink);background:#fff;color:var(--ink);border-radius:8px;cursor:pointer}
+button:hover:not(:disabled){background:#efede6}
+button:focus-visible{outline:3px solid var(--coral);outline-offset:2px}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.pri{background:var(--ink);color:#fff}button.pri:hover:not(:disabled){background:#2c3547}
+.planet{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line)}
+.planet:first-of-type{border-top:0}
+.sw{display:inline-block;width:14px;height:14px;border-radius:50%;border:1.5px solid var(--ink);vertical-align:-2px;margin-right:6px}
+.log p{font-size:14px;color:var(--mute);margin:5px 0}.log p:first-of-type{color:var(--ink)}
+.talk{display:flex;gap:14px;align-items:center;margin-bottom:8px}
+.por{width:104px;height:104px;flex:none;border-radius:12px;background:#f1efe8;border:1px solid var(--line)}
+.quote{font-size:16px;border-left:3px solid var(--ink);padding-left:12px;margin:12px 0}
+.badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:13px;font-weight:600;color:#fff}
+.dice{display:flex;gap:10px;margin:8px 0}
+.die{width:52px;height:52px;border:2px solid var(--ink);border-radius:50%;display:grid;place-items:center;font:700 22px "Chakra Petch",sans-serif;background:#fff}
+#touch{position:absolute;left:0;right:0;bottom:0;display:none;justify-content:space-between;padding:10px;pointer-events:none}
+#touch div{display:flex;gap:8px;pointer-events:auto}
+#touch button{min-width:60px;min-height:58px;background:rgba(255,255,255,.88);touch-action:none;user-select:none;-webkit-user-select:none}
+#flee{position:absolute;top:10px;right:10px;display:none}
+.combat #touch{display:flex}.combat #flee{display:block}
+#overlay{position:fixed;inset:0;display:none;place-items:center;background:rgba(246,245,240,.94);padding:20px;z-index:5;overflow:auto}
+#overlay.on{display:grid}
+#overlay .box{max-width:560px;background:#fff;border:2px solid var(--ink);border-radius:14px;padding:24px}
+#overlay h2{font-size:clamp(30px,6vw,44px)}
+@media(max-width:480px){#touch{padding:8px}#touch div{gap:6px}#touch button{min-width:46px;padding:8px 10px;font-size:14px}}
+@media(max-width:860px){main{grid-template-columns:1fr}.stage{height:62vh;min-height:360px;border-right:0;border-bottom:1px solid var(--line)}#panel{max-height:none}}
+</style></head><body>
+<header><h1><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true" style="vertical-align:-4px;margin-right:8px"><path d="M29 16 L5 28 L10 16 L5 4 Z" fill="#e4572e" stroke="#18202e" stroke-width="2.2" stroke-linejoin="round"/><circle cx="17" cy="16" r="2.4" fill="#18202e"/></svg>Starwake</h1><div class="stats" id="stats"></div></header>
+<main>
+<section class="stage"><canvas id="cv" aria-label="Star chart and combat view"></canvas>
+<button id="flee">Flee</button>
+<div id="touch"><div><button data-k="left" aria-label="Turn left">&#9664;</button><button data-k="right" aria-label="Turn right">&#9654;</button><button data-k="up">Thrust</button></div><div><button data-k="sp">Seeker</button><button data-k="fire">Fire</button></div></div>
+</section>
+<aside id="panel"></aside>
+</main>
+<div id="overlay"><div class="box" id="obox"></div></div>
+<script>
+{
+const $=s=>document.querySelector(s);
+const cv=$('#cv'),ctx=cv.getContext('2d'),panel=$('#panel'),statsEl=$('#stats'),ov=$('#overlay'),obox=$('#obox'),fleeBtn=$('#flee');
+const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const INK='#18202e',CORAL='#e4572e',BLOOM='#7a6ea3';
+let CW=300,CH=300,DPR=1;
+function resize(){const r=cv.getBoundingClientRect();DPR=Math.min(2,devicePixelRatio||1);CW=Math.max(1,r.width);CH=Math.max(1,r.height);cv.width=Math.round(CW*DPR);cv.height=Math.round(CH*DPR)}
+const ro=new ResizeObserver(resize);ro.observe(cv);
+const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const SY=['ka','ru','vel','os','tir','ne','mau','dra','qi','lon','sef','ar','um','pha','zet','ol','ix','bre','tan','cor','ish','ya','gel','mo','sa','ven'];
+function mkName(r){let n='';const k=2+(r()<.35?1:0);for(let i=0;i<k;i++)n+=SY[Math.floor(r()*SY.length)];return n[0].toUpperCase()+n.slice(1)}
+const ri=(r,a,b)=>a+Math.floor(r()*(b-a+1));
+
+const HX=900,HY=100,DAYRATE=2.4,R0=50,FUELK=8,PRICE=8,HAVENPRICE=5;
+const RACES={
+ vellani:{name:'Vellani Registry',short:'Vellani',col:'#2f6f9f'},
+ ossiri:{name:'Ossiri Toll Ring',short:'Ossiri',col:'#b8791f'},
+ thrask:{name:'Thrask of the Ninth Edge',short:'Thrask',col:'#a8323e'},
+ murmur:{name:'The Murmur',short:'Murmur',col:'#4f8a55'},
+ pell:{name:'Pell Syndicate',short:'Pell',col:'#b23c8a'}
+};
+const RK=Object.keys(RACES);
+const PTYPES={rocky:{min:[8,16],haz:.1},ice:{min:[4,10],haz:.05},gas:{fuel:[10,22],haz:.08},molten:{min:[14,26],haz:.35},metal:{min:[18,30],haz:.22},crystal:{min:[22,40],haz:.3}};
+const PTK=Object.keys(PTYPES);
+const PCOL={rocky:'#a39684',ice:'#c3dceb',gas:'#e0c08f',molten:'#dd6a3f',metal:'#8f9aa8',crystal:'#b096dc'};
+const TINT=['#18202e','#34466b','#7a3b2b','#2b5f6b'];
+let NEB=null;
+function nebulae(){if(NEB&&NEB.seed===G.seed)return NEB.b;const r=mulberry((G.seed^0x5bd1)>>>0),cols=['47,111,159','228,87,46','122,110,163','184,121,31','79,138,85'];const b=Array.from({length:6},(_,i)=>({x:80+r()*840,y:60+r()*580,rad:120+r()*200,c:cols[i%cols.length],a:.05+r()*.04}));NEB={seed:G.seed,b};return b}
+function bloomPath(cx,cy,br,t){ctx.beginPath();for(let i=0;i<=120;i++){const a=i/120*Math.PI*2,rr=br+Math.sin(a*7+t*.6)*2.4+Math.sin(a*13-t*.9)*1.5+Math.sin(a*3+t*.3)*1.8;i?ctx.lineTo(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr):ctx.moveTo(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr)}ctx.closePath()}
+const HAZ={rocky:'A landslide caught one of the landers.',ice:'A crevasse opened under the survey team.',gas:'A skimmer tore loose in a storm.',molten:'Lava surged over the landing site.',metal:'A magnetic storm fried a lander in midair.',crystal:'The crystals began to sing, and then they shattered.'};
+const UPS=[
+ {id:'pods',name:'Crew pods',desc:'Six more berths for crew.',cost:200,fn:()=>{G.crewMax+=6}},
+ {id:'cells',name:'Battery cells',desc:'Ten more energy in combat.',cost:140,fn:()=>{G.batMax+=10}},
+ {id:'drive',name:'Fusion drive',desc:'Faster in combat, and travel takes a quarter less time.',cost:180,fn:()=>{G.thrust=1}},
+ {id:'cannon',name:'Lance cannon',desc:'Main gun hits twice as hard.',cost:260,fn:()=>{G.dmg=2}},
+ {id:'tank',name:'Long tanks',desc:'Sixty more fuel capacity.',cost:120,fn:()=>{G.fuelMax+=60}},
+ {id:'hold',name:'Deep hold',desc:'Eighty more cargo space for minerals.',cost:100,fn:()=>{G.cargo+=80}}
+];
+const RELIC={
+ part:["A voice loops on every channel in a language nobody has spoken for ten thousand years. Your linguist thinks it is saying not yet. Behind the voice, a sealed vault opens to your ship's old codes. Inside rests the Lantern's trigger.",
+  "A ring of shattered habitats circles a cold star. In the deepest one, wrapped in a flag nobody can read, you find a lens the size of a door. It is the Lantern's eye.",
+  "A planet of black glass. One tower still hums. At its top a coil sits in a cradle, as if someone set it down an hour ago and meant to come back. It is the Lantern's heart coil."],
+ seed:"A frozen moon with no air. In a crater sits a single pale seed the size of a fist, untouched for an age. It is faintly warm, and it hums when you hold it near the comms. Someone out there would know this sound.",
+ lore1:"Wreckage of a fleet that fought something grey a very long time ago. They lost. Their last log says the grey thing was stopped at its heart, with light. You salvage 200 credits of alloy.",
+ lore2:"An observatory aimed at a star that is no longer there. The final entry reads: we should have looked sooner. You strip 150 credits of instruments from the dome."
+};
+
+let G=null,C=null;
+const UI={sel:null,mode:'sys',race:null,line:'',acts:null,dice:null,confirmNew:false};
+const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
+const dH=s=>Math.hypot(s.x-HX,s.y-HY);
+const R=()=>R0+G.day*DAYRATE;
+const S=id=>G.stars[id];
+const consumed=s=>s.kind!=='heart'&&dH(s)<R();
+const homeOf=k=>G.stars.find(s=>s.kind==='home'&&s.race===k);
+const SPEED=()=>20*(1+.25*G.thrust);
+
+function newGame(seed){
+ const r=mulberry(seed),stars=[],used=new Set();
+ const add=(x,y,kind,name)=>{let n=name;if(!n){do n=mkName(r);while(used.has(n))}used.add(n);const s={id:stars.length,x,y,name:n,kind,planets:[]};stars.push(s);return s};
+ add(110,600,'haven','Haven Yard');add(HX,HY,'heart','The Bloom Heart');
+ let t=0;
+ while(stars.length<48&&t++<8000){const x=40+r()*920,y=40+r()*620;if(stars.every(s=>Math.hypot(s.x-x,s.y-y)>62))add(x,y,'plain')}
+ const pl=stars.filter(s=>s.kind==='plain').sort((a,b)=>dH(a)-dH(b));
+ const take=p=>{const i=Math.min(pl.length-1,Math.floor(p*pl.length));for(let k=0;k<pl.length;k++){const s=pl[(i+k)%pl.length];if(s.kind==='plain')return s}return pl[0]};
+ [['murmur',.2],['thrask',.33],['ossiri',.5],['vellani',.6],['pell',.82]].forEach(([k,p])=>{const s=take(p);s.kind='home';s.race=k});
+ let near=null;[.42,.72,.93].forEach(p=>{const s=take(p);s.kind='station';s.race='ossiri';near=s});
+ let pi=0;[['part',.1],['lore1',.28],['seed',.45],['part',.55],['lore2',.66],['part',.78]].forEach(([k,p])=>{const s=take(p);s.kind='dead';s.relic=k;if(k==='part')s.pi=pi++});
+ const RN=['I','II','III','IV'];
+ stars.forEach(s=>{if(!['plain','dead','home'].includes(s.kind))return;const n=ri(r,1,s.kind==='plain'?4:2);for(let i=0;i<n;i++){const ty=PTK[Math.floor(r()*PTK.length)],d=PTYPES[ty];s.planets.push({name:s.name+' '+RN[i],type:ty,min:d.min?ri(r,d.min[0],d.min[1]):0,fuel:d.fuel?ri(r,d.fuel[0],d.fuel[1]):0,done:false})}});
+ return {v:1,seed,day:0,fuel:80,fuelMax:100,crew:12,crewMax:18,credits:200,min:0,cargo:100,batMax:24,thrust:0,dmg:1,at:0,allies:[],parts:0,hasSeed:false,ups:[],visited:[0],known:[0,1,near.id],msg:[],over:null,travel:null,stars,flags:{}};
+}
+function log(t){G.msg.unshift(t);if(G.msg.length>30)G.msg.length=30}
+function save(){try{localStorage.setItem('starwake-v1',JSON.stringify(G))}catch(e){}}
+function load(){try{const j=localStorage.getItem('starwake-v1');if(j){const g=JSON.parse(j);if(g&&g.v===1&&g.stars)return g}}catch(e){}return null}
+
+const TALK={
+ vellani:{
+  greet:"Unregistered vessel! Hold position while we locate the correct form. There is always a correct form. Somewhere.",
+  who:"We are the Vellani Registry. Every star we have ever seen is catalogued, cross referenced and filed in triplicate. When the universe feels too large, we file a little more of it. It helps.",
+  bloom:"The Bloom does not fill out forms. It does not request permits. It simply arrives. We have lodged a formal complaint with ourselves and are reviewing it with great urgency.",
+  others:"The Thrask once dueled our chief archivist over a poem. The archivist had only corrected its spelling. We no longer speak of the Thrask, except constantly. The Pell borrowed our census and returned it with wagers written in the margins.",
+  allied:"Your file is in good order. Our fleet is at your disposal, provided you give us a little warning before anything happens.",
+  ally:()=>{
+   if(G.allies.length===0)return{t:"Join first? Absolutely not. Being first is how a people ends up as a footnote in somebody else's disaster. Come back when another fleet has signed."};
+   return{t:"Another fleet has signed. Good. That makes us second at worst, which is the safest number. There is a filing fee of 150 credits. It is not optional. Nothing here is optional.",acts:[{l:'Pay 150 credits',ok:G.credits>=150,fn:()=>{G.credits-=150;ally('vellani',"Filed, stamped and countersigned. The Vellani fleet will follow you, nervously and in perfect formation.")}}]};
+  }},
+ ossiri:{
+  greet:"Ossiri Toll Ring. State your cargo. State your credit. Do not state your feelings.",
+  who:"We build the toll rings that sit between the stars. Everyone passes through a ring eventually. Everyone pays eventually. It is the most dependable law we have found.",
+  bloom:"The Bloom eats customers. We are therefore opposed to it, in the strongest commercial terms available.",
+  others:"The Murmur tried to pay us in spores. We do not accept spores. The Thrask pay on time, which we respect more than their poetry. The Vellani ask for receipts for their receipts.",
+  allied:"Your charter is active. Your credit is good. Your feelings remain unstated, as agreed.",
+  ally:()=>({t:"An alliance is a contract, and a contract has a price. A war charter costs 600 credits. For that, our gunships fly where you point them.",acts:[{l:'Pay 600 credits',ok:G.credits>=600,fn:()=>{G.credits-=600;ally('ossiri',"Paid in full. A pleasure. Our gunships are yours until the contract is complete, or until the Bloom is, whichever comes first.")}}]})},
+ thrask:{
+  greet:"Stranger. Speak your name in three beats, or do not speak it at all.",
+  who:"We are the Thrask of the Ninth Edge. We write a poem before every duel and burn it afterward. A poem that outlives its author is only vanity with good rhythm.",
+  bloom:"The Bloom has no face to challenge. That is its only cowardice, and it is complete.",
+  others:"The Pell wagered on our champion's defeat, lost, and never paid. A debt unpaid is a blade left in the wound. The Vellani corrected our verse once. We forgave them. We have not forgotten.",
+  allied:"Our blades are with you. Try to give them something with a face.",
+  ally:()=>{const n=G.allies.includes('pell')?2:1;
+   return{t:n===1?"You wish our blades beside yours? Then cross blades with our champion first. Lose, and you lose only crew and pride. Win, and the Ninth Edge flies with you.":"You fly beside the Pell, who owe us still. Then you will face two champions, not one. That is the price of keeping such company.",
+    acts:[{l:n===1?'Accept the duel':'Accept the double duel',fn:()=>{fight({foes:{thrask:n},nonLethal:true,title:'Thrask duel',onWin:()=>{UI.mode='talk';UI.race='thrask';ally('thrask',"Well fought. Tonight we burn a poem in your name. Tomorrow the Ninth Edge flies with you.")},onLose:()=>{UI.mode='talk';UI.race='thrask';UI.line="The champion lowers its blade. Again, when you are sharper.";log('You lost the Thrask duel. Your crew will live to try again.')}})}}]};
+  }},
+ murmur:{
+  greet:"we are many. we are listening. you are very loud, small one.",
+  who:"we are the murmur. we grew on a moon that has stopped turning. we remember through one another. when one of us forgets, the rest hum it back.",
+  bloom:"the grey thing grows, as we grow. but it grows without remembering. that is how you can tell it is hungry and not alive.",
+  others:"the ossiri would not take our spores as payment. we have grown them a small grudge. it is coming along nicely. the pell are kind to us. they lose to us at dice. we think on purpose.",
+  allied:"the first grove is growing again. it hums your name. it is not a good name, but it is yours.",
+  ally:()=>G.hasSeed?{t:"you carry it. we can hear it humming from here. give it to us, small one.",acts:[{l:'Give them the seed',fn:()=>{G.hasSeed=false;ally('murmur',"it is home. it is home. the murmur will grow beside you, and our spore ships will follow wherever you go.")}}]}
+   :{t:"long ago our first grove died when our moon went cold. one seed was carried away, and lost. somewhere in a dead system it is still drifting, still warm. bring it home, and we will grow beside you."}},
+ pell:{
+  greet:"A visitor! Quick, guess how many teeth I am thinking of. Wrong. Too late. Welcome!",
+  who:"We are the Pell Syndicate. Life is a long bet against the house, the house is entropy, and entropy cheats. So we cheat back, but cheerfully, and with snacks.",
+  bloom:"We set odds on the Bloom reaching our world. The odds are excellent. So we bet against ourselves. It is called a hedge, and it is very relaxing.",
+  others:"The Thrask say we owe them for a duel. We say the duel was rigged. They say we rigged it. We say exactly, so why should we pay? The Murmur are lovely. They always win at dice. Nobody knows how.",
+  allied:"We are with you. We have also placed a small bet that you survive. Please do.",
+  ally:()=>{const st=G.allies.includes('thrask')?250:100;
+   return{t:st===100?"Fleets are for winners. Beat us at Three Moons and ours is yours. The stake is 100 credits.":"You fly with the Thrask? Grudges are expensive. Beat us at Three Moons and our fleet is yours, but the stake is 250 credits.",acts:[{l:'Play Three Moons',ok:G.credits>=st,fn:()=>{UI.mode='dice';UI.dice={stake:st,p:null,e:null,rr:false,done:false,res:''}}}]};
+  }}
+};
+function ally(k,line){if(!G.allies.includes(k))G.allies.push(k);UI.line=line;UI.acts=null;log(`The ${RACES[k].short} have joined you. ${G.allies.length} of 3 fleets needed.`)}
+
+function portrait(k){const c=RACES[k].col;let b='';
+ if(k==='vellani')b=`<path d="M14 106 L30 60 L44 102 Z M106 106 L90 60 L76 102 Z M40 108 L60 72 L80 108 Z" fill="#fff" stroke="${INK}" stroke-width="2"/><circle cx="60" cy="50" r="28" fill="${c}" stroke="${INK}" stroke-width="2"/>${[[46,47],[60,42],[74,47]].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="5.5" fill="#fff"/><circle cx="${x}" cy="${y+1.5}" r="2.2" fill="${INK}"/>`).join('')}<path d="M50 64 Q60 58 70 64" fill="none" stroke="${INK}" stroke-width="2"/>`;
+ if(k==='ossiri')b=`<circle cx="64" cy="40" r="34" fill="none" stroke="${c}" stroke-width="2" stroke-dasharray="3 5"/><g fill="${c}" stroke="${INK}" stroke-width="2">${[0,1,2,3].map(i=>`<ellipse cx="${56-i*2}" cy="${106-i*13}" rx="${16-i}" ry="7"/>`).join('')}<ellipse cx="64" cy="40" rx="26" ry="17" transform="rotate(-18 64 40)"/></g><circle cx="73" cy="36" r="8" fill="#fff" stroke="${INK}" stroke-width="2"/><circle cx="75" cy="36" r="3.5" fill="${INK}"/>`;
+ if(k==='thrask')b=`<path d="M60 10 L70 34 L94 20 L84 48 L106 56 L82 70 L76 108 L60 92 L44 108 L38 70 L14 56 L36 48 L26 20 L50 34 Z" fill="${c}" stroke="${INK}" stroke-width="2"/><path d="M42 58 L54 62 M78 58 L66 62" stroke="#fff" stroke-width="4" stroke-linecap="round"/><path d="M50 80 L60 76 L70 80" fill="none" stroke="${INK}" stroke-width="2"/>`;
+ if(k==='murmur'){const caps=[[24,94,12],[90,92,14],[56,92,18],[38,66,22],[76,58,26]];b=caps.map(([x,y,r])=>`<rect x="${x-r*.25}" y="${y}" width="${r*.5}" height="${r*.9}" fill="#efe9dc" stroke="${INK}" stroke-width="1.5"/>`).join('')+caps.map(([x,y,r])=>`<path d="M${x-r} ${y} A${r} ${r} 0 0 1 ${x+r} ${y} Z" fill="${c}" stroke="${INK}" stroke-width="2"/><circle cx="${x-r*.3}" cy="${y-r*.35}" r="2.2" fill="#fff"/><circle cx="${x+r*.3}" cy="${y-r*.35}" r="2.2" fill="#fff"/>`).join('')}
+ if(k==='pell')b=`<ellipse cx="60" cy="60" rx="46" ry="38" fill="${c}" stroke="${INK}" stroke-width="2"/>${[[44,42],[76,42],[48,56],[72,56]].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="6" fill="#fff" stroke="${INK}" stroke-width="1.5"/><circle cx="${x+1}" cy="${y+1}" r="2.5" fill="${INK}"/>`).join('')}<path d="M28 70 Q60 102 92 70 Z" fill="#fff" stroke="${INK}" stroke-width="2"/>${[40,50,60,70,80].map(x=>`<path d="M${x} 71 L${x} 80" stroke="${INK}" stroke-width="1.5"/>`).join('')}`;
+ return `<svg class="por" viewBox="0 0 120 120" aria-hidden="true">${b}</svg>`;
+}
+
+/* ---------- star chart ---------- */
+function mapT(){const s=Math.min(CW/1000,CH/700)*.94;return{s,ox:(CW-1000*s)/2,oy:(CH-700*s)/2}}
+function drawMap(now){
+ ctx.setTransform(DPR,0,0,DPR,0,0);ctx.fillStyle='#fff';ctx.fillRect(0,0,CW,CH);
+ const T=mapT(),X=x=>T.ox+x*T.s,Y=y=>T.oy+y*T.s,tt=RM?0:now/1000;
+ ctx.save();ctx.beginPath();ctx.rect(X(0),Y(0),1000*T.s,700*T.s);ctx.clip();
+ for(const n of nebulae()){const g=ctx.createRadialGradient(X(n.x),Y(n.y),0,X(n.x),Y(n.y),n.rad*T.s);g.addColorStop(0,`rgba(${n.c},${n.a})`);g.addColorStop(1,`rgba(${n.c},0)`);ctx.fillStyle=g;ctx.fillRect(X(n.x)-n.rad*T.s,Y(n.y)-n.rad*T.s,n.rad*2*T.s,n.rad*2*T.s)}
+ ctx.restore();
+ ctx.strokeStyle='#efece4';ctx.lineWidth=1;
+ for(let x=0;x<=1000;x+=100){ctx.beginPath();ctx.moveTo(X(x),Y(0));ctx.lineTo(X(x),Y(700));ctx.stroke()}
+ for(let y=0;y<=700;y+=100){ctx.beginPath();ctx.moveTo(X(0),Y(y));ctx.lineTo(X(1000),Y(y));ctx.stroke()}
+ const br=R()*T.s;
+ ctx.save();ctx.beginPath();ctx.rect(X(0),Y(0),1000*T.s,700*T.s);ctx.clip();
+ const bg=ctx.createRadialGradient(X(HX),Y(HY),0,X(HX),Y(HY),Math.max(1,br));bg.addColorStop(0,'rgba(122,110,163,.34)');bg.addColorStop(.75,'rgba(122,110,163,.16)');bg.addColorStop(1,'rgba(122,110,163,.24)');
+ bloomPath(X(HX),Y(HY),br,tt);ctx.fillStyle=bg;ctx.fill();
+ ctx.save();ctx.clip();ctx.strokeStyle='rgba(122,110,163,.26)';ctx.lineWidth=1;for(let k=0;k<CW+CH;k+=9){ctx.beginPath();ctx.moveTo(k,0);ctx.lineTo(k-CH,CH);ctx.stroke()}
+ ctx.fillStyle='rgba(75,65,102,.35)';for(let i=0;i<60;i++){const a=i*2.399+tt*.05,rr=br*(.35+(i*37%60)/100)+Math.sin(tt+i)*3;ctx.beginPath();ctx.arc(X(HX)+Math.cos(a)*rr,Y(HY)+Math.sin(a)*rr,1.2+(i%3)*.6,0,7);ctx.fill()}
+ ctx.restore();
+ bloomPath(X(HX),Y(HY),br,tt);ctx.strokeStyle=BLOOM;ctx.lineWidth=2;ctx.setLineDash([6,5]);ctx.stroke();ctx.setLineDash([]);
+ if(!RM){const ph=(now/1500)%1;ctx.beginPath();ctx.arc(X(HX),Y(HY),br+ph*22,0,7);ctx.strokeStyle=`rgba(122,110,163,${.55*(1-ph)})`;ctx.stroke()}
+ const cur=S(G.at);
+ if(!G.travel){ctx.beginPath();ctx.arc(X(cur.x),Y(cur.y),G.fuel*FUELK*T.s,0,7);ctx.strokeStyle='rgba(228,87,46,.4)';ctx.lineWidth=1;ctx.setLineDash([2,5]);ctx.stroke();ctx.setLineDash([])}
+ ctx.restore();
+ ctx.strokeStyle=INK;ctx.lineWidth=1.5;ctx.strokeRect(X(0),Y(0),1000*T.s,700*T.s);
+ if(UI.sel!=null&&UI.sel!==G.at&&!G.travel){const t=S(UI.sel);ctx.strokeStyle=CORAL;ctx.lineWidth=2;ctx.setLineDash([7,5]);ctx.beginPath();ctx.moveTo(X(cur.x),Y(cur.y));ctx.lineTo(X(t.x),Y(t.y));ctx.stroke();ctx.setLineDash([])}
+ if(G.travel){const a=S(G.travel.from),b=S(G.travel.to);ctx.strokeStyle=CORAL;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(X(a.x),Y(a.y));ctx.lineTo(X(b.x),Y(b.y));ctx.stroke()}
+ ctx.font='600 12px "IBM Plex Sans",sans-serif';ctx.textAlign='center';
+ for(const s of G.stars){
+  const x=X(s.x),y=Y(s.y),kn=G.known.includes(s.id),gone=consumed(s);
+  if(s.kind==='heart'){ctx.save();ctx.translate(x,y);for(let k=0;k<8;k++){ctx.rotate(Math.PI/4);ctx.beginPath();ctx.ellipse(9,0,7,3.5,0,0,7);ctx.fillStyle='#b3a9d1';ctx.fill();ctx.strokeStyle='#4b4166';ctx.lineWidth=1;ctx.stroke()}ctx.beginPath();ctx.arc(0,0,5,0,7);ctx.fillStyle='#4b4166';ctx.fill();ctx.restore()}
+  else{
+   let r=2.4+((s.id*37)%10)/10,col=TINT[s.id%4];
+   if(kn&&s.kind!=='plain'){r=6;col=s.kind==='haven'?CORAL:s.kind==='dead'?'#5d6472':RACES[s.race].col}
+   if(gone)col='#9d94b8';
+   if(kn&&s.kind!=='plain'&&!gone){const h=ctx.createRadialGradient(x,y,0,x,y,18);h.addColorStop(0,col+'44');h.addColorStop(1,col+'00');ctx.fillStyle=h;ctx.beginPath();ctx.arc(x,y,18,0,7);ctx.fill()}
+   if(s.kind==='plain'&&s.id%5===0&&!gone){const gl=3.5+(RM?0:Math.sin(tt*1.3+s.id)*1.2);ctx.strokeStyle=col;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x-r-gl,y);ctx.lineTo(x+r+gl,y);ctx.moveTo(x,y-r-gl);ctx.lineTo(x,y+r+gl);ctx.stroke()}
+   ctx.beginPath();
+   if(kn&&s.kind==='station')ctx.rect(x-r,y-r,r*2,r*2);else ctx.arc(x,y,r,0,7);
+   if(kn&&s.kind==='dead'){ctx.strokeStyle=col;ctx.lineWidth=2;ctx.stroke()}else{ctx.fillStyle=col;ctx.fill()}
+   if(s.kind==='home'&&G.allies.includes(s.race)){ctx.beginPath();ctx.arc(x,y,10,0,7);ctx.strokeStyle=col;ctx.lineWidth=2;ctx.stroke()}
+   if(G.visited.includes(s.id)&&s.kind==='plain'){ctx.beginPath();ctx.arc(x,y,6,0,7);ctx.strokeStyle='#b9b4a6';ctx.lineWidth=1;ctx.stroke()}
+  }
+  if(s.id===UI.sel){ctx.beginPath();ctx.arc(x,y,13,0,7);ctx.strokeStyle=CORAL;ctx.lineWidth=2;ctx.stroke()}
+  let lab=null;
+  if(s.kind==='heart'||s.kind==='haven')lab=s.kind==='haven'?'Haven':'Bloom Heart';
+  else if(kn&&s.kind==='home')lab=RACES[s.race].short;
+  else if(kn&&s.kind==='station')lab='Toll ring';
+  else if(kn&&s.kind==='dead')lab=s.name;
+  if(s.id===UI.sel||s.id===G.at)lab=lab||s.name;
+  if(lab){ctx.fillStyle=gone?'#7d7596':INK;ctx.fillText(lab,x,y+(s.kind==='heart'?24:20))}
+ }
+ let px,py,pa=-Math.PI/2;
+ if(G.travel){const a=S(G.travel.from),b=S(G.travel.to),p=G.travel.p;px=a.x+(b.x-a.x)*p;py=a.y+(b.y-a.y)*p;pa=Math.atan2(b.y-a.y,b.x-a.x);for(let k=1;k<10;k++){const q=p-k*.018;if(q<0)break;ctx.globalAlpha=.5*(1-k/10);ctx.fillStyle=CORAL;ctx.beginPath();ctx.arc(X(a.x+(b.x-a.x)*q),Y(a.y+(b.y-a.y)*q),3.2-k*.25,0,7);ctx.fill()}ctx.globalAlpha=1}else{px=cur.x;py=cur.y-12/T.s}
+ ctx.save();ctx.translate(X(px),Y(py));ctx.rotate(pa);ctx.beginPath();ctx.moveTo(9,0);ctx.lineTo(-6,6);ctx.lineTo(-3,0);ctx.lineTo(-6,-6);ctx.closePath();ctx.fillStyle=CORAL;ctx.fill();ctx.strokeStyle=INK;ctx.lineWidth=1.5;ctx.stroke();ctx.restore();
+}
+cv.addEventListener('pointerdown',e=>{
+ if(!G||C||G.over||G.travel)return;
+ const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,T=mapT();
+ let best=null,bd=26;for(const s of G.stars){const d=Math.hypot(T.ox+s.x*T.s-mx,T.oy+s.y*T.s-my);if(d<bd){bd=d;best=s}}
+ if(best){UI.sel=best.id===G.at?null:best.id;UI.mode='sys';renderPanel()}
+});
+
+/* ---------- game flow ---------- */
+function jump(){
+ if(UI.sel==null)return;const a=S(G.at),b=S(UI.sel),d=dist(a,b),f=d/FUELK;
+ if(f>G.fuel+1e-6)return;
+ G.fuel-=f;G.travel={from:a.id,to:b.id,p:0,d,day0:G.day};UI.sel=null;UI.mode='sys';renderPanel();
+}
+function arrive(id){
+ G.at=id;if(!G.visited.includes(id))G.visited.push(id);if(!G.known.includes(id))G.known.push(id);
+ const s=S(id);UI.mode='sys';UI.sel=null;
+ if(checkDoom())return;
+ if(s.kind==='heart'){heartArrive();return}
+ if(consumed(s)){log(`${s.name} is inside the Bloom. Grey scouts rise from what used to be its planets.`);fight({foes:{scout:3},canFlee:true,title:'Bloom scouts'});return}
+ const edge=dH(s)-R();
+ if(edge<140&&Math.random()<.45){log(`Bloom scouts drift in from the edge of the grey as you reach ${s.name}.`);fight({foes:{scout:2},canFlee:true,title:'Bloom scouts'});return}
+ if((s.kind==='plain'||s.kind==='dead')&&Math.random()<.13){log('Hollow Drifters, scavengers with nothing left to lose, cut across your approach.');fight({foes:{drifter:Math.random()<.4?2:1},canFlee:true,title:'Hollow Drifters'});return}
+ log(`Arrived at ${s.name}.`);save();renderAll();
+}
+function heartArrive(){
+ if(G.parts>=3&&G.allies.length>=3){
+  log('The Lantern wakes in your hold. Allied fleets drop out of jump beside you.');
+  fight({foes:{heart:1,scout:2},allies:G.allies.slice(),lantern:true,title:'The Bloom Heart',onWin:()=>end(true)});
+ }else{
+  log('Grey petals the size of moons turn toward you. Without the whole Lantern and three allied fleets there is nothing here you can hurt.');
+  fight({foes:{scout:4},canFlee:true,title:'The Heart defends itself'});
+ }
+}
+function checkDoom(){
+ if(G.over)return true;
+ if(consumed(S(0))){end(false,'The Bloom reached Haven Yard. There is nowhere left to refit, and nowhere left to come home to.');return true}
+ for(const k of RK){if(!G.allies.includes(k)&&consumed(homeOf(k))&&!G.flags['lost_'+k]){G.flags['lost_'+k]=1;log(`The ${RACES[k].short} homeworld has fallen to the Bloom. They can no longer join you.`)}}
+ const alive=RK.filter(k=>G.allies.includes(k)||!consumed(homeOf(k))).length;
+ if(alive<3){end(false,'Too many peoples fell to the grey before they could stand with you. Three fleets are needed to hold the Bloom back, and three are no longer left.');return true}
+ const eta=(dH(S(0))-R0)/DAYRATE-G.day;
+ if(eta<60&&!G.flags.warn60){G.flags.warn60=1;log('Haven Yard reports the Bloom will reach them in under sixty days.')}
+ return false;
+}
+function end(win,why){
+ G.over={win,why:why||'',day:Math.floor(G.day)};G.travel=null;save();showEnd();renderAll();
+}
+function showEnd(){
+ const o=G.over,names=G.allies.map(k=>RACES[k].short).join(', ')||'none';
+ obox.innerHTML=o.win?`<h2>The Bloom is ash</h2><p>The Lantern opens its eye inside the heart, and white light pours through the grey. Across the chart, petals curl and fall away like ash. Allied fleets fly home through stars that are slowly turning their old colors again.</p><p class="sub">Day ${o.day}. Allies: ${esc(names)}. Lantern parts: ${G.parts} of 3.</p><div class="row"><button class="pri" data-new>Play again</button></div>`
+ :`<h2>The galaxy goes grey</h2><p>${esc(o.why)}</p><p class="sub">Day ${o.day}. Allies: ${esc(names)}. Lantern parts: ${G.parts} of 3.</p><div class="row"><button class="pri" data-new>Try again</button></div>`;
+ ov.classList.add('on');
+}
+function intro(){
+ obox.innerHTML=`<h2>Starwake</h2><p>You command the Wakeful, an ancient survey hull found adrift and refitted at Haven Yard. A grey growth called the Bloom has woken at the far corner of the chart, and it eats a little more of the galaxy every day.</p><p>Old records point to a weapon called the Lantern, broken into three parts and left in dead systems long ago. Find all three. Win three peoples to your side so their fleets can hold the grey back. Then fly into the Bloom Heart and end it.</p><p class="sub">Tap a star to plot a jump. Jumps cost fuel and days, and the Bloom grows while you travel. Survey planets for minerals, sell them at Ossiri toll rings, refit your ship, and learn what each people wants. Your crew is your hull.</p><div class="row"><button class="pri" data-go>Launch the Wakeful</button></div>`;
+ ov.classList.add('on');
+}
+ov.addEventListener('click',e=>{
+ if(e.target.closest('[data-go]')){ov.classList.remove('on');renderAll()}
+ if(e.target.closest('[data-new]')){startNew()}
+});
+function startNew(){G=newGame((Date.now()^Math.floor(Math.random()*1e9))>>>0);C=null;document.body.classList.remove('combat');Object.assign(UI,{sel:null,mode:'sys',race:null,line:'',acts:null,dice:null,confirmNew:false});log('Haven Yard clears you for launch. The nearest Ossiri toll ring is marked on your chart.');save();ov.classList.remove('on');intro();renderAll()}
+function after(){if(!checkDoom())save();renderAll()}
+
+const ACT={
+ jump,clear:()=>{UI.sel=null;renderPanel()},
+ survey:i=>{const s=S(G.at),p=s.planets[+i];if(!p||p.done||consumed(s))return;p.done=true;G.day+=1;const T=PTYPES[p.type];let t=`Surveyed ${p.name}.`;
+  if(p.fuel){const f=Math.min(p.fuel,G.fuelMax-G.fuel);G.fuel+=f;t+=` Skimmed ${Math.round(f)} fuel from the upper clouds.`}
+  if(p.min){const m=Math.min(p.min,G.cargo-G.min);G.min+=m;t+=` Landers brought back ${m} minerals${m<p.min?', hold full':''}.`}
+  if(Math.random()<T.haz){const l=1+Math.floor(Math.random()*3);G.crew=Math.max(1,G.crew-l);t+=` ${HAZ[p.type]} Lost ${l} crew.`}
+  log(t);after()},
+ explore:()=>{const s=S(G.at);if(s.kind!=='dead'||s.taken)return;s.taken=true;G.day+=2;
+  if(s.relic==='part'){G.parts++;log(RELIC.part[s.pi]+` Lantern parts: ${G.parts} of 3.`);if(G.parts===3)log('The Lantern is whole. It sits in your hold, warm and patient.')}
+  else if(s.relic==='seed'){G.hasSeed=true;log(RELIC.seed)}
+  else if(s.relic==='lore1'){G.credits+=200;log(RELIC.lore1)}
+  else{G.credits+=150;log(RELIC.lore2)}
+  after()},
+ refuel:()=>{G.fuel=G.fuelMax;log('Haven Yard fills your tanks.');after()},
+ hire:n=>{const price=+n;if(G.crew<G.crewMax&&G.credits>=price){G.crew++;G.credits-=price}renderAll();save()},
+ hirefull:n=>{const price=+n;while(G.crew<G.crewMax&&G.credits>=price){G.crew++;G.credits-=price}renderAll();save()},
+ beacon:()=>{G.fuel=Math.min(G.fuelMax,G.fuel+30);G.day+=18;log('An Ossiri tanker answers your beacon eighteen days later, tops you up with 30 fuel, and charges nothing, which is somehow more worrying.');after()},
+ hail:()=>{const s=S(G.at);UI.mode='talk';UI.race=s.race;UI.line=G.allies.includes(s.race)?TALK[s.race].allied:TALK[s.race].greet;UI.acts=null;renderPanel()},
+ topic:t=>{const T=TALK[UI.race];if(t==='ally'){if(G.allies.includes(UI.race)){UI.line=T.allied;UI.acts=null}else{const r=T.ally();UI.line=r.t;UI.acts=r.acts||null}}else{UI.line=T[t];UI.acts=null}renderPanel()},
+ do:i=>{const a=UI.acts&&UI.acts[+i];if(!a||a.ok===false)return;UI.acts=null;a.fn();if(!C)after()},
+ back:()=>{UI.mode='sys';UI.acts=null;UI.dice=null;renderPanel()},
+ trade:()=>{UI.mode='trade';renderPanel()},
+ sell:()=>{if(!G.min)return;G.credits+=G.min*PRICE;log(`Sold ${G.min} minerals for ${G.min*PRICE} credits.`);G.min=0;after()},
+ sellhaven:()=>{if(!G.min)return;G.credits+=G.min*HAVENPRICE;log(`Haven Yard bought ${G.min} minerals for ${G.min*HAVENPRICE} credits.`);G.min=0;after()},
+ fuel:()=>{const need=Math.floor(G.fuelMax-G.fuel),n=Math.min(need,Math.floor(G.credits/3));if(n<=0)return;G.fuel+=n;G.credits-=n*3;after()},
+ charts:()=>{if(G.flags.charts||G.credits<80)return;G.credits-=80;G.flags.charts=1;G.stars.forEach(s=>{if((s.kind==='home'||s.kind==='station')&&!G.known.includes(s.id))G.known.push(s.id)});log('The Ossiri charts mark every homeworld and toll ring. Ruins, they say, are not for sale. Nobody ever comes back to complain about them.');after()},
+ up:id=>{const u=UPS.find(x=>x.id===id);if(!u||G.ups.includes(id)||G.credits<u.cost)return;G.credits-=u.cost;G.ups.push(id);u.fn();log(`Installed ${u.name.toLowerCase()}.`);after()},
+ roll:()=>{const D=UI.dice;if(!D||D.p||G.credits<D.stake)return;G.credits-=D.stake;D.p=[d6(),d6(),d6()];save();renderAll()},
+ reroll:()=>{const D=UI.dice;if(!D||!D.p||D.rr||D.done)return;let m=0;D.p.forEach((v,i)=>{if(v<D.p[m])m=i});D.p[m]=d6();D.rr=true;renderPanel()},
+ stand:()=>{const D=UI.dice;if(!D||!D.p||D.done)return;D.e=[d6(),d6(),d6()];D.done=true;const a=sum(D.p),b=sum(D.e);
+  if(a>b){G.credits+=D.stake;ally('pell',"Ha! Three moons, and all of them yours. A deal is a deal, even for us. Especially for us, this once.");D.res=UI.line}
+  else{D.res=a===b?'A tie! Ties go to the house. The house is delighted.':'The house thanks you for your generous contribution. Again?';log(`Lost ${D.stake} credits at Three Moons.`)}
+  after()},
+ again:()=>{UI.dice={stake:UI.dice.stake,p:null,e:null,rr:false,done:false,res:''};renderPanel()},
+ newgame:()=>{if(!UI.confirmNew){UI.confirmNew=true;renderPanel();return}startNew()}
+};
+const d6=()=>1+Math.floor(Math.random()*6),sum=a=>a.reduce((x,y)=>x+y,0);
+panel.addEventListener('click',e=>{const b=e.target.closest('button[data-act]');if(!b||b.disabled)return;const f=ACT[b.dataset.act];if(f)f(b.dataset.arg)});
+
+/* ---------- panel ---------- */
+function kindLine(s){return s.kind==='haven'?'Your home yard':s.kind==='heart'?'Source of the Bloom':s.kind==='home'?`Homeworld of the ${RACES[s.race].name}`:s.kind==='station'?'Ossiri toll ring':s.kind==='dead'?'Dead system':`${s.planets.length} planet${s.planets.length>1?'s':''}`}
+const logH=()=>`<div class="card log"><h3>Captain's log</h3>${G.msg.slice(0,6).map(m=>`<p>${esc(m)}</p>`).join('')||'<p>Nothing yet.</p>'}</div>`;
+const btn=(act,label,arg,dis,pri)=>`<button class="${pri?'pri':''}" data-act="${act}"${arg!=null?` data-arg="${esc(arg)}"`:''}${dis?' disabled':''}>${esc(label)}</button>`;
+function destCard(){
+ const t=S(UI.sel),c=S(G.at),d=dist(c,t),f=d/FUELK,arr=G.day+d/SPEED(),days=Math.floor(arr)-Math.floor(G.day),kn=G.known.includes(t.id),no=f>G.fuel;
+ const rArr=R0+arr*DAYRATE,inside=t.kind!=='heart'&&dH(t)<rArr,edge=!inside&&t.kind!=='heart'&&dH(t)-rArr<140;
+ let warn='';
+ if(t.kind==='heart'&&!(G.parts>=3&&G.allies.length>=3))warn='The Heart is guarded by four scouts, and you cannot hurt it yet.';
+ else if(inside)warn=`By the time you arrive, ${esc(t.name)} will be inside the Bloom. Three scouts will attack on arrival. You can flee once your battery is full.`;
+ else if(edge)warn='This system sits near the edge of the Bloom. Scouts attack about half the time on arrival.';
+ if(warn&&G.crew<8)warn+=` You have only ${G.crew} crew. Hire more at Haven or a toll ring first.`;
+ return `<div class="card"><h3>Course to ${esc(t.name)}</h3><p class="sub">${kn?esc(kindLine(t)):'Uncharted'}</p><p>${Math.ceil(f)} fuel, ${days} day${days===1?'':'s'}, arriving on day ${Math.floor(arr)}.</p>${warn?`<p class="warn">${warn}</p>`:''}${no?'<p class="warn">Not enough fuel for this jump.</p>':''}<div class="row">${btn('jump',inside?'Jump into the Bloom':'Jump',null,no,true)}${btn('clear','Cancel')}</div></div>`;
+}
+function renderSys(){
+ if(G.travel){const t=S(G.travel.to);panel.innerHTML=`<h2>In transit</h2><p class="sub">Bound for ${esc(t.name)}. The days slip by, and the grey keeps growing.</p>`+logH();return}
+ const s=S(G.at),gone=consumed(s);let h='';
+ if(UI.sel!=null&&UI.sel!==G.at)h+=destCard();
+ h+=`<h2>${esc(s.name)}</h2><p class="sub">${esc(kindLine(s))}</p>`;
+ if(gone)h+=`<p class="warn">This system is inside the Bloom.</p>`;
+ if(s.kind==='haven'){const n=G.crewMax-G.crew;h+=`<div class="card"><h3>Haven Yard</h3><p>The yard crews top off your tanks for free, sign on new hands at 8 credits each, and buy minerals at ${HAVENPRICE} credits each. The Ossiri pay ${PRICE}.</p><div class="row">${btn('refuel','Refuel free',null,G.fuel>=G.fuelMax)}${btn('sellhaven',`Sell ${G.min} minerals for ${G.min*HAVENPRICE} cr`,null,!G.min)}${btn('hire','Hire 1 crew','8',!n||G.credits<8)}${btn('hirefull','Hire to full','8',!n||G.credits<8)}</div></div>`}
+ if(s.kind==='station'||(s.kind==='home'&&s.race==='ossiri'))h+=`<div class="row">${btn('trade','Open trade',null,gone,true)}</div>`;
+ if(s.kind==='home'){if(gone&&!G.allies.includes(s.race))h+=`<p>The homeworld is grey and silent.</p>`;else h+=`<div class="row">${btn('hail',`Hail the ${RACES[s.race].short}`,null,false,true)}${G.allies.includes(s.race)?`<span class="badge" style="background:${RACES[s.race].col};align-self:center">Allied</span>`:''}</div>`}
+ if(s.kind==='dead')h+=`<div class="card"><h3>Ruins</h3>${s.taken?'<p class="sub">You have already picked these ruins clean.</p>':`<p>Something old is still here. Exploring takes 2 days.</p><div class="row">${btn('explore','Explore the ruins',null,false,true)}</div>`}</div>`;
+ if(s.kind==='heart')h+=`<p>${G.parts>=3&&G.allies.length>=3?'The Lantern is ready. Jump away and back to strike.':'You need all three Lantern parts and three allied fleets to strike here.'}</p>`;
+ if(s.planets.length)h+=`<div class="card"><h3>Planets</h3>${s.planets.map((p,i)=>`<div class="planet"><div><span class="sw" style="background:${PCOL[p.type]}"></span><b>${esc(p.name)}</b> <span class="sub">${p.type}${p.type==='gas'?', fuel':''}</span></div>${p.done?'<span class="sub">Surveyed</span>':btn('survey','Survey, 1 day',i,gone)}</div>`).join('')}</div>`;
+ if(UI.sel==null)h+=`<p class="sub">Tap a star on the chart to plot a jump. The dotted coral circle is your fuel range.</p>`;
+ if(G.fuel<15)h+=`<div class="card"><h3>Low fuel</h3><p>A distress beacon will bring a tanker with 30 fuel, but it takes 18 days to arrive.</p>${btn('beacon','Fire distress beacon')}</div>`;
+ const names=G.allies.map(k=>RACES[k].short).join(', ');
+ h+=`<p class="sub">Allied fleets: ${esc(names||'none yet')}. Lantern parts: ${G.parts} of 3.${G.hasSeed?' You carry a warm pale seed.':''}</p>`;
+ h+=logH()+`<div class="row">${btn('newgame',UI.confirmNew?'Tap again to start over':'New game')}</div>`;
+ panel.innerHTML=h;
+}
+function renderTalk(){
+ const k=UI.race,Rc=RACES[k],al=G.allies.includes(k);
+ let h=`<div class="talk">${portrait(k)}<div><h2>${esc(Rc.name)}</h2>${al?`<span class="badge" style="background:${Rc.col}">Allied</span>`:''}</div></div><p class="quote">${esc(UI.line)}</p>`;
+ if(UI.acts)h+=`<div class="row">${UI.acts.map((a,i)=>btn('do',a.l,i,a.ok===false,true)).join('')}</div>`;
+ h+=`<div class="row">${[['who','Who are you?'],['bloom','The Bloom?'],['others','Your neighbors?'],['ally',al?'Our alliance':'Join us']].map(([t,l])=>btn('topic',l,t)).join('')}${btn('back','Leave')}</div>`+logH();
+ panel.innerHTML=h;
+}
+function renderTrade(){
+ const need=Math.floor(G.fuelMax-G.fuel),n=Math.min(need,Math.floor(G.credits/3));
+ let h=`<h2>Ossiri toll ring</h2><p class="quote">State your cargo. State your credit. Do not state your feelings.</p>`;
+ h+=`<div class="card"><h3>Sell</h3><p>Minerals in hold: ${G.min}. The ring pays ${PRICE} credits each.</p>${btn('sell',`Sell all for ${G.min*PRICE} credits`,null,!G.min,true)}</div>`;
+ h+=`<div class="card"><h3>Supplies</h3><p>Fuel is 3 credits a unit. Crew sign on for 10 credits each.</p><div class="row">${btn('fuel',n>0?`Buy ${n} fuel for ${n*3} cr`:'Tanks full',null,n<=0)}${btn('hire','Hire 1 crew','10',G.crew>=G.crewMax||G.credits<10)}${btn('hirefull','Hire to full','10',G.crew>=G.crewMax||G.credits<10)}</div></div>`;
+ h+=`<div class="card"><h3>Star charts</h3>${G.flags.charts?'<p class="sub">Your charts are up to date.</p>':`<p>Marks every homeworld and toll ring on your chart.</p>${btn('charts','Buy charts for 80 cr',null,G.credits<80)}`}</div>`;
+ h+=`<div class="card"><h3>Refits</h3>${UPS.map(u=>`<div class="planet"><div><b>${esc(u.name)}</b><br><span class="sub">${esc(u.desc)}</span></div>${G.ups.includes(u.id)?'<span class="sub">Installed</span>':btn('up',`${u.cost} cr`,u.id,G.credits<u.cost)}</div>`).join('')}</div>`;
+ h+=`<div class="row">${btn('back','Leave the ring')}</div>`+logH();
+ panel.innerHTML=h;
+}
+function renderDice(){
+ const D=UI.dice,dv=a=>`<div class="dice">${a.map(v=>`<div class="die">${v}</div>`).join('')}</div>`;
+ let h=`<div class="talk">${portrait('pell')}<div><h2>Three Moons</h2><p class="sub">Stake ${D.stake} credits. Each side rolls three moons and the higher total wins. You may reroll your lowest moon once. Ties go to the house.</p></div></div>`;
+ if(!D.p)h+=`<div class="row">${btn('roll',`Roll, paying ${D.stake} cr`,null,G.credits<D.stake,true)}${btn('back','Walk away')}</div>`;
+ else{
+  h+=`<h3>Your moons: ${sum(D.p)}</h3>${dv(D.p)}`;
+  if(!D.done)h+=`<div class="row">${btn('reroll','Reroll lowest moon',null,D.rr)}${btn('stand','Stand',null,false,true)}</div>`;
+  else{h+=`<h3>Pell moons: ${sum(D.e)}</h3>${dv(D.e)}<p class="quote">${esc(D.res)}</p><div class="row">${G.allies.includes('pell')?btn('back','Back to the Pell'):btn('again','Play again')+btn('back','Walk away')}</div>`}
+ }
+ panel.innerHTML=h+logH();
+}
+function renderPanel(){
+ if(!G)return;
+ if(C){panel.innerHTML=`<h2>${esc(C.opts.title)}</h2><p>Steer with the arrow keys or WASD. Space fires the main gun. Shift launches a seeker that costs 6 energy. F flees once your battery is full. On a phone, use the buttons on the screen.</p><p class="sub">Your crew is your hull, so every hit costs lives. The planet pulls on everything, so swing around it and never into it.</p>`+logH();return}
+ if(UI.mode!=='sys'&&UI.mode!=='talk')UI.confirmNew=false;
+ if(UI.mode==='talk')renderTalk();else if(UI.mode==='trade')renderTrade();else if(UI.mode==='dice'&&UI.dice)renderDice();else{UI.mode='sys';renderSys()}
+}
+let lastStats='';
+function renderStats(){
+ const eta=Math.max(0,Math.ceil((dH(S(0))-R0)/DAYRATE-G.day));
+ const h=[['Day',Math.floor(G.day)],['Bloom reaches Haven in',eta+' days',eta<60],['Fuel',Math.floor(G.fuel)+'/'+G.fuelMax,G.fuel<15],['Crew',(C?Math.max(0,Math.ceil(C.player.crew)):G.crew)+'/'+G.crewMax,G.crew<5],['Credits',G.credits],['Minerals',G.min+'/'+G.cargo],['Allies',G.allies.length+'/3'],['Lantern',G.parts+'/3']]
+  .map(([k,v,w])=>`<span class="st${w?' warn':''}">${k} <b>${v}</b></span>`).join('');
+ if(h!==lastStats){statsEl.innerHTML=h;lastStats=h}
+}
+function renderAll(){renderStats();renderPanel()}
+
+/* ---------- combat ---------- */
+const AW=1600,AH=1600,PL={x:800,y:800,r:58};
+const TY={
+ player:{r:14,turn:4.4,acc:300,maxV:330,cd:.16,col:CORAL},
+ ally:{r:13,crew:10,turn:3.4,acc:250,maxV:300,cd:.45,range:460,col:'#2f6f9f'},
+ scout:{r:11,crew:3,turn:3.1,acc:220,maxV:270,cd:1.9,range:420,col:BLOOM},
+ drifter:{r:15,crew:8,turn:2.6,acc:190,maxV:250,cd:.6,range:460,col:'#5d6472'},
+ thrask:{r:16,crew:14,turn:3.8,acc:300,maxV:350,cd:.8,range:430,col:'#a8323e'},
+ heart:{r:66,crew:70,turn:.45,acc:0,maxV:0,cd:2.4,range:0,col:BLOOM}
+};
+const SH={bolt:{v:640,life:.85,dmg:1,r:3},ebolt:{v:520,life:.9,dmg:1,r:3},spore:{v:280,life:2.4,dmg:1,r:5},seeker:{v:380,life:2.6,dmg:3,r:4}};
+const keys={};
+const BG=Array.from({length:140},()=>({x:Math.random()*AW,y:Math.random()*AH,r:Math.random()<.2?1.6:1}));
+const BG2=Array.from({length:110},()=>({x:Math.random()*AW,y:Math.random()*AH,r:Math.random()<.15?1.4:.9}));
+const wd=(d,L)=>{d%=L;if(d>L/2)d-=L;if(d<-L/2)d+=L;return d};
+const wrapP=o=>{o.x=(o.x%AW+AW)%AW;o.y=(o.y%AH+AH)%AH};
+const rel=(a,b)=>{const dx=wd(b.x-a.x,AW),dy=wd(b.y-a.y,AH);return{dx,dy,d:Math.hypot(dx,dy)||.001}};
+const angD=(a,b)=>{let d=b-a;while(d>Math.PI)d-=2*Math.PI;while(d<-Math.PI)d+=2*Math.PI;return d};
+function mkShip(type,side,x,y,a,ex){const t=TY[type];return Object.assign({type,side,x,y,vx:0,vy:0,a,crew:t.crew||1,crewMax:t.crew||1,bat:0,batMax:0,cd:.5+Math.random()*.8,scd:1+Math.random()*2,r:t.r,hit:0,flash:0,thr:false,spawn:5,dash:0,dead:false},ex||{})}
+function fight(o){
+ for(const k in keys)keys[k]=false;
+ const ships=[],p=mkShip('player','p',450,1150,-Math.PI/4,{crew:G.crew,crewMax:G.crewMax,bat:G.batMax,batMax:G.batMax});ships.push(p);
+ (o.allies||[]).forEach((k,i)=>ships.push(mkShip('ally','p',360+i*60,1240-i*50,-Math.PI/4,{race:k,col:RACES[k].col})));
+ let i=0;for(const [t,n] of Object.entries(o.foes))for(let j=0;j<n;j++,i++){if(t==='heart')ships.push(mkShip('heart','e',1150,450,0));else{const an=i*1.3;ships.push(mkShip(t,'e',1120+Math.cos(an)*130,480+Math.sin(an)*130,Math.PI*.75))}}
+ C={opts:o,ships,shots:[],fx:[],rings:[],player:p,t:0,end:null,kills:{},lantern:!!o.lantern,cam:{x:p.x,y:p.y},msgT:2.5};
+ fleeBtn.style.visibility=o.canFlee?'visible':'hidden';
+ document.body.classList.add('combat');renderAll();
+}
+function shoot(s,kind,a,mul){const k=SH[kind],c=Math.cos(a),n=Math.sin(a);C.shots.push({kind,side:s.side,x:s.x+c*(s.r+4),y:s.y+n*(s.r+4),vx:s.vx*.4+c*k.v,vy:s.vy*.4+n*k.v,life:k.life,dmg:k.dmg*(mul||1),r:k.r,a})}
+function burst(x,y,col,n){for(let i=0;i<n;i++){const a=Math.random()*7,v=40+Math.random()*220;C.fx.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:.4+Math.random()*.6,col})}}
+function dmg(s,n){
+ if(s.dead)return;
+ if(s.type==='heart'&&!C.lantern){s.flash=.15;return}
+ if(s===C.player&&C.opts.nonLethal){s.crew=Math.max(2,s.crew-n);s.flash=.12;if(s.crew<=2&&!C.end)C.end={res:'lose',t:1.2};return}
+ s.crew-=n;s.flash=.12;
+ if(s.crew<=0){s.dead=true;C.rings.push({x:s.x,y:s.y,t:0,R:s.type==='heart'?280:80,col:s.side==='p'?CORAL:INK});burst(s.x,s.y,s.col||TY[s.type].col,s.type==='heart'?80:24);if(s.side==='e')C.kills[s.type]=(C.kills[s.type]||0)+1}
+}
+function lim(s,m){const v=Math.hypot(s.vx,s.vy);if(v>m){s.vx*=m/v;s.vy*=m/v}}
+function ai(s,t,dt){
+ if(s.type==='heart'){s.a+=t.turn*dt;s.vx=s.vy=0;
+  if(s.cd<=0){for(let k=0;k<14;k++)shoot(s,'spore',s.a+k*Math.PI*2/14);s.cd=t.cd}
+  s.spawn-=dt;if(s.spawn<=0){if(C.ships.filter(o=>o.type==='scout'&&!o.dead).length<5){const sc=mkShip('scout','e',s.x+Math.cos(s.a)*95,s.y+Math.sin(s.a)*95,s.a);sc.vx=Math.cos(s.a)*150;sc.vy=Math.sin(s.a)*150;C.ships.push(sc)}s.spawn=6}
+  return}
+ let tg=null,best=1e9;for(const o of C.ships)if(o.side!==s.side&&!o.dead){const d=rel(s,o).d;if(d<best){best=d;tg=o}}
+ if(!tg)return;
+ const v=rel(s,tg),lead=v.d/(s.type==='scout'?280:520);
+ const want=Math.atan2(v.dy+(tg.vy-s.vy)*lead*.6,v.dx+(tg.vx-s.vx)*lead*.6),df=angD(s.a,want);
+ s.a+=Math.max(-t.turn*dt,Math.min(t.turn*dt,df));
+ const g=rel(s,PL),avoid=g.d<PL.r+s.r+90;
+ if(avoid){const away=Math.atan2(-g.dy,-g.dx);s.a+=Math.max(-t.turn*dt,Math.min(t.turn*dt,angD(s.a,away)))}
+ const pref=s.type==='scout'?0:s.type==='thrask'?150:230;
+ if((v.d>pref&&Math.abs(df)<.7)||avoid){s.vx+=Math.cos(s.a)*t.acc*dt;s.vy+=Math.sin(s.a)*t.acc*dt;s.thr=true}
+ lim(s,t.maxV*(s.dash>0?2.2:1));
+ if(s.cd<=0&&Math.abs(df)<.22&&v.d<t.range){
+  if(s.type==='scout')shoot(s,'spore',s.a);
+  else if(s.type==='thrask')for(const o of[-.13,0,.13])shoot(s,'ebolt',s.a+o);
+  else shoot(s,s.side==='p'?'bolt':'ebolt',s.a);
+  s.cd=t.cd*(.8+Math.random()*.4)}
+ if(s.type==='thrask'&&s.scd<=0&&v.d<520&&Math.abs(df)<.3){s.vx+=Math.cos(s.a)*480;s.vy+=Math.sin(s.a)*480;s.scd=3.5;s.dash=.6;burst(s.x,s.y,t.col,8)}
+}
+function upCombat(dt){
+ C.t+=dt;C.msgT-=dt;const p=C.player;
+ for(const s of C.ships){
+  if(s.dead)continue;
+  s.cd-=dt;s.scd-=dt;s.hit-=dt;s.flash-=dt;s.dash-=dt;s.thr=false;const t=TY[s.type];
+  if(s===p){
+   const acc=t.acc*(1+.2*G.thrust);
+   if(keys.left)s.a-=t.turn*dt;if(keys.right)s.a+=t.turn*dt;
+   if(keys.up){s.vx+=Math.cos(s.a)*acc*dt;s.vy+=Math.sin(s.a)*acc*dt;s.thr=true}
+   if(keys.fire&&s.cd<=0&&s.bat>=1){shoot(s,'bolt',s.a,G.dmg);s.bat-=1;s.cd=t.cd}
+   if(keys.sp&&s.scd<=0&&s.bat>=6){shoot(s,'seeker',s.a);s.bat-=6;s.scd=.5}
+   s.bat=Math.min(s.batMax,s.bat+6.5*dt);lim(s,t.maxV*(1+.15*G.thrust));
+  }else ai(s,t,dt);
+  if(s.type!=='heart'){
+   const g=rel(s,PL);
+   if(g.d<750){const f=Math.min(380,3.2e6/(g.d*g.d));s.vx+=g.dx/g.d*f*dt;s.vy+=g.dy/g.d*f*dt}
+   lim(s,720);
+   if(g.d<PL.r+s.r){const nx=-g.dx/g.d,ny=-g.dy/g.d,o=PL.r+s.r-g.d+1;s.x+=nx*o;s.y+=ny*o;const vn=s.vx*nx+s.vy*ny;if(vn<0){s.vx-=1.6*vn*nx;s.vy-=1.6*vn*ny}if(s.hit<=0){dmg(s,1);s.hit=.5;burst(s.x,s.y,'#8fa3b8',6)}}
+  }
+  s.x+=s.vx*dt;s.y+=s.vy*dt;wrapP(s);
+  if(s.thr&&s.type!=='scout'&&Math.random()<.7){const c=Math.cos(s.a),n=Math.sin(s.a);C.fx.push({x:s.x-c*s.r,y:s.y-n*s.r,vx:s.vx*.3-c*80+(Math.random()-.5)*30,vy:s.vy*.3-n*80+(Math.random()-.5)*30,life:.45,col:'#d6cfbf',sz:4})}
+ }
+ const sh=C.ships;
+ for(let i=0;i<sh.length;i++)for(let j=i+1;j<sh.length;j++){const a=sh[i],b=sh[j];if(a.side===b.side||a.dead||b.dead)continue;const v=rel(a,b),m=a.r+b.r;
+  if(v.d<m){const nx=v.dx/v.d,ny=v.dy/v.d,o=(m-v.d)/2,ah=a.type==='heart',bh=b.type==='heart';
+   if(!ah){a.x-=nx*o*(bh?2:1);a.y-=ny*o*(bh?2:1);wrapP(a)}if(!bh){b.x+=nx*o*(ah?2:1);b.y+=ny*o*(ah?2:1);wrapP(b)}
+   const rv=(b.vx-a.vx)*nx+(b.vy-a.vy)*ny;if(rv<0){const im=-rv*.9;if(!ah){a.vx-=nx*im;a.vy-=ny*im}if(!bh){b.vx+=nx*im;b.vy+=ny*im}}
+   if(a.hit<=0&&b.hit<=0){dmg(a,bh?2:1);dmg(b,ah?2:1);a.hit=b.hit=.45}}}
+ for(const b of C.shots){
+  b.life-=dt;
+  if(b.kind==='seeker'){let tg=null,best=900;for(const o of C.ships)if(o.side!==b.side&&!o.dead){const d=rel(b,o).d;if(d<best){best=d;tg=o}}
+   if(tg){const v=rel(b,tg);b.a+=Math.max(-3.2*dt,Math.min(3.2*dt,angD(b.a,Math.atan2(v.dy,v.dx))));const sp=Math.max(380,Math.hypot(b.vx,b.vy));b.vx=Math.cos(b.a)*sp;b.vy=Math.sin(b.a)*sp}}
+  b.x+=b.vx*dt;b.y+=b.vy*dt;wrapP(b);
+  if(rel(b,PL).d<PL.r){b.life=0;burst(b.x,b.y,'#8fa3b8',3);continue}
+  for(const o of C.ships){if(o.side===b.side||o.dead)continue;if(rel(b,o).d<o.r+b.r){b.life=0;dmg(o,b.dmg);C.rings.push({x:b.x,y:b.y,t:0,R:20,col:b.side==='p'?CORAL:INK});burst(b.x,b.y,b.side==='p'?CORAL:INK,5);break}}
+ }
+ C.shots=C.shots.filter(b=>b.life>0);
+ for(const f of C.fx){f.life-=dt;f.x+=f.vx*dt;f.y+=f.vy*dt;f.vx*=.96;f.vy*=.96}
+ C.fx=C.fx.filter(f=>f.life>0);
+ for(const g of C.rings)g.t+=dt;C.rings=C.rings.filter(g=>g.t<.6);
+ C.ships=C.ships.filter(s=>!s.dead||s===p);
+ if(!C.end){if(p.dead)C.end={res:'lose',t:1.6};else if(!C.ships.some(s=>s.side==='e'&&!s.dead))C.end={res:'win',t:1.2}}
+ else{C.end.t-=dt;if(C.end.t<=0)endFight(C.end.res)}
+}
+function tryFlee(){if(C&&C.opts.canFlee&&!C.end&&!C.player.dead&&C.player.bat>=C.player.batMax*.95)C.end={res:'flee',t:.25}}
+fleeBtn.addEventListener('click',tryFlee);
+function endFight(res){
+ const o=C.opts,k=C.kills,p=C.player;
+ G.crew=Math.max(0,Math.ceil(p.crew));if(o.nonLethal)G.crew=Math.max(2,G.crew);
+ C=null;document.body.classList.remove('combat');for(const kk in keys)keys[kk]=false;
+ if(res==='win'){const t=[];
+  if(k.scout){const m=Math.min(k.scout*6,G.cargo-G.min);G.min+=m;if(m)t.push(`${m} minerals of grey residue`)}
+  if(k.drifter){G.credits+=k.drifter*90;t.push(`${k.drifter*90} credits from the wrecks`)}
+  log(t.length?`Victory. Salvaged ${t.join(' and ')}.`:'Victory.');
+  if(o.onWin)o.onWin();
+ }else if(res==='flee'){G.day+=2;log('You flee into the dark and lose two days circling back.');if(o.onFlee)o.onFlee()}
+ else{if(o.nonLethal){if(o.onLose)o.onLose()}else{end(false,'The Wakeful goes dark with all hands. Somewhere behind you, the grey keeps growing.');return}}
+ if(G.over)return;
+ after();
+}
+function drawShip(s,X,Y,z){
+ ctx.save();ctx.translate(X,Y);ctx.rotate(s.a);ctx.scale(z,z);ctx.lineWidth=2.2;ctx.strokeStyle=INK;ctx.lineJoin='round';
+ const ty=s.type;
+ if(s.thr&&ty!=='scout'&&ty!=='heart'){const L=20+Math.random()*9;ctx.fillStyle='#f2a65a';ctx.beginPath();ctx.moveTo(-9,6);ctx.lineTo(-L,0);ctx.lineTo(-9,-6);ctx.fill();ctx.fillStyle='#fff1c9';ctx.beginPath();ctx.moveTo(-9,3);ctx.lineTo(-L*.7,0);ctx.lineTo(-9,-3);ctx.fill()}
+ if(ty==='player'||ty==='ally'){const k=ty==='ally'?.85:1;ctx.beginPath();ctx.moveTo(20*k,0);ctx.lineTo(-10*k,12*k);ctx.lineTo(-6*k,0);ctx.lineTo(-10*k,-12*k);ctx.closePath();ctx.fillStyle=ty==='ally'?s.col:'#fff';ctx.fill();ctx.stroke();if(ty==='player'){ctx.fillStyle='#d9d4c7';ctx.beginPath();ctx.moveTo(-10,12);ctx.lineTo(-6,0);ctx.lineTo(-2,5);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(-10,-12);ctx.lineTo(-6,0);ctx.lineTo(-2,-5);ctx.closePath();ctx.fill();ctx.fillStyle=CORAL;ctx.beginPath();ctx.moveTo(14,0);ctx.lineTo(-2,5);ctx.lineTo(-2,-5);ctx.fill();ctx.fillStyle=INK;ctx.beginPath();ctx.arc(6,0,2.2,0,7);ctx.fill()}else{ctx.fillStyle='rgba(255,255,255,.7)';ctx.beginPath();ctx.arc(5,0,2,0,7);ctx.fill()}}
+ else if(ty==='scout'){ctx.rotate(C.t*3);ctx.beginPath();for(let i=0;i<12;i++){const r=i%2?5:13,a=i*Math.PI/6;ctx.lineTo(Math.cos(a)*r,Math.sin(a)*r)}ctx.closePath();ctx.fillStyle='#b3a9d1';ctx.fill();ctx.strokeStyle='#4b4166';ctx.stroke()}
+ else if(ty==='drifter'){ctx.beginPath();[[17,0],[6,11],[-12,13],[-7,0],[-12,-13],[6,-11]].forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();ctx.fillStyle='#cfd2d8';ctx.fill();ctx.stroke();ctx.beginPath();ctx.moveTo(-2,-6);ctx.lineTo(6,6);ctx.stroke()}
+ else if(ty==='thrask'){ctx.beginPath();[[24,0],[-6,7],[-15,15],[-10,0],[-15,-15],[-6,-7]].forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();ctx.fillStyle='#a8323e';ctx.fill();ctx.stroke();ctx.strokeStyle='#f0c9cd';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(18,0);ctx.lineTo(-8,0);ctx.stroke()}
+ else if(ty==='heart'){const pu=1+Math.sin(C.t*2)*.035;ctx.scale(pu,pu);for(let i=0;i<10;i++){ctx.save();ctx.rotate(i*Math.PI/5);ctx.beginPath();ctx.ellipse(46,0,28,13,0,0,7);const pg=ctx.createLinearGradient(18,0,74,0);pg.addColorStop(0,'#8e82b3');pg.addColorStop(1,'#d2cbe6');ctx.fillStyle=pg;ctx.fill();ctx.strokeStyle='#4b4166';ctx.stroke();ctx.restore()}
+  ctx.beginPath();ctx.arc(0,0,32,0,7);ctx.fillStyle='#ece8f5';ctx.fill();ctx.strokeStyle='#4b4166';ctx.stroke();
+  const p=C.player,v=rel(s,p),la=Math.atan2(v.dy,v.dx)-s.a;ctx.beginPath();ctx.arc(Math.cos(la)*13,Math.sin(la)*13,12,0,7);ctx.fillStyle=INK;ctx.fill()}
+ if(s.flash>0){ctx.globalAlpha=.5;ctx.fillStyle=CORAL;ctx.beginPath();ctx.arc(0,0,s.r+3,0,7);ctx.fill()}
+ ctx.restore();
+}
+function bar(x,y,w,v,max,col,label){ctx.fillStyle='#fff';ctx.fillRect(x,y,w,12);ctx.fillStyle=col;ctx.fillRect(x,y,w*Math.max(0,Math.min(1,v/max)),12);ctx.strokeStyle=INK;ctx.lineWidth=1.5;ctx.strokeRect(x,y,w,12);ctx.fillStyle=INK;ctx.font='600 12px "IBM Plex Sans",sans-serif';ctx.textAlign='left';ctx.fillText(label,x,y-4)}
+function drawCombat(){
+ ctx.setTransform(DPR,0,0,DPR,0,0);ctx.fillStyle='#f8f7f2';ctx.fillRect(0,0,CW,CH);
+ const z=Math.max(.55,Math.min(1.1,Math.min(CW,CH)/560)),p=C.player;
+ if(!p.dead){C.cam.x+=wd(p.x-C.cam.x,AW)*.15;C.cam.y+=wd(p.y-C.cam.y,AH)*.15;wrapP(C.cam)}
+ const SX=x=>CW/2+wd(x-C.cam.x,AW)*z,SYc=y=>CH/2+wd(y-C.cam.y,AH)*z;
+ ctx.fillStyle='#dedad0';for(const b of BG2){const x=CW/2+wd(b.x-C.cam.x*.5,AW)*z*.8,y=CH/2+wd(b.y-C.cam.y*.5,AH)*z*.8;if(x>-2&&x<CW+2&&y>-2&&y<CH+2)ctx.fillRect(x,y,b.r*1.4,b.r*1.4)}
+ ctx.fillStyle='#bdb7a8';for(const b of BG){const x=SX(b.x),y=SYc(b.y);if(x>-2&&x<CW+2&&y>-2&&y<CH+2)ctx.fillRect(x,y,b.r*1.6,b.r*1.6)}
+ const px=SX(PL.x),py=SYc(PL.y);
+ ctx.beginPath();ctx.arc(px,py,320*z,0,7);ctx.strokeStyle='rgba(77,97,119,.18)';ctx.setLineDash([3,7]);ctx.lineWidth=1;ctx.stroke();ctx.setLineDash([]);
+ const pr=PL.r*z,ring=(a0,a1)=>{ctx.beginPath();ctx.ellipse(px,py,pr*1.7,pr*.38,-.35,a0,a1);ctx.strokeStyle='rgba(196,170,128,.45)';ctx.lineWidth=7*z;ctx.stroke();ctx.beginPath();ctx.ellipse(px,py,pr*1.7,pr*.38,-.35,a0,a1);ctx.strokeStyle='rgba(24,32,46,.55)';ctx.lineWidth=1.2;ctx.stroke()};
+ const halo=ctx.createRadialGradient(px,py,pr*.9,px,py,pr*1.35);halo.addColorStop(0,'rgba(143,163,184,.35)');halo.addColorStop(1,'rgba(143,163,184,0)');ctx.fillStyle=halo;ctx.beginPath();ctx.arc(px,py,pr*1.35,0,7);ctx.fill();
+ ring(Math.PI,Math.PI*2);
+ const gr=ctx.createRadialGradient(px-18*z,py-18*z,6*z,px,py,pr);gr.addColorStop(0,'#d3dfe9');gr.addColorStop(1,'#4d6177');
+ ctx.save();ctx.beginPath();ctx.arc(px,py,pr,0,7);ctx.fillStyle=gr;ctx.fill();ctx.clip();
+ ctx.translate(px,py);ctx.rotate(-.35);for(const [y,h,a] of [[-.55,.12,.18],[-.2,.2,.14],[.15,.1,.2],[.42,.16,.12]]){ctx.fillStyle=`rgba(40,58,80,${a})`;ctx.fillRect(-pr,y*pr,pr*2,h*pr)}ctx.setTransform(DPR,0,0,DPR,0,0);
+ const sh=ctx.createLinearGradient(px-pr,py-pr,px+pr,py+pr);sh.addColorStop(.45,'rgba(24,32,46,0)');sh.addColorStop(1,'rgba(24,32,46,.45)');ctx.fillStyle=sh;ctx.fillRect(px-pr,py-pr,pr*2,pr*2);
+ ctx.restore();ctx.beginPath();ctx.arc(px,py,pr,0,7);ctx.strokeStyle=INK;ctx.lineWidth=2;ctx.stroke();
+ ring(0,Math.PI);
+ for(const b of C.shots){const x=SX(b.x),y=SYc(b.y);
+  if(b.kind==='spore'){ctx.beginPath();ctx.arc(x,y,b.r*1.9*z,0,7);ctx.fillStyle='rgba(156,144,191,.25)';ctx.fill();ctx.beginPath();ctx.arc(x,y,b.r*z,0,7);ctx.fillStyle='#9c90bf';ctx.fill();ctx.strokeStyle='#4b4166';ctx.lineWidth=1;ctx.stroke();ctx.beginPath();ctx.arc(x,y,b.r*.4*z,0,7);ctx.fillStyle='#4b4166';ctx.fill()}
+  else if(b.kind==='seeker'){ctx.save();ctx.translate(x,y);ctx.rotate(b.a);ctx.scale(z,z);ctx.fillStyle=CORAL;ctx.strokeStyle=INK;ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(9,0);ctx.lineTo(-6,5);ctx.lineTo(-6,-5);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore()}
+  else{const sp=Math.hypot(b.vx,b.vy)||1,x2=x-b.vx/sp*14*z,y2=y-b.vy/sp*14*z;ctx.lineCap='round';ctx.strokeStyle=b.side==='p'?'rgba(228,87,46,.25)':'rgba(24,32,46,.15)';ctx.lineWidth=9*z;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x2,y2);ctx.stroke();ctx.strokeStyle=b.side==='p'?CORAL:INK;ctx.lineWidth=3*z;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x2,y2);ctx.stroke()}}
+ for(const f of C.fx){if(!f.sz)continue;ctx.globalAlpha=Math.max(0,f.life*1.8);ctx.fillStyle=f.col;ctx.beginPath();ctx.arc(SX(f.x),SYc(f.y),f.sz*z*(1.5-f.life),0,7);ctx.fill()}ctx.globalAlpha=1;
+ for(const s of C.ships)if(!s.dead)drawShip(s,SX(s.x),SYc(s.y),z);
+ for(const f of C.fx){if(f.sz)continue;ctx.globalAlpha=Math.max(0,Math.min(1,f.life*1.6));ctx.fillStyle=f.col;ctx.fillRect(SX(f.x)-2,SYc(f.y)-2,4,4)}
+ for(const g of C.rings){const k=g.t/.6;ctx.globalAlpha=1-k;ctx.strokeStyle=g.col;ctx.lineWidth=Math.max(.5,3*(1-k));ctx.beginPath();ctx.arc(SX(g.x),SYc(g.y),g.R*k*z,0,7);ctx.stroke()}ctx.globalAlpha=1;
+ for(const s of C.ships){if(s.dead||s.side!=='e')continue;const x=SX(s.x),y=SYc(s.y);if(x>=0&&x<=CW&&y>=0&&y<=CH)continue;
+  const a=Math.atan2(y-CH/2,x-CW/2),c=Math.cos(a),n=Math.sin(a),t=Math.min((CW/2-18)/Math.abs(c||1e-6),(CH/2-18)/Math.abs(n||1e-6));
+  ctx.save();ctx.translate(CW/2+c*t,CH/2+n*t);ctx.rotate(a);ctx.beginPath();ctx.moveTo(9,0);ctx.lineTo(-5,7);ctx.lineTo(-5,-7);ctx.closePath();ctx.fillStyle=s.type==='heart'?'#4b4166':TY[s.type].col;ctx.fill();ctx.restore()}
+ bar(14,26,140,p.crew,p.crewMax,CORAL,`Crew ${Math.max(0,Math.ceil(p.crew))}`);
+ bar(14,62,140,p.bat,p.batMax,'#2f6f9f','Energy');
+ const h=C.ships.find(s=>s.type==='heart'&&!s.dead);if(h)bar(CW/2-110,26,220,h.crew,h.crewMax,BLOOM,'Bloom Heart');
+ if(C.msgT>0||C.end){ctx.globalAlpha=C.end?1:Math.min(1,C.msgT);ctx.fillStyle=INK;ctx.font='700 24px "Chakra Petch",sans-serif';ctx.textAlign='center';
+  const m=C.end?(C.end.res==='win'?'Victory':C.end.res==='flee'?'Escaping':C.opts.nonLethal?'Duel lost':'Destroyed'):C.opts.title;ctx.fillText(m,CW/2,h?CH*.3:CH*.25);ctx.globalAlpha=1}
+ const canF=C.opts.canFlee&&p.bat>=p.batMax*.95&&!C.end;if(fleeBtn.disabled===canF)fleeBtn.disabled=!canF;
+}
+
+/* ---------- input ---------- */
+const KM={ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right',ArrowUp:'up',KeyW:'up',Space:'fire',KeyJ:'fire',ShiftLeft:'sp',ShiftRight:'sp',KeyK:'sp'};
+addEventListener('keydown',e=>{if(!C)return;const k=KM[e.code];if(k){keys[k]=true;e.preventDefault()}if(e.code==='KeyF')tryFlee()});
+addEventListener('keyup',e=>{const k=KM[e.code];if(k)keys[k]=false});
+addEventListener('blur',()=>{for(const k in keys)keys[k]=false});
+document.querySelectorAll('#touch button').forEach(b=>{const k=b.dataset.k;
+ b.addEventListener('pointerdown',e=>{e.preventDefault();keys[k]=true;try{b.setPointerCapture(e.pointerId)}catch(_){}});
+ const off=()=>{keys[k]=false};['pointerup','pointercancel','lostpointercapture'].forEach(ev=>b.addEventListener(ev,off));
+ b.addEventListener('contextmenu',e=>e.preventDefault())});
+
+/* ---------- loop ---------- */
+let last=performance.now();
+function loop(now){
+ const dt=Math.min(.033,(now-last)/1000);last=now;
+ if(G){
+  if(C&&!G.over)upCombat(dt);
+  if(C)drawCombat();
+  else{
+   if(G.travel&&!G.over){const tr=G.travel;tr.p=Math.min(1,tr.p+dt/(.5+tr.d/320));G.day=tr.day0+tr.p*tr.d/SPEED();
+    if(checkDoom()){G.travel=null}else if(tr.p>=1){G.travel=null;arrive(tr.to)}}
+   drawMap(now);
+  }
+  renderStats();
+ }
+ requestAnimationFrame(loop);
+}
+G=load();
+if(!G){startNew()}else{G.travel=null;if(G.over)showEnd();renderAll()}
+requestAnimationFrame(loop);
+}
+</script></body></html>

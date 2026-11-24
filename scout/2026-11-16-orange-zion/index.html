@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Zion Wakes</title>
+<link rel="icon" href="data:,">
 <style>
 :root{--bg:#f6f3ea;--ink:#2b2a26;--soft:#8a857a;--line:#cfc8b8;--accent:#c2551f;--panel:#fffdf7}
 *{box-sizing:border-box}
@@ -21,6 +22,9 @@ button{font:inherit;border:1px solid var(--line);background:#fff;border-radius:8
 button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 #msg{color:var(--accent);font-size:13px;min-height:1em}
 #menu{font-size:13px}
+#nameBox{display:none;margin-top:6px}
+#nameIn{font:inherit;width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 9px;margin-bottom:4px;background:#fff;color:var(--ink)}
+#retry{display:none}
 </style>
 </head>
 <body>
@@ -28,11 +32,13 @@ button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 <div id="top"><div><b>Zion Wakes</b> <span id="stats">loading the city</span></div><div id="menu"><button id="reset">New start</button></div></div>
 <div id="story">
  <p id="beat">The city is loading.</p>
+ <button id="retry">Try again</button>
  <div id="msg"></div>
  <div id="sel">
   <div class="nm" id="selName"></div>
   <div class="meta" id="selMeta"></div>
   <button id="bMove">Move</button><button id="bName">Name it</button><button id="bOk">Approve</button><button id="bNo">Reject</button>
+  <div id="nameBox"><input id="nameIn" maxlength="60" autocomplete="off" enterkeyhint="done"><button id="nameOk" class="on">Confirm</button><button id="nameCancel">Cancel</button></div>
  </div>
 </div>
 <script>
@@ -89,6 +95,7 @@ function S2W(px,py){const r=devicePixelRatio;return [(px*r-cv.width/2)/(view.z*r
 function draw(){
  const r=devicePixelRatio;cx.setTransform(1,0,0,1,0,0);cx.fillStyle='#f6f3ea';cx.fillRect(0,0,cv.width,cv.height);
  if(!city)return;
+ const edgeLabels=new Map();
  for(const c of city.chunks){
   const [x0,y0]=W2S(c.chunk[0]*S,(c.chunk[1]+1)*S),[x1,y1]=W2S((c.chunk[0]+1)*S,c.chunk[1]*S);
   const vis=seen(c.chunk);
@@ -96,9 +103,15 @@ function draw(){
   cx.strokeStyle='#d8d2c4';cx.lineWidth=1;cx.strokeRect(x0,y0,x1-x0,y1-y0);
   if(!vis)continue;
   for(const l of c.lots){cx.beginPath();l.pts.forEach((p,i)=>{const q=W2S(p[0],p[1]);i?cx.lineTo(q[0],q[1]):cx.moveTo(q[0],q[1])});cx.closePath();cx.fillStyle=ZONE[(l.zone||'').toLowerCase()]||'#f0ede4';cx.fill()}
-  cx.fillStyle='#8a857a';cx.font=(11*r)+'px system-ui';
-  for(const e in c.streets){const m={N:[.5,.96],S:[.5,.04],W:[.04,.5],E:[.96,.5]}[e];const q=W2S((c.chunk[0]+m[0])*S,(c.chunk[1]+m[1])*S);cx.textAlign='center';cx.fillText(c.streets[e],q[0],q[1])}
+  for(const e in c.streets){
+   const [gx,gy]=c.chunk,k={N:'h'+gx+','+(gy+1),S:'h'+gx+','+gy,W:'v'+gx+','+gy,E:'v'+(gx+1)+','+gy}[e];if(!k)continue;
+   const m={N:[.5,1],S:[.5,0],W:[0,.5],E:[1,.5]}[e],n=c.streets[e],had=edgeLabels.get(k);
+   if(!had||n.length>had.n.length)edgeLabels.set(k,{n,x:(gx+m[0])*S,y:(gy+m[1])*S});
+  }
  }
+ cx.fillStyle='#8a857a';cx.font=(11*r)+'px system-ui';cx.textAlign='center';cx.textBaseline='middle';
+ for(const L of edgeLabels.values()){const q=W2S(L.x,L.y);cx.fillText(L.n,q[0],q[1])}
+ cx.textBaseline='alphabetic';
  for(const b of city.buildings){
   if(!seen(b.chunk))continue;
   const P=fp(b);cx.beginPath();P.forEach((p,i)=>{const q=W2S(p[0],p[1]);i?cx.lineTo(q[0],q[1]):cx.moveTo(q[0],q[1])});cx.closePath();
@@ -117,30 +130,39 @@ function stats(){
 function act(){fork.actions++;if(fork.actions%3===0){fork.radius++;beat('reveal')}save();stats();draw()}
 function wake(n){fork.awake=Math.round(fork.awake+n)}
 
-function select(b){sel=b;moving=false;$('bMove').classList.remove('on');
+function endMove(){moving=false;$('bMove').classList.remove('on')}
+function closeName(){$('nameBox').style.display='none';$('nameIn').blur()}
+function select(b){sel=b;endMove();closeName();
  if(!b){$('sel').style.display='none';draw();return}
  $('sel').style.display='block';$('selName').textContent=label(b);
  $('selMeta').textContent=b.use+' · '+b.floors+' floor'+(b.floors>1?'s':'')+' · '+b.footprintM2+' m² · chunk '+b.chunk.join(',')+(fork.names[b.name]?' · was '+b.name:'');
  say('');draw()}
 
-$('bMove').onclick=()=>{if(!sel)return;moving=!moving;$('bMove').classList.toggle('on',moving);say(moving?'Tap where it should go.':'')};
-$('bName').onclick=()=>{if(!sel)return;const n=prompt('New name',label(sel));if(!n||!n.trim())return;
- const first=!Object.keys(fork.names).length;fork.names[sel.name]=n.trim().slice(0,60);const c=Object.keys(fork.names).length;
+$('bMove').onclick=()=>{if(!sel)return;closeName();moving=!moving;$('bMove').classList.toggle('on',moving);say(moving?'Tap where it should go.':'')};
+$('bName').onclick=()=>{if(!sel)return;endMove();say('');$('nameIn').value=label(sel);$('nameBox').style.display='block';$('nameIn').focus();$('nameIn').select()};
+$('nameCancel').onclick=()=>{closeName();say('')};
+$('nameIn').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('nameOk').click()}else if(e.key==='Escape')$('nameCancel').click()});
+$('nameOk').onclick=()=>{if(!sel)return;const n=$('nameIn').value.trim().slice(0,60);if(!n){say('Type a name first.');return}
+ closeName();if(n===label(sel)){say('');return}
+ const first=!Object.keys(fork.names).length;fork.names[sel.name]=n;const c=Object.keys(fork.names).length;
  wake(1+c*1.5+fork.awake*0.25);
  if(first)beat('name1');else if(c===3)beat('name3');else if(c===10)beat('name10');
- select(sel);act()};
+ select(sel);say('Named '+n+'.');act()};
 $('bOk').onclick=()=>{if(!sel)return;fork.ok[sel.name]=1;delete fork.no[sel.name];wake(2);if(Object.keys(fork.ok).length===5)beat('approve5');say('Approved.');act()};
 $('bNo').onclick=()=>{if(!sel)return;const first=!Object.keys(fork.no).length;fork.no[sel.name]=1;delete fork.ok[sel.name];if(first)beat('reject1');say('Rejected.');act()};
 $('reset').onclick=()=>{if(!confirm('Start over from a new spot in the city?'))return;fork=newFork();save();begin()};
 
 function tryMove(wx,wy){
  const b=sel,old=shift(b),c0=center(b.footprint),d=[wx-c0[0],wy-c0[1]];
- if(!seen(chunkOf(wx,wy))){$('beat').textContent=pick('fog');return}
+ endMove();
+ if(!seen(chunkOf(wx,wy))){say('Move canceled. '+pick('fog'));draw();return}
  fork.moves[b.name]=d;const box=bbox(fp(b));
- for(const o of city.buildings){if(o===b||fork.no[o.name])continue;if(hit(box,bbox(fp(o)))){fork.moves[b.name]=old;$('beat').textContent=pick('blocked');return}}
- moving=false;$('bMove').classList.remove('on');say('Moved.');wake(3);
+ for(const o of city.buildings){if(o===b||fork.no[o.name])continue;if(hit(box,bbox(fp(o)))){fork.moves[b.name]=old;say('Move canceled. '+pick('blocked'));draw();return}}
+ wake(3);
  if(/cemetery|graveyard/i.test(b.name))beat('cemetery');else if(!fork.log.includes('move1'))beat('move1');
- select(b);act()}
+ select(b);say('Moved '+label(b)+'.');flash(b);act()}
+
+function flash(b){let n=0;const t=setInterval(()=>{n++;draw();if(n%2){const P=fp(b);cx.beginPath();P.forEach((p,i)=>{const q=W2S(p[0],p[1]);i?cx.lineTo(q[0],q[1]):cx.moveTo(q[0],q[1])});cx.closePath();cx.fillStyle='rgba(194,85,31,.35)';cx.fill()}if(n>=6){clearInterval(t);draw()}},180)}
 
 function tap(px,py){const [wx,wy]=S2W(px,py);
  if(moving&&sel)return tryMove(wx,wy);
@@ -162,10 +184,26 @@ function begin(){
  if(!fork.log.length)beat('start');else $('beat').textContent=pick(fork.log[fork.log.length-1]);
  draw()}
 
+async function getCity(){
+ let last='';
+ for(let i=1;i<=3;i++){
+  $('stats').textContent='loading the city'+(i>1?' (try '+i+' of 3)':'');
+  const ac=new AbortController(),t=setTimeout(()=>ac.abort(),15000);
+  try{const r=await fetch(API+(i>1?'?t='+Date.now():''),{signal:ac.signal,cache:i>1?'no-store':'default'});
+   if(!r.ok)throw new Error('status '+r.status);const j=await r.json();
+   if(!j||!Array.isArray(j.chunks)||!Array.isArray(j.buildings)||!j.chunkSizeMm)throw new Error('incomplete city data');
+   clearTimeout(t);return j}
+  catch(e){clearTimeout(t);last=e.name==='AbortError'?'no answer after 15 seconds':e.message}
+  await new Promise(r=>setTimeout(r,1500*i));
+ }
+ throw new Error(last);
+}
+$('retry').onclick=()=>{$('retry').style.display='none';$('beat').textContent='The city is loading.';boot()};
+
 async function boot(){
  resize();
- try{const r=await fetch(API);if(!r.ok)throw new Error(r.status);city=await r.json()}
- catch(e){$('beat').textContent='The city server did not answer. Try again in a minute.';return}
+ try{city=await getCity()}
+ catch(e){$('stats').textContent='city did not load';$('beat').textContent='The city server did not answer ('+e.message+').';$('retry').style.display='inline-block';return}
  S=city.chunkSizeMm;
  fork=load();if(!fork||!fork.start)fork=newFork();
  begin()}

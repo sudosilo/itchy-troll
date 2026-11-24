@@ -1,12 +1,8 @@
 Conveyor Sim changelog
 
-2026-11-23. Every label now leads with what the machine is in software, like Web server, Database or Cron job, and the factory picture comes second as "shown as Shipping Dock". This covers the floor labels, the machine card, the Machines, Live and Stack tabs, and the build hints. Machines built from a stack lead with the tool name, like React, then its role.
+2026-11-23, v2026.11.23. Every label now leads with what the machine is in software, like Web server, Database or Cron job, with the factory picture second. This covers the floor, the machine card, the tabs, and the build hints.
 
-2026-11-22. The machine card stops growing past a readable size when you zoom in, and never covers more than 90 percent of the screen width or 30 percent of its height.
-
-2026-11-22. The machine info card now pops up above the tapped machine instead of at the bottom of the screen. It grows and shrinks with your zoom, stays on screen with its arrow pointing at the machine, and closes with its x or a tap on open floor.
-
-2026-11-22. Stack import. A Stack tab takes text pasted from the pipeline builder, and links can carry a stack as #stack= (base64url JSON) or #tools=frontend:Next.js,infra:Vercel. Each tool is matched to a machine and laid out as a factory: main line, side lines after a work splitter, and a showroom at the end. New machines: Showroom (frontend), Arcade Cabinet (game engine), Cash Register (payments), Holding Hopper (job queue), Pneumatic Tube (websocket), Doorbell (webhook), Vending Machine (CDN), Ticker Tape (monitoring), Oracle (AI), Cold Locker (file storage) and Unbuilt Machine for gaps. Hosts color the floor under the machines they run. Tools with no machine sit in a gap row and are listed as gaps. Example stack: Neopets-style virtual pet game.
+2026-11-22, v2026.11.22. You can now build a factory from the stacks made in the pipeline builder. Teardown layers are accepted by name, then detail, then category. The machine info card pops up above the tapped machine, scales with your zoom, and stops growing past a readable size.
 
 2026-11-21, v2026.11.21. Built a packet factory, then rebuilt the whole site as a visual pipeline builder. Sixteen machine types stand for parts of a website and run a live simulation using Packet Baron's sauces, wrapper styles and 50/50 packets. The agent world is gone, so the site is now a static builder. There are four examples, a Build mode to place, connect, rename and delete machines, live counts, a build saved in the browser, and share links that hold the whole plan.
 

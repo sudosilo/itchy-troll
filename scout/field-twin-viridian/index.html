@@ -211,6 +211,43 @@
     border-radius: 8px; z-index: 1100; display: none; max-width: 90vw; text-align: center;
   }
   @media (prefers-reduced-motion: reduce) { #sideMenu, #panel { transition: none; } }
+
+  /* Rotate and dark screen buttons in the dock */
+  #dock .ico { min-height: 46px; width: 46px; padding: 0; display: flex; align-items: center; justify-content: center;
+    background: #ffffff; color: var(--text); border: 2px solid var(--text); box-shadow: 3px 3px 0 var(--text); }
+  #dock .ico svg { width: 24px; height: 24px; }
+  #dock .ico:active { box-shadow: none; transform: translate(3px, 3px); }
+  #rotateBtn.locked { background: #1565c0; border-color: var(--text); color: #ffffff; }
+
+  /* Dark screen: the display goes black and as dim as the phone allows, the camera and plate reader keep running */
+  #darkScreen { position: fixed; inset: 0; z-index: 3000; background: #000000; display: none;
+    align-items: flex-end; justify-content: center; padding-bottom: 28px; cursor: pointer; }
+  #darkScreen.open { display: flex; }
+  #darkScreen p { margin: 0; color: #1c2a3a; font-size: 14px; font-weight: 600; text-align: center; }
+  #darkScreen b { color: #1e3f6e; }
+
+  /* Sideways: camera on the left, readings on the right, dock along the bottom */
+  @media (orientation: landscape) and (max-height: 600px) {
+    :root { --head-h: 48px; --dock-h: 58px; }
+    header { padding: 0 8px; }
+    .title { font-size: 15px; letter-spacing: 2px; }
+    .status { font-size: 12px; }
+    #menuBtn { min-height: 38px; width: 38px; }
+    main { left: 61vw; padding: 8px 10px 12px 8px; }
+    #camBox { position: fixed; top: calc(var(--head-h) + 8px); bottom: calc(var(--dock-h) + 8px); left: 8px; width: calc(61vw - 12px);
+      aspect-ratio: auto; }
+    #gauges { margin-top: 0; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+    .g { padding: 5px 7px 4px 7px; }
+    .g b { font-size: 21px; }
+    .g small { font-size: 11px; }
+    #trace { height: 64px; margin-top: 8px; }
+    .plate-head { margin-top: 10px; }
+    #dock { gap: 8px; }
+    #dock #mapBtn, #dock #startBtn { min-height: 42px; }
+    #dock .ico { min-height: 42px; width: 42px; }
+    #panel { left: auto; width: min(520px, 70vw); max-height: 88%; }
+    #toast { bottom: calc(var(--dock-h) + 8px); }
+  }
 </style>
 </head>
 <body>
@@ -253,9 +290,12 @@
 
 <nav id="dock">
   <div class="radar" id="radar" aria-label="Upload signal"><div></div><div></div><div></div><div></div></div>
+  <button class="ico" id="rotateBtn" aria-label="Turn the screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M20 9a8 8 0 0 1 0 6M4 15a8 8 0 0 1 0-6"/><path d="M20 15l-2-1M4 9l2 1"/></svg></button>
+  <button class="ico" id="darkBtn" aria-label="Dark screen, camera keeps running"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg></button>
   <button id="mapBtn">MAP</button>
   <button id="startBtn">START DRIVE</button>
 </nav>
+<div id="darkScreen" role="button" aria-label="Wake the screen"><p>Screen dark. <b>Camera and plate reader running.</b><br>Tap to wake.</p></div>
 
 <div id="scrim"></div>
 <aside id="sideMenu" aria-label="Menu">
@@ -1453,10 +1493,68 @@ $('aboutBtn').onclick = () => {
     '<p>Camera shake is how far the picture bounces between frames, in percent of the frame height. It measures pitch, which the motion sensors read poorly when the phone sits upright, and it lets the two be compared against each other and against Chassisquiver runs on the same road.</p>' +
     '<p>Plates are found and read on this phone. A sighting is one plate in view with no gap longer than 30 seconds. Each sighting keeps its best photo of the plate, about 8 KB, then a second pass reads the state name off that photo and records the car and plate colors. Tap any plate to see every sighting on a map and a timeline. A hard bump saves the frame from just before the hit, so the photo shows what you drove over.</p>' +
     '<p>Registration stickers are too small to read at 1280 by 720 unless the car is very close. Camera detail at 1920 by 1080 in settings makes close range sticker photos sharp enough to inspect by eye.</p>' +
+    '<p>The phone button next to the moon turns the screen: tap it to hold the screen sideways, again to hold it upright, and again to let it turn with the phone. Sideways puts the camera on the left and the readings on the right. The moon button darkens the screen to the lowest the phone allows and keeps it on, so the camera and plate reader keep running on less battery. Tap the dark screen to wake it. Pressing the power button stops the camera, so use the moon instead.</p>' +
     '<p>Nothing streams. Readings save on the phone and upload once a minute, about 1 to 3 MB an hour. Rules on storing plate reads vary by state, so check yours before keeping or sharing them.</p>' +
     '<div class="actions"><button id="closeBtn">DONE</button></div>');
   $('closeBtn').onclick = closePanel;
 };
+
+// ---------- screen turning and dark screen ----------
+// Inside the Field Twin phone app the phone does the work (turning, dimming, keeping the screen on), asked through
+// Field Twin. In a plain browser the page does what the browser allows: full screen with a turn lock, and a black cover.
+const IN_FT = (() => { try { return window.parent !== window; } catch (e) { return true; } })();
+function phone(cmd, arg) {
+  try {
+    if (window.FieldTwinNative && typeof window.FieldTwinNative[cmd] === 'function') { window.FieldTwinNative[cmd](arg); return true; }
+  } catch (e) {}
+  if (IN_FT) { try { window.parent.postMessage({ viridianPhone: { cmd, arg } }, '*'); return true; } catch (e) {} }
+  return false;
+}
+const TURNS = ['auto', 'landscape', 'portrait'];
+const TURN_SAY = { auto: 'Screen turns with the phone', landscape: 'Screen held sideways', portrait: 'Screen held upright' };
+let turnMode = 'auto';
+try { turnMode = localStorage.getItem('viridianTurn') || 'auto'; } catch (e) {}
+async function applyTurn(say) {
+  $('rotateBtn').classList.toggle('locked', turnMode !== 'auto');
+  $('rotateBtn').setAttribute('aria-label', TURN_SAY[turnMode] + ', tap to change');
+  if (!phone('setRotation', turnMode)) {
+    try {
+      if (turnMode === 'auto') { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); }
+      else {
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+        await screen.orientation.lock(turnMode);
+      }
+    } catch (e) { if (say) { toast('This browser will not hold the screen turned. The Field Twin phone app will.'); return; } }
+  }
+  if (say) toast(TURN_SAY[turnMode]);
+}
+$('rotateBtn').onclick = () => {
+  turnMode = TURNS[(TURNS.indexOf(turnMode) + 1) % TURNS.length];
+  try { localStorage.setItem('viridianTurn', turnMode); } catch (e) {}
+  applyTurn(true);
+};
+if (turnMode !== 'auto') applyTurn(false);
+
+let previewWasHidden = false;
+function setDark(on) {
+  $('darkScreen').classList.toggle('open', on);
+  if (on) {
+    previewWasHidden = $('camBox').classList.contains('hidden');
+    $('camBox').classList.add('hidden');
+    keepAwake();
+  } else if (!previewWasHidden) $('camBox').classList.remove('hidden');
+  phone('setDark', on);
+}
+$('darkBtn').onclick = () => {
+  if (!S.on) toast('Screen going dark. Start a drive first to keep reading plates.');
+  setDark(true);
+};
+$('darkScreen').onclick = () => setDark(false);
+// The phone's own keep awake, so the screen never shuts off while driving, which would stop the camera.
+const startDrive0 = startDrive, stopDrive0 = stopDrive;
+startDrive = async function () { await startDrive0(); if (S.on) phone('keepAwake', true); };
+stopDrive = async function () { await stopDrive0(); phone('keepAwake', false); if ($('darkScreen').classList.contains('open')) setDark(false); };
+$('startBtn').onclick = () => (S.on ? stopDrive() : startDrive());
 
 // ---------- preview and other apps ----------
 $('previewBtn').onclick = () => {

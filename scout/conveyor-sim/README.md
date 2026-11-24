@@ -6,6 +6,6 @@ Paste a stack from the pipeline builder in the Stack tab, or open it with a link
 
 Live at conveyor-sim.vercel.app
 
-Latest change. 2026-11-22. Stack import: tools from the pipeline builder become machines, with 11 new machine types (showroom, arcade cabinet, cash register, holding hopper, pneumatic tube, doorbell, vending machine, ticker tape, oracle, cold locker, unbuilt machine), host floors and a gap row.
+Latest change. 2026-11-23, v2026.11.23. Every label now leads with what the machine is in software, like Web server, Database or Cron job, with the factory picture second. This covers the floor, the machine card, the tabs, and the build hints.
 
 The full history is in CHANGELOG.md.
