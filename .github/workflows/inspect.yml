@@ -47,6 +47,15 @@ jobs:
             user=$(echo "$url" | sed -E 's#https?://([^.]+)\.itch\.io/.*#\1#')
             butler status "$user/$slug" > "inspect/$slug-status.txt" 2>&1 || true
             cat "inspect/$slug-status.txt"
+            gid=$(python3 -c "import json,sys;print([g['id'] for g in json.load(open('inspect/games.json')) if g['url'].rstrip('/').endswith('/'+sys.argv[1])][0])" "$slug")
+            curl -s "https://itch.io/api/1/$BUTLER_API_KEY/game/$gid/uploads" > "inspect/$slug-uploads.json"
+            python3 -c "import json;[print(u['id'],u.get('filename'),u.get('type'),u.get('created_at'),u.get('size')) for u in json.load(open('inspect/$slug-uploads.json')).get('uploads',[])]"
+            for uid in $(python3 -c "import json;[print(u['id']) for u in json.load(open('inspect/$slug-uploads.json')).get('uploads',[])]"); do
+              mkdir -p "inspect/$slug/upload-$uid"
+              dl=$(curl -s "https://itch.io/api/1/$BUTLER_API_KEY/upload/$uid/download" | python3 -c "import json,sys;print(json.load(sys.stdin).get('url',''))")
+              [ -n "$dl" ] && curl -sL -o "inspect/$slug/upload-$uid/file" "$dl"
+              (cd "inspect/$slug/upload-$uid" && (unzip -o -q file && rm -f file) || mv file index.html) 2>/dev/null || true
+            done
             for ch in $(grep -oE '^\| *[a-z0-9_-]+ ' "inspect/$slug-status.txt" | tr -d '| ' | grep -v CHANNEL); do
               mkdir -p "inspect/$slug/$ch"
               butler fetch "$user/$slug:$ch" "inspect/$slug/$ch" > "inspect/$slug/$ch.log" 2>&1 || true
