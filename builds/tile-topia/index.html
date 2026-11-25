@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Tile-topia</title>
+<script src="https://itchy-troll.vercel.app/unlock-kit.js" data-itch-page="sudosilo/tile-topia"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;background:#f2f6fb;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#1d2b3a;touch-action:none;user-select:none;-webkit-user-select:none}
@@ -166,6 +167,21 @@ graphite:{fogA:'rgba(236,227,210,',bg:'#efe6d6',bgGrid:'rgba(90,70,50,.10)',fiel
   ,bunker:{fogA:'rgba(222,218,208,',bg:'#e4e0d8',bgGrid:'rgba(100,95,85,.10)',field:'#d9d3c6',grid:'rgba(0,0,0,0)',edge:'rgba(0,0,0,0)',city:'#efe9dd',cityLine:'#8f877a',road:'#f2eee6',roadLine:'#8f877a',water:'#7d98a6',waterLine:'#5d7684',pkt:'#3f6fb0',pkt2:'#d4a72c',core:'#6aa35a',shield:'#d4a72c',white:'#f7f4ee',winA:'rgba(255,209,102,',pktA:'rgba(63,111,176,',coreA:'rgba(106,163,90,',flowA:'rgba(255,255,255,',gold:'#d4a72c',goldLine:'#7d6a3c',star:'#efe0a8',starLine:'#7d6a3c',flashA:'rgba(255,214,110,',hintA:'rgba(63,111,176,',hintLine:'rgba(50,90,150,',ok:'#3f6fb0',bad:'#b5543c',scanA:null,slab:'#c9c2b4',slabLine:'#8f877a',hatch:0,text:'#2f3540',popC:'#3f6fb0',font:'ui-monospace,monospace',style:'bunker'}
 };
 var VIEW={skin:'cyber',iso:0};try{var vv=JSON.parse(localStorage.getItem('tiletopia_view'));if(vv)VIEW=vv;}catch(e){}
+// Demo gate: 60 tiles per map and the Cyber and Graphite skins are free.
+// The purchase unlocks the endless tile bag and the City, War, West and Bunker skins.
+var DEMO_TILES=60,FREE_SKINS={cyber:1,graphite:1},GATE={busy:false,open:false};
+function demoLocked(){var k=window.ItchyUnlock;return !!(k&&!GATE.open&&!k.isUnlocked());}
+function askUnlock(then){
+  if(GATE.busy)return;GATE.busy=true;
+  window.ItchyUnlock.require().then(function(ok){GATE.busy=false;if(ok){GATE.open=true;Array.prototype.forEach.call(document.querySelectorAll('#scount button'),function(x){x.textContent=x.textContent.replace(' (Full)','');});if(typeof toast==='function')toast('Full version unlocked');if(then)then();else{sel=null;ui();maybeNPC();}}});
+}
+function tileCapHit(){
+  if(!demoLocked()||!st||st.placed<DEMO_TILES)return false;
+  if(AUTO.on)setAuto(0);
+  askUnlock();
+  return true;
+}
+if(demoLocked()&&!FREE_SKINS[VIEW.skin])VIEW.skin='cyber';
 var COL=SKINS[VIEW.skin]||SKINS.cyber;
 var flashes=[],placeAnim=null;
 var PCOL=['#d2492f','#2f72c9','#2e9a52','#a347b8'];
@@ -403,6 +419,7 @@ function scanRecords(){
 }
 function place(){
   if(!sel)return;
+  if(tileCapHit())return;
   var list=fits.get(sel);
   if(!list||list.indexOf(st.rot)<0){toast('Does not fit that way');return;}
   var p=sel.split(','),x=+p[0],y=+p[1];
@@ -1631,6 +1648,7 @@ function fillHole(cells){
   return true;
 }
 function autoPlaceOne(){
+  if(tileCapHit())return false;
   var cells=autoCells();
   if(!cells.length){AUTO.idle=true;return false;}
   AUTO.idle=false;
@@ -1780,7 +1798,9 @@ document.getElementById('autoBtn').onclick=function(){setAuto((AUTO.on+1)%3);};
 var menuSkin=VIEW.skin;
 Array.prototype.forEach.call(document.querySelectorAll('#scount button'),function(b){
   b.classList.toggle('sel',b.dataset.s===menuSkin);
-  b.onclick=function(){menuSkin=b.dataset.s;Array.prototype.forEach.call(document.querySelectorAll('#scount button'),function(x){x.classList.toggle('sel',x===b);});};
+  var pick=function(){menuSkin=b.dataset.s;Array.prototype.forEach.call(document.querySelectorAll('#scount button'),function(x){x.classList.toggle('sel',x===b);});};
+  if(demoLocked()&&!FREE_SKINS[b.dataset.s])b.textContent+=' (Full)';
+  b.onclick=function(){if(demoLocked()&&!FREE_SKINS[b.dataset.s]){askUnlock(function(){Array.prototype.forEach.call(document.querySelectorAll('#scount button'),function(x){x.textContent=x.textContent.replace(' (Full)','');});pick();});return;}pick();};
 });
 document.getElementById('viewBtn').onclick=function(){VIEW.iso=VIEW.iso?0:1;applyView();};
 function human(fn){return function(){if(st&&(P().npc||AUTO.on))return;fn();};}
