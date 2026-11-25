@@ -7,9 +7,61 @@
 
 <!--
 ╔══════════════════════════════════════════════════════════════╗
-║  ITERATION MANIFEST — READ THIS FIRST                        ║
+║  ITERATION MANIFEST - READ THIS FIRST                        ║
 ╠══════════════════════════════════════════════════════════════╣
-║  CURRENT BUILD : v0.9 — MILESTONES                           ║
+║  CURRENT BUILD : v1.8 - NO MORE BLANK SKY, RESULT SCREENS    ║
+║  v1.8: fixed the Cloud Kingdom crash (snowflake radius went  ║
+║        negative and killed the render, leaving a blank sky). ║
+║        Loop is now crash proof. Zones extended with NORTHERN ║
+║        LIGHTS and EMERALD NIGHT before looping. Career level ║
+║        clears stop on a RESULT screen with the clear time,   ║
+║        best time and rank; tap for the next level. Each      ║
+║        career level has its own fastest time leaderboard     ║
+║        (backend board lvN, lower is better). Game over and   ║
+║        result screens prompt for a name if none is set.      ║
+║  v1.7: GAUNTLET mode: industrial look, three lives, no       ║
+║        parachute, falling below your last platform costs a  ║
+║        life, turrets fire aimed rounds every ~1.3 to 2.2s.  ║
+║        JEWELS mode: jewels everywhere, score = jewels, full ║
+║        sets of eight platforms give a PERFECT SET bonus.    ║
+║        Power-ups now spawn through one picker with at least ║
+║        POWERUP_GAP platforms between any two.               ║
+║  v1.6: CAREER mode, 25 levels, target heights grow from 150m ║
+║        to about 14000m (LEVEL_TARGET), harder each level     ║
+║        (more steel, more movers, wider gaps). Unlocks saved, ║
+║        level picker in the ☰ overlay, own leaderboard.       ║
+║        Slow-mo pickup: world runs at SLOWMO_RATE for        ║
+║        SLOWMO_TIME, player at full speed. Trail Blazer       ║
+║        pickup: thick striped trail behind you for TRAIL_TIME ║
+║        in a random palette (rainbow, ocean, fire, neon...).  ║
+║  v1.5: shrink pickup (smaller body) and grow pickup (bigger  ║
+║        body), SIZE_TIME each, they cancel each other. Static ║
+║        pickup throws a random Bitfield Synth pattern over    ║
+║        the whole screen for STATIC_TIME (random expression   ║
+║        and palette ported from sudosilo/bitfield-synth).     ║
+║  v1.4: blue level pickup (STEADY_CHANCE per platform) gives  ║
+║        two minutes of calm controls: slower side accel and   ║
+║        top speed, more grip, half wind, softer glider dive.  ║
+║  v1.3: five height zones (cycle every 6000m) change sky,     ║
+║        weather, colors, wind and gravity. Solid steel blocks ║
+║        you cannot jump through (rockets still pass). Ghost   ║
+║        replays your best run per mode. WebAudio synth sound  ║
+║        effects, optional music file ascend-music-v1.mp3,     ║
+║        phone vibration. Long falls (6s, above 30m) warp you ║
+║        straight to the ground. Climb renamed MARATHON.       ║
+║  v1.2: mode picker in the ☰ overlay (CLIMB / CHALLENGE).     ║
+║        Challenge: numbered tokens on every third platform,   ║
+║        must be taken in order. Wrong token flashes red and   ║
+║        an edge arrow points to the one you need. Platforms  ║
+║        are not culled in challenge so you can drop back.    ║
+║        Falling to the ground rebuilds the world from the    ║
+║        next needed token. Separate leaderboard per mode.    ║
+║  v1.1: glider burns out after 10s of flight (GLIDER_TIME),  ║
+║        HUD shows seconds left plus a blue bar.              ║
+║  v1.0: ☰ button upper left opens a left side overlay with   ║
+║        name entry and the global top list. Best height      ║
+║        posts to ascend-backend (Railway, Redis sorted set). ║
+║        Backend URL read from ascend-api-v1.json.            ║
 ║  v0.9: gem spawn 0.35 (climb currency ◆), rocket 0.18,      ║
 ║        glider 0.10. Every 30 gems AND every 30 coins grants ║
 ║        a power-up instantly (alternating rocket/glider),    ║
@@ -49,7 +101,7 @@
 ║  ✓ Platforms cull when off-screen (memory safe)              ║
 ║  ✓ Height score (meters climbed)                             ║
 ║  ✓ Best height persisted in localStorage                     ║
-║  ✓ Parachute — auto-deploys after 2s free-fall               ║
+║  ✓ Parachute - auto-deploys after 2s free-fall               ║
 ║  ✓ Parachute caps fall speed, drawn as canopy above player   ║
 ║  ✓ Parachute collapses on landing                            ║
 ║  ✓ Coyote time (100ms grace after walking off edge)          ║
@@ -61,7 +113,7 @@
 ║  ✗ Enemies / hazards                                         ║
 ║  ✗ Moving platforms                                          ║
 ╠══════════════════════════════════════════════════════════════╣
-║  RED PHONE: built v0.2 — infinite scroll + parachute         ║
+║  RED PHONE: built v0.2 - infinite scroll + parachute         ║
 ╚══════════════════════════════════════════════════════════════╝
 -->
 
@@ -83,10 +135,98 @@
     image-rendering: pixelated;
     image-rendering: crisp-edges;
   }
+
+  #lbBtn {
+    position: fixed; left: 14px; top: 40px; z-index: 20;
+    width: 44px; height: 44px; border-radius: 10px;
+    border: 2px solid #3d8bff; background: rgba(13,13,20,0.85);
+    color: #6fb0ff; font: bold 22px monospace; line-height: 1;
+  }
+  #lbPanel {
+    position: fixed; left: 0; top: 0; bottom: 0; z-index: 30;
+    width: min(320px, 82vw); padding: 18px 16px;
+    background: rgba(10,18,40,0.96); border-right: 3px solid #3d8bff;
+    color: #d8e6ff; font: 14px monospace;
+    transform: translateX(-105%); transition: transform 0.18s ease-out;
+    overflow-y: auto; touch-action: pan-y;
+  }
+  #lbPanel.open { transform: translateX(0); }
+  #lbPanel h2 { font-size: 18px; color: #6fb0ff; margin-bottom: 12px; letter-spacing: 2px; }
+  #lbPanel label { display: block; color: #8aa0c8; font-size: 11px; margin-bottom: 4px; }
+  #lbName {
+    width: 100%; padding: 10px; font: bold 16px monospace; text-transform: uppercase;
+    background: #0d1430; color: #ffe066; border: 1px solid #3d8bff; border-radius: 6px;
+  }
+  #lbSave, #lbClose {
+    margin-top: 8px; width: 100%; padding: 10px; font: bold 14px monospace;
+    border-radius: 6px; border: 1px solid #3d8bff;
+  }
+  #lbSave { background: #3d8bff; color: #fff; }
+  #lbClose { background: transparent; color: #6fb0ff; }
+  #lbOpts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  #lbOpts button {
+    padding: 10px 0; font: bold 12px monospace; border-radius: 6px;
+    border: 1px solid #3d8bff; background: transparent; color: #6fb0ff;
+  }
+  #lbOpts button.on { background: #3d8bff; color: #fff; }
+  #lbLevel { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; height: 42px; }
+  #lbLevel button {
+    width: 48px; height: 42px; font: bold 16px monospace; border-radius: 6px;
+    border: 1px solid #3d8bff; background: transparent; color: #6fb0ff;
+  }
+  #lvText { flex: 1; text-align: center; font: bold 13px monospace; color: #d8e6ff; white-space: nowrap; overflow: hidden; }
+  #lbModes { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  #lbModes button {
+    flex: 1; padding: 10px 0; font: bold 11px monospace; border-radius: 6px;
+    border: 1px solid #3d8bff; background: transparent; color: #6fb0ff;
+  }
+  #lbModes button.on { background: #3d8bff; color: #fff; }
+  #lbStatus { min-height: 18px; margin: 10px 0; font-size: 11px; color: #8aa0c8; }
+  #lbList { list-style: none; }
+  #lbList li {
+    display: flex; justify-content: space-between; padding: 6px 4px;
+    border-bottom: 1px solid #1c2a55;
+  }
+  #lbList li.me { color: #ffe066; }
+  #lbList li.hd { color: #6fb0ff; font-weight: bold; margin-top: 14px; border-bottom: 2px solid #3d8bff; }
+  #lbList .rk { color: #6fb0ff; width: 28px; }
+  #lbList .nm { flex: 1; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+<button id="lbBtn" aria-label="leaderboard">☰</button>
+<div id="lbPanel">
+  <h2>ASCEND</h2>
+  <label>MODE</label>
+  <div id="lbModes">
+    <button id="modeClimb" data-mode="climb">MARATHON</button>
+    <button id="modeChallenge" data-mode="challenge">CHALLENGE</button>
+    <button id="modeCareer" data-mode="career">CAREER</button>
+    <button id="modeGauntlet" data-mode="gauntlet">GAUNTLET</button>
+    <button id="modeJewels" data-mode="jewels">JEWELS</button>
+  </div>
+  <label>CAREER LEVEL</label>
+  <div id="lbLevel">
+    <button id="lvPrev">◀</button>
+    <span id="lvText">LEVEL 1</span>
+    <button id="lvNext">▶</button>
+  </div>
+  <label>OPTIONS</label>
+  <div id="lbOpts">
+    <button data-opt="sound">SOUND</button>
+    <button data-opt="music">MUSIC</button>
+    <button data-opt="buzz">VIBRATE</button>
+    <button data-opt="ghost">GHOST</button>
+  </div>
+  <h2 id="lbTitle">LEADERBOARD</h2>
+  <label for="lbName">YOUR NAME</label>
+  <input id="lbName" maxlength="12" autocomplete="off" spellcheck="false">
+  <button id="lbSave">SAVE NAME AND POST BEST</button>
+  <div id="lbStatus"></div>
+  <ol id="lbList"></ol>
+  <button id="lbClose">CLOSE</button>
+</div>
 <script>
 // ════════════════════════════════════════════════════════════
 //  CONFIG
@@ -130,7 +270,7 @@ const CFG = {
 };
 
 // ════════════════════════════════════════════════════════════
-//  CANVAS — fills full screen, logical coords = pixel coords
+//  CANVAS - fills full screen, logical coords = pixel coords
 // ════════════════════════════════════════════════════════════
 const canvas = document.getElementById('c');
 const ctx    = canvas.getContext('2d');
@@ -151,7 +291,7 @@ const touch = { left: false, right: false, jump: false };
 let jumpPressedThisFrame = false;
 let jumpWasDown = false;
 
-window.addEventListener('keydown', e => { keys[e.code] = true;  e.preventDefault(); });
+window.addEventListener('keydown', e => { if (e.target && e.target.tagName === 'INPUT') return; SFX.unlock(); keys[e.code] = true;  e.preventDefault(); });
 window.addEventListener('keyup',   e => { keys[e.code] = false; });
 
 canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
@@ -163,8 +303,11 @@ canvas.addEventListener('touchend',   e => {
 
 function handleTouchStart(e) {
   e.preventDefault();
-  // Tap to start / retry from menu or dead screen
+  SFX.unlock();
+  // Tap to start / retry from menu or dead screen, or continue from a result
   if (state !== STATE.PLAYING) {
+    if (performance.now() - stateSince < 700) return;   // ignore the thumb still on the glass
+    if (state === STATE.RESULT) { advanceFromResult(); return; }
     setState(STATE.PLAYING);
     return;
   }
@@ -201,21 +344,26 @@ function getInput() {
 // ════════════════════════════════════════════════════════════
 //  STATE MACHINE
 // ════════════════════════════════════════════════════════════
-const STATE = { MENU: 'menu', PLAYING: 'playing', DEAD: 'dead' };
+const STATE = { MENU: 'menu', PLAYING: 'playing', DEAD: 'dead', RESULT: 'result' };
 let state = STATE.MENU;
 
+let stateSince = 0;
 function setState(s) {
   state = s;
+  stateSince = performance.now();
   if (s === STATE.PLAYING) initGame();
 }
 
 window.addEventListener('keydown', e => {
-  if ((e.code === 'Space' || e.code === 'Enter') && state !== STATE.PLAYING)
-    setState(STATE.PLAYING);
+  if (e.target && e.target.tagName === 'INPUT') return;
+  if ((e.code === 'Space' || e.code === 'Enter') && state !== STATE.PLAYING) {
+    if (performance.now() - stateSince < 700) return;
+    if (state === STATE.RESULT) advanceFromResult(); else setState(STATE.PLAYING);
+  }
 });
 
 // ════════════════════════════════════════════════════════════
-//  WORLD — infinite procedural platforms
+//  WORLD - infinite procedural platforms
 // ════════════════════════════════════════════════════════════
 let platforms = [];
 let cameraY = 0;       // world-Y of the top of the screen
@@ -228,6 +376,8 @@ let highestPlatY = 0;     // y of the highest platform generated so far
 let worldGenBottom = 800; // lowest rescue platform generated
 
 function rand(min, max) { return min + Math.random() * (max - min); }
+const SOLID_CHANCE = 0.13;
+const DIFF = { solid: SOLID_CHANCE, mover: 0.15, gapMax: 90 };
 
 function addGround() {
   platforms.push({ x: 0, y: 0, w: W, h: 40, isGround: true });
@@ -236,19 +386,27 @@ function addGround() {
 // Generate platforms upward until we've covered up to targetY (more negative = higher)
 function generateUpTo(targetY) {
   while (highestPlatY > targetY) {
-    const gap = rand(55, 90);
+    const gap = rand(55, DIFF.gapMax);
     highestPlatY -= gap;
     const pw = rand(CFG.PLAT_MIN_W, CFG.PLAT_MAX_W);
     const px = rand(0, W - pw);
     const np = { x: px, y: highestPlatY, w: pw, h: CFG.PLAT_H, hue: Math.floor(Math.random() * 360) };
     // ~15% of platforms drift left-right (harder to land)
-    if (Math.random() < 0.15) {
+    if (Math.random() < DIFF.mover) {
       np.vx = (0.6 + Math.random() * 0.9) * (Math.random() < 0.5 ? 1 : -1);
+    } else if (highestPlatY < -400 && Math.random() < DIFF.solid) {
+      // Solid steel block: cannot be jumped through from below
+      np.solid = true;
+      np.h = 16;
+      np.w = Math.max(np.w, 80);
+      np.x = Math.min(np.x, W - np.w);
     }
     platforms.push(np);
-    maybeSpawnRocket(np);
-    maybeSpawnGlider(np);
+    maybeSpawnPowerup(np);
     maybeSpawnGem(np);
+    maybeSpawnToken(np);
+    maybeSpawnTurret(np);
+    maybeSpawnJewels(np);
   }
 }
 
@@ -265,6 +423,7 @@ function generateBelow(bottomY) {
 
 // Dissolve platforms that have scrolled off the BOTTOM of the screen (behind the climber)
 function cullPlatforms() {
+  if (mode === 'challenge') return;   // keep the whole tower so you can drop back for a token
   const bottomEdge = cameraY + H + 100; // 100px grace below screen bottom
   platforms = platforms.filter(p => p.y <= bottomEdge || p.isGround || p.isRescue);
 }
@@ -283,6 +442,11 @@ function updateMovingPlatforms(dt) {
 function respawnFromY() {
   platforms = platforms.filter(p => p.isGround);
   rockets = [];
+  steadies = [];
+  oddities = [];
+  platsSincePU = Math.floor(POWERUP_GAP / 2);
+  jewels = [];
+  turrets = []; bullets = [];
   gliders = [];
   gems = [];
   coins = [];
@@ -299,8 +463,333 @@ function respawnFromY() {
   highestPlatY    = 0;
   worldGenBottom  = 800;
   cameraY         = 0;
+  resetTokens();
   generateUpTo(-H * 2);
 }
+
+// ════════════════════════════════════════════════════════════
+//  CHALLENGE MODE - numbered tokens taken in order
+// ════════════════════════════════════════════════════════════
+const TOKEN_EVERY = 3;       // one token per this many platforms
+let tokens = [];
+let tokenNeed = 1;           // number the player has to grab next
+let tokenSpawnNext = 1;      // number the next spawned token will carry
+let tokenPlatCount = 0;
+let tokenWrongT = 0;
+
+function maybeSpawnToken(p) {
+  if (mode !== 'challenge') return;
+  tokenPlatCount++;
+  if (tokenPlatCount % TOKEN_EVERY !== 0) return;
+  tokens.push({ n: tokenSpawnNext++, x: p.x + p.w / 2, y: p.y - 20, plat: p, flash: 0 });
+}
+
+function resetTokens() {
+  tokens = [];
+  tokenSpawnNext = tokenNeed;
+  tokenPlatCount = 0;
+}
+
+function updateTokens(ms) {
+  if (mode !== 'challenge') return;
+  const pcx = player.x + player.w / 2;
+  const pcy = player.y + player.h / 2;
+  if (tokenWrongT > 0) tokenWrongT -= ms;
+  for (const t of tokens) {
+    if (t.plat && t.plat.vx) t.x = t.plat.x + t.plat.w / 2;
+    if (t.flash > 0) t.flash -= ms;
+    const dx = pcx - t.x, dy = pcy - t.y;
+    if (dx * dx + dy * dy > 24 * 24) continue;
+    if (t.n === tokenNeed) {
+      t.taken = true;
+      tokenNeed++;
+      if (tokenNeed - 1 > bestChallenge) {
+        bestChallenge = tokenNeed - 1;
+        localStorage.setItem('bestChallenge', bestChallenge);
+        LB.queue();
+      }
+      if ((tokenNeed - 1) % 10 === 0) showBanner('TOKEN ' + (tokenNeed - 1) + '!');
+      audio.triggers.token();
+      for (let i = 0; i < 18; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 2 + Math.random() * 5;
+        particles.push({
+          x: t.x, y: t.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: 1, decay: 0.03, size: 2 + Math.random() * 3,
+          hue: 210 + Math.random() * 20, type: 'splash',
+        });
+      }
+    } else if (t.n > tokenNeed && t.flash <= 0) {
+      t.flash = 700;
+      tokenWrongT = 1500;
+      showBanner('GET ' + tokenNeed + ' FIRST');
+      audio.triggers.wrong();
+    }
+  }
+  tokens = tokens.filter(t => !t.taken);
+}
+
+function drawTokens(time) {
+  if (mode !== 'challenge') return;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const t of tokens) {
+    if (t.y < cameraY - 40 || t.y > cameraY + H + 40) continue;
+    const isNext = t.n === tokenNeed;
+    const bob = Math.sin(time * 0.004 + t.n) * 3;
+    const r = isNext ? 13 : 11;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI / 6 + i * Math.PI / 3;
+      const px = t.x + Math.cos(a) * r, py = t.y + bob + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    if (t.flash > 0) ctx.fillStyle = '#ff2244';
+    else ctx.fillStyle = isNext ? '#3d8bff' : '#2a2f4a';
+    ctx.fill();
+    ctx.lineWidth = isNext ? 3 : 1.5;
+    ctx.strokeStyle = isNext ? '#bfe0ff' : '#6fb0ff';
+    ctx.stroke();
+    ctx.fillStyle = isNext ? '#ffffff' : '#9fc4ff';
+    ctx.font = 'bold ' + (isNext ? 12 : 10) + 'px monospace';
+    ctx.fillText(String(t.n), t.x, t.y + bob + 1);
+  }
+  ctx.textBaseline = 'alphabetic';
+}
+
+// Screen-space arrow at the top or bottom edge pointing to the next token
+function drawTokenArrow(time) {
+  if (mode !== 'challenge' || state !== STATE.PLAYING) return;
+  const t = tokens.find(k => k.n === tokenNeed);
+  if (!t) return;
+  const sy = t.y - cameraY;
+  if (sy > 20 && sy < H - 20) return;
+  const up = sy <= 20;
+  const x = Math.max(24, Math.min(W - 24, t.x));
+  const y = up ? 96 : H - 34;
+  const pulse = 0.6 + 0.4 * Math.abs(Math.sin(time * 0.006));
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = tokenWrongT > 0 ? '#ff2244' : '#3d8bff';
+  ctx.beginPath();
+  if (up) { ctx.moveTo(x, y - 14); ctx.lineTo(x - 12, y + 6); ctx.lineTo(x + 12, y + 6); }
+  else    { ctx.moveTo(x, y + 14); ctx.lineTo(x - 12, y - 6); ctx.lineTo(x + 12, y - 6); }
+  ctx.closePath();
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#bfe0ff';
+  ctx.font = 'bold 11px monospace';
+  ctx.textAlign = 'center';
+  const dist = Math.round(Math.abs(t.y - player.y) / 10);
+  ctx.fillText(tokenNeed + '  ' + dist + 'm', x, up ? y + 20 : y - 12);
+}
+
+// ════════════════════════════════════════════════════════════
+//  SOLID BLOCKS, FALL WARP
+// ════════════════════════════════════════════════════════════
+const FALL_WARP_MS = 6000;
+let warpFlash = 0;
+
+function drawSolid(p, time) {
+  // steel body
+  ctx.fillStyle = '#5b6b8c';
+  ctx.fillRect(p.x, p.y, p.w, p.h);
+  // hazard stripes
+  ctx.save();
+  ctx.beginPath(); ctx.rect(p.x, p.y, p.w, p.h); ctx.clip();
+  ctx.fillStyle = '#3d8bff';
+  for (let sx = p.x - p.h; sx < p.x + p.w; sx += 14) {
+    ctx.beginPath();
+    ctx.moveTo(sx, p.y + p.h); ctx.lineTo(sx + 6, p.y + p.h);
+    ctx.lineTo(sx + 6 + p.h, p.y); ctx.lineTo(sx + p.h, p.y);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+  // frame + rivets
+  ctx.strokeStyle = '#1b2440'; ctx.lineWidth = 2;
+  ctx.strokeRect(p.x + 1, p.y + 1, p.w - 2, p.h - 2);
+  ctx.fillStyle = '#d7e3ff';
+  ctx.fillRect(p.x, p.y, p.w, 2);
+  ctx.fillStyle = '#1b2440';
+  for (let rx = p.x + 5; rx < p.x + p.w - 3; rx += 18) {
+    ctx.fillRect(rx, p.y + 4, 2, 2);
+    ctx.fillRect(rx, p.y + p.h - 5, 2, 2);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  ZONES - every stretch of height has its own sky, weather and feel
+// ════════════════════════════════════════════════════════════
+const ZONE_CYCLE = 10000;  // meters before the zones loop with a new lap
+const ZONES = [
+  { at: 0,    name: 'NEON BASEMENT', top: '#0d0d14', bot: '#0d0d14', grid: '#8899ff', starA: 1,   weather: 'rain',  wcol: '160,190,255', player: '#e8e8d0', grav: 1.00, wind: 1.0 },
+  { at: 600,  name: 'SUNRISE DECK',  top: '#bfe3ff', bot: '#ffd9b8', grid: '#e08a5a', starA: 0.2, weather: 'rain',  wcol: '70,110,190',  player: '#1f3a8a', grav: 1.00, wind: 1.3 },
+  { at: 1500, name: 'CLOUD KINGDOM', top: '#d6ebff', bot: '#f4f9ff', grid: '#7aa6e0', starA: 0.1, weather: 'snow',  wcol: '120,160,230', player: '#1f3a8a', grav: 0.95, wind: 1.6 },
+  { at: 2700, name: 'AURORA FIELD',  top: '#e6dcff', bot: '#e3fff2', grid: '#8a6be0', starA: 0.3, weather: 'spark', wcol: '90,200,160',  player: '#2a2a8a', grav: 0.92, wind: 0.8 },
+  { at: 4200, name: 'STRATOSPHERE',  top: '#b8c8e8', bot: '#e9eef7', grid: '#3d8bff', starA: 0.6, weather: 'dust',  wcol: '60,80,140',   player: '#0f2a6e', grav: 0.86, wind: 2.0 },
+  { at: 6000, name: 'NORTHERN LIGHTS', top: '#06142e', bot: '#0b2a3a', grid: '#3dffb0', starA: 1, weather: 'snow', wcol: '200,230,255', player: '#e8f1ff', grav: 0.90, wind: 1.2, aurora: true },
+  { at: 8000, name: 'EMERALD NIGHT', top: '#032018', bot: '#0d3b2a', grid: '#3d8bff', starA: 0.8, weather: 'spark', wcol: '80,255,160', player: '#bfe0ff', grav: 0.94, wind: 1.0, aurora: true },
+];
+let zoneIdx = 0, zoneLap = 0;
+const zoneFeel = { grav: 1, wind: 1 };
+
+function zoneAt(m) {
+  const lap = Math.floor(Math.max(0, m) / ZONE_CYCLE);
+  const r = Math.max(0, m) - lap * ZONE_CYCLE;
+  let i = 0;
+  for (let k = 0; k < ZONES.length; k++) if (r >= ZONES[k].at) i = k;
+  return { i, lap };
+}
+
+function updateZone() {
+  const m = Math.floor(-player.y / 10);
+  const z = zoneAt(m);
+  if (z.i !== zoneIdx || z.lap !== zoneLap) {
+    const up = z.lap > zoneLap || (z.lap === zoneLap && z.i > zoneIdx);
+    zoneIdx = z.i; zoneLap = z.lap;
+    if (up) {
+      showBanner('ZONE ' + (zoneLap * ZONES.length + zoneIdx + 1) + ' ' + ZONES[zoneIdx].name);
+      audio.triggers.zone();
+    }
+  }
+  const Z = ZONES[zoneIdx];
+  zoneFeel.grav += (Z.grav - zoneFeel.grav) * 0.02;
+  zoneFeel.wind += (Z.wind - zoneFeel.wind) * 0.02;
+}
+
+function hexRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function mixHex(a, b, t) {
+  const A = hexRgb(a), B = hexRgb(b);
+  return 'rgb(' + A.map((v, i) => Math.round(v + (B[i] - v) * t)).join(',') + ')';
+}
+
+// Sky: blends into the next zone across the last 80m of each zone
+function zoneSky() {
+  const m = Math.max(0, Math.floor(-cameraY / 10));
+  const lap = Math.floor(m / ZONE_CYCLE), r = m - lap * ZONE_CYCLE;
+  let i = 0;
+  for (let k = 0; k < ZONES.length; k++) if (r >= ZONES[k].at) i = k;
+  const nextAt = i + 1 < ZONES.length ? ZONES[i + 1].at : ZONE_CYCLE;
+  const j = (i + 1) % ZONES.length;
+  const t = Math.max(0, Math.min(1, (r - (nextAt - 80)) / 80));
+  const lapHue = (lap * 40) % 360;
+  return {
+    top: mixHex(ZONES[i].top, ZONES[j].top, t),
+    bot: mixHex(ZONES[i].bot, ZONES[j].bot, t),
+    t, i, j, lapHue,
+  };
+}
+
+function drawZoneSky() {
+  if (mode === 'gauntlet') {
+    const gg = ctx.createLinearGradient(0, 0, 0, H);
+    gg.addColorStop(0, GAUNTLET_THEME.top);
+    gg.addColorStop(1, GAUNTLET_THEME.bot);
+    ctx.fillStyle = gg;
+    ctx.fillRect(0, 0, W, H);
+    return;
+  }
+  const z = zoneSky();
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, z.top);
+  g.addColorStop(1, z.bot);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  if (ZONES[z.i].aurora || ZONES[z.j].aurora) {
+    const a = ZONES[z.i].aurora ? (ZONES[z.j].aurora ? 1 : 1 - z.t) : z.t;
+    const t = performance.now() * 0.0004;
+    const bands = [['61,255,176', 0.30], ['61,139,255', 0.22], ['176,110,255', 0.18]];
+    bands.forEach(([col, base], k) => {
+      ctx.beginPath();
+      for (let x = 0; x <= W; x += 12) {
+        const y = H * (0.18 + k * 0.1) + Math.sin(x * 0.012 + t * (1.5 + k) + k) * 26 + Math.sin(x * 0.031 - t * 2) * 10;
+        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      for (let x = W; x >= 0; x -= 12) {
+        const y = H * (0.18 + k * 0.1) + 70 + Math.sin(x * 0.01 + t * (1.2 + k)) * 30;
+        ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      const g2 = ctx.createLinearGradient(0, H * (0.12 + k * 0.1), 0, H * (0.36 + k * 0.1));
+      g2.addColorStop(0, 'rgba(' + col + ',0)');
+      g2.addColorStop(0.4, 'rgba(' + col + ',' + (base * a) + ')');
+      g2.addColorStop(1, 'rgba(' + col + ',0)');
+      ctx.fillStyle = g2;
+      ctx.fill();
+    });
+  }
+  if (z.lapHue) {
+    ctx.globalAlpha = 0.08;
+    ctx.fillStyle = 'hsl(' + z.lapHue + ', 80%, 60%)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  GHOST - replays your best run for the current mode
+// ════════════════════════════════════════════════════════════
+const GHOST = {
+  rec: [], recT: 0, runT: 0, play: null, playBest: 0, dirty: false,
+  key() { return 'ascendGhostRun_' + mode + (mode === 'career' ? '_' + careerLevel : ''); },
+  metric() { return mode === 'challenge' ? tokenNeed - 1 : mode === 'jewels' ? jewelScore : score; },
+  load() {
+    this.play = null; this.playBest = 0;
+    try {
+      const j = JSON.parse(localStorage.getItem(this.key()) || 'null');
+      if (j && j.p && j.p.length) { this.play = j.p; this.playBest = j.best || 0; }
+    } catch (e) {}
+  },
+  reset() { this.rec = []; this.recT = 0; this.runT = 0; this.dirty = false; this.load(); },
+  record(ms) {
+    this.runT += ms;
+    this.recT += ms;
+    if (this.recT >= 100 && this.rec.length < 18000) {
+      this.recT = 0;
+      this.rec.push(+(player.x / W).toFixed(3), Math.round(player.y));
+    }
+    if (this.metric() > this.playBest) this.dirty = true;
+  },
+  save() {
+    if (!this.dirty) return;
+    const m = this.metric();
+    if (m <= this.playBest) return;
+    try {
+      localStorage.setItem(this.key(), JSON.stringify({ best: m, p: this.rec }));
+      this.playBest = m;
+      this.dirty = false;
+    } catch (e) {}
+  },
+  pos() {
+    if (!this.play || !SETTINGS.ghost) return null;
+    const i = Math.floor(this.runT / 100) * 2;
+    if (i + 1 >= this.play.length) return { x: this.play[this.play.length - 2] * W, y: this.play[this.play.length - 1], done: true };
+    return { x: this.play[i] * W, y: this.play[i + 1] };
+  },
+  draw(time) {
+    const g = this.pos();
+    if (!g) return;
+    ctx.globalAlpha = g.done ? 0.2 : 0.38 + 0.12 * Math.sin(time * 0.006);
+    ctx.fillStyle = '#3d8bff';
+    ctx.fillRect(g.x - 2, g.y - 2, CFG.PLAYER_W + 4, CFG.PLAYER_H + 4);
+    ctx.fillStyle = '#bfe0ff';
+    ctx.fillRect(g.x, g.y, CFG.PLAYER_W, CFG.PLAYER_H);
+    ctx.fillStyle = '#3d8bff';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('GHOST', g.x + CFG.PLAYER_W / 2, g.y - 6);
+    ctx.globalAlpha = 1;
+  },
+  hud() {
+    const g = this.pos();
+    if (!g) return;
+    const d = Math.round((g.y - player.y) / 10);
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 12px monospace';
+    ctx.fillStyle = d >= 0 ? '#3dff9b' : '#ff6688';
+    ctx.fillText('ghost ' + (d >= 0 ? '+' : '') + d + 'm', 14, 100);
+  },
+};
 
 // ════════════════════════════════════════════════════════════
 //  PLAYER
@@ -322,44 +811,151 @@ function initPlayer() {
     facing:      1,
     peakY:       -CFG.PLAYER_H - 42,
     rocketTimer: 0,
+    steadyTime:  0,
+    sizeKind:    '',
+    sizeTime:    0,
+    staticTime:  0,
+    slowTime:    0,
+    trailTime:   0,
+    trailPal:    'rainbow',
     hasGlider:   false,
+    gliderTime:  0,
   };
 }
 
 // ════════════════════════════════════════════════════════════
 //  SCORE
 // ════════════════════════════════════════════════════════════
+let mode = ['challenge', 'career', 'gauntlet', 'jewels'].includes(localStorage.getItem('ascendMode')) ? localStorage.getItem('ascendMode') : 'climb';
+let bestChallenge = parseInt(localStorage.getItem('bestChallenge') || '0');
+let bestGauntlet  = parseInt(localStorage.getItem('bestGauntlet') || '0');
+let bestJewels    = parseInt(localStorage.getItem('bestJewels') || '0');
 let score = 0;      // max height in "meters" (world units / 10)
 let best  = parseInt(localStorage.getItem('best') || '0');
 
 // ════════════════════════════════════════════════════════════
 //  AUDIO TRIGGERS stub
 // ════════════════════════════════════════════════════════════
+const SETTINGS = {
+  sound:   localStorage.getItem('ascendSound')   !== 'off',
+  music:   localStorage.getItem('ascendMusic')   !== 'off',
+  buzz:    localStorage.getItem('ascendBuzz')    !== 'off',
+  ghost:   localStorage.getItem('ascendGhost')   !== 'off',
+};
+function saveSetting(k) { localStorage.setItem('ascend' + k[0].toUpperCase() + k.slice(1), SETTINGS[k] ? 'on' : 'off'); }
+
+// ── Synth sound effects (WebAudio, no files) ────────────────
+const SFX = {
+  ac: null, master: null, last: {},
+  unlock() {
+    if (!this.ac) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      this.ac = new AC();
+      this.master = this.ac.createGain();
+      this.master.gain.value = 0.35;
+      this.master.connect(this.ac.destination);
+    }
+    if (this.ac.state === 'suspended') this.ac.resume();
+    MUSIC.start();
+  },
+  ok(name, gap) {
+    if (!SETTINGS.sound || !this.ac) return false;
+    const now = performance.now();
+    if (this.last[name] && now - this.last[name] < (gap || 40)) return false;
+    this.last[name] = now;
+    return true;
+  },
+  tone(type, f1, f2, dur, vol, delay) {
+    const t = this.ac.currentTime + (delay || 0);
+    const o = this.ac.createOscillator(), g = this.ac.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f1, t);
+    if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t + dur + 0.02);
+  },
+  noise(dur, vol, freq, delay) {
+    const t = this.ac.currentTime + (delay || 0);
+    const len = Math.floor(this.ac.sampleRate * dur);
+    const buf = this.ac.createBuffer(1, len, this.ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = this.ac.createBufferSource(); src.buffer = buf;
+    const f = this.ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq || 1200;
+    const g = this.ac.createGain(); g.gain.value = vol;
+    src.connect(f); f.connect(g); g.connect(this.master);
+    src.start(t);
+  },
+};
+
+// ── Music: plays ascend-music-v1.mp3 from the repo if it exists ─
+const MUSIC = {
+  el: null, tried: false,
+  start() {
+    if (!SETTINGS.music) return;
+    if (!this.el && !this.tried) {
+      this.tried = true;
+      const a = new Audio('ascend-music-v1.mp3');
+      a.loop = true; a.volume = 0.45;
+      a.addEventListener('error', () => { this.el = null; });
+      this.el = a;
+    }
+    if (this.el && this.el.paused) this.el.play().catch(() => {});
+  },
+  stop() { if (this.el) this.el.pause(); },
+};
+
+function buzz(pattern) {
+  if (!SETTINGS.buzz || !navigator.vibrate) return;
+  try { navigator.vibrate(pattern); } catch (e) {}
+}
+
 const audio = {
   triggers: {
-    jump:        () => {},
-    land:        () => {},
-    die:         () => {},
-    chuteOpen:   () => {},
-    chuteClose:  () => {},
-    coin:        () => {},
-    rocket:      () => {},
-    glider:      () => {},
-    gem:         () => {},
-    milestone:   () => {},
+    jump:        () => { if (SFX.ok('jump')) SFX.tone('square', 260, 620, 0.12, 0.12); },
+    land:        (v) => {
+      const k = Math.min(1, (v || 3) / 13);
+      if (SFX.ok('land', 60)) { SFX.noise(0.08 + k * 0.1, 0.25 + k * 0.4, 500 + k * 600); SFX.tone('sine', 140, 60, 0.12, 0.2 * k + 0.05); }
+      buzz(Math.round(12 + k * 38));
+    },
+    die:         () => { if (SFX.ok('die', 500)) [392, 330, 262, 196].forEach((f, i) => SFX.tone('square', f, 0, 0.22, 0.12, i * 0.16)); buzz([200, 80, 300]); },
+    chuteOpen:   () => { if (SFX.ok('chuteOpen')) { SFX.noise(0.15, 0.25, 2500); SFX.tone('triangle', 300, 420, 0.1, 0.1); } buzz(15); },
+    chuteClose:  () => { if (SFX.ok('chuteClose')) SFX.tone('triangle', 380, 220, 0.1, 0.08); },
+    coin:        () => { if (SFX.ok('coin', 30)) { SFX.tone('square', 988, 0, 0.06, 0.08); SFX.tone('square', 1319, 0, 0.12, 0.08, 0.06); } },
+    rocket:      () => { if (SFX.ok('rocket')) { SFX.noise(1.2, 0.35, 900); SFX.tone('sawtooth', 120, 600, 1.0, 0.08); } buzz([60, 40, 120]); },
+    glider:      () => { if (SFX.ok('glider')) SFX.tone('sine', 400, 1200, 0.35, 0.15); buzz(40); },
+    gem:         () => { if (SFX.ok('gem', 30)) { SFX.tone('triangle', 1047, 0, 0.08, 0.1); SFX.tone('triangle', 1568, 0, 0.14, 0.08, 0.05); } },
+    milestone:   () => { if (SFX.ok('milestone')) [523, 659, 784, 1047].forEach((f, i) => SFX.tone('square', f, 0, 0.14, 0.1, i * 0.08)); buzz([40, 30, 40, 30, 80]); },
     bgStart:     () => {},
+    token:       () => { if (SFX.ok('token')) [659, 880, 1175].forEach((f, i) => SFX.tone('triangle', f, 0, 0.1, 0.13, i * 0.05)); buzz(30); },
+    wrong:       () => { if (SFX.ok('wrong', 300)) { SFX.tone('sawtooth', 160, 90, 0.3, 0.14); } buzz([80, 50, 80]); },
+    spent:       () => { if (SFX.ok('spent')) SFX.tone('sine', 900, 200, 0.5, 0.14); buzz([30, 30, 30]); },
+    bonk:        () => { if (SFX.ok('bonk', 120)) { SFX.tone('square', 180, 110, 0.08, 0.14); SFX.noise(0.05, 0.2, 800); } buzz(25); },
+    warp:        () => { if (SFX.ok('warp')) { SFX.tone('sine', 1400, 120, 0.45, 0.14); SFX.noise(0.4, 0.15, 3000); } buzz(70); },
+    steady:      () => { if (SFX.ok('steady')) [330, 440, 554].forEach((f, i) => SFX.tone('sine', f, 0, 0.25, 0.1, i * 0.07)); buzz([30, 40, 30]); },
+    shrink:      () => { if (SFX.ok('shrink')) SFX.tone('square', 900, 300, 0.3, 0.1); buzz(20); },
+    grow:        () => { if (SFX.ok('grow')) SFX.tone('square', 150, 450, 0.35, 0.12); buzz([40, 20, 60]); },
+    staticOn:    () => { if (SFX.ok('staticOn')) { SFX.noise(0.6, 0.35, 6000); SFX.tone('sawtooth', 60, 2000, 0.5, 0.06); } buzz([20, 20, 20, 20, 20, 20, 60]); },
+    slowmo:      () => { if (SFX.ok('slowmo')) SFX.tone('sine', 600, 90, 0.9, 0.14); buzz([100, 60, 100]); },
+    trail:       () => { if (SFX.ok('trail')) [523, 659, 784, 988, 1175, 1319].forEach((f, i) => SFX.tone('square', f, 0, 0.07, 0.07, i * 0.04)); buzz(40); },
+    hurt:        () => { if (SFX.ok('hurt', 200)) { SFX.tone('sawtooth', 300, 70, 0.35, 0.16); SFX.noise(0.2, 0.3, 1500); } },
+    shot:        () => { if (SFX.ok('shot', 60)) { SFX.noise(0.06, 0.18, 2500); SFX.tone('square', 520, 260, 0.06, 0.05); } },
+    zone:        () => { if (SFX.ok('zone')) [392, 494, 587, 784].forEach((f, i) => SFX.tone('triangle', f, 0, 0.6, 0.07, i * 0.12)); buzz([50, 60, 50, 60, 120]); },
   }
 };
 
 // ════════════════════════════════════════════════════════════
-//  AESTHETICS — RED PHONE: particles, starfield, sparkles
+//  AESTHETICS - RED PHONE: particles, starfield, sparkles
 // ════════════════════════════════════════════════════════════
 
 // ── Particle system ──────────────────────────────────────────
 let particles = [];
 
 function spawnSplash(x, y, hue) {
-  // Color splash — fast radial burst
+  // Color splash - fast radial burst
   for (let i = 0; i < 14; i++) {
     const a = Math.random() * Math.PI * 2;
     const sp = 2 + Math.random() * 5;
@@ -374,7 +970,7 @@ function spawnSplash(x, y, hue) {
       type: 'splash',
     });
   }
-  // Dust cloud — slow drifting puffs
+  // Dust cloud - slow drifting puffs
   for (let i = 0; i < 8; i++) {
     particles.push({
       x: x + (Math.random() - 0.5) * 30,
@@ -434,7 +1030,7 @@ function drawParticles() {
   ctx.globalAlpha = 1;
 }
 
-// ── COIN DESCENT MINIGAME — RED PHONE ────────────────────────
+// ── COIN DESCENT MINIGAME - RED PHONE ────────────────────────
 // Coins spawn below the player while the parachute is open.
 // Steer left/right to catch them. Each catch = gold sparkle burst.
 let coins = [];
@@ -532,7 +1128,7 @@ function drawCoins(time) {
   }
 }
 
-// ── MILESTONES — RED PHONE ───────────────────────────────────
+// ── MILESTONES - RED PHONE ───────────────────────────────────
 // Every 30 climb-gems (◆) and every 30 descent-coins (◉) grants a
 // power-up instantly, alternating rocket / glider.
 let nextGemMilestone  = 30;
@@ -550,9 +1146,12 @@ function grantPowerup(kind) {
     player.chute = false;
     player.fallTimer = 0;
     showBanner('🚀 ROCKET UNLOCKED!');
+    audio.triggers.rocket();
   } else {
     player.hasGlider = true;
+    player.gliderTime = GLIDER_TIME;
     showBanner('🪂 GLIDER UNLOCKED!');
+    audio.triggers.glider();
   }
   // celebration burst
   for (let i = 0; i < 24; i++) {
@@ -593,7 +1192,7 @@ function drawBanner() {
   ctx.globalAlpha = 1;
 }
 
-// ── WIND — RED PHONE ─────────────────────────────────────────
+// ── WIND - RED PHONE ─────────────────────────────────────────
 // Global wind drifts between gusts. Pushes the player while airborne
 // (double under chute/glider). Indicated by leaning rain-streaks + motes.
 const wind = { force: 0, target: 0, timer: 0 };
@@ -613,8 +1212,9 @@ function updateWind(ms) {
 let streaks = [];
 function updateStreaks() {
   const strength = Math.abs(wind.force);
-  // Spawn rate scales with wind strength — calm = almost none
-  if (Math.random() < 0.1 + strength * 3) {
+  // Spawn rate scales with wind strength - calm = almost none
+  const wzz = theme().weather;
+  if (Math.random() < (wzz === 'rain' ? 0.1 + strength * 3 : 0.35 + strength * 2)) {
     streaks.push({
       x: Math.random() * W,
       y: -10,
@@ -622,15 +1222,44 @@ function updateStreaks() {
     });
   }
   for (const s of streaks) {
-    s.x += wind.force * 30;          // lean hard with the wind
-    s.y += 7 + strength * 6;         // fall
+    const wz = theme().weather;
+    const slow = wz === 'snow' ? 0.3 : wz === 'dust' ? 0.15 : wz === 'spark' ? 0.5 : wz === 'ash' ? 0.4 : 1;
+    s.x += wind.force * 30 * (wz === 'dust' ? 1.6 : 1);   // lean hard with the wind
+    s.y += (7 + strength * 6) * slow;                      // fall
     s.life -= 0.012;
   }
   streaks = streaks.filter(s => s.life > 0 && s.y < H + 20);
 }
 function drawStreaks() {
   const strength = Math.abs(wind.force);
-  ctx.strokeStyle = 'rgba(160, 190, 255, 0.35)';
+  const Z = theme();
+  if (Z.weather === 'ash') {
+    for (const s of streaks) {
+      ctx.globalAlpha = s.life * 0.8;
+      ctx.fillStyle = (Math.floor(s.x) % 3) ? 'rgba(255,140,40,1)' : 'rgba(90,74,62,1)';
+      ctx.fillRect(s.x, s.y, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
+  if (Z.weather !== 'rain') {
+    for (const s of streaks) {
+      ctx.globalAlpha = s.life * (Z.weather === 'dust' ? 0.5 : 0.8);
+      if (Z.weather === 'snow') {
+        ctx.fillStyle = 'rgba(' + Z.wcol + ',0.9)';
+        ctx.beginPath(); ctx.arc(s.x, s.y, 1.5 + Math.abs(s.y % 3), 0, Math.PI * 2); ctx.fill();
+      } else if (Z.weather === 'spark') {
+        ctx.fillStyle = (Math.floor(s.y / 40) % 2) ? 'rgba(' + Z.wcol + ',1)' : 'rgba(150,110,240,1)';
+        ctx.fillRect(s.x, s.y, 2, 6);
+      } else {
+        ctx.fillStyle = 'rgba(' + Z.wcol + ',1)';
+        ctx.fillRect(s.x, s.y, 1.5, 1.5);
+      }
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
+  ctx.strokeStyle = 'rgba(' + Z.wcol + ', 0.35)';
   ctx.lineWidth = 1;
   for (const s of streaks) {
     ctx.globalAlpha = s.life * (0.2 + strength * 1.5);
@@ -642,7 +1271,7 @@ function drawStreaks() {
   ctx.globalAlpha = 1;
 }
 
-// ── GLIDER POWER-UP — RED PHONE ──────────────────────────────
+// ── GLIDER POWER-UP - RED PHONE ──────────────────────────────
 // Pickup upgrades your parachute to a glider for the rest of the run.
 // Glider: faster fall than chute, steerable dives (hold left/right = speed),
 // tap jump for a small lift pulse to grab missed coins.
@@ -651,6 +1280,7 @@ const GLIDER_CHANCE = 0.02;
 const GLIDER_MAX_FALL = 3.2;
 const GLIDER_DIVE_FALL = 7;     // while holding a direction
 const GLIDER_LIFT = -4.5;       // lift pulse on jump tap
+const GLIDER_TIME = 10000;   // ms of glider flight before it burns out
 
 function maybeSpawnGlider(p) {
   if (Math.random() < GLIDER_CHANCE) {
@@ -667,6 +1297,7 @@ function updateGliders() {
     if (dx * dx + dy * dy < 22 * 22) {
       g.taken = true;
       player.hasGlider = true;
+      player.gliderTime = GLIDER_TIME;
       audio.triggers.glider();
       for (let i = 0; i < 16; i++) {
         const a = Math.random() * Math.PI * 2;
@@ -706,7 +1337,7 @@ function drawGliders(time) {
   }
 }
 
-// ── GEMS (climb collectible, worth 5) — RED PHONE ────────────
+// ── GEMS (climb collectible, worth 5) - RED PHONE ────────────
 let gems = [];
 let gemCount = 0;
 const GEM_CHANCE = 0.35;
@@ -775,7 +1406,7 @@ function drawGems(time) {
   }
 }
 
-// ── CLOUD ZONE (above 300m) — RED PHONE ──────────────────────
+// ── CLOUD ZONE (above 300m) - RED PHONE ──────────────────────
 const CLOUD_START = -3000;  // world y where clouds begin (300m)
 const cloudPuffs = [];
 (function initClouds() {
@@ -815,13 +1446,745 @@ function drawClouds(time) {
   ctx.globalAlpha = 1;
 }
 
-// ── ROCKET POWER-UP — RED PHONE ──────────────────────────────
+// ── ROCKET POWER-UP - RED PHONE ──────────────────────────────
 // Pickups spawn on platforms. Grab = 3s uninterrupted upward flight,
 // fire out the back, player turns rocket-shaped, ends with a jump kick.
 let rockets = [];          // pickup items in world
 const ROCKET_TIME = 3.0;   // seconds of flight
 const ROCKET_SPEED = -13;  // upward velocity during flight
 const ROCKET_CHANCE = 0.03; // chance per platform to carry a pickup
+
+// ── STEADY POWER-UP: two minutes of calm, controllable side movement ──
+let steadies = [];
+const STEADY_CHANCE   = 0.035;
+const STEADY_TIME     = 120000;  // ms
+const STEADY_ACCEL    = 1.1;     // vs CFG.PLAYER_SPEED
+const STEADY_FRICTION = 0.84;    // vs CFG.FRICTION (higher keeps it smooth, lower accel caps top speed)
+
+function maybeSpawnSteady(p) {
+  if (p.solid || p.vx) return;
+  if (Math.random() < STEADY_CHANCE) {
+    steadies.push({ x: p.x + p.w / 2, y: p.y - 14, taken: false, ph: Math.random() * Math.PI * 2 });
+  }
+}
+
+function updateSteadies(ms) {
+  const pcx = player.x + player.w / 2;
+  const pcy = player.y + player.h / 2;
+  for (const st of steadies) {
+    if (st.taken) continue;
+    const dx = pcx - st.x, dy = pcy - st.y;
+    if (dx * dx + dy * dy < 22 * 22) {
+      st.taken = true;
+      player.steadyTime = STEADY_TIME;
+      showBanner('STEADY CONTROLS');
+      audio.triggers.steady();
+      for (let i = 0; i < 16; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 2 + Math.random() * 4;
+        particles.push({
+          x: st.x, y: st.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: 1, decay: 0.03, size: 2 + Math.random() * 3,
+          hue: 205 + Math.random() * 20, type: 'splash',
+        });
+      }
+    }
+  }
+  steadies = steadies.filter(st => !st.taken && (mode === 'challenge' || st.y < cameraY + H + 200));
+  if (player.steadyTime > 0) {
+    player.steadyTime -= ms;
+    if (player.steadyTime <= 0) {
+      player.steadyTime = 0;
+      showBanner('STEADY WORE OFF');
+      audio.triggers.spent();
+    }
+  }
+}
+
+function drawSteadies(time) {
+  for (const st of steadies) {
+    const sy = st.y - cameraY;
+    if (sy < -20 || sy > H + 20) continue;
+    const y = st.y + Math.sin(time * 0.004 + st.ph) * 3;
+    ctx.globalAlpha = 0.3 + 0.2 * Math.abs(Math.sin(time * 0.005 + st.ph));
+    ctx.fillStyle = '#3d8bff';
+    ctx.beginPath(); ctx.arc(st.x, y, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    // spirit level: rounded bar with a bubble centered
+    ctx.fillStyle = '#1b2f6b';
+    ctx.fillRect(st.x - 10, y - 4, 20, 8);
+    ctx.fillStyle = '#bfe0ff';
+    ctx.fillRect(st.x - 8, y - 2, 16, 4);
+    ctx.fillStyle = '#3dff9b';
+    ctx.beginPath(); ctx.arc(st.x, y, 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1b2f6b';
+    ctx.fillRect(st.x - 4, y - 3, 1, 6);
+    ctx.fillRect(st.x + 3, y - 3, 1, 6);
+  }
+}
+
+// ── SHRINK / GROW / STATIC PICKUPS ─────────────────────────────
+let oddities = [];
+const ODD_CHANCE = { shrink: 0.025, grow: 0.025, static: 0.025, slowmo: 0.025, trail: 0.025 };
+const SIZE_TIME   = 30000;   // ms a shrink or grow lasts
+const STATIC_TIME = 10000;   // ms the bitfield static covers the screen
+const SIZE_SCALE  = { shrink: 0.6, grow: 1.55 };
+
+function maybeSpawnOddity(p) {
+  if (p.vx) return;
+  const r = Math.random();
+  let kind = null, acc = 0;
+  for (const k of ['shrink', 'grow', 'static', 'slowmo', 'trail']) { acc += ODD_CHANCE[k]; if (r < acc) { kind = k; break; } }
+  if (!kind) return;
+  oddities.push({ kind, x: p.x + p.w / 2, y: p.y - 14, taken: false, ph: Math.random() * Math.PI * 2 });
+}
+
+function setPlayerSize(scale) {
+  const feet = player.y + player.h;
+  const cx = player.x + player.w / 2;
+  player.w = Math.round(CFG.PLAYER_W * scale);
+  player.h = Math.round(CFG.PLAYER_H * scale);
+  player.y = feet - player.h;
+  player.x = cx - player.w / 2;
+}
+
+function updateOddities(ms) {
+  const pcx = player.x + player.w / 2;
+  const pcy = player.y + player.h / 2;
+  const reach = 20 + player.w / 2;
+  for (const o of oddities) {
+    if (o.taken) continue;
+    const dx = pcx - o.x, dy = pcy - o.y;
+    if (dx * dx + dy * dy > reach * reach) continue;
+    o.taken = true;
+    if (o.kind === 'slowmo') {
+      player.slowTime = SLOWMO_TIME;
+      showBanner('SLOW-MO');
+      audio.triggers.slowmo();
+    } else if (o.kind === 'trail') {
+      const keys = Object.keys(TRAIL_PALETTES);
+      player.trailPal = keys[Math.floor(Math.random() * keys.length)];
+      player.trailTime = TRAIL_TIME;
+      showBanner('TRAIL BLAZER');
+      audio.triggers.trail();
+    } else if (o.kind === 'static') {
+      player.staticTime = STATIC_TIME;
+      staticFx.start();
+      showBanner('STATIC!');
+      audio.triggers.staticOn();
+    } else {
+      player.sizeKind = o.kind;
+      player.sizeTime = SIZE_TIME;
+      setPlayerSize(SIZE_SCALE[o.kind]);
+      showBanner(o.kind === 'shrink' ? 'SHRUNK' : 'GROWN');
+      audio.triggers[o.kind]();
+    }
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 4;
+      particles.push({ x: o.x, y: o.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 1, decay: 0.03, size: 2 + Math.random() * 3,
+        hue: o.kind === 'static' ? Math.random() * 360 : 210, type: 'splash' });
+    }
+  }
+  oddities = oddities.filter(o => !o.taken && (mode === 'challenge' || o.y < cameraY + H + 200));
+
+  if (player.sizeTime > 0) {
+    player.sizeTime -= ms;
+    if (player.sizeTime <= 0) {
+      player.sizeTime = 0;
+      player.sizeKind = '';
+      setPlayerSize(1);
+      showBanner('BACK TO NORMAL SIZE');
+      audio.triggers.spent();
+    }
+  }
+  if (player.slowTime > 0) {
+    player.slowTime -= ms;
+    if (player.slowTime <= 0) { player.slowTime = 0; showBanner('BACK TO FULL SPEED'); audio.triggers.spent(); }
+  }
+  if (player.trailTime > 0) {
+    player.trailTime -= ms;
+    if (player.trailTime <= 0) player.trailTime = 0;
+  }
+  if (player.staticTime > 0) {
+    player.staticTime -= ms;
+    if (player.staticTime <= 0) {
+      player.staticTime = 0;
+      staticFx.on = false;
+      showBanner('STATIC CLEARED');
+    }
+  }
+}
+
+function drawOddities(time) {
+  for (const o of oddities) {
+    const sy = o.y - cameraY;
+    if (sy < -24 || sy > H + 24) continue;
+    const y = o.y + Math.sin(time * 0.004 + o.ph) * 3;
+    ctx.globalAlpha = 0.3 + 0.2 * Math.abs(Math.sin(time * 0.005 + o.ph));
+    ctx.fillStyle = o.kind === 'static' ? 'hsl(' + ((time * 0.3) % 360) + ',100%,60%)' : '#3d8bff';
+    ctx.beginPath(); ctx.arc(o.x, y, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    if (o.kind === 'slowmo') {
+      // hourglass
+      ctx.fillStyle = '#e8f1ff';
+      ctx.beginPath(); ctx.moveTo(o.x - 7, y - 9); ctx.lineTo(o.x + 7, y - 9); ctx.lineTo(o.x, y); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(o.x - 7, y + 9); ctx.lineTo(o.x + 7, y + 9); ctx.lineTo(o.x, y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#1b2f6b';
+      ctx.fillRect(o.x - 8, y - 11, 16, 2); ctx.fillRect(o.x - 8, y + 9, 16, 2);
+      ctx.fillStyle = '#ffd21a';
+      ctx.beginPath(); ctx.moveTo(o.x - 4, y + 8); ctx.lineTo(o.x + 4, y + 8); ctx.lineTo(o.x, y + 3); ctx.closePath(); ctx.fill();
+      continue;
+    }
+    if (o.kind === 'trail') {
+      const pal = TRAIL_PALETTES.rainbow;
+      for (let k = 0; k < 6; k++) { ctx.fillStyle = pal[k]; ctx.fillRect(o.x - 10, y - 9 + k * 3, 14, 3); }
+      ctx.fillStyle = '#e8f1ff'; ctx.fillRect(o.x + 4, y - 6, 7, 12);
+      ctx.strokeStyle = '#1b2f6b'; ctx.lineWidth = 1.5; ctx.strokeRect(o.x + 4, y - 6, 7, 12);
+      continue;
+    }
+    if (o.kind === 'static') {
+      for (let gy = 0; gy < 4; gy++) for (let gx = 0; gx < 4; gx++) {
+        ctx.fillStyle = 'hsl(' + (((gx * 7 ^ gy * 13) * 40 + time * 0.4) % 360) + ',100%,55%)';
+        ctx.fillRect(o.x - 8 + gx * 4, y - 8 + gy * 4, 4, 4);
+      }
+      ctx.strokeStyle = '#1b2f6b'; ctx.lineWidth = 1.5;
+      ctx.strokeRect(o.x - 8, y - 8, 16, 16);
+    } else {
+      const big = o.kind === 'grow';
+      const sz = big ? 14 : 6;
+      ctx.fillStyle = '#e8f1ff';
+      ctx.fillRect(o.x - sz / 2, y - sz / 2, sz, sz);
+      ctx.strokeStyle = '#1b2f6b'; ctx.lineWidth = 1.5;
+      ctx.strokeRect(o.x - sz / 2, y - sz / 2, sz, sz);
+      // corner arrows: out for grow, in for shrink
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+      for (const [ax, ay] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const a1 = big ? 9 : 12, a2 = big ? 12 : 8;
+        ctx.beginPath();
+        ctx.moveTo(o.x + ax * a1, y + ay * a1);
+        ctx.lineTo(o.x + ax * a2, y + ay * a2);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+// ── Bitfield static: patterns ported from sudosilo/bitfield-synth ──
+const staticFx = {
+  on: false, R: 72, cv: null, cx: null, img: null, fn: null, pal: null, t: 0, skip: 0,
+  exprs: [
+    (x, y, t, b) => Math.tan(x | y ^ t / 30) * 10,
+    (x, y, t, b) => Math.tan(x | y ^ t / 30) * 10 * (1 + b.bass * 4),
+    (x, y, t, b) => (x ^ y) + t + b.treble * 60,
+    (x, y, t, b) => Math.tan(x * y / 40 + t / 20 + b.beat * 3) * 8,
+    (x, y, t, b) => (Math.sin(x / 8 + t / 30) + Math.sin(y / 8) + Math.sin((x + y) / 16 + t / 40) + b.vol * 4) * 40,
+    (x, y, t, b) => (x | y ^ t / 20) * (1 + b.bass * 5),
+    (x, y, t, b) => ((x * y) >> 3) + t * 2,
+    (x, y, t, b) => (x & y) * 4 + t,
+  ],
+  palettes: ['blue', 'spectrum', 'fire', 'ice', 'neon'],
+  hue(h) {
+    h = ((h % 360) + 360) % 360;
+    const c = 255, X = (c * (1 - Math.abs((h / 60) % 2 - 1))) | 0;
+    if (h < 60) return [c, X, 0]; if (h < 120) return [X, c, 0]; if (h < 180) return [0, c, X];
+    if (h < 240) return [0, X, c]; if (h < 300) return [X, 0, c]; return [c, 0, X];
+  },
+  buildPal(kind) {
+    const P = new Uint8ClampedArray(256 * 3);
+    for (let b = 0; b < 256; b++) {
+      const n = b / 255; let r, g, bl;
+      if (kind === 'blue') { r = b * 0.22; g = b * 0.52; bl = Math.min(255, b * 1.1); }
+      else if (kind === 'spectrum') { [r, g, bl] = this.hue(n * 360); }
+      else if (kind === 'fire') { r = Math.min(255, n * 3 * 255); g = Math.min(255, Math.max(0, (n - 0.33) * 3) * 255); bl = Math.min(255, Math.max(0, (n - 0.66) * 3) * 255); }
+      else if (kind === 'ice') { bl = Math.min(255, n * 2.2 * 255); g = Math.min(255, Math.max(0, (n - 0.35) * 2.2) * 255); r = Math.min(255, Math.max(0, (n - 0.7) * 3.3) * 255); }
+      else { if (n < 0.5) { const k = n / 0.5; r = k * 255; g = k * 40; bl = k * 255; } else { const k = (n - 0.5) / 0.5; r = 40 * (1 - k); g = k * 255; bl = 255; } }
+      P[b * 3] = r; P[b * 3 + 1] = g; P[b * 3 + 2] = bl;
+    }
+    return P;
+  },
+  start() {
+    if (!this.cv) {
+      this.cv = document.createElement('canvas');
+      this.cv.width = this.cv.height = this.R;
+      this.cx = this.cv.getContext('2d');
+      this.img = this.cx.createImageData(this.R, this.R);
+    }
+    this.fn = this.exprs[Math.floor(Math.random() * this.exprs.length)];
+    this.pal = this.buildPal(this.palettes[Math.floor(Math.random() * this.palettes.length)]);
+    this.t = Math.random() * 1000;
+    this.on = true;
+  },
+  render() {
+    const R = this.R, d = this.img.data, P = this.pal, fn = this.fn, t = this.t;
+    // fake audio drive so the audio presets still pulse
+    const b = {
+      bass: 0.5 + 0.5 * Math.sin(t / 9), treble: 0.5 + 0.5 * Math.sin(t / 5),
+      vol: 0.5 + 0.5 * Math.sin(t / 13), beat: Math.max(0, Math.sin(t / 4)) ** 8,
+    };
+    for (let y = 0; y < R; y++) for (let x = 0; x < R; x++) {
+      let v; try { v = fn(x, y, t, b); } catch (e) { v = 0; }
+      if (!isFinite(v)) v = 0;
+      const c = (v | 0) & 255, i = (y * R + x) * 4;
+      d[i] = P[c * 3]; d[i + 1] = P[c * 3 + 1]; d[i + 2] = P[c * 3 + 2]; d[i + 3] = 255;
+    }
+    this.cx.putImageData(this.img, 0, 0);
+  },
+  draw(ms) {
+    if (!this.on || !player || player.staticTime <= 0) return;
+    this.t += ms / 16.67;
+    if ((this.skip = (this.skip + 1) % 2) === 0) this.render();
+    const left = player.staticTime, total = STATIC_TIME;
+    // fade in over the first half second, out over the last second
+    const fade = Math.min(1, (total - left) / 500, left / 1000);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.globalAlpha = 0.62 * fade;
+    ctx.drawImage(this.cv, 0, 0, W, H);
+    ctx.restore();
+  },
+};
+
+// ── POWER-UP PACING: one picker, spaced far apart ──────────────
+const POWERUP_GAP  = 14;     // minimum platforms between any two power-ups
+const POWERUP_ROLL = 0.30;   // chance per platform once the gap has passed
+const PU_WEIGHTS = { rocket: 3, glider: 2, steady: 3, shrink: 1.5, grow: 1.5, static: 1.5, slowmo: 2, trail: 2 };
+let platsSincePU = 0;
+function maybeSpawnPowerup(p) {
+  platsSincePU++;
+  if (p.vx || platsSincePU < POWERUP_GAP || Math.random() > POWERUP_ROLL) return;
+  let total = 0; for (const k in PU_WEIGHTS) total += PU_WEIGHTS[k];
+  let r = Math.random() * total, kind = 'rocket';
+  for (const k in PU_WEIGHTS) { r -= PU_WEIGHTS[k]; if (r <= 0) { kind = k; break; } }
+  const item = { x: p.x + p.w / 2, y: p.y - 14, taken: false, ph: Math.random() * Math.PI * 2 };
+  if (kind === 'rocket') rockets.push(item);
+  else if (kind === 'glider') gliders.push(item);
+  else if (kind === 'steady') steadies.push(item);
+  else { item.kind = kind; oddities.push(item); }
+  platsSincePU = 0;
+}
+
+// ── GAUNTLET MODE: industrial, three lives, turrets, no falling ──
+const GAUNTLET_LIVES = 3;
+const GAUNTLET_FALL  = 340;   // px below your last platform before you lose a life
+const GAUNTLET_THEME = { top: '#f3cf9e', bot: '#b9a58e', grid: '#7a6450', player: '#1f3a8a', weather: 'ash', wcol: '255,140,40', starA: 0 };
+let lives = GAUNTLET_LIVES;
+let checkpoint = null;
+let invulnT = 0;
+let turrets = [];
+let bullets = [];
+
+function theme() { return mode === 'gauntlet' ? GAUNTLET_THEME : ZONES[zoneIdx]; }
+
+function maybeSpawnTurret(p) {
+  if (mode !== 'gauntlet' || p.vx || p.isGround || p.y > -1500) return;
+  const m = -p.y / 10;
+  const chance = Math.min(0.28, 0.10 + m / 20000);
+  if (Math.random() > chance) return;
+  const side = Math.random() < 0.5 ? 0.2 : 0.8;
+  turrets.push({ x: p.x + p.w * side, y: p.y, plat: p, cd: 1200 + Math.random() * 1500, aim: -Math.PI / 2, dead: false });
+}
+
+function loseLife(reason) {
+  if (invulnT > 0 || state !== STATE.PLAYING) return;
+  lives--;
+  audio.triggers.hurt();
+  buzz([120, 60, 160]);
+  warpFlash = 0.6;
+  if (lives <= 0) {
+    lives = 0;
+    GHOST.dirty = true; GHOST.save();
+    LB.queue();
+    state = STATE.DEAD;
+    stateSince = performance.now();
+    audio.triggers.die();
+    return;
+  }
+  showBanner(reason + ' ' + lives + (lives === 1 ? ' LIFE LEFT' : ' LIVES LEFT'));
+  invulnT = 2200;
+  bullets = [];
+  const cp = checkpoint && platforms.includes(checkpoint) ? checkpoint : platforms.find(q => q.isGround);
+  player.x = cp.x + cp.w / 2 - player.w / 2;
+  player.y = cp.y - player.h;
+  player.vx = 0; player.vy = 0;
+  player.chute = false; player.fallTimer = 0; player.rocketTimer = 0;
+}
+
+function updateGauntlet(ms, wr) {
+  if (mode !== 'gauntlet') return;
+  if (invulnT > 0) invulnT -= ms;
+  if (player.onGround) {
+    const under = platforms.find(q => !q.vx &&
+      player.x + player.w > q.x && player.x < q.x + q.w && Math.abs(player.y + player.h - q.y) < 2);
+    if (under) checkpoint = under;
+  }
+  const cpY = checkpoint ? checkpoint.y : 0;
+  if (player.y > cpY + GAUNTLET_FALL && player.rocketTimer <= 0) loseLife('FELL!');
+  if (score > bestGauntlet) {
+    bestGauntlet = score;
+    localStorage.setItem('bestGauntlet', bestGauntlet);
+    LB.queue();
+  }
+  const pcx = player.x + player.w / 2, pcy = player.y + player.h / 2;
+  const m = Math.max(0, score);
+  const interval = Math.max(1300, 2200 - m * 0.25);
+  for (const t of turrets) {
+    if (!platforms.includes(t.plat)) { t.dead = true; continue; }
+    const sy = t.y - cameraY;
+    t.aim = Math.atan2(pcy - (t.y - 10), pcx - t.x);
+    if (sy < -40 || sy > H + 40) continue;
+    t.cd -= ms * wr;
+    if (t.cd <= 0) {
+      t.cd = interval * (0.85 + Math.random() * 0.3);
+      const sp = 3.4;
+      bullets.push({ x: t.x + Math.cos(t.aim) * 14, y: t.y - 10 + Math.sin(t.aim) * 14,
+        vx: Math.cos(t.aim) * sp, vy: Math.sin(t.aim) * sp, life: 4500 });
+      audio.triggers.shot();
+    }
+  }
+  turrets = turrets.filter(t => !t.dead);
+  for (const b of bullets) {
+    b.x += b.vx * wr * (ms / 16.67);
+    b.y += b.vy * wr * (ms / 16.67);
+    b.life -= ms * wr;
+    if (b.x > player.x - 2 && b.x < player.x + player.w + 2 && b.y > player.y - 2 && b.y < player.y + player.h + 2) {
+      b.life = 0;
+      if (player.rocketTimer <= 0) loseLife('HIT!');
+    }
+    // steel blocks stop rounds
+    for (const q of platforms) if (q.solid && b.x > q.x && b.x < q.x + q.w && b.y > q.y && b.y < q.y + q.h) b.life = 0;
+  }
+  bullets = bullets.filter(b => b.life > 0);
+}
+
+function drawTurrets(time) {
+  if (mode !== 'gauntlet') return;
+  for (const t of turrets) {
+    const sy = t.y - cameraY;
+    if (sy < -40 || sy > H + 40) continue;
+    ctx.fillStyle = '#4a4038';
+    ctx.fillRect(t.x - 10, t.y - 10, 20, 10);
+    ctx.fillStyle = '#ffcc00';
+    for (let i = 0; i < 4; i++) ctx.fillRect(t.x - 10 + i * 6, t.y - 3, 3, 3);
+    ctx.fillStyle = '#6b5d50';
+    ctx.beginPath(); ctx.arc(t.x, t.y - 10, 8, Math.PI, 0); ctx.fill();
+    ctx.save();
+    ctx.translate(t.x, t.y - 10);
+    ctx.rotate(t.aim);
+    ctx.fillStyle = '#2b2520';
+    ctx.fillRect(0, -2.5, 16, 5);
+    ctx.restore();
+    // warning light flashes right before a shot
+    const warn = t.cd < 450;
+    ctx.fillStyle = warn ? (Math.floor(time / 80) % 2 ? '#ff3b1a' : '#ffd21a') : '#3d8bff';
+    ctx.beginPath(); ctx.arc(t.x, t.y - 16, 2.5, 0, Math.PI * 2); ctx.fill();
+  }
+  for (const b of bullets) {
+    ctx.fillStyle = '#ff6a1a';
+    ctx.beginPath(); ctx.arc(b.x, b.y, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff3b0';
+    ctx.beginPath(); ctx.arc(b.x, b.y, 1.5, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawGirder(p, time) {
+  ctx.fillStyle = '#5a4a3e';
+  ctx.fillRect(p.x, p.y, p.w, p.h);
+  ctx.fillStyle = '#8a6d55';
+  ctx.fillRect(p.x, p.y, p.w, 2);
+  ctx.fillStyle = '#3a2f27';
+  ctx.fillRect(p.x, p.y + p.h - 2, p.w, 2);
+  ctx.fillStyle = '#ffcc00';
+  for (let x = p.x; x < p.x + p.w - 4; x += 12) ctx.fillRect(x, p.y + 2, 6, 2);
+  ctx.fillStyle = '#2b2520';
+  for (let x = p.x + 4; x < p.x + p.w - 2; x += 10) ctx.fillRect(x, p.y + 5, 2, 2);
+  if (p.vx) {
+    ctx.fillStyle = '#3d8bff';
+    ctx.fillRect(p.x, p.y + p.h, p.w, 2);
+  }
+}
+
+// Factory skyline with smokestacks, steam, pipes and blinking lights
+const factory = [];
+(function initFactory() {
+  for (let i = 0; i < 18; i++) factory.push({ x: Math.random() * 2000, w: 30 + Math.random() * 70, h: 80 + Math.random() * 220, layer: i % 2, stack: Math.random() < 0.4, ph: Math.random() * 6 });
+})();
+function drawIndustrialBG(time) {
+  const speeds = [0.08, 0.2];
+  for (let L = 0; L < 2; L++) {
+    const col = L ? '#7a6656' : '#9c8875';
+    for (const f of factory) {
+      if (f.layer !== L) continue;
+      const sx = f.x % (W + 100) - 50;
+      const base = H + ((-cameraY * speeds[L]) % 300);
+      ctx.fillStyle = col;
+      ctx.fillRect(sx, base - f.h, f.w, f.h + 400);
+      if (f.stack) {
+        ctx.fillRect(sx + f.w * 0.35, base - f.h - 60, 10, 60);
+        const puff = (time * 0.02 + f.ph * 40) % 60;
+        ctx.globalAlpha = 0.25 * (1 - puff / 60);
+        ctx.fillStyle = '#f5ece0';
+        ctx.beginPath(); ctx.arc(sx + f.w * 0.35 + 5, base - f.h - 64 - puff, 8 + puff * 0.3, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      ctx.fillStyle = Math.sin(time * 0.004 + f.ph) > 0.6 ? '#ff3b1a' : '#3d8bff';
+      ctx.fillRect(sx + 4, base - f.h + 6, 3, 3);
+    }
+  }
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = '#5a4a3e';
+  const gap = 260, off = ((-cameraY * 0.5) % gap + gap) % gap;
+  for (let y = off; y < H; y += gap) { ctx.fillRect(0, y, W, 6); ctx.fillRect(0, y + 10, W, 2); }
+  ctx.globalAlpha = 1;
+}
+
+function drawLives() {
+  if (mode !== 'gauntlet') return;
+  for (let i = 0; i < GAUNTLET_LIVES; i++) {
+    const x = 68 + i * 18, y = 54;
+    ctx.fillStyle = i < lives ? '#3d8bff' : 'rgba(0,0,0,0.25)';
+    ctx.beginPath();
+    ctx.moveTo(x + 7, y + 12);
+    ctx.bezierCurveTo(x - 4, y + 4, x + 1, y - 3, x + 7, y + 2);
+    ctx.bezierCurveTo(x + 13, y - 3, x + 18, y + 4, x + 7, y + 12);
+    ctx.fill();
+  }
+  if (invulnT > 0) {
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('shielded', 68, 80);
+    ctx.textAlign = 'right';
+  }
+}
+
+// ── JEWELS MODE: jewels everywhere, score is jewels collected ────
+const JEWEL_SET = 8;          // platforms per set; collect every jewel in a set for a bonus
+const JEWEL_SET_BONUS = 10;
+const JEWEL_KINDS = [
+  { c: '#ff2a55', e: '#ffd0da' },  // ruby
+  { c: '#3d8bff', e: '#d6e8ff' },  // sapphire
+  { c: '#22d07a', e: '#c8ffe2' },  // emerald
+  { c: '#ffb81a', e: '#fff0c0' },  // topaz
+  { c: '#a64bff', e: '#ead6ff' },  // amethyst
+];
+let jewels = [];
+let jewelScore = 0;
+let jewelPlat = 0;
+const jewelSets = {};
+
+function maybeSpawnJewels(p) {
+  if (mode !== 'jewels') return;
+  const set = Math.floor(jewelPlat++ / JEWEL_SET);
+  const S = jewelSets[set] || (jewelSets[set] = { total: 0, got: 0, done: false });
+  const n = 2 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < n; i++) {
+    const diamond = Math.random() < 0.04;
+    const k = JEWEL_KINDS[Math.floor(Math.random() * JEWEL_KINDS.length)];
+    const arc = (i - (n - 1) / 2);
+    jewels.push({
+      x: Math.max(10, Math.min(W - 10, p.x + p.w / 2 + arc * 18)),
+      y: p.y - 24 - (n - Math.abs(arc)) * 10,
+      c: diamond ? '#e8f8ff' : k.c, e: diamond ? '#ffffff' : k.e, v: diamond ? 5 : 1,
+      diamond, set, ph: Math.random() * 6, taken: false,
+    });
+    S.total++;
+  }
+}
+
+function updateJewels() {
+  if (mode !== 'jewels') return;
+  const pcx = player.x + player.w / 2, pcy = player.y + player.h / 2;
+  const reach = 16 + player.w / 2;
+  for (const j of jewels) {
+    if (j.taken) continue;
+    const dx = pcx - j.x, dy = pcy - j.y;
+    if (dx * dx + dy * dy > reach * reach) continue;
+    j.taken = true;
+    jewelScore += j.v;
+    const S = jewelSets[j.set];
+    if (S) S.got++;
+    audio.triggers.gem();
+    if (j.diamond) { showBanner('DIAMOND +5'); buzz(30); }
+    if (S && S.got === S.total && !S.done) {
+      S.done = true;
+      jewelScore += JEWEL_SET_BONUS;
+      showBanner('PERFECT SET +' + JEWEL_SET_BONUS);
+      audio.triggers.token();
+    }
+    for (let i = 0; i < 8; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 1.5 + Math.random() * 3;
+      particles.push({ x: j.x, y: j.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, decay: 0.04,
+        size: 1.5 + Math.random() * 2, hue: 200, type: 'splash' });
+    }
+  }
+  jewels = jewels.filter(j => !j.taken && j.y < cameraY + H + 200);
+  if (jewelScore > bestJewels) {
+    bestJewels = jewelScore;
+    localStorage.setItem('bestJewels', bestJewels);
+    LB.queue();
+  }
+}
+
+function drawJewels(time) {
+  if (mode !== 'jewels') return;
+  for (const j of jewels) {
+    const sy = j.y - cameraY;
+    if (sy < -20 || sy > H + 20) continue;
+    const y = j.y + Math.sin(time * 0.005 + j.ph) * 2.5;
+    const r = j.diamond ? 9 : 6;
+    ctx.fillStyle = j.c;
+    ctx.beginPath();
+    ctx.moveTo(j.x, y - r); ctx.lineTo(j.x + r * 0.8, y - r * 0.2);
+    ctx.lineTo(j.x, y + r); ctx.lineTo(j.x - r * 0.8, y - r * 0.2);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = j.e;
+    ctx.beginPath();
+    ctx.moveTo(j.x, y - r); ctx.lineTo(j.x + r * 0.35, y - r * 0.2); ctx.lineTo(j.x - r * 0.35, y - r * 0.2);
+    ctx.closePath(); ctx.fill();
+    if (Math.sin(time * 0.01 + j.ph * 3) > 0.92) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(j.x + r * 0.3, y - r, 2, 2);
+    }
+  }
+}
+
+// ── CAREER MODE: 25 levels, each one a target height ───────────
+const LEVEL_COUNT = 25;
+const LEVEL_TARGET = n => Math.round(150 * Math.pow(14000 / 150, (n - 1) / (LEVEL_COUNT - 1)) / 10) * 10;
+let careerLevel    = Math.max(1, parseInt(localStorage.getItem('ascendCareerLevel') || '1'));
+let careerUnlocked = Math.max(1, parseInt(localStorage.getItem('ascendCareerUnlocked') || '1'));
+let careerCleared  = parseInt(localStorage.getItem('ascendCareerCleared') || '0');
+let levelDoneT = 0;
+careerLevel = Math.min(careerLevel, careerUnlocked, LEVEL_COUNT);
+
+function applyDifficulty() {
+  if (mode === 'career') {
+    const k = (careerLevel - 1) / (LEVEL_COUNT - 1);
+    DIFF.solid = 0.06 + k * 0.16;
+    DIFF.mover = 0.10 + k * 0.18;
+    DIFF.gapMax = 80 + k * 30;
+  } else {
+    DIFF.solid = SOLID_CHANCE; DIFF.mover = 0.15; DIFF.gapMax = 90;
+  }
+}
+
+let levelTime = 0;
+const result = { level: 1, time: 0, best: 0, newBest: false, rank: null, posting: false };
+function lvBestTime(n) { return parseInt(localStorage.getItem('ascendLvTime_' + n) || '0'); }
+function fmtTime(ms) {
+  const t = Math.max(0, Math.round(ms / 100));
+  const m = Math.floor(t / 600), sec = Math.floor((t % 600) / 10), d = t % 10;
+  return m + ':' + String(sec).padStart(2, '0') + '.' + d;
+}
+
+function advanceFromResult() {
+  if (careerLevel < LEVEL_COUNT) {
+    careerLevel++;
+    localStorage.setItem('ascendCareerLevel', careerLevel);
+    LB.syncLevel();
+    setState(STATE.PLAYING);
+  } else {
+    setState(STATE.MENU);
+    initGame();
+  }
+}
+
+function checkLevel(ms) {
+  if (mode !== 'career') return;
+  if (levelDoneT > 0) {
+    levelDoneT -= ms;
+    if (levelDoneT <= 0) {
+      levelDoneT = 0;
+      setState(STATE.RESULT);
+    }
+    return;
+  }
+  if (score >= LEVEL_TARGET(careerLevel)) {
+    levelDoneT = 1400;
+    const prev = lvBestTime(careerLevel);
+    result.level = careerLevel; result.time = levelTime; result.rank = null;
+    result.newBest = !prev || levelTime < prev;
+    result.best = result.newBest ? levelTime : prev;
+    if (result.newBest) localStorage.setItem('ascendLvTime_' + careerLevel, String(Math.round(levelTime)));
+    LB.postTime(careerLevel, Math.round(levelTime));
+    if (careerLevel > careerCleared) {
+      careerCleared = careerLevel;
+      localStorage.setItem('ascendCareerCleared', careerCleared);
+      LB.queue();
+    }
+    if (careerLevel + 1 > careerUnlocked && careerLevel < LEVEL_COUNT) {
+      careerUnlocked = careerLevel + 1;
+      localStorage.setItem('ascendCareerUnlocked', careerUnlocked);
+    }
+    GHOST.dirty = true; GHOST.save();
+    showBanner(careerLevel === LEVEL_COUNT ? 'CAREER COMPLETE!' : 'LEVEL ' + careerLevel + ' CLEAR');
+    audio.triggers.milestone();
+    for (let i = 0; i < 40; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 3 + Math.random() * 7;
+      particles.push({ x: player.x + player.w / 2, y: player.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 1, decay: 0.015, size: 2 + Math.random() * 4, hue: 200 + Math.random() * 40, type: 'splash' });
+    }
+  }
+}
+
+function drawFinishLine() {
+  if (mode !== 'career') return;
+  const y = -LEVEL_TARGET(careerLevel) * 10;
+  if (y - cameraY < -30 || y - cameraY > H + 30) return;
+  const sq = 10;
+  for (let i = 0; i * sq < W; i++) for (let r = 0; r < 2; r++) {
+    ctx.fillStyle = (i + r) % 2 ? '#3d8bff' : '#ffffff';
+    ctx.fillRect(i * sq, y - 10 + r * sq, sq, sq);
+  }
+  ctx.fillStyle = '#1b2f6b';
+  ctx.font = 'bold 12px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('LEVEL ' + careerLevel + ' TOP', W / 2, y - 16);
+}
+
+// ── SLOW-MO: the world slows down, you do not ──────────────────
+const SLOWMO_TIME = 15000;
+const SLOWMO_RATE = 0.35;
+function worldRate() { return player && player.slowTime > 0 ? SLOWMO_RATE : 1; }
+
+// ── TRAIL BLAZER: striped trail out the back wherever you go ──
+const TRAIL_TIME = 20000;
+const TRAIL_PALETTES = {
+  rainbow: ['#ff2a2a', '#ff9a1a', '#ffe81a', '#33e04a', '#2a9bff', '#8a4bff'],
+  ocean:   ['#0b2a6e', '#1b4fbf', '#3d8bff', '#6fb0ff', '#a9d4ff', '#e3f1ff'],
+  fire:    ['#5a0a00', '#b31d00', '#ff4a00', '#ff8c1a', '#ffd21a', '#fff3b0'],
+  neon:    ['#ff2bd6', '#b02bff', '#3d8bff', '#1affd5', '#3dff6a', '#eaff1a'],
+  sunset:  ['#2a1b5e', '#6b2a8a', '#c23b7a', '#ff6a5a', '#ffa84a', '#ffe08a'],
+  mint:    ['#0a4a3a', '#138a6a', '#2ad1a0', '#7af0c8', '#c8fff0', '#3d8bff'],
+};
+let blaze = [];
+function updateBlaze() {
+  if (!player || player.trailTime <= 0) { if (blaze.length) blaze = blaze.filter(b => (b.life -= 0.02) > 0); return; }
+  const pal = TRAIL_PALETTES[player.trailPal];
+  const x = player.x + player.w / 2, y = player.y + player.h / 2;
+  const last = blaze[blaze.length - 1];
+  const steps = last ? Math.min(12, Math.ceil(Math.hypot(x - last.x, y - last.y) / 3)) : 1;
+  for (let i = 1; i <= steps; i++) {
+    const f = i / steps;
+    blaze.push({ x: last ? last.x + (x - last.x) * f : x, y: last ? last.y + (y - last.y) * f : y, life: 1, pal });
+  }
+  for (const b of blaze) b.life -= 0.006;
+  blaze = blaze.filter(b => b.life > 0);
+  if (blaze.length > 900) blaze.splice(0, blaze.length - 900);
+}
+function drawBlaze() {
+  const band = 3;
+  for (const b of blaze) {
+    if (b.y - cameraY < -30 || b.y - cameraY > H + 30) continue;
+    ctx.globalAlpha = Math.min(1, b.life * 1.4);
+    for (let k = 0; k < 6; k++) {
+      ctx.fillStyle = b.pal[k];
+      ctx.fillRect(b.x - 3, b.y - 9 + k * band, 6, band);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
 
 function maybeSpawnRocket(p) {
   if (Math.random() < ROCKET_CHANCE) {
@@ -860,7 +2223,7 @@ function updateRockets(ms) {
   if (player.rocketTimer > 0) {
     player.rocketTimer -= ms / 1000;
     player.vy = ROCKET_SPEED;
-    // Fire out the back — every frame
+    // Fire out the back - every frame
     for (let i = 0; i < 3; i++) {
       particles.push({
         x: player.x + player.w / 2 + (Math.random() - 0.5) * 6,
@@ -910,7 +2273,7 @@ function drawRockets(time) {
   }
 }
 
-// ── ENERGY LAYER — RED PHONE: trails, shooting stars, motes ──
+// ── ENERGY LAYER - RED PHONE: trails, shooting stars, motes ──
 
 // Player comet trail
 let trail = [];
@@ -1027,15 +2390,15 @@ function drawStarfield(time) {
     const sy = ((s.y - cameraY * speeds[s.layer]) % H + H) % H;
     const sx = s.x % W;
     const twinkle = 0.4 + 0.6 * Math.abs(Math.sin(time * 0.002 + s.tw));
-    ctx.globalAlpha = twinkle * (0.25 + s.layer * 0.25);
+    ctx.globalAlpha = twinkle * (0.25 + s.layer * 0.25) * ZONES[zoneIdx].starA;
     ctx.fillStyle = 'hsl(' + ((s.hue + time * 0.02) % 360) + ', 90%, 70%)';
     ctx.fillRect(sx, sy, s.size, s.size);
   }
   ctx.globalAlpha = 1;
 
-  // Faint horizontal grid lines that scroll with the world — strong fall cue
-  ctx.globalAlpha = 0.05;
-  ctx.strokeStyle = '#8899ff';
+  // Faint horizontal grid lines that scroll with the world - strong fall cue
+  ctx.globalAlpha = zoneIdx === 0 ? 0.05 : 0.12;
+  ctx.strokeStyle = ZONES[zoneIdx].grid;
   ctx.lineWidth = 1;
   const gridGap = 120;
   const offset = ((-cameraY) % gridGap + gridGap) % gridGap;
@@ -1054,6 +2417,9 @@ function drawStarfield(time) {
 function initGame() {
   platforms       = [];
   rockets         = [];
+  steadies        = [];
+  oddities        = [];
+  staticFx.on     = false;
   gliders         = [];
   gems            = [];
   gemCount        = 0;
@@ -1067,9 +2433,22 @@ function initGame() {
   score           = 0;
   highestPlatY    = 0;
   worldGenBottom  = 800;
+  tokenNeed       = 1;
+  tokenWrongT     = 0;
+  zoneIdx = 0; zoneLap = 0; zoneFeel.grav = 1; zoneFeel.wind = 1;
+  levelDoneT = 0;
+  levelTime = 0;
+  blaze = [];
+  lives = GAUNTLET_LIVES; checkpoint = null; invulnT = 0; turrets = []; bullets = [];
+  jewels = []; jewelScore = 0; jewelPlat = 0; for (const k in jewelSets) delete jewelSets[k];
+  platsSincePU = Math.floor(POWERUP_GAP / 2);
+  applyDifficulty();
+  warpFlash       = 0;
+  resetTokens();
   addGround();
   generateUpTo(-H * 2);
   initPlayer();
+  GHOST.reset();
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1079,21 +2458,23 @@ function updatePhysics(dt, ms) {
   const inp = getInput();
 
   // Horizontal
-  if (inp.left)  player.vx -= CFG.PLAYER_SPEED;
-  if (inp.right) player.vx += CFG.PLAYER_SPEED;
+  const steady = player.steadyTime > 0;
+  const accel = steady ? STEADY_ACCEL : CFG.PLAYER_SPEED;
+  if (inp.left)  player.vx -= accel;
+  if (inp.right) player.vx += accel;
 
-  // Wind push — only while airborne, doubled under canopy
+  // Wind push - only while airborne, doubled under canopy
   if (!player.onGround) {
     const windMult = player.chute ? 2.2 : 1.0;
-    player.vx += wind.force * windMult * dt;
+    player.vx += wind.force * windMult * zoneFeel.wind * (steady ? 0.5 : 1) * dt;
   }
 
-  player.vx *= CFG.FRICTION;
+  player.vx *= steady ? STEADY_FRICTION : CFG.FRICTION;
   if (Math.abs(player.vx) < 0.05) player.vx = 0;
 
-  // Gravity — none during rocket flight, bubble at apex when holding jump, reduced under chute
+  // Gravity - none during rocket flight, bubble at apex when holding jump, reduced under chute
   if (player.rocketTimer > 0) {
-    // rocket controls vy directly in updateRockets — no gravity
+    // rocket controls vy directly in updateRockets - no gravity
   } else {
     let grav;
     if (player.chute) {
@@ -1103,9 +2484,19 @@ function updatePhysics(dt, ms) {
     } else {
       grav = CFG.GRAVITY;
     }
-    player.vy += grav * dt;
+    player.vy += grav * zoneFeel.grav * dt;
 
     // Glider controls (active while deployed and hasGlider)
+    if (player.chute && player.hasGlider) {
+      // Flight time limit: glider burns out after GLIDER_TIME ms of flying
+      player.gliderTime -= ms;
+      if (player.gliderTime <= 0) {
+        player.gliderTime = 0;
+        player.hasGlider = false;
+        showBanner('GLIDER SPENT');
+        audio.triggers.spent();
+      }
+    }
     if (player.chute && player.hasGlider) {
       // Lift pulse: tap jump to swoop up a little (grab missed coins)
       if (inp.jumpPressed) {
@@ -1114,7 +2505,7 @@ function updatePhysics(dt, ms) {
       // Dive: holding a direction tilts nose down = faster fall + extra h-speed
       if (inp.left || inp.right) {
         if (player.vy > GLIDER_DIVE_FALL) player.vy = GLIDER_DIVE_FALL;
-        player.vx += (inp.right ? 1 : -1) * 1.2;
+        player.vx += (inp.right ? 1 : -1) * (steady ? 0.4 : 1.2);
       } else {
         if (player.vy > GLIDER_MAX_FALL) player.vy = GLIDER_MAX_FALL;
       }
@@ -1130,7 +2521,7 @@ function updatePhysics(dt, ms) {
   }
   if (player.vy > maxFall) player.vy = maxFall;
 
-  // Jump — uses coyote time
+  // Jump - uses coyote time
   const canJump = player.onGround || player.coyoteTimer > 0;
   if (inp.jumpPressed && canJump) {
     player.vy = CFG.JUMP_FORCE;
@@ -1140,6 +2531,21 @@ function updatePhysics(dt, ms) {
     player.fallTimer = 0;
     spawnJumpPuff(player.x + player.w / 2, player.y + player.h);
     audio.triggers.jump();
+  }
+
+  // Long fall: warp straight to the ground so a new climb starts fast
+  if (mode !== 'gauntlet' && !player.onGround && player.vy > 0 && player.rocketTimer <= 0 && player.y < -300) {
+    player.dropT = (player.dropT || 0) + ms;
+    if (player.dropT > FALL_WARP_MS) {
+      player.dropT = 0;
+      warpFlash = 1;
+      audio.triggers.warp();
+      showBanner('⬇ BACK TO THE GROUND');
+      respawnFromY();
+      return;
+    }
+  } else {
+    player.dropT = 0;
   }
 
   // Coyote countdown
@@ -1155,6 +2561,26 @@ function updatePhysics(dt, ms) {
   // Facing
   if (player.vx >  0.1) player.facing =  1;
   if (player.vx < -0.1) player.facing = -1;
+
+  // Solid blocks: bonk your head instead of passing through (rockets punch through)
+  if (player.vy < 0 && player.rocketTimer <= 0) {
+    const prevTop = player.y - player.vy * dt;
+    for (const p of platforms) {
+      if (!p.solid) continue;
+      if (player.x + player.w <= p.x + 2 || player.x >= p.x + p.w - 2) continue;
+      const bottom = p.y + p.h;
+      if (prevTop >= bottom - 1 && player.y < bottom) {
+        player.y = bottom;
+        player.vy = 1;
+        audio.triggers.bonk();
+        for (let i = 0; i < 6; i++) particles.push({
+          x: player.x + player.w / 2, y: bottom, vx: (Math.random() - 0.5) * 4, vy: Math.random() * 2,
+          life: 1, decay: 0.05, size: 1.5 + Math.random() * 1.5, hue: 210, type: 'splash',
+        });
+        break;
+      }
+    }
+  }
 
   // Horizontal wrap
   if (player.x + player.w < 0)  player.x = W;
@@ -1174,6 +2600,7 @@ function updatePhysics(dt, ms) {
     ) {
       // Landing splash + cloud in this platform's color (only on real impact)
       if (!player.onGround && player.vy > 2) {
+        audio.triggers.land(player.vy);
         spawnSplash(player.x + player.w / 2, p.y, p.hue !== undefined ? p.hue : 230);
         // Extra ring of sparks proportional to impact speed
         const extra = Math.min(Math.floor(player.vy * 2), 20);
@@ -1203,9 +2630,9 @@ function updatePhysics(dt, ms) {
         audio.triggers.chuteClose();
       }
 
-      // Landed on a rescue platform OR back on bare ground after a fall —
+      // Landed on a rescue platform OR back on bare ground after a fall -
       // respawn fresh platforms above
-      if (p.isRescue || (p.isGround && player.peakY < -300)) {
+      if (mode !== 'gauntlet' && (p.isRescue || (p.isGround && player.peakY < -300))) {
         respawnFromY();
         return;
       }
@@ -1220,7 +2647,7 @@ function updatePhysics(dt, ms) {
   // ── Parachute logic ─────────────────────────────────────
   if (!player.onGround && player.vy > 0 && player.rocketTimer <= 0) {
     player.fallTimer += ms / 1000;
-    if (!player.chute && player.fallTimer >= CFG.CHUTE_DEPLOY_S) {
+    if (!player.chute && mode !== 'gauntlet' && player.fallTimer >= CFG.CHUTE_DEPLOY_S) {
       player.chute = true;
       audio.triggers.chuteOpen();
     }
@@ -1241,11 +2668,15 @@ function updatePhysics(dt, ms) {
   const height = Math.floor(-player.y / 10);
   if (height > score) {
     score = height;
-    if (score > best) {
+    if (mode === 'climb' && score > best) {
       best = score;
       localStorage.setItem('best', best);
+      LB.queue();
     }
   }
+
+  if (mode !== 'gauntlet') updateZone();
+  GHOST.record(ms);
 
   // ── Generate more world ahead ────────────────────────────
   // Keep platforms generated at least one screen above the camera top
@@ -1272,6 +2703,9 @@ function render(time) {
 
   if (state === STATE.MENU) { drawMenu(); return; }
   if (state === STATE.DEAD)  { drawDead(); return; }
+  if (state === STATE.RESULT) { drawResult(); return; }
+
+  drawZoneSky();
 
   // Sky tint shifts toward dawn-blue inside the cloud zone
   const cf = cloudFactor();
@@ -1281,9 +2715,13 @@ function render(time) {
   }
 
   // Parallax starfield + grid (screen-space, scrolls with cameraY)
-  drawStarfield(time);
-  drawClouds(time);
-  drawMotes(time);
+  if (mode === 'gauntlet') {
+    drawIndustrialBG(time);
+  } else {
+    drawStarfield(time);
+    drawClouds(time);
+    drawMotes(time);
+  }
   drawStreaks();
   drawShooters();
 
@@ -1291,7 +2729,7 @@ function render(time) {
   ctx.save();
   ctx.translate(0, -cameraY);
 
-  // Platforms — each with its own neon hue, glow strip, LED sparkle dots
+  // Platforms - each with its own neon hue, glow strip, LED sparkle dots
   for (const p of platforms) {
     const screenY = p.y - cameraY;
     if (screenY > H + 20 || screenY + p.h < -20) continue;
@@ -1304,11 +2742,14 @@ function render(time) {
       continue;
     }
 
+    if (p.solid) { drawSolid(p, time); continue; }
+    if (mode === 'gauntlet') { drawGirder(p, time); continue; }
+
     // Slow hue drift + breathing glow
     const hue = ((p.hue !== undefined ? p.hue : 230) + time * 0.01) % 360;
     const breathe = 0.2 + 0.18 * Math.abs(Math.sin(time * 0.002 + (p.hue || 0)));
 
-    // Soft glow under the platform — pulses
+    // Soft glow under the platform - pulses
     ctx.globalAlpha = breathe;
     ctx.fillStyle = 'hsl(' + hue + ', 100%, 55%)';
     ctx.fillRect(p.x - 4, p.y - 3, p.w + 8, p.h + 8);
@@ -1344,13 +2785,22 @@ function render(time) {
     }
   }
 
+  drawFinishLine();
+  drawJewels(time);
+  drawTurrets(time);
+  drawBlaze();
+  GHOST.draw(time);
+
   // Player comet trail (world space, under everything else)
   drawTrail();
 
   // Rocket pickups
   drawRockets(time);
+  drawSteadies(time);
+  drawOddities(time);
   drawGliders(time);
   drawGems(time);
+  drawTokens(time);
 
   // Coins (descent minigame)
   drawCoins(time);
@@ -1364,7 +2814,8 @@ function render(time) {
     else drawParachute();
   }
 
-  // Player — rocket shape during flight, box otherwise
+  if (mode === 'gauntlet' && invulnT > 0 && Math.floor(invulnT / 100) % 2) ctx.globalAlpha = 0.35;
+  // Player - rocket shape during flight, box otherwise
   if (player.rocketTimer > 0) {
     const cx = player.x + player.w / 2;
     // Hot glow
@@ -1397,14 +2848,38 @@ function render(time) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(player.x - 2, player.y - 2, player.w + 4, player.h + 4);
     ctx.globalAlpha = 1;
-    ctx.fillStyle = CFG.PLAYER;
+    ctx.fillStyle = theme().player;
     ctx.fillRect(player.x, player.y, player.w, player.h);
   }
 
+  ctx.globalAlpha = 1;
   ctx.restore();
 
+  staticFx.draw(16.67 * worldRate());
+  if (player && player.slowTime > 0) {
+    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+    g.addColorStop(0, 'rgba(61,139,255,0)');
+    g.addColorStop(1, 'rgba(61,139,255,0.35)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  if (warpFlash > 0) {
+    ctx.globalAlpha = warpFlash;
+    ctx.fillStyle = '#bfe0ff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+    warpFlash = Math.max(0, warpFlash - 0.04);
+  }
+  ctx.shadowColor = 'rgba(0,0,0,0.75)';
+  ctx.shadowBlur = 3;
   drawHUD();
+  drawLives();
+  GHOST.hud();
+  drawTokenArrow(time);
   drawBanner();
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = 'transparent';
   drawTouchHints();
 }
 
@@ -1449,7 +2924,7 @@ function drawParachute() {
   const cx = player.x + player.w / 2;
   const topY = player.y - 38;
 
-  // Canopy — simple arc
+  // Canopy - simple arc
   ctx.fillStyle = CFG.CHUTE;
   ctx.beginPath();
   ctx.arc(cx, topY, 22, Math.PI, 0);
@@ -1497,13 +2972,87 @@ function drawHUD() {
   if (player && player.hasGlider) {
     ctx.fillStyle = '#22ddee';
     ctx.font = '10px monospace';
-    ctx.fillText('glider', W - 14, 104);
+    ctx.fillText('glider ' + Math.ceil(player.gliderTime / 1000) + 's', W - 14, 104);
+    const gw = 60, gp = player.gliderTime / GLIDER_TIME;
+    ctx.fillStyle = '#16223f';
+    ctx.fillRect(W - 14 - gw, 110, gw, 5);
+    ctx.fillStyle = gp > 0.3 ? '#3d8bff' : '#ff4466';
+    ctx.fillRect(W - 14 - gw, 110, gw * gp, 5);
   }
 
   // Best
   ctx.fillStyle = CFG.UI_DIM;
   ctx.font = '11px monospace';
-  ctx.fillText('best ' + best + 'm', W - 14, 46);
+  if (mode === 'gauntlet') {
+    ctx.fillText('best ' + bestGauntlet + 'm', W - 14, 46);
+  } else if (mode === 'jewels') {
+    ctx.fillText('best ' + bestJewels + ' jewels', W - 14, 46);
+    ctx.fillStyle = '#3d8bff';
+    ctx.font = 'bold 16px monospace';
+    ctx.fillText('◆ ' + jewelScore, W - 14, 132);
+  } else if (mode === 'career') {
+    ctx.fillText('top ' + LEVEL_TARGET(careerLevel) + 'm', W - 14, 46);
+    ctx.fillStyle = '#6fb0ff';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('LEVEL ' + careerLevel, W - 14, 132);
+    const lp = Math.min(1, score / LEVEL_TARGET(careerLevel));
+    ctx.fillStyle = '#16223f'; ctx.fillRect(W - 74, 138, 60, 5);
+    ctx.fillStyle = '#3d8bff'; ctx.fillRect(W - 74, 138, 60 * lp, 5);
+  } else if (mode === 'challenge') {
+    ctx.fillText('best ' + bestChallenge + ' tokens', W - 14, 46);
+    ctx.fillStyle = '#6fb0ff';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('next ⬡ ' + tokenNeed, W - 14, 132);
+  } else {
+    ctx.fillText('best ' + best + 'm', W - 14, 46);
+  }
+
+  // Steady timer
+  if (player && player.steadyTime > 0) {
+    const sp = player.steadyTime / STEADY_TIME;
+    const secs = Math.ceil(player.steadyTime / 1000);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#6fb0ff';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText('steady ' + Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0'), 14, 120);
+    ctx.fillStyle = '#16223f';
+    ctx.fillRect(14, 125, 60, 5);
+    ctx.fillStyle = sp > 0.15 ? '#3d8bff' : '#ff4466';
+    ctx.fillRect(14, 125, 60 * sp, 5);
+    ctx.textAlign = 'right';
+  }
+
+  // Size and static timers
+  if (player && player.sizeTime > 0) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#6fb0ff';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText((player.sizeKind === 'shrink' ? 'shrunk ' : 'grown ') + Math.ceil(player.sizeTime / 1000) + 's', 14, 146);
+    ctx.fillStyle = '#16223f'; ctx.fillRect(14, 151, 60, 5);
+    ctx.fillStyle = '#3d8bff'; ctx.fillRect(14, 151, 60 * player.sizeTime / SIZE_TIME, 5);
+    ctx.textAlign = 'right';
+  }
+  if (player && player.slowTime > 0) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#6fb0ff';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText('slow-mo ' + Math.ceil(player.slowTime / 1000) + 's', 14, 190);
+    ctx.textAlign = 'right';
+  }
+  if (player && player.trailTime > 0) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = TRAIL_PALETTES[player.trailPal][2];
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText('trail ' + Math.ceil(player.trailTime / 1000) + 's', 14, 208);
+    ctx.textAlign = 'right';
+  }
+  if (player && player.staticTime > 0) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ff6688';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText('static ' + Math.ceil(player.staticTime / 1000) + 's', 14, 172);
+    ctx.textAlign = 'right';
+  }
 
   // Parachute indicator
   if (player && !player.onGround && !player.chute && player.vy > 0) {
@@ -1534,6 +3083,10 @@ function drawMenu() {
   ctx.font = 'bold 32px monospace';
   ctx.textAlign = 'center';
   ctx.fillText('ASCEND', W / 2, H / 2 - 30);
+  ctx.fillStyle = '#6fb0ff';
+  ctx.font = 'bold 12px monospace';
+  ctx.fillText(mode === 'gauntlet' ? 'RUN THE GAUNTLET' : mode === 'jewels' ? 'JEWELS MODE' : mode === 'career' ? 'CAREER  LEVEL ' + careerLevel + '  REACH ' + LEVEL_TARGET(careerLevel) + 'm'
+    : mode === 'challenge' ? 'CHALLENGE MODE' : 'MARATHON MODE', W / 2, H / 2 - 54);
 
   ctx.fillStyle = CFG.UI_DIM;
   ctx.font = '13px monospace';
@@ -1544,18 +3097,75 @@ function drawMenu() {
   ctx.font = 'bold 14px monospace';
   ctx.fillText('tap to start', W / 2, H / 2 + 56);
 
-  if (best > 0) {
+  const menuBest = mode === 'challenge' ? bestChallenge : mode === 'career' ? careerCleared : mode === 'gauntlet' ? bestGauntlet : mode === 'jewels' ? bestJewels : best;
+  if (menuBest > 0) {
     ctx.fillStyle = CFG.SCORE_COL;
     ctx.font = '11px monospace';
-    ctx.fillText('best: ' + best + 'm', W / 2, H / 2 + 80);
+    ctx.fillText(mode === 'career' ? 'levels cleared: ' + menuBest + ' of ' + LEVEL_COUNT
+      : 'best: ' + menuBest + (mode === 'challenge' ? ' tokens' : mode === 'jewels' ? ' jewels' : 'm'), W / 2, H / 2 + 80);
   }
+  if (mode === 'challenge' || mode === 'gauntlet' || mode === 'jewels') {
+    ctx.fillStyle = CFG.UI_DIM;
+    ctx.font = '11px monospace';
+    ctx.fillText(mode === 'challenge' ? 'grab tokens in order: 1, 2, 3...'
+      : mode === 'gauntlet' ? 'three lives, no parachute, dodge the turrets'
+      : 'grab every jewel, full sets pay a bonus', W / 2, H / 2 + 120);
+  }
+  ctx.fillStyle = '#6fb0ff';
+  ctx.font = '11px monospace';
+  ctx.fillText('☰ global leaderboard', W / 2, H / 2 + 100);
+}
+
+function drawNamePrompt(y) {
+  if (LB.name) return;
+  ctx.fillStyle = '#3d8bff';
+  ctx.font = 'bold 12px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('tap ☰ to enter your name and post this score', W / 2, y);
+}
+
+function drawResult() {
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#3d8bff';
+  ctx.font = 'bold 13px monospace';
+  ctx.fillText('CAREER', W / 2, H / 2 - 92);
+  ctx.fillStyle = CFG.UI_TEXT;
+  ctx.font = 'bold 26px monospace';
+  ctx.fillText(result.level === LEVEL_COUNT ? 'CAREER COMPLETE' : 'LEVEL ' + result.level + ' CLEAR', W / 2, H / 2 - 60);
+  ctx.fillStyle = CFG.SCORE_COL;
+  ctx.font = 'bold 30px monospace';
+  ctx.fillText(fmtTime(result.time), W / 2, H / 2 - 18);
+  ctx.font = '12px monospace';
+  ctx.fillStyle = result.newBest ? '#3d8bff' : CFG.UI_DIM;
+  ctx.fillText(result.newBest ? 'new best time!' : 'best ' + fmtTime(result.best), W / 2, H / 2 + 6);
+  ctx.fillStyle = CFG.UI_DIM;
+  ctx.fillText(LB.name ? (result.posting ? 'posting...' : result.rank ? 'rank ' + result.rank + ' on level ' + result.level + ' times' : 'saved') : '', W / 2, H / 2 + 28);
+  drawNamePrompt(H / 2 + 28);
+  ctx.fillStyle = CFG.ACCENT;
+  ctx.font = 'bold 14px monospace';
+  ctx.fillText(result.level === LEVEL_COUNT ? 'tap for the menu' : 'tap for level ' + (result.level + 1), W / 2, H / 2 + 64);
 }
 
 function drawDead() {
   ctx.fillStyle = CFG.UI_TEXT;
   ctx.font = 'bold 26px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('FELL', W / 2, H / 2 - 24);
+  ctx.fillText(mode === 'gauntlet' ? 'GAME OVER' : 'FELL', W / 2, H / 2 - 24);
+  if (mode === 'gauntlet') {
+    ctx.fillStyle = CFG.SCORE_COL;
+    ctx.font = 'bold 20px monospace';
+    ctx.fillText(score + 'm', W / 2, H / 2 + 4);
+    if (score >= bestGauntlet && score > 0) {
+      ctx.fillStyle = '#3d8bff';
+      ctx.font = '12px monospace';
+      ctx.fillText('new best!', W / 2, H / 2 + 24);
+    }
+    ctx.fillStyle = CFG.UI_DIM;
+    ctx.font = '12px monospace';
+    ctx.fillText('tap to run it again', W / 2, H / 2 + 50);
+    drawNamePrompt(H / 2 + 76);
+    return;
+  }
 
   ctx.fillStyle = CFG.SCORE_COL;
   ctx.font = 'bold 20px monospace';
@@ -1576,30 +3186,272 @@ function drawDead() {
 //  GAME LOOP
 // ════════════════════════════════════════════════════════════
 let lastTs = 0;
+let worldClock = 0;
 
+let loopErrors = 0;
 function loop(ts) {
+  requestAnimationFrame(loop);
+  try { tick(ts); } catch (e) {
+    // never let one bad frame freeze or blank the game
+    if (loopErrors++ < 5) console.error('ascend frame error', e);
+    try { ctx.restore(); ctx.globalAlpha = 1; ctx.shadowBlur = 0; } catch (e2) {}
+  }
+}
+function tick(ts) {
   const ms = Math.min(ts - lastTs, 50); // cap spike
   const dt = ms / 16.67;
   lastTs = ts;
 
-  if (state === STATE.PLAYING) {
+  if (state === STATE.PLAYING && !LB.open) {
+    const wr = worldRate();
+    worldClock += ms * wr;
     updatePhysics(dt, ms);
     updateCoins();
-    updateParticles(dt);
+    updateParticles(dt * wr);
     updateTrail();
-    updateShooters();
+    updateBlaze();
+    updateGauntlet(ms, wr);
+    updateJewels();
+    if (Math.random() < wr) updateShooters();
     updateRockets(ms);
+    updateSteadies(ms);
+    updateOddities(ms);
     updateGliders();
     updateGems();
-    updateMovingPlatforms(dt);
-    updateWind(ms);
-    updateStreaks();
+    updateTokens(ms);
+    updateMovingPlatforms(dt * wr);
+    updateWind(ms * wr);
+    if (Math.random() < wr) updateStreaks();
     checkMilestones();
+    checkLevel(ms);
   }
-  render(ts);
-
-  requestAnimationFrame(loop);
+  if (state === STATE.PLAYING && !LB.open && mode === 'career' && levelDoneT <= 0) levelTime += ms;
+  render(state === STATE.PLAYING ? worldClock : ts);
 }
+
+// ════════════════════════════════════════════════════════════
+//  GLOBAL LEADERBOARD (ascend-backend on Railway)
+// ════════════════════════════════════════════════════════════
+const LB = {
+  open: false, api: null, timer: null, posted: 0, postedC: 0, postedK: 0, postedG: 0, postedJ: 0,
+  name: localStorage.getItem('ascendName') || '',
+  el: id => document.getElementById(id),
+  clean(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9 _.-]/g, '').trim().slice(0, 12); },
+  status(t) { this.el('lbStatus').textContent = t; },
+  async findApi() {
+    if (this.api) return this.api;
+    const srcs = ['ascend-api-v1.json', 'https://raw.githubusercontent.com/sudosilo/ascend/master/ascend-api-v1.json'];
+    for (const u of srcs) {
+      try {
+        const r = await fetch(u, { cache: 'no-store' });
+        if (!r.ok) continue;
+        const j = await r.json();
+        if (j && j.url && /^https:\/\/[^\/]+$/.test(j.url)) { this.api = j.url; return this.api; }
+      } catch (e) {}
+    }
+    return null;
+  },
+  render(rows, kind, append) {
+    const ol = this.el('lbList');
+    if (!append) ol.innerHTML = '';
+    if (append) {
+      const h = document.createElement('li');
+      h.className = 'hd';
+      h.textContent = 'MOST LEVELS CLEARED';
+      ol.appendChild(h);
+    }
+    if (!rows.length) {
+      if (!append && !kind) { this.status('no scores yet, go set one'); return; }
+      const li = document.createElement('li'); li.textContent = 'no scores yet'; ol.appendChild(li); return;
+    }
+    rows.forEach((r, i) => {
+      const li = document.createElement('li');
+      if (r.name === this.name) li.className = 'me';
+      const rk = document.createElement('span'); rk.className = 'rk'; rk.textContent = (i + 1) + '.';
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = r.name;
+      const sc = document.createElement('span'); sc.textContent = kind === 'time' ? fmtTime(r.score) : mode === 'career' ? 'LV ' + r.score : r.score + (mode === 'challenge' ? ' ⬡' : mode === 'jewels' ? ' ◆' : 'm');
+      li.append(rk, nm, sc);
+      ol.appendChild(li);
+    });
+  },
+  async load() {
+    const api = await this.findApi();
+    if (!api) { this.status('leaderboard offline'); return; }
+    try {
+      if (mode === 'career') {
+        const [rt, rc] = await Promise.all([
+          fetch(api + '/scores?mode=lv' + careerLevel).then(x => x.json()),
+          fetch(api + '/scores?mode=career').then(x => x.json()),
+        ]);
+        this.status(this.name ? 'posting as ' + this.name : 'enter a name to post your scores');
+        this.render(rt.scores || [], 'time');
+        this.render(rc.scores || [], 'levels', true);
+        return;
+      }
+      const r = await fetch(api + '/scores?mode=' + mode);
+      const j = await r.json();
+      this.status(this.name ? 'posting as ' + this.name : 'enter a name to post your best');
+      this.render(j.scores || []);
+    } catch (e) { this.status('leaderboard offline'); }
+  },
+  async post() {
+    if (!this.name) return;
+    const api = await this.findApi();
+    if (!api) return;
+    const jobs = [];
+    if (best > 0 && best > this.posted) jobs.push(['climb', best]);
+    if (bestChallenge > 0 && bestChallenge > this.postedC) jobs.push(['challenge', bestChallenge]);
+    if (careerCleared > 0 && careerCleared > this.postedK) jobs.push(['career', careerCleared]);
+    if (bestGauntlet > 0 && bestGauntlet > this.postedG) jobs.push(['gauntlet', bestGauntlet]);
+    if (bestJewels > 0 && bestJewels > this.postedJ) jobs.push(['jewels', bestJewels]);
+    for (const [m, val] of jobs) {
+      try {
+        const r = await fetch(api + '/scores', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: this.name, score: val, mode: m }),
+        });
+        const j = await r.json();
+        if (!j.ok) continue;
+        if (m === 'climb') { this.posted = val; localStorage.setItem('ascendPosted', String(val)); }
+        else if (m === 'challenge') { this.postedC = val; localStorage.setItem('ascendPostedC', String(val)); }
+        else if (m === 'career') { this.postedK = val; localStorage.setItem('ascendPostedK', String(val)); }
+        else if (m === 'gauntlet') { this.postedG = val; localStorage.setItem('ascendPostedG', String(val)); }
+        else { this.postedJ = val; localStorage.setItem('ascendPostedJ', String(val)); }
+        if (this.open && m === mode) {
+          this.render(j.scores || []);
+          this.status('posted ' + (m === 'career' ? 'level ' + val : val + (m === 'challenge' ? ' tokens' : m === 'jewels' ? ' jewels' : 'm')) + ', rank ' + j.rank);
+        }
+      } catch (e) {}
+    }
+  },
+  async postTime(level, ms) {
+    if (!this.name) { this.pendingTime = { level, ms }; return; }
+    const api = await this.findApi();
+    if (!api) return;
+    result.posting = true;
+    try {
+      const r = await fetch(api + '/scores', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: this.name, score: ms, mode: 'lv' + level }),
+      });
+      const j = await r.json();
+      if (j.ok && result.level === level) result.rank = j.rank;
+      if (this.open && mode === 'career') this.load();
+    } catch (e) {}
+    result.posting = false;
+    this.pendingTime = null;
+  },
+  async postAllTimes() {
+    for (let n = 1; n <= LEVEL_COUNT; n++) {
+      const t = lvBestTime(n);
+      if (t > 0) await this.postTime(n, t);
+    }
+  },
+  setMode(m) {
+    mode = m;
+    localStorage.setItem('ascendMode', m);
+    this.el('modeClimb').className = m === 'climb' ? 'on' : '';
+    this.el('modeChallenge').className = m === 'challenge' ? 'on' : '';
+    this.el('modeCareer').className = m === 'career' ? 'on' : '';
+    this.el('modeGauntlet').className = m === 'gauntlet' ? 'on' : '';
+    this.el('modeJewels').className = m === 'jewels' ? 'on' : '';
+    this.el('lbTitle').textContent = m === 'career' ? 'LEVEL ' + careerLevel + ' FASTEST TIMES'
+      : ({ challenge: 'CHALLENGE', gauntlet: 'GAUNTLET', jewels: 'JEWELS' }[m] || 'MARATHON') + ' LEADERBOARD';
+    this.syncLevel();
+  },
+  syncLevel() {
+    if (mode === 'career') this.el('lbTitle').textContent = 'LEVEL ' + careerLevel + ' FASTEST TIMES';
+    this.el('lvText').textContent = 'LEVEL ' + careerLevel + '  ' + LEVEL_TARGET(careerLevel) + 'm';
+    this.el('lbLevel').style.opacity = mode === 'career' ? '1' : '0.45';
+  },
+  queue() {
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => { GHOST.save(); this.post(); }, 4000);
+  },
+  show() {
+    this.open = true;
+    touch.left = touch.right = touch.jump = false;
+    this.el('lbName').value = this.name;
+    this.el('lbPanel').classList.add('open');
+    this.status('loading');
+    this.load();
+  },
+  hide() {
+    this.open = false;
+    this.el('lbName').blur();
+    this.el('lbPanel').classList.remove('open');
+  },
+  init() {
+    const n = parseInt(localStorage.getItem('ascendPosted') || '0');
+    const sameName = localStorage.getItem('ascendPostedName') === this.name;
+    this.posted = sameName ? n : 0;
+    this.postedC = sameName ? parseInt(localStorage.getItem('ascendPostedC') || '0') : 0;
+    this.postedK = sameName ? parseInt(localStorage.getItem('ascendPostedK') || '0') : 0;
+    this.postedG = sameName ? parseInt(localStorage.getItem('ascendPostedG') || '0') : 0;
+    this.postedJ = sameName ? parseInt(localStorage.getItem('ascendPostedJ') || '0') : 0;
+    this.setMode(mode);
+    document.querySelectorAll('#lbOpts button').forEach(b => {
+      const k = b.dataset.opt;
+      b.className = SETTINGS[k] ? 'on' : '';
+      b.addEventListener('click', () => {
+        SETTINGS[k] = !SETTINGS[k];
+        saveSetting(k);
+        b.className = SETTINGS[k] ? 'on' : '';
+        SFX.unlock();
+        if (k === 'music') SETTINGS.music ? MUSIC.start() : MUSIC.stop();
+        if (k === 'buzz' && SETTINGS.buzz) buzz(40);
+      });
+    });
+    const pickLevel = d => {
+      const nl = Math.max(1, Math.min(careerUnlocked, LEVEL_COUNT, careerLevel + d));
+      if (nl === careerLevel && mode === 'career') { if (d > 0 && careerLevel >= careerUnlocked) this.status('clear level ' + careerLevel + ' to unlock the next'); return; }
+      GHOST.save();
+      careerLevel = nl;
+      localStorage.setItem('ascendCareerLevel', careerLevel);
+      if (mode !== 'career') { this.setMode('career'); this.status('loading'); this.load(); }
+      this.syncLevel();
+      state = STATE.MENU;
+      initGame();
+    };
+    this.el('lvPrev').addEventListener('click', () => pickLevel(-1));
+    this.el('lvNext').addEventListener('click', () => pickLevel(1));
+    ['modeClimb', 'modeChallenge', 'modeCareer', 'modeGauntlet', 'modeJewels'].forEach(id => this.el(id).addEventListener('click', e => {
+      const m = e.currentTarget.dataset.mode;
+      if (m === mode) return;
+      GHOST.save();
+      this.setMode(m);
+      state = STATE.MENU;
+      initGame();
+      this.status('loading');
+      this.load();
+    }));
+    const stop = e => e.stopPropagation();
+    ['touchstart', 'touchmove', 'touchend'].forEach(t => {
+      this.el('lbPanel').addEventListener(t, stop, { passive: true });
+      this.el('lbBtn').addEventListener(t, stop, { passive: true });
+    });
+    this.el('lbBtn').addEventListener('click', () => this.open ? this.hide() : this.show());
+    this.el('lbClose').addEventListener('click', () => this.hide());
+    this.el('lbSave').addEventListener('click', async () => {
+      const nm = this.clean(this.el('lbName').value);
+      if (!nm) { this.status('name needs letters or numbers'); return; }
+      if (nm !== this.name) { this.posted = 0; this.postedC = 0; this.postedK = 0; this.postedG = 0; this.postedJ = 0; }
+      this.name = nm;
+      this.el('lbName').value = nm;
+      localStorage.setItem('ascendName', nm);
+      localStorage.setItem('ascendPostedName', nm);
+      this.postAllTimes();
+      if (best > 0 || bestChallenge > 0 || careerCleared > 0 || bestGauntlet > 0 || bestJewels > 0) { this.status('posting'); await this.post(); }
+      this.load();
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { GHOST.save(); this.post(); MUSIC.stop(); }
+      else if (SFX.ac) MUSIC.start();
+    });
+    this.post();
+  },
+};
+LB.init();
 
 initGame();
 requestAnimationFrame(loop);

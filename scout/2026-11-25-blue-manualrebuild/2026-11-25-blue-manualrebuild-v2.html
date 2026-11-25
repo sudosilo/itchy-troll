@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Manual Rebuild</title>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<style>
+:root{--blue:#1e6fd9;--blue2:#e8f1fc;--ink:#1b2430;--line:#d5dde8;--bg:#f6f8fb}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,sans-serif}
+button,select,input{font:inherit}
+button{height:40px;border:1px solid var(--line);background:#fff;border-radius:8px;color:var(--ink);padding:0 10px;cursor:pointer}
+button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+button:disabled{opacity:.45}
+#bar{position:fixed;top:0;left:0;right:0;height:104px;background:#fff;border-bottom:3px solid var(--blue);z-index:10}
+.row{display:flex;align-items:center;gap:6px;padding:6px 8px;height:50px}
+#ham{width:46px;font-size:22px;padding:0}
+#title{flex:1;font-weight:700;color:var(--blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#count{min-width:70px;text-align:right;font-variant-numeric:tabular-nums;color:#506078}
+#pagesBtn{width:70px}
+.row2 button{flex:1;padding:0 2px;font-size:14px;min-width:0}
+#main{position:absolute;top:104px;left:0;right:0;bottom:0;overflow:auto;padding:10px}
+#stageWrap{position:relative;background:#fff;border:1px solid var(--line);border-radius:10px;height:56vh;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none}
+#cv{width:auto;height:auto;max-width:100%;max-height:100%;display:block}
+#status{position:absolute;top:6px;left:6px;right:6px;background:rgba(30,111,217,.92);color:#fff;padding:6px 10px;border-radius:8px;font-size:13px;pointer-events:none;opacity:0;transition:opacity .2s}
+#status.show{opacity:1}
+#empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#fff;text-align:center;padding:20px;color:#506078}
+#empty button{height:52px;padding:0 24px}
+h3{margin:14px 0 6px;font-size:15px;color:var(--blue)}
+#txt{width:100%;height:30vh;border:1px solid var(--line);border-radius:10px;padding:10px;font:14px/1.45 ui-monospace,Menlo,monospace;background:#fff;color:var(--ink);resize:vertical}
+#figs{display:flex;flex-wrap:wrap;gap:8px}
+.fig{position:relative;border:1px solid var(--line);border-radius:8px;background:#fff;padding:4px}
+.fig canvas{display:block;max-width:140px;max-height:120px}
+.fig button{position:absolute;top:4px;right:4px;height:30px;width:30px;padding:0;background:#fff}
+#hint{color:#506078;font-size:13px;margin:6px 2px}
+#scrim{position:fixed;inset:0;background:rgba(20,30,45,.35);z-index:20;display:none}
+#menu{position:fixed;top:0;left:0;bottom:0;width:min(84vw,340px);background:#fff;z-index:21;transform:translateX(-102%);transition:transform .2s;overflow:auto;border-right:3px solid var(--blue);padding:10px}
+#menu.open{transform:none}
+#menu details{border:1px solid var(--line);border-radius:10px;margin:8px 0;padding:4px 10px 10px}
+#menu summary{font-weight:700;color:var(--blue);padding:8px 0;cursor:pointer}
+#menu .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#menu .full{grid-column:1/-1}
+#menu input,#menu select{width:100%;height:40px;border:1px solid var(--line);border-radius:8px;padding:0 8px;margin:4px 0;background:#fff}
+#menuHead{display:flex;align-items:center;justify-content:space-between;font-weight:700;color:var(--blue)}
+#pages{position:fixed;inset:0;background:var(--bg);z-index:15;display:none;flex-direction:column}
+#pages.open{display:flex}
+#pagesTop{height:56px;display:flex;align-items:center;gap:8px;padding:8px;background:#fff;border-bottom:3px solid var(--blue);font-weight:700;color:var(--blue)}
+#pagesTop span{flex:1}
+#grid{flex:1;overflow:auto;padding:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;align-content:start}
+.tile{background:#fff;border:1px solid var(--line);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:6px}
+.tile.cur{border:2px solid var(--blue)}
+.tile img{width:100%;height:150px;object-fit:contain;background:#eef2f7;border-radius:6px}
+.tile .lbl{font-size:13px;color:#506078;display:flex;justify-content:space-between}
+.tile .act{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px}
+.tile .act button{height:34px;padding:0}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--blue)}
+.fig .open3d{position:static;width:100%;height:32px;margin-top:4px;font-size:13px;border-left:5px solid var(--blue)}
+.fig .fname{font-size:12px;color:#506078;margin-top:2px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#figList button{width:100%;margin:3px 0;text-align:left;border-left:5px solid var(--blue)}
+#studio{position:fixed;inset:0;background:#f3f1ec;z-index:30;display:none}
+#studio.open{display:block}
+#stHead{position:absolute;top:0;left:0;right:0;height:52px;display:flex;gap:6px;align-items:center;padding:6px 8px;background:#fff;border-bottom:3px solid var(--blue)}
+#stName{flex:1;min-width:0;height:40px;border:1px solid var(--line);border-radius:8px;padding:0 8px;color:var(--blue);font-weight:700}
+#stTools{position:absolute;top:52px;left:0;right:0;height:100px;background:#fff;border-bottom:1px solid var(--line)}
+#stTools .row{height:50px}
+#stTools .row button{flex:1;min-width:0;padding:0 2px;font-size:13px}
+#stTools label{flex:1;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--blue);font-weight:700}
+#stTools input[type=range]{flex:1}
+#stStage{position:absolute;top:152px;left:0;right:0;bottom:0;overflow:hidden}
+#stTrace{position:absolute;inset:0;margin:auto;max-width:100%;max-height:100%;touch-action:none;background:#fff}
+#st3d{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:none}
+#stStatus{position:absolute;top:8px;left:8px;right:8px;background:rgba(30,111,217,.92);color:#fff;padding:6px 10px;border-radius:8px;font-size:13px;pointer-events:none;opacity:0;transition:opacity .2s;z-index:3}
+#stStatus.show{opacity:1}
+.card{position:absolute;left:8px;right:8px;bottom:8px;background:#fff;border:1px solid #3d3d3d;border-left:6px solid var(--blue);border-radius:10px;padding:10px;z-index:4;display:none}
+.card.open{display:block}
+.card input[type=text]{width:100%;height:40px;border:1px solid var(--line);border-radius:8px;padding:0 8px;margin-bottom:6px;font-weight:700}
+.card .g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:6px}
+.card .g2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.card label{display:flex;align-items:center;gap:8px;font-size:13px;margin:6px 0;color:#506078}
+.card label input{flex:1}
+.card .cap{font-size:12px;color:#506078;margin-bottom:6px}
+</style>
+</head>
+<body>
+<div id="bar">
+  <div class="row">
+    <button id="ham" aria-label="Menu">&#9776;</button>
+    <div id="title">Manual Rebuild</div>
+    <div id="count"></div>
+    <button id="pagesBtn">Pages</button>
+  </div>
+  <div class="row row2">
+    <button id="prev">&#9664;</button>
+    <button id="mCorners">Corners</button>
+    <button id="mResult" class="on">Page</button>
+    <button id="mFigure">Figure</button>
+    <button id="ocrBtn">Read</button>
+    <button id="next">&#9654;</button>
+  </div>
+</div>
+
+<div id="main">
+  <div id="stageWrap">
+    <canvas id="cv"></canvas>
+    <div id="empty">
+      <div>Load every photo of the manual. Each photo becomes a page.</div>
+      <button class="primary" id="addFirst">Add photos</button>
+    </div>
+    <div id="status"></div>
+  </div>
+  <div id="hint"></div>
+  <h3>Page text</h3>
+  <textarea id="txt" placeholder="Tap Read to pull the text off this page, then fix anything it got wrong."></textarea>
+  <h3>Figures on this page</h3>
+  <div id="figs"></div>
+</div>
+
+<div id="scrim"></div>
+<div id="menu">
+  <div id="menuHead"><span>Manual Rebuild</span><button id="closeMenu">&#10005;</button></div>
+  <details open>
+    <summary>Project</summary>
+    <label>Manual title</label>
+    <input id="titleIn" placeholder="Manual title">
+    <div class="grid">
+      <button class="full primary" id="add">Add photos</button>
+      <button id="sortName">Sort by file name</button>
+      <button id="sortTime">Sort by photo time</button>
+      <button class="full" id="clearAll">Start a new project</button>
+    </div>
+  </details>
+  <details>
+    <summary>Page</summary>
+    <label>Cleanup look</label>
+    <div class="grid">
+      <button data-clean="color">Color</button>
+      <button data-clean="gray">Gray</button>
+      <button data-clean="scan">Scan</button>
+      <button data-clean="bw">Black and white</button>
+      <button class="full" id="cleanAll">Use this look on every page</button>
+      <button id="rotL">Rotate left</button>
+      <button id="rotR">Rotate right</button>
+      <button class="full" id="resetCorners">Reset corners</button>
+      <button class="full" id="delPage">Delete this page</button>
+    </div>
+  </details>
+  <details>
+    <summary>Text</summary>
+    <label>Manual language</label>
+    <select id="lang">
+      <option value="eng">English</option>
+      <option value="spa">Spanish</option>
+      <option value="fra">French</option>
+      <option value="deu">German</option>
+      <option value="ita">Italian</option>
+      <option value="por">Portuguese</option>
+      <option value="jpn">Japanese</option>
+      <option value="chi_sim">Chinese</option>
+    </select>
+    <div class="grid">
+      <button class="full" id="ocrAll">Read every page not read yet</button>
+      <button class="full" id="copyAll">Copy all text</button>
+    </div>
+  </details>
+  <details>
+    <summary>Parts studio</summary>
+    <div id="figList"></div>
+  </details>
+  <details>
+    <summary>Export</summary>
+    <div class="grid">
+      <button class="full primary" id="expRebuilt">Rebuilt manual PDF</button>
+      <button class="full" id="expScan">Scanned pages PDF</button>
+      <button class="full" id="expTxt">Text file</button>
+    </div>
+  </details>
+</div>
+
+<div id="studio">
+  <div id="stHead"><button id="stBack">Back</button><input id="stName" type="text"><button id="tabTrace" class="on">Trace</button><button id="tab3d">3D</button></div>
+  <div id="stTools">
+    <div id="toolsTrace">
+      <div class="row"><button data-tool="select" class="on">Select</button><button data-tool="merge">Merge</button><button data-tool="delete">Delete</button><button data-tool="move">Move</button><button id="tuneBtn">Tune</button></div>
+      <div class="row"><button id="drawnBtn">Shows exploded</button><button id="autoBtn">Auto place</button><button id="unhideBtn">Unhide all</button><button class="svgBtn">SVG</button></div>
+    </div>
+    <div id="tools3d" style="display:none">
+      <div class="row"><label>EXPLODE <input id="exSlide" type="range" min="0" max="150" value="100"></label></div>
+      <div class="row"><button id="cycleBtn">Cycle</button><button id="spinBtn">Spin</button><button id="edgeBtn" class="on">Edges</button><button id="viewBtn">Reset view</button><button class="svgBtn">SVG</button></div>
+    </div>
+  </div>
+  <div id="stStage">
+    <canvas id="stTrace"></canvas>
+    <canvas id="st3d"></canvas>
+    <div id="stStatus"></div>
+    <div id="pcard" class="card">
+      <input type="text" id="pName">
+      <div class="cap">Shape</div>
+      <div class="g3"><button data-kind="flat">Flat</button><button data-kind="latheV">Turned up and down</button><button data-kind="latheH">Turned side to side</button></div>
+      <label>Thickness <input id="pThick" type="range" min="1" max="80"></label>
+      <label>Depth <input id="pDepth" type="range" min="-100" max="100"></label>
+      <div class="g2"><button id="pHide">Hide part</button><button id="pClose">Close</button></div>
+    </div>
+    <div id="tune" class="card">
+      <label>Ink darkness <input id="tInk" type="range" min="60" max="230"></label>
+      <label>Break thin lines <input id="tBrk" type="range" min="0" max="10"></label>
+      <label>Smallest part <input id="tMin" type="range" min="0" max="40"></label>
+      <div class="g2"><button id="tGo" class="primary">Retrace</button><button id="tClose">Close</button></div>
+    </div>
+  </div>
+</div>
+
+<div id="pages">
+  <div id="pagesTop"><span>All pages</span><button id="pagesAdd">Add photos</button><button id="pagesClose">Done</button></div>
+  <div id="grid"></div>
+</div>
+
+<input type="file" id="file" accept="image/*" multiple hidden>
+
+<script>
+const $=s=>document.querySelector(s);
+const cv=$('#cv');
+const TESS='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+const JSPDF='https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+let db,proj={order:[],title:'',lang:'eng'},cur=0,mode='result',page=null,srcImg=null,procCanvas=null,procId=null,busy=false;
+
+/* storage */
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manualrebuild',1);r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore('pages',{keyPath:'id'});d.createObjectStore('meta')};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+function tx(store,m,fn){return new Promise((res,rej)=>{const t=db.transaction(store,m);const r=fn(t.objectStore(store));t.oncomplete=()=>res(r?r.result:undefined);t.onerror=()=>rej(t.error)})}
+const getPage=id=>tx('pages','readonly',s=>s.get(id));
+const putPage=p=>tx('pages','readwrite',s=>s.put(p));
+const delPageDB=id=>tx('pages','readwrite',s=>s.delete(id));
+const saveMeta=()=>tx('meta','readwrite',s=>s.put(proj,'project'));
+const loadMeta=()=>tx('meta','readonly',s=>s.get('project'));
+
+/* helpers */
+let stT;
+function status(msg,keep){const s=$('#status');s.textContent=msg;s.classList.add('show');clearTimeout(stT);if(!keep)stT=setTimeout(()=>s.classList.remove('show'),2200)}
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('Could not load '+src));document.head.appendChild(s)})}
+const toBlob=(c,type,q)=>new Promise(r=>c.toBlob(r,type,q));
+const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+function blobImg(blob){return createImageBitmap(blob)}
+async function makeThumb(canvasOrBmp,w,h){const s=Math.min(1,320/Math.max(w,h));const c=document.createElement('canvas');c.width=Math.round(w*s);c.height=Math.round(h*s);c.getContext('2d').drawImage(canvasOrBmp,0,0,c.width,c.height);return toBlob(c,'image/jpeg',.8)}
+async function guard(fn){if(busy){status('Still working, hang on');return}busy=true;try{await fn()}catch(e){console.error(e);status('Error: '+e.message)}finally{busy=false}}
+
+/* import */
+async function fileToPage(f){
+  const url=URL.createObjectURL(f);
+  const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('Could not open '+f.name));i.src=url});
+  const sc=Math.min(1,2200/Math.max(img.naturalWidth,img.naturalHeight));
+  const w=Math.round(img.naturalWidth*sc),h=Math.round(img.naturalHeight*sc);
+  const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);
+  URL.revokeObjectURL(url);
+  return {id:uid(),name:f.name,lm:f.lastModified,img:await toBlob(c,'image/jpeg',.9),thumb:await makeThumb(c,w,h),w,h,
+    corners:[[0,0],[w,0],[w,h],[0,h]],clean:'scan',text:'',figures:[],proc:null,ocr:false};
+}
+async function addFiles(files){
+  files=[...files].sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+  const first=proj.order.length;
+  for(let i=0;i<files.length;i++){status('Loading photo '+(i+1)+' of '+files.length,true);const p=await fileToPage(files[i]);await putPage(p);proj.order.push(p.id)}
+  await saveMeta();
+  cur=first;mode='corners';status('Loaded. Drag the blue corners onto the page edges.');
+  await render();
+}
+
+/* geometry */
+function solve(A,b){const n=b.length;for(let i=0;i<n;i++){let m=i;for(let r=i+1;r<n;r++)if(Math.abs(A[r][i])>Math.abs(A[m][i]))m=r;[A[i],A[m]]=[A[m],A[i]];[b[i],b[m]]=[b[m],b[i]];for(let r=i+1;r<n;r++){const f=A[r][i]/A[i][i];for(let c=i;c<n;c++)A[r][c]-=f*A[i][c];b[r]-=f*b[i]}}const x=new Array(n);for(let i=n-1;i>=0;i--){let s=b[i];for(let c=i+1;c<n;c++)s-=A[i][c]*x[c];x[i]=s/A[i][i]}return x}
+function homography(from,to){const A=[],b=[];for(let i=0;i<4;i++){const[x,y]=from[i],[u,v]=to[i];A.push([x,y,1,0,0,0,-u*x,-u*y]);b.push(u);A.push([0,0,0,x,y,1,-v*x,-v*y]);b.push(v)}return solve(A,b)}
+
+async function processPage(p){
+  const bmp=await blobImg(p.img);
+  const sc=document.createElement('canvas');sc.width=p.w;sc.height=p.h;const sx=sc.getContext('2d');sx.drawImage(bmp,0,0);
+  const src=sx.getImageData(0,0,p.w,p.h).data,sw=p.w,sh=p.h;
+  const[a,b,c,d]=p.corners;
+  const W=Math.max(10,Math.round((dist(a,b)+dist(d,c))/2)),H=Math.max(10,Math.round((dist(a,d)+dist(b,c))/2));
+  const m=homography([[0,0],[W,0],[W,H],[0,H]],p.corners);
+  const out=new ImageData(W,H),o=out.data;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const den=m[6]*x+m[7]*y+1;let u=(m[0]*x+m[1]*y+m[2])/den,v=(m[3]*x+m[4]*y+m[5])/den;
+    u=Math.min(Math.max(u,0),sw-1.001);v=Math.min(Math.max(v,0),sh-1.001);
+    const x0=u|0,y0=v|0,fx=u-x0,fy=v-y0,i00=(y0*sw+x0)*4,i10=i00+4,i01=i00+sw*4,i11=i01+4,k=(y*W+x)*4;
+    for(let ch=0;ch<3;ch++){const t=src[i00+ch]*(1-fx)+src[i10+ch]*fx,bt=src[i01+ch]*(1-fx)+src[i11+ch]*fx;o[k+ch]=t*(1-fy)+bt*fy}
+    o[k+3]=255;
+  }
+  if(p.clean!=='color')cleanup(o,W,H,p.clean);
+  const oc=document.createElement('canvas');oc.width=W;oc.height=H;oc.getContext('2d').putImageData(out,0,0);
+  return oc;
+}
+function cleanup(o,W,H,kind){
+  const g=new Float32Array(W*H);
+  for(let i=0,k=0;i<g.length;i++,k+=4)g[i]=o[k]*.299+o[k+1]*.587+o[k+2]*.114;
+  if(kind==='gray'){for(let i=0,k=0;i<g.length;i++,k+=4)o[k]=o[k+1]=o[k+2]=g[i];return}
+  const B=Math.max(16,Math.round(Math.max(W,H)/60)),gw=Math.ceil(W/B),gh=Math.ceil(H/B),grid=new Float32Array(gw*gh);
+  for(let by=0;by<gh;by++)for(let bx=0;bx<gw;bx++){let mx=0;const ye=Math.min(H,(by+1)*B),xe=Math.min(W,(bx+1)*B);for(let y=by*B;y<ye;y+=2)for(let x=bx*B;x<xe;x+=2){const v=g[y*W+x];if(v>mx)mx=v}grid[by*gw+bx]=mx}
+  const dil=new Float32Array(gw*gh);
+  for(let y=0;y<gh;y++)for(let x=0;x<gw;x++){let mx=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const yy=y+dy,xx=x+dx;if(yy>=0&&yy<gh&&xx>=0&&xx<gw&&grid[yy*gw+xx]>mx)mx=grid[yy*gw+xx]}dil[y*gw+x]=Math.max(mx,40)}
+  for(let y=0;y<H;y++){const gy=Math.min(Math.max(y/B-.5,0),gh-1),y0=gy|0,y1=Math.min(y0+1,gh-1),fy=gy-y0;
+    for(let x=0;x<W;x++){const gx=Math.min(Math.max(x/B-.5,0),gw-1),x0=gx|0,x1=Math.min(x0+1,gw-1),fx=gx-x0;
+      const bg=(dil[y0*gw+x0]*(1-fx)+dil[y0*gw+x1]*fx)*(1-fy)+(dil[y1*gw+x0]*(1-fx)+dil[y1*gw+x1]*fx)*fy;
+      let v=g[y*W+x]/bg*255;v=(v-85)*255/(245-85);v=v<0?0:v>255?255:v;
+      if(kind==='bw')v=v<165?0:255;
+      const k=(y*W+x)*4;o[k]=o[k+1]=o[k+2]=v}}
+}
+async function ensureProc(p){
+  if(procId===p.id&&procCanvas)return procCanvas;
+  if(p.proc){const b=await blobImg(p.proc);const c=document.createElement('canvas');c.width=b.width;c.height=b.height;c.getContext('2d').drawImage(b,0,0);procCanvas=c}
+  else{status('Flattening page',true);procCanvas=await processPage(p);p.proc=await toBlob(procCanvas,p.clean==='bw'?'image/png':'image/jpeg',.92);p.thumb=await makeThumb(procCanvas,procCanvas.width,procCanvas.height);await putPage(p);status('Page ready')}
+  procId=p.id;return procCanvas;
+}
+function invalidate(p){p.proc=null;if(procId===p.id){procId=null;procCanvas=null}}
+
+/* drawing */
+let drag=-1,figDrag=null;
+function pt(e){const r=cv.getBoundingClientRect();const s=cv.width/r.width;return[(e.clientX-r.left)*s,(e.clientY-r.top)*s,s]}
+function cssScale(){const r=cv.getBoundingClientRect();return r.width?cv.width/r.width:1}
+function drawCorners(){
+  if(cv.width!==page.w||cv.height!==page.h){cv.width=page.w;cv.height=page.h}
+  const x=cv.getContext('2d'),s=cssScale(),c=page.corners;
+  x.drawImage(srcImg,0,0);
+  x.beginPath();c.forEach((p,i)=>i?x.lineTo(p[0],p[1]):x.moveTo(p[0],p[1]));x.closePath();
+  x.fillStyle='rgba(30,111,217,.14)';x.fill();x.lineWidth=3*s;x.strokeStyle='#1e6fd9';x.stroke();
+  c.forEach((p,i)=>{x.beginPath();x.arc(p[0],p[1],15*s,0,7);x.fillStyle=i===drag?'#1e6fd9':'#fff';x.fill();x.lineWidth=3*s;x.strokeStyle='#1e6fd9';x.stroke()});
+  if(drag>=0){
+    const p=c[drag],L=150*s,z=3,r=L/z,lx=p[0]<page.w/2?page.w-L-10*s:10*s,ly=10*s;
+    x.save();x.fillStyle='#fff';x.fillRect(lx,ly,L,L);x.drawImage(srcImg,p[0]-r/2,p[1]-r/2,r,r,lx,ly,L,L);
+    x.strokeStyle='#1e6fd9';x.lineWidth=3*s;x.strokeRect(lx,ly,L,L);
+    x.beginPath();x.moveTo(lx+L/2,ly);x.lineTo(lx+L/2,ly+L);x.moveTo(lx,ly+L/2);x.lineTo(lx+L,ly+L/2);x.lineWidth=1.5*s;x.stroke();x.restore();
+  }
+}
+function drawResult(){
+  const pc=procCanvas;if(cv.width!==pc.width||cv.height!==pc.height){cv.width=pc.width;cv.height=pc.height}
+  const x=cv.getContext('2d'),s=cssScale();x.drawImage(pc,0,0);
+  if(mode==='figure'){
+    x.lineWidth=3*s;x.strokeStyle='#1e6fd9';x.fillStyle='rgba(30,111,217,.12)';
+    page.figures.forEach(f=>{x.fillRect(f.x*pc.width,f.y*pc.height,f.w*pc.width,f.h*pc.height);x.strokeRect(f.x*pc.width,f.y*pc.height,f.w*pc.width,f.h*pc.height)});
+    if(figDrag){const r=normRect(figDrag);x.setLineDash([10*s,6*s]);x.strokeRect(r.x,r.y,r.w,r.h);x.setLineDash([])}
+  }
+}
+function normRect(d){return{x:Math.min(d.x0,d.x1),y:Math.min(d.y0,d.y1),w:Math.abs(d.x1-d.x0),h:Math.abs(d.y1-d.y0)}}
+
+cv.addEventListener('pointerdown',e=>{
+  if(!page)return;const[x,y,s]=pt(e);
+  if(mode==='corners'){let best=-1,bd=1e9;page.corners.forEach((p,i)=>{const d=Math.hypot(p[0]-x,p[1]-y);if(d<bd){bd=d;best=i}});if(bd<60*s){drag=best;cv.setPointerCapture(e.pointerId);drawCorners()}}
+  else if(mode==='figure'&&procCanvas){figDrag={x0:x,y0:y,x1:x,y1:y};cv.setPointerCapture(e.pointerId)}
+});
+cv.addEventListener('pointermove',e=>{
+  if(mode==='corners'&&drag>=0){const[x,y]=pt(e);page.corners[drag]=[Math.min(Math.max(x,0),page.w),Math.min(Math.max(y,0),page.h)];drawCorners()}
+  else if(mode==='figure'&&figDrag){const[x,y]=pt(e);figDrag.x1=Math.min(Math.max(x,0),cv.width);figDrag.y1=Math.min(Math.max(y,0),cv.height);drawResult()}
+});
+async function endDrag(){
+  if(mode==='corners'&&drag>=0){drag=-1;invalidate(page);await putPage(page);drawCorners()}
+  else if(mode==='figure'&&figDrag){const r=normRect(figDrag);figDrag=null;const W=procCanvas.width,H=procCanvas.height;
+    if(r.w>20&&r.h>20){page.figures.push({x:r.x/W,y:r.y/H,w:r.w/W,h:r.h/H});await putPage(page);renderFigures();status('Figure saved')}
+    drawResult()}
+}
+cv.addEventListener('pointerup',endDrag);cv.addEventListener('pointercancel',endDrag);
+
+/* render */
+const hints={corners:'Drag each blue dot onto a corner of the printed page. The zoom box shows exactly where the dot sits.',result:'This is the flattened page. Tap Read to pull its text, or Figure to box off a diagram.',figure:'Drag a box around each diagram, chart or photo you want kept as a picture. Open a figure in the parts studio to trace it into parts and spin it in 3D.'};
+function setModeButtons(){['mCorners','mResult','mFigure'].forEach(id=>$('#'+id).classList.toggle('on',(id==='mCorners'&&mode==='corners')||(id==='mResult'&&mode==='result')||(id==='mFigure'&&mode==='figure')))}
+async function render(){
+  const n=proj.order.length;
+  $('#title').textContent=proj.title||'Manual Rebuild';
+  $('#count').textContent=n?(cur+1)+' / '+n:'';
+  $('#empty').style.display=n?'none':'flex';
+  setModeButtons();
+  document.querySelectorAll('[data-clean]').forEach(b=>b.classList.remove('on'));
+  if(!n){page=null;$('#txt').value='';$('#figs').innerHTML='';$('#hint').textContent='';const x=cv.getContext('2d');x.clearRect(0,0,cv.width,cv.height);return}
+  cur=Math.min(Math.max(cur,0),n-1);
+  page=await getPage(proj.order[cur]);
+  $('#txt').value=page.text||'';
+  $('#hint').textContent=hints[mode];
+  document.querySelectorAll('[data-clean]').forEach(b=>b.classList.toggle('on',b.dataset.clean===page.clean));
+  if(mode==='corners'){srcImg=await blobImg(page.img);drawCorners()}
+  else{await ensureProc(page);drawResult()}
+  renderFigures();
+}
+function renderFigures(){
+  const box=$('#figs');box.innerHTML='';
+  if(!page||!page.figures.length){box.innerHTML='<div id="nofig" style="color:#506078;font-size:13px">None yet. Use Figure to box off diagrams.</div>';return}
+  const draw=pc=>page.figures.forEach((f,i)=>{
+    const d=document.createElement('div');d.className='fig';const c=document.createElement('canvas');
+    const sx=f.x*pc.width,sy=f.y*pc.height,sw=f.w*pc.width,sh=f.h*pc.height,s=Math.min(1,280/Math.max(sw,sh));
+    c.width=Math.max(1,sw*s);c.height=Math.max(1,sh*s);c.getContext('2d').drawImage(pc,sx,sy,sw,sh,0,0,c.width,c.height);
+    const b=document.createElement('button');b.textContent='✕';b.onclick=async()=>{if(f.parts&&f.parts.length&&!confirm('Delete this figure and its traced parts?'))return;page.figures.splice(i,1);await putPage(page);renderFigures();if(mode!=='corners')drawResult()};
+    const nm=document.createElement('div');nm.className='fname';nm.textContent=f.name||('Figure '+(i+1));
+    const o=document.createElement('button');o.className='open3d';o.textContent='Parts studio';o.onclick=()=>guard(()=>openStudio(cur,i));
+    d.append(c,b,nm,o);box.append(d)});
+  if(procId===page.id&&procCanvas)draw(procCanvas);else ensureProc(page).then(draw);
+}
+
+/* text */
+let txtT;
+$('#txt').addEventListener('input',()=>{if(!page)return;const p=page,v=$('#txt').value;clearTimeout(txtT);txtT=setTimeout(()=>{p.text=v;putPage(p)},400)});
+let worker=null,workerLang=null;
+async function getWorker(){
+  if(!window.Tesseract){status('Loading the text reader',true);await loadScript(TESS)}
+  if(worker&&workerLang===proj.lang)return worker;
+  if(worker)await worker.terminate();
+  status('Loading language data',true);
+  worker=await Tesseract.createWorker(proj.lang,1,{logger:m=>{if(m.status==='recognizing text')status('Reading text '+Math.round(m.progress*100)+'%',true)}});
+  workerLang=proj.lang;return worker;
+}
+async function ocrPage(p){
+  const pc=await ensureProc(p);const w=await getWorker();
+  const{data}=await w.recognize(pc);
+  p.text=(data.text||'').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();p.ocr=true;await putPage(p);
+}
+$('#ocrBtn').onclick=()=>guard(async()=>{
+  if(!page)return;
+  if(page.text&&!confirm('Replace the text already on this page?'))return;
+  if(mode==='corners'){mode='result'}
+  await ocrPage(page);status('Text read. Fix anything it got wrong.');await render();
+});
+$('#ocrAll').onclick=()=>guard(async()=>{
+  closeMenu();
+  for(let i=0;i<proj.order.length;i++){const p=await getPage(proj.order[i]);if(p.ocr||p.text)continue;cur=i;$('#count').textContent=(i+1)+' / '+proj.order.length;status('Reading page '+(i+1),true);await ocrPage(p)}
+  mode='result';status('Every page has text now');await render();
+});
+$('#copyAll').onclick=async()=>{const t=await allText();try{await navigator.clipboard.writeText(t);status('All text copied')}catch(e){status('Copy blocked by the browser')}};
+async function allText(){const parts=[];for(const id of proj.order){const p=await getPage(id);if(p.text)parts.push(p.text)}return parts.join('\n\n')}
+
+/* navigation and modes */
+$('#prev').onclick=()=>guard(async()=>{if(cur>0){cur--;await render()}});
+$('#next').onclick=()=>guard(async()=>{if(cur<proj.order.length-1){cur++;await render()}});
+$('#mCorners').onclick=()=>guard(async()=>{mode='corners';await render()});
+$('#mResult').onclick=()=>guard(async()=>{mode='result';await render()});
+$('#mFigure').onclick=()=>guard(async()=>{mode='figure';await render()});
+
+/* menu */
+function openMenu(){$('#menu').classList.add('open');$('#scrim').style.display='block';fillFigList()}
+async function fillFigList(){
+  const box=$('#figList');box.innerHTML='';let n=0;
+  for(let pi=0;pi<proj.order.length;pi++){const p=await getPage(proj.order[pi]);p.figures.forEach((f,fi)=>{n++;const b=document.createElement('button');b.textContent=(f.name||('Figure '+(fi+1)))+', page '+(pi+1)+(f.parts?', '+f.parts.length+' parts':'');b.onclick=()=>{closeMenu();guard(()=>openStudio(pi,fi))};box.append(b)})}
+  if(!n)box.innerHTML='<div style="color:#506078;font-size:13px">No figures yet. Use Figure on a page to box off a drawing.</div>';
+}
+function closeMenu(){$('#menu').classList.remove('open');$('#scrim').style.display='none'}
+$('#ham').onclick=openMenu;$('#closeMenu').onclick=closeMenu;$('#scrim').onclick=closeMenu;
+$('#titleIn').addEventListener('input',e=>{proj.title=e.target.value;$('#title').textContent=proj.title||'Manual Rebuild';saveMeta()});
+$('#lang').onchange=e=>{proj.lang=e.target.value;saveMeta()};
+const pick=()=>{$('#file').value='';$('#file').click()};
+$('#add').onclick=()=>{closeMenu();pick()};$('#addFirst').onclick=pick;$('#pagesAdd').onclick=()=>{closePages();pick()};
+$('#file').onchange=e=>{const f=e.target.files;if(f&&f.length)guard(()=>addFiles(f))};
+async function sortBy(key){const ps=[];for(const id of proj.order)ps.push(await getPage(id));
+  ps.sort(key==='name'?(a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}):(a,b)=>a.lm-b.lm);
+  proj.order=ps.map(p=>p.id);cur=0;await saveMeta();await render();status('Pages sorted')}
+$('#sortName').onclick=()=>guard(()=>sortBy('name'));
+$('#sortTime').onclick=()=>guard(()=>sortBy('time'));
+$('#clearAll').onclick=()=>guard(async()=>{if(!confirm('Wipe every page and start over?'))return;await tx('pages','readwrite',s=>s.clear());proj={order:[],title:'',lang:proj.lang};$('#titleIn').value='';await saveMeta();cur=0;procId=null;closeMenu();await render()});
+document.querySelectorAll('[data-clean]').forEach(b=>b.onclick=()=>guard(async()=>{if(!page)return;page.clean=b.dataset.clean;invalidate(page);await putPage(page);if(mode==='corners')mode='result';await render()}));
+$('#cleanAll').onclick=()=>guard(async()=>{if(!page)return;const k=page.clean;for(const id of proj.order){const p=await getPage(id);if(p.clean!==k){p.clean=k;p.proc=null;await putPage(p)}}procId=null;await render();status('Look applied to every page')});
+async function rotate(dir){
+  if(!page)return;const b=await blobImg(page.img);const c=document.createElement('canvas');c.width=page.h;c.height=page.w;const x=c.getContext('2d');
+  x.translate(c.width/2,c.height/2);x.rotate(dir*Math.PI/2);x.drawImage(b,-page.w/2,-page.h/2);
+  page.img=await toBlob(c,'image/jpeg',.9);[page.w,page.h]=[c.width,c.height];page.corners=[[0,0],[page.w,0],[page.w,page.h],[0,page.h]];
+  page.figures=[];invalidate(page);page.thumb=await makeThumb(c,c.width,c.height);await putPage(page);mode='corners';await render();
+}
+$('#rotL').onclick=()=>guard(()=>rotate(-1));$('#rotR').onclick=()=>guard(()=>rotate(1));
+$('#resetCorners').onclick=()=>guard(async()=>{if(!page)return;page.corners=[[0,0],[page.w,0],[page.w,page.h],[0,page.h]];invalidate(page);await putPage(page);mode='corners';await render()});
+$('#delPage').onclick=()=>guard(async()=>{if(!page||!confirm('Delete this page?'))return;await delPageDB(page.id);proj.order.splice(cur,1);await saveMeta();procId=null;closeMenu();await render()});
+
+/* pages grid */
+let thumbURLs=[];
+function closePages(){$('#pages').classList.remove('open');thumbURLs.forEach(u=>URL.revokeObjectURL(u));thumbURLs=[];setTimeout(()=>guard(render),0)}
+$('#pagesClose').onclick=closePages;
+$('#pagesBtn').onclick=()=>guard(openPages);
+async function openPages(){
+  const g=$('#grid');g.innerHTML='';thumbURLs.forEach(u=>URL.revokeObjectURL(u));thumbURLs=[];
+  for(let i=0;i<proj.order.length;i++){
+    const p=await getPage(proj.order[i]);const u=URL.createObjectURL(p.thumb);thumbURLs.push(u);
+    const t=document.createElement('div');t.className='tile'+(i===cur?' cur':'');
+    t.innerHTML=`<img src="${u}"><div class="lbl"><span>Page ${i+1}</span>${p.text?'<span class="dot" title="Has text"></span>':''}</div><div class="act"><button data-a="l">&#9664;</button><button data-a="d">&#10005;</button><button data-a="r">&#9654;</button></div>`;
+    t.querySelector('img').onclick=()=>{cur=i;closePages()};
+    t.querySelector('[data-a=l]').onclick=()=>guard(async()=>{if(i>0){[proj.order[i-1],proj.order[i]]=[proj.order[i],proj.order[i-1]];await saveMeta();await openPages()}});
+    t.querySelector('[data-a=r]').onclick=()=>guard(async()=>{if(i<proj.order.length-1){[proj.order[i+1],proj.order[i]]=[proj.order[i],proj.order[i+1]];await saveMeta();await openPages()}});
+    t.querySelector('[data-a=d]').onclick=()=>guard(async()=>{if(!confirm('Delete page '+(i+1)+'?'))return;await delPageDB(proj.order[i]);proj.order.splice(i,1);await saveMeta();procId=null;await openPages()});
+    g.append(t);
+  }
+  $('#pages').classList.add('open');
+}
+
+/* export */
+function fileBase(){return ((proj.title||'manual').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'manual')}
+async function pdfLib(){if(!window.jspdf){status('Loading the PDF maker',true);await loadScript(JSPDF)}return window.jspdf.jsPDF}
+$('#expScan').onclick=()=>guard(async()=>{
+  if(!proj.order.length)return;closeMenu();const J=await pdfLib();const doc=new J({unit:'pt',format:'letter'});
+  for(let i=0;i<proj.order.length;i++){status('Building page '+(i+1)+' of '+proj.order.length,true);
+    const p=await getPage(proj.order[i]);procId=null;const pc=await ensureProc(p);if(i)doc.addPage('letter');
+    const s=Math.min(576/pc.width,756/pc.height),w=pc.width*s,h=pc.height*s;
+    doc.addImage(pc.toDataURL('image/jpeg',.85),'JPEG',(612-w)/2,(792-h)/2,w,h,undefined,'FAST')}
+  doc.save(fileBase()+'-scanned.pdf');procId=null;status('Scanned PDF saved');await render();
+});
+$('#expRebuilt').onclick=()=>guard(async()=>{
+  if(!proj.order.length)return;closeMenu();const J=await pdfLib();const doc=new J({unit:'pt',format:'letter'});
+  const M=54,TW=612-M*2,BOT=792-M;let y=M;
+  const title=proj.title||'Manual';
+  doc.setFont('helvetica','bold');doc.setFontSize(26);doc.setTextColor(30,111,217);
+  doc.splitTextToSize(title,TW).forEach(l=>{doc.text(l,M,y+26);y+=34});
+  doc.setDrawColor(30,111,217);doc.setLineWidth(2);doc.line(M,y+6,612-M,y+6);y+=30;
+  doc.setTextColor(27,36,48);
+  for(let i=0;i<proj.order.length;i++){status('Building page '+(i+1)+' of '+proj.order.length,true);
+    const p=await getPage(proj.order[i]);
+    if(p.text){
+      const blocks=p.text.split(/\n\s*\n/);
+      for(const blk of blocks){
+        const raw=blk.trim();if(!raw)continue;
+        const lines=raw.split('\n');
+        const isHead=lines.length===1&&raw.length<60&&(raw===raw.toUpperCase()&&/[A-Z]/.test(raw)||/^\d+(\.\d+)*\s+\S/.test(raw));
+        const body=isHead?raw:lines.join(/^[-*•]|^\d+[.)]\s/.test(lines[1]||'')?'\n':' ').replace(/-\s+(?=[a-z])/g,'');
+        doc.setFont('helvetica',isHead?'bold':'normal');doc.setFontSize(isHead?14:11);
+        const lh=isHead?19:15;if(isHead){y+=6;if(isHead)doc.setTextColor(30,111,217)}
+        for(const l of doc.splitTextToSize(body,TW)){if(y+lh>BOT){doc.addPage('letter');y=M}doc.text(l,M,y+lh-4);y+=lh}
+        doc.setTextColor(27,36,48);y+=8;
+      }
+    }
+    if(p.figures.length){procId=null;const pc=await ensureProc(p);
+      for(const f of p.figures){
+        const sx=f.x*pc.width,sy=f.y*pc.height,sw=f.w*pc.width,sh=f.h*pc.height;
+        const c=document.createElement('canvas');c.width=sw;c.height=sh;c.getContext('2d').drawImage(pc,sx,sy,sw,sh,0,0,sw,sh);
+        let s=Math.min(TW/sw,(BOT-M)/sh,1.5),w=sw*s,h=sh*s;
+        if(y+h>BOT){doc.addPage('letter');y=M}
+        doc.addImage(c.toDataURL('image/jpeg',.9),'JPEG',M+(TW-w)/2,y,w,h,undefined,'FAST');y+=h+14;
+      }}
+  }
+  const n=doc.getNumberOfPages();doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(30,111,217);
+  for(let i=1;i<=n;i++){doc.setPage(i);doc.text(String(i),306,792-24,{align:'center'})}
+  doc.save(fileBase()+'-rebuilt.pdf');procId=null;status('Rebuilt manual saved');await render();
+});
+$('#expTxt').onclick=async()=>{closeMenu();const t=await allText();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain'}));a.download=fileBase()+'.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);status('Text file saved')};
+
+/* ================= PARTS STUDIO ================= */
+const PAL=['#8db3d6','#e9a074','#9cc7a4','#f0cd6e','#b8a3d1','#7cc0bb','#e58e95','#d2cbbd'];
+let ST=null,T=null;
+function stStatus(msg,keep){const s=$('#stStatus');s.textContent=msg;s.classList.add('show');clearTimeout(s._t);if(!keep)s._t=setTimeout(()=>s.classList.remove('show'),2400)}
+const nextFrame=()=>new Promise(r=>requestAnimationFrame(()=>setTimeout(r,0)));
+
+/* raster helpers */
+function grayOf(c){const d=c.getContext('2d').getImageData(0,0,c.width,c.height).data,g=new Uint8Array(c.width*c.height);for(let i=0,k=0;i<g.length;i++,k+=4)g[i]=(d[k]*.299+d[k+1]*.587+d[k+2]*.114)|0;return g}
+function floodOutside(free,W,H){const out=new Uint8Array(W*H),st=new Int32Array(W*H);let sp=0;const push=i=>{if(free[i]&&!out[i]){out[i]=1;st[sp++]=i}};
+  for(let x=0;x<W;x++){push(x);push((H-1)*W+x)}for(let y=0;y<H;y++){push(y*W);push(y*W+W-1)}
+  while(sp){const i=st[--sp],x=i%W;if(x>0)push(i-1);if(x<W-1)push(i+1);if(i>=W)push(i-W);if(i<W*(H-1))push(i+W)}return out}
+function morph(m,W,H,r,dil){const t=new Uint8Array(W*H),o=new Uint8Array(W*H);
+  for(let y=0;y<H;y++){let c=0;const row=y*W;for(let x=-r;x<W;x++){const a=x+r;if(a<W)c+=m[row+a];const q=x-r-1;if(q>=0)c-=m[row+q];if(x>=0){const n=Math.min(W-1,x+r)-Math.max(0,x-r)+1;t[row+x]=dil?(c>0?1:0):(c===n?1:0)}}}
+  for(let x=0;x<W;x++){let c=0;for(let y=-r;y<H;y++){const a=y+r;if(a<H)c+=t[a*W+x];const q=y-r-1;if(q>=0)c-=t[q*W+x];if(y>=0){const n=Math.min(H-1,y+r)-Math.max(0,y-r)+1;o[y*W+x]=dil?(c>0?1:0):(c===n?1:0)}}}
+  return o}
+function labelComps(m,W,H){const lab=new Int32Array(W*H),st=new Int32Array(W*H),comps=[];let id=0;
+  for(let s=0;s<W*H;s++){if(!m[s]||lab[s])continue;id++;let sp=0,area=0,x0=W,y0=H,x1=0,y1=0;lab[s]=id;st[sp++]=s;
+    while(sp){const i=st[--sp],x=i%W,y=(i/W)|0;area++;if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
+      const nb=[x>0?i-1:-1,x<W-1?i+1:-1,y>0?i-W:-1,y<H-1?i+W:-1];for(const j of nb)if(j>=0&&m[j]&&!lab[j]){lab[j]=id;st[sp++]=j}}
+    comps.push({id,area,x0,y0,x1,y1})}
+  return{lab,comps}}
+function traceLoops(inside,x0,y0,x1,y1){
+  const VW=x1-x0+2,VH=y1-y0+2,key=(x,y)=>(y-y0)*VW+(x-x0),sx=[],sy=[],ex=[],ey=[];
+  const add=(a,b,c,d)=>{sx.push(a);sy.push(b);ex.push(c);ey.push(d)};
+  for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){if(!inside(x,y))continue;
+    if(y===y0||!inside(x,y-1))add(x,y,x+1,y);
+    if(x===x1||!inside(x+1,y))add(x+1,y,x+1,y+1);
+    if(y===y1||!inside(x,y+1))add(x+1,y+1,x,y+1);
+    if(x===x0||!inside(x-1,y))add(x,y+1,x,y)}
+  const n=sx.length,head=new Int32Array(VW*VH).fill(-1),nxt=new Int32Array(n),used=new Uint8Array(n),loops=[];
+  for(let i=0;i<n;i++){const k=key(sx[i],sy[i]);nxt[i]=head[k];head[k]=i}
+  for(let i=0;i<n;i++){if(used[i])continue;const pts=[],sk=key(sx[i],sy[i]);let e=i;
+    while(e>=0&&!used[e]){used[e]=1;pts.push([sx[e],sy[e]]);const k=key(ex[e],ey[e]);if(k===sk)break;let f=head[k];while(f>=0&&used[f])f=nxt[f];e=f}
+    if(pts.length>=4)loops.push(pts)}
+  return loops}
+function dp(P,eps){const n=P.length;if(n<3)return P.slice();const keep=new Uint8Array(n);keep[0]=keep[n-1]=1;const st=[[0,n-1]];
+  while(st.length){const[a,b]=st.pop();let md=0,mi=-1;const ax=P[a][0],ay=P[a][1],dx=P[b][0]-ax,dy=P[b][1]-ay,L=Math.hypot(dx,dy)||1;
+    for(let i=a+1;i<b;i++){const d=Math.abs((P[i][0]-ax)*dy-(P[i][1]-ay)*dx)/L;if(d>md){md=d;mi=i}}
+    if(md>eps&&mi>0){keep[mi]=1;st.push([a,mi],[mi,b])}}
+  return P.filter((_,i)=>keep[i])}
+function simplifyRing(P,eps){if(P.length<5)return P;let far=0,fd=-1;for(let i=1;i<P.length;i++){const d=(P[i][0]-P[0][0])**2+(P[i][1]-P[0][1])**2;if(d>fd){fd=d;far=i}}
+  const a=dp(P.slice(0,far+1),eps),b=dp(P.slice(far).concat([P[0]]),eps);return a.slice(0,-1).concat(b.slice(0,-1))}
+const ringArea=P=>{let s=0;for(let i=0;i<P.length;i++){const a=P[i],b=P[(i+1)%P.length];s+=a[0]*b[1]-b[0]*a[1]}return s/2};
+function inPoly(x,y,P){let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){const a=P[i],b=P[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
+const bbCenter=p=>[(p.bb[0]+p.bb[2])/2,(p.bb[1]+p.bb[3])/2];
+
+/* tracing a figure into parts */
+function traceFigure(){
+  const f=ST.fig,o=f.trace,W=ST.tw,H=ST.th,g=ST.gray;
+  const ink=new Uint8Array(W*H),free=new Uint8Array(W*H);for(let i=0;i<W*H;i++){ink[i]=g[i]<o.ink?1:0;free[i]=1-ink[i]}
+  const out=floodOutside(free,W,H);let solid=new Uint8Array(W*H);for(let i=0;i<W*H;i++)solid[i]=out[i]?0:1;
+  if(o.brk>0)solid=morph(morph(solid,W,H,o.brk,false),W,H,o.brk,true);
+  const{lab,comps}=labelComps(solid,W,H),minA=W*H*o.min/2000;
+  f.parts=[];let n=0;
+  comps.filter(c=>c.area>=Math.max(30,minA)).sort((a,b)=>(a.y0+a.y1)-(b.y0+b.y1)||(a.x0-b.x0)).forEach(c=>{
+    const loops=traceLoops((x,y)=>lab[y*W+x]===c.id,c.x0,c.y0,c.x1,c.y1);if(!loops.length)return;
+    let best=loops[0];loops.forEach(l=>{if(Math.abs(ringArea(l))>Math.abs(ringArea(best)))best=l});
+    const poly=simplifyRing(best,1.2);if(poly.length<3)return;n++;
+    f.parts.push({id:uid(),name:'Part '+n,polys:[poly],bb:[c.x0,c.y0,c.x1+1,c.y1+1],kind:'flat',thick:.06,z:0,hidden:false});
+  });
+  f.tw=W;f.th=H;autoPlace();
+}
+function autoPlace(){
+  const f=ST.fig,P=f.parts;if(!P.length)return;
+  const C=P.map(bbCenter),mx=C.reduce((s,c)=>s+c[0],0)/C.length,my=C.reduce((s,c)=>s+c[1],0)/C.length;
+  let sxx=0,syy=0,sxy=0;C.forEach(c=>{const dx=c[0]-mx,dy=c[1]-my;sxx+=dx*dx;syy+=dy*dy;sxy+=dx*dy});
+  const th=.5*Math.atan2(2*sxy,sxx-syy),ux=Math.cos(th),uy=Math.sin(th),R=Math.max(ST.tw,ST.th);
+  P.forEach((p,i)=>{const[cx,cy]=C[i],dx=cx-mx,dy=cy-my;
+    if(f.drawn==='exploded'){const al=dx*ux+dy*uy,px=dx-al*ux,py=dy-al*uy;p.ex=cx;p.ey=cy;p.ax=mx+px+al*ux*.12;p.ay=my+py+al*uy*.12}
+    else{const l=Math.hypot(dx,dy);p.ax=cx;p.ay=cy;if(l<2){p.ex=cx;p.ey=cy}else{const k=(R*.08+l*.6)/l;p.ex=cx+dx*k;p.ey=cy+dy*k}}
+    p.ex=Math.round(p.ex);p.ey=Math.round(p.ey);p.ax=Math.round(p.ax);p.ay=Math.round(p.ay)});
+}
+/* the position the drawing does not show, which Move edits */
+function altPos(p){return ST.fig.drawn==='exploded'?[p.ax,p.ay]:[p.ex,p.ey]}
+function setAlt(p,x,y){if(ST.fig.drawn==='exploded'){p.ax=x;p.ay=y}else{p.ex=x;p.ey=y}}
+function homePos(p){return ST.fig.drawn==='exploded'?[p.ex,p.ey]:[p.ax,p.ay]}
+async function saveFig(){await putPage(ST.page)}
+
+/* open and close */
+async function openStudio(pi,fi){
+  if(cur!==pi){cur=pi;mode='result';await render()}
+  const f=page.figures[fi];if(!f)return;
+  if(!f.id)f.id=uid();if(!f.name)f.name='Figure '+(fi+1);
+  if(!f.trace)f.trace={ink:150,brk:2,min:4};if(!f.drawn)f.drawn='exploded';
+  const pc=await ensureProc(page),sx=f.x*pc.width,sy=f.y*pc.height,sw=f.w*pc.width,sh=f.h*pc.height,s=Math.min(1,1400/Math.max(sw,sh));
+  const c=document.createElement('canvas');c.width=Math.max(8,Math.round(sw*s));c.height=Math.max(8,Math.round(sh*s));
+  const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(pc,sx,sy,sw,sh,0,0,c.width,c.height);
+  ST={page,fig:f,crop:c,gray:grayOf(c),tw:c.width,th:c.height,tab:'trace',tool:'select',sel:null,mergeA:null,t:1,cycle:false,edges:true,drag:null};
+  if(f.parts&&f.tw&&(f.tw!==ST.tw||f.th!==ST.th)){const kx=ST.tw/f.tw,ky=ST.th/f.th;f.parts.forEach(p=>{p.polys=p.polys.map(P=>P.map(q=>[q[0]*kx,q[1]*ky]));p.bb=[p.bb[0]*kx,p.bb[1]*ky,p.bb[2]*kx,p.bb[3]*ky];p.ax*=kx;p.ex*=kx;p.ay*=ky;p.ey*=ky});f.tw=ST.tw;f.th=ST.th}
+  $('#stName').value=f.name;$('#studio').classList.add('open');closeCards();
+  if(!f.parts){f.parts=[];stStatus('Tracing parts',true);await nextFrame();traceFigure();await saveFig()}
+  setTab('trace');setTool('select');drawnLabel();drawTrace();stStatus(f.parts.length+' parts found. Tap one to name it or change its shape.');
+}
+function closeStudio(){$('#studio').classList.remove('open');ST&&(ST.cycle=false);ST=null;if(T)T.running=false;guard(render)}
+$('#stBack').onclick=closeStudio;
+$('#stName').addEventListener('input',e=>{if(!ST)return;ST.fig.name=e.target.value;clearTimeout(ST._nt);ST._nt=setTimeout(saveFig,400)});
+function setTab(t){ST.tab=t;$('#tabTrace').classList.toggle('on',t==='trace');$('#tab3d').classList.toggle('on',t==='3d');
+  $('#toolsTrace').style.display=t==='trace'?'':'none';$('#tools3d').style.display=t==='3d'?'':'none';
+  $('#stTrace').style.display=t==='trace'?'block':'none';$('#st3d').style.display=t==='3d'?'block':'none';$('#tune').classList.remove('open');
+  if(t==='3d')start3D();else{if(T)T.running=false;drawTrace()}}
+$('#tabTrace').onclick=()=>ST&&setTab('trace');
+$('#tab3d').onclick=()=>ST&&setTab('3d');
+function setTool(t){ST.tool=t;ST.mergeA=null;document.querySelectorAll('[data-tool]').forEach(b=>b.classList.toggle('on',b.dataset.tool===t));
+  const msg={select:'Tap a part to name it or change its shape.',merge:'Tap the first part, then the part to join into it.',delete:'Tap a part to remove it. Callout numbers and stray marks go here.',move:ST.fig.drawn==='exploded'?'Drag each part to where it sits when the thing is put together.':'Drag each part to where it goes when spread apart.'}[t];stStatus(msg);drawTrace()}
+document.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>ST&&setTool(b.dataset.tool));
+function drawnLabel(){$('#drawnBtn').textContent=ST.fig.drawn==='exploded'?'Shows exploded':'Shows assembled'}
+$('#drawnBtn').onclick=async()=>{if(!ST)return;const f=ST.fig;f.drawn=f.drawn==='exploded'?'assembled':'exploded';autoPlace();drawnLabel();await saveFig();drawTrace();if(ST.tab==='3d')build3D();stStatus(f.drawn==='exploded'?'This drawing shows the parts spread apart.':'This drawing shows the parts put together.')};
+$('#autoBtn').onclick=async()=>{if(!ST)return;autoPlace();await saveFig();drawTrace();stStatus('Positions reset')};
+$('#unhideBtn').onclick=async()=>{if(!ST)return;ST.fig.parts.forEach(p=>p.hidden=false);await saveFig();drawTrace();if(ST.tab==='3d')build3D()};
+
+/* trace view */
+function traceScale(){const c=$('#stTrace'),r=c.getBoundingClientRect();return r.width?c.width/r.width:1}
+function shownOffset(p){if(ST.tool!=='move')return[0,0];const[hx,hy]=homePos(p),[ax,ay]=altPos(p);return[ax-hx,ay-hy]}
+function polyPath(x,p,dx,dy){x.beginPath();p.polys.forEach(P=>{P.forEach((q,j)=>j?x.lineTo(q[0]+dx,q[1]+dy):x.moveTo(q[0]+dx,q[1]+dy));x.closePath()})}
+function drawTrace(){
+  if(!ST||ST.tab!=='trace'||!ST.fig.parts)return;const c=$('#stTrace');if(c.width!==ST.tw||c.height!==ST.th){c.width=ST.tw;c.height=ST.th}
+  const x=c.getContext('2d'),s=traceScale();x.drawImage(ST.crop,0,0);x.fillStyle='rgba(255,255,255,.4)';x.fillRect(0,0,c.width,c.height);
+  ST.fig.parts.forEach((p,i)=>{
+    const[dx,dy]=shownOffset(p);
+    if(ST.tool==='move'&&(dx||dy)){x.setLineDash([6*s,5*s]);polyPath(x,p,0,0);x.lineWidth=1.2*s;x.strokeStyle='#8aa0bd';x.stroke();x.setLineDash([])}
+    polyPath(x,p,dx,dy);x.globalAlpha=p.hidden?.12:.5;x.fillStyle=PAL[i%8];x.fill('evenodd');x.globalAlpha=p.hidden?.3:1;
+    const on=ST.sel===p||ST.mergeA===p;x.lineWidth=(on?4:1.6)*s;x.strokeStyle=on?'#1e6fd9':'#3d3d3d';x.stroke();x.globalAlpha=1;
+    x.font=(12*s)+'px system-ui';x.fillStyle='#1b2430';x.fillText(p.name,p.bb[0]+dx,Math.max(12*s,p.bb[1]+dy-4*s));
+  });
+}
+function hitPart(px,py){const P=ST.fig.parts;for(let i=P.length-1;i>=0;i--){const p=P[i],[dx,dy]=shownOffset(p);if(p.polys.some(Q=>inPoly(px-dx,py-dy,Q)))return p}return null}
+function tracePt(e){const c=$('#stTrace'),r=c.getBoundingClientRect(),s=c.width/r.width;return[(e.clientX-r.left)*s,(e.clientY-r.top)*s]}
+$('#stTrace').addEventListener('pointerdown',e=>{if(!ST)return;const[x,y]=tracePt(e),p=hitPart(x,y);
+  if(ST.tool==='move'&&p){const[ax,ay]=altPos(p);ST.drag={p,ox:ax-x,oy:ay-y};$('#stTrace').setPointerCapture(e.pointerId);ST.sel=p;drawTrace();return}
+  ST.down=[x,y,p]});
+$('#stTrace').addEventListener('pointermove',e=>{if(!ST||!ST.drag)return;const[x,y]=tracePt(e);setAlt(ST.drag.p,Math.round(x+ST.drag.ox),Math.round(y+ST.drag.oy));drawTrace()});
+$('#stTrace').addEventListener('pointerup',async e=>{if(!ST)return;
+  if(ST.drag){ST.drag=null;await saveFig();return}
+  const d=ST.down;ST.down=null;if(!d)return;const p=d[2];
+  if(ST.tool==='select'){ST.sel=p;p?openPartCard(p):closeCards();drawTrace()}
+  else if(ST.tool==='delete'&&p){ST.fig.parts.splice(ST.fig.parts.indexOf(p),1);if(ST.sel===p){ST.sel=null;closeCards()}await saveFig();drawTrace();stStatus(p.name+' removed')}
+  else if(ST.tool==='merge'&&p){
+    if(!ST.mergeA){ST.mergeA=p;drawTrace();stStatus('Now tap the part to join into '+p.name)}
+    else if(ST.mergeA!==p){const a=ST.mergeA,[hx,hy]=homePos(a),[lx,ly]=altPos(a);a.polys.push(...p.polys);
+      a.bb=[Math.min(a.bb[0],p.bb[0]),Math.min(a.bb[1],p.bb[1]),Math.max(a.bb[2],p.bb[2]),Math.max(a.bb[3],p.bb[3])];
+      const[cx,cy]=bbCenter(a),ox=lx-hx,oy=ly-hy;if(ST.fig.drawn==='exploded'){a.ex=cx;a.ey=cy;a.ax=cx+ox;a.ay=cy+oy}else{a.ax=cx;a.ay=cy;a.ex=cx+ox;a.ey=cy+oy}
+      ST.fig.parts.splice(ST.fig.parts.indexOf(p),1);ST.mergeA=null;await saveFig();drawTrace();stStatus('Joined into '+a.name)}}
+});
+
+/* part card */
+function closeCards(){$('#pcard').classList.remove('open');$('#tune').classList.remove('open')}
+function openPartCard(p){$('#tune').classList.remove('open');$('#pName').value=p.name;$('#pThick').value=Math.round(p.thick*100);$('#pDepth').value=Math.round((p.z||0)*50);
+  document.querySelectorAll('[data-kind]').forEach(b=>b.classList.toggle('on',b.dataset.kind===p.kind));$('#pHide').textContent=p.hidden?'Show part':'Hide part';$('#pcard').classList.add('open')}
+async function partChanged(rebuild){await saveFig();drawTrace();if(ST.tab==='3d'&&rebuild)build3D()}
+$('#pName').addEventListener('input',e=>{if(!ST||!ST.sel)return;ST.sel.name=e.target.value;clearTimeout(ST._pt);ST._pt=setTimeout(()=>partChanged(false),400)});
+document.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{if(!ST||!ST.sel)return;ST.sel.kind=b.dataset.kind;openPartCard(ST.sel);partChanged(true)});
+$('#pThick').addEventListener('change',e=>{if(!ST||!ST.sel)return;ST.sel.thick=e.target.value/100;partChanged(true)});
+$('#pDepth').addEventListener('input',e=>{if(!ST||!ST.sel)return;ST.sel.z=e.target.value/50;if(T)place3D()});
+$('#pDepth').addEventListener('change',()=>ST&&saveFig());
+$('#pHide').onclick=()=>{if(!ST||!ST.sel)return;ST.sel.hidden=!ST.sel.hidden;openPartCard(ST.sel);partChanged(true)};
+$('#pClose').onclick=()=>{if(ST){ST.sel=null;drawTrace();if(T&&ST.tab==='3d')highlight3D()}closeCards()};
+
+/* tune */
+$('#tuneBtn').onclick=()=>{if(!ST)return;const o=ST.fig.trace;$('#tInk').value=o.ink;$('#tBrk').value=o.brk;$('#tMin').value=o.min;$('#pcard').classList.remove('open');$('#tune').classList.add('open')};
+$('#tClose').onclick=()=>$('#tune').classList.remove('open');
+$('#tGo').onclick=async()=>{if(!ST)return;if(ST.fig.parts.length&&!confirm('Retracing replaces the parts, names and positions on this figure. Go ahead?'))return;
+  ST.fig.trace={ink:+$('#tInk').value,brk:+$('#tBrk').value,min:+$('#tMin').value};$('#tune').classList.remove('open');stStatus('Tracing parts',true);await nextFrame();
+  traceFigure();ST.sel=null;await saveFig();drawTrace();stStatus('Found '+ST.fig.parts.length+' parts')};
+
+/* svg */
+document.querySelectorAll('.svgBtn').forEach(b=>b.onclick=async()=>{
+  if(!ST)return;stStatus('Tracing line work',true);await nextFrame();
+  const W=ST.tw,H=ST.th,g=ST.gray,thr=ST.fig.trace.ink,ink=(x,y)=>g[y*W+x]<thr;
+  const loops=traceLoops(ink,0,0,W-1,H-1).map(l=>simplifyRing(l,.8)).filter(l=>l.length>2);
+  const d=L=>L.map(P=>'M'+P.map(q=>q[0]+' '+q[1]).join('L')+'Z').join('');
+  const parts=ST.fig.parts.map((p,i)=>`<path id="${'part-'+(i+1)}" data-name="${p.name.replace(/[<>&"]/g,'')}" d="${d(p.polys)}" fill="${PAL[i%8]}" fill-opacity=".45" stroke="#1e6fd9" stroke-width="1.5"/>`).join('\n');
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">\n<rect width="${W}" height="${H}" fill="#fff"/>\n<g id="parts">\n${parts}\n</g>\n<g id="linework"><path d="${d(loops)}" fill="#1b2430" fill-rule="evenodd"/></g>\n</svg>`;
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));a.download=(ST.fig.name||'figure').toLowerCase().replace(/[^a-z0-9]+/g,'-')+'.svg';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);stStatus('SVG saved')});
+
+/* 3D view, same three.js build and look as Hub View */
+async function init3D(){
+  if(T)return T;stStatus('Loading 3D',true);
+  const THREE=await import('three'),{OrbitControls}=await import('three/addons/controls/OrbitControls.js');
+  const canvas=$('#st3d'),renderer=new THREE.WebGLRenderer({canvas,antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  const scene=new THREE.Scene();scene.background=new THREE.Color(0xf3f1ec);
+  const camera=new THREE.PerspectiveCamera(30,1,.05,300),controls=new OrbitControls(camera,canvas);controls.enableDamping=true;
+  scene.add(new THREE.HemisphereLight(0xffffff,0xd6d0c4,1.7));const sun=new THREE.DirectionalLight(0xffffff,.8);sun.position.set(4,6,8);scene.add(sun);
+  T={THREE,renderer,scene,camera,controls,canvas,group:null,items:[],running:false,tex:null};
+  let down=null;
+  canvas.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY]});
+  canvas.addEventListener('pointerup',e=>{if(!ST||!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>6)return;
+    const r=canvas.getBoundingClientRect(),ptr=new THREE.Vector2((e.clientX-r.left)/r.width*2-1,-((e.clientY-r.top)/r.height)*2+1),ray=new THREE.Raycaster();ray.setFromCamera(ptr,camera);
+    const hit=ray.intersectObjects(T.items.map(i=>i.mesh),false)[0];ST.sel=hit?hit.object.userData.item.p:null;ST.sel?openPartCard(ST.sel):closeCards();highlight3D()});
+  addEventListener('resize',size3D);
+  return T}
+function size3D(){if(!T)return;const w=T.canvas.clientWidth,h=T.canvas.clientHeight;if(!w||!h)return;T.renderer.setSize(w,h,false);T.camera.aspect=w/h;T.camera.updateProjectionMatrix()}
+function resetView(){const{THREE}=T,b=new THREE.Box3();if(T.group)b.setFromObject(T.group);if(b.isEmpty())b.set(new THREE.Vector3(-2,-2,0),new THREE.Vector3(2,2,0));
+  const c=new THREE.Vector3(),sz=new THREE.Vector3();b.getCenter(c);b.getSize(sz);const vf=T.camera.fov*Math.PI/360,hf=Math.atan(Math.tan(vf)*T.camera.aspect);
+  const d=Math.max(sz.x/2/Math.tan(hf),sz.y/2/Math.tan(vf))*1.25+sz.z;const dir=new THREE.Vector3(.3,.25,1).normalize();
+  T.camera.position.copy(c).addScaledVector(dir,d);T.controls.target.copy(c);T.controls.update()}
+function latheGeo(p,s){
+  const{THREE}=T,[x0,y0,x1,y1]=p.bb.map(Math.round),w=Math.max(1,x1-x0),h=Math.max(1,y1-y0),c=document.createElement('canvas');c.width=w;c.height=h;
+  const x=c.getContext('2d');x.fillStyle='#000';polyPath(x,p,-x0,-y0);x.fill('nonzero');
+  const d=x.getImageData(0,0,w,h).data,m=i=>d[i*4+3]>127,vert=p.kind==='latheV',L=vert?h:w,n=Math.min(90,L),pts=[];
+  for(let k=0;k<=n;k++){const t=Math.min(L-1,Math.round(k*(L-1)/n));let lo=-1,hi=-1;
+    if(vert){for(let i=0;i<w;i++)if(m(t*w+i)){if(lo<0)lo=i;hi=i}}else{for(let i=0;i<h;i++)if(m(i*w+t)){if(lo<0)lo=i;hi=i}}
+    pts.push(new THREE.Vector2(lo<0?0:(hi-lo+1)/2*s,(L/2-t)*s*(vert?1:-1)))}
+  pts.unshift(new THREE.Vector2(0,pts[0].y));pts.push(new THREE.Vector2(0,pts[pts.length-1].y));
+  const g=new THREE.LatheGeometry(pts,48);if(!vert)g.rotateZ(-Math.PI/2);return g}
+function build3D(){
+  const{THREE}=T,f=ST.fig,W=ST.tw,H=ST.th,s=4/Math.max(W,H);
+  if(T.group){T.scene.remove(T.group);T.group.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)[].concat(o.material).forEach(m=>m.dispose())})}
+  if(T.tex)T.tex.dispose();T.tex=new THREE.CanvasTexture(ST.crop);T.tex.colorSpace=THREE.SRGBColorSpace;T.tex.repeat.set(1/(W*s),1/(H*s));
+  T.group=new THREE.Group();T.scene.add(T.group);T.items=[];T.s=s;
+  const toW=(px,py)=>new THREE.Vector3((px-W/2)*s,(H/2-py)*s,0);
+  f.parts.forEach((p,i)=>{if(p.hidden)return;
+    const col=new THREE.Color(PAL[i%8]),[bx,by]=bbCenter(p);let geo,mat;
+    if(p.kind==='flat'){
+      const shapes=p.polys.map(P=>{const sh=new THREE.Shape();P.forEach((q,j)=>{const X=q[0]*s,Y=(H-q[1])*s;j?sh.lineTo(X,Y):sh.moveTo(X,Y)});sh.closePath();return sh});
+      geo=new THREE.ExtrudeGeometry(shapes,{depth:p.thick,bevelEnabled:false,curveSegments:1});geo.translate(-bx*s,-(H-by)*s,-p.thick/2);
+      mat=[new THREE.MeshStandardMaterial({color:col,map:T.tex,roughness:1,side:THREE.DoubleSide}),new THREE.MeshStandardMaterial({color:col.clone().multiplyScalar(.8),roughness:1,flatShading:true})];
+    }else{geo=latheGeo(p,s);mat=new THREE.MeshStandardMaterial({color:col,roughness:.85,metalness:.05,side:THREE.DoubleSide})}
+    const mesh=new THREE.Mesh(geo,mat),edges=new THREE.LineSegments(new THREE.EdgesGeometry(geo,30),new THREE.LineBasicMaterial({color:0x3d3d3d}));
+    edges.visible=ST.edges;const node=new THREE.Group();node.add(mesh,edges);T.group.add(node);
+    const it={p,i,node,mesh,edges,ex:toW(p.ex,p.ey),as:toW(p.ax,p.ay)};
+    /* offset from bbox center to the stored spot, since geometry is centered on its bbox */
+    mesh.userData.item=it;T.items.push(it)});
+  place3D();highlight3D()}
+function place3D(){if(!T||!ST)return;const t=ST.t;T.items.forEach(it=>{const p=it.p;it.node.position.set(it.as.x+(it.ex.x-it.as.x)*t,it.as.y+(it.ex.y-it.as.y)*t,it.i*.004+(p.z||0)*t)})}
+function highlight3D(){if(!T)return;T.items.forEach(it=>{const on=ST&&it.p===ST.sel;it.edges.material.color.set(on?0x1e6fd9:0x3d3d3d);it.edges.visible=on||ST.edges;[].concat(it.mesh.material).forEach(m=>m.emissive&&m.emissive.set(on?0x0c2a55:0x000000))})}
+async function start3D(){
+  await init3D();size3D();build3D();if(!T.posed){resetView();T.posed=true}stStatus('Drag to spin, pinch to zoom, slide to explode');
+  if(T.running)return;T.running=true;let ph=0;
+  (function loop(){if(!T.running)return;requestAnimationFrame(loop);
+    if(ST&&ST.cycle){ph+=.012;ST.t=.75-.75*Math.cos(ph);$('#exSlide').value=Math.round(ST.t*100);place3D()}
+    T.controls.update();T.renderer.render(T.scene,T.camera)})()}
+$('#exSlide').addEventListener('input',e=>{if(!ST)return;ST.cycle=false;$('#cycleBtn').classList.remove('on');ST.t=e.target.value/100;place3D()});
+$('#cycleBtn').onclick=()=>{if(!ST)return;ST.cycle=!ST.cycle;$('#cycleBtn').classList.toggle('on',ST.cycle)};
+$('#spinBtn').onclick=()=>{if(!T)return;T.controls.autoRotate=!T.controls.autoRotate;T.controls.autoRotateSpeed=2.5;$('#spinBtn').classList.toggle('on',T.controls.autoRotate)};
+$('#edgeBtn').onclick=()=>{if(!ST)return;ST.edges=!ST.edges;$('#edgeBtn').classList.toggle('on',ST.edges);highlight3D()};
+$('#viewBtn').onclick=()=>T&&resetView();
+
+/* boot */
+window.addEventListener('resize',()=>{if(!page)return;if(mode==='corners'&&srcImg)drawCorners();else if(procCanvas)drawResult()});
+(async()=>{db=await openDB();const m=await loadMeta();if(m)proj=Object.assign(proj,m);$('#titleIn').value=proj.title||'';$('#lang').value=proj.lang||'eng';
+  if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();await render()})();
+</script>
+</body>
+</html>

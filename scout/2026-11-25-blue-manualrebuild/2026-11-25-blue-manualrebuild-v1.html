@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Manual Rebuild</title>
+<style>
+:root{--blue:#1e6fd9;--blue2:#e8f1fc;--ink:#1b2430;--line:#d5dde8;--bg:#f6f8fb}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,sans-serif}
+button,select,input{font:inherit}
+button{height:40px;border:1px solid var(--line);background:#fff;border-radius:8px;color:var(--ink);padding:0 10px;cursor:pointer}
+button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+button:disabled{opacity:.45}
+#bar{position:fixed;top:0;left:0;right:0;height:104px;background:#fff;border-bottom:3px solid var(--blue);z-index:10}
+.row{display:flex;align-items:center;gap:6px;padding:6px 8px;height:50px}
+#ham{width:46px;font-size:22px;padding:0}
+#title{flex:1;font-weight:700;color:var(--blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#count{min-width:70px;text-align:right;font-variant-numeric:tabular-nums;color:#506078}
+#pagesBtn{width:70px}
+.row2 button{flex:1;padding:0 2px;font-size:14px;min-width:0}
+#main{position:absolute;top:104px;left:0;right:0;bottom:0;overflow:auto;padding:10px}
+#stageWrap{position:relative;background:#fff;border:1px solid var(--line);border-radius:10px;height:56vh;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none}
+#cv{width:auto;height:auto;max-width:100%;max-height:100%;display:block}
+#status{position:absolute;top:6px;left:6px;right:6px;background:rgba(30,111,217,.92);color:#fff;padding:6px 10px;border-radius:8px;font-size:13px;pointer-events:none;opacity:0;transition:opacity .2s}
+#status.show{opacity:1}
+#empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#fff;text-align:center;padding:20px;color:#506078}
+#empty button{height:52px;padding:0 24px}
+h3{margin:14px 0 6px;font-size:15px;color:var(--blue)}
+#txt{width:100%;height:30vh;border:1px solid var(--line);border-radius:10px;padding:10px;font:14px/1.45 ui-monospace,Menlo,monospace;background:#fff;color:var(--ink);resize:vertical}
+#figs{display:flex;flex-wrap:wrap;gap:8px}
+.fig{position:relative;border:1px solid var(--line);border-radius:8px;background:#fff;padding:4px}
+.fig canvas{display:block;max-width:140px;max-height:120px}
+.fig button{position:absolute;top:4px;right:4px;height:30px;width:30px;padding:0;background:#fff}
+#hint{color:#506078;font-size:13px;margin:6px 2px}
+#scrim{position:fixed;inset:0;background:rgba(20,30,45,.35);z-index:20;display:none}
+#menu{position:fixed;top:0;left:0;bottom:0;width:min(84vw,340px);background:#fff;z-index:21;transform:translateX(-102%);transition:transform .2s;overflow:auto;border-right:3px solid var(--blue);padding:10px}
+#menu.open{transform:none}
+#menu details{border:1px solid var(--line);border-radius:10px;margin:8px 0;padding:4px 10px 10px}
+#menu summary{font-weight:700;color:var(--blue);padding:8px 0;cursor:pointer}
+#menu .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#menu .full{grid-column:1/-1}
+#menu input,#menu select{width:100%;height:40px;border:1px solid var(--line);border-radius:8px;padding:0 8px;margin:4px 0;background:#fff}
+#menuHead{display:flex;align-items:center;justify-content:space-between;font-weight:700;color:var(--blue)}
+#pages{position:fixed;inset:0;background:var(--bg);z-index:15;display:none;flex-direction:column}
+#pages.open{display:flex}
+#pagesTop{height:56px;display:flex;align-items:center;gap:8px;padding:8px;background:#fff;border-bottom:3px solid var(--blue);font-weight:700;color:var(--blue)}
+#pagesTop span{flex:1}
+#grid{flex:1;overflow:auto;padding:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;align-content:start}
+.tile{background:#fff;border:1px solid var(--line);border-radius:10px;padding:6px;display:flex;flex-direction:column;gap:6px}
+.tile.cur{border:2px solid var(--blue)}
+.tile img{width:100%;height:150px;object-fit:contain;background:#eef2f7;border-radius:6px}
+.tile .lbl{font-size:13px;color:#506078;display:flex;justify-content:space-between}
+.tile .act{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px}
+.tile .act button{height:34px;padding:0}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--blue)}
+</style>
+</head>
+<body>
+<div id="bar">
+  <div class="row">
+    <button id="ham" aria-label="Menu">&#9776;</button>
+    <div id="title">Manual Rebuild</div>
+    <div id="count"></div>
+    <button id="pagesBtn">Pages</button>
+  </div>
+  <div class="row row2">
+    <button id="prev">&#9664;</button>
+    <button id="mCorners">Corners</button>
+    <button id="mResult" class="on">Page</button>
+    <button id="mFigure">Figure</button>
+    <button id="ocrBtn">Read</button>
+    <button id="next">&#9654;</button>
+  </div>
+</div>
+
+<div id="main">
+  <div id="stageWrap">
+    <canvas id="cv"></canvas>
+    <div id="empty">
+      <div>Load every photo of the manual. Each photo becomes a page.</div>
+      <button class="primary" id="addFirst">Add photos</button>
+    </div>
+    <div id="status"></div>
+  </div>
+  <div id="hint"></div>
+  <h3>Page text</h3>
+  <textarea id="txt" placeholder="Tap Read to pull the text off this page, then fix anything it got wrong."></textarea>
+  <h3>Figures on this page</h3>
+  <div id="figs"></div>
+</div>
+
+<div id="scrim"></div>
+<div id="menu">
+  <div id="menuHead"><span>Manual Rebuild</span><button id="closeMenu">&#10005;</button></div>
+  <details open>
+    <summary>Project</summary>
+    <label>Manual title</label>
+    <input id="titleIn" placeholder="Manual title">
+    <div class="grid">
+      <button class="full primary" id="add">Add photos</button>
+      <button id="sortName">Sort by file name</button>
+      <button id="sortTime">Sort by photo time</button>
+      <button class="full" id="clearAll">Start a new project</button>
+    </div>
+  </details>
+  <details>
+    <summary>Page</summary>
+    <label>Cleanup look</label>
+    <div class="grid">
+      <button data-clean="color">Color</button>
+      <button data-clean="gray">Gray</button>
+      <button data-clean="scan">Scan</button>
+      <button data-clean="bw">Black and white</button>
+      <button class="full" id="cleanAll">Use this look on every page</button>
+      <button id="rotL">Rotate left</button>
+      <button id="rotR">Rotate right</button>
+      <button class="full" id="resetCorners">Reset corners</button>
+      <button class="full" id="delPage">Delete this page</button>
+    </div>
+  </details>
+  <details>
+    <summary>Text</summary>
+    <label>Manual language</label>
+    <select id="lang">
+      <option value="eng">English</option>
+      <option value="spa">Spanish</option>
+      <option value="fra">French</option>
+      <option value="deu">German</option>
+      <option value="ita">Italian</option>
+      <option value="por">Portuguese</option>
+      <option value="jpn">Japanese</option>
+      <option value="chi_sim">Chinese</option>
+    </select>
+    <div class="grid">
+      <button class="full" id="ocrAll">Read every page not read yet</button>
+      <button class="full" id="copyAll">Copy all text</button>
+    </div>
+  </details>
+  <details>
+    <summary>Export</summary>
+    <div class="grid">
+      <button class="full primary" id="expRebuilt">Rebuilt manual PDF</button>
+      <button class="full" id="expScan">Scanned pages PDF</button>
+      <button class="full" id="expTxt">Text file</button>
+    </div>
+  </details>
+</div>
+
+<div id="pages">
+  <div id="pagesTop"><span>All pages</span><button id="pagesAdd">Add photos</button><button id="pagesClose">Done</button></div>
+  <div id="grid"></div>
+</div>
+
+<input type="file" id="file" accept="image/*" multiple hidden>
+
+<script>
+const $=s=>document.querySelector(s);
+const cv=$('#cv');
+const TESS='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+const JSPDF='https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+let db,proj={order:[],title:'',lang:'eng'},cur=0,mode='result',page=null,srcImg=null,procCanvas=null,procId=null,busy=false;
+
+/* storage */
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('manualrebuild',1);r.onupgradeneeded=()=>{const d=r.result;d.createObjectStore('pages',{keyPath:'id'});d.createObjectStore('meta')};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+function tx(store,m,fn){return new Promise((res,rej)=>{const t=db.transaction(store,m);const r=fn(t.objectStore(store));t.oncomplete=()=>res(r?r.result:undefined);t.onerror=()=>rej(t.error)})}
+const getPage=id=>tx('pages','readonly',s=>s.get(id));
+const putPage=p=>tx('pages','readwrite',s=>s.put(p));
+const delPageDB=id=>tx('pages','readwrite',s=>s.delete(id));
+const saveMeta=()=>tx('meta','readwrite',s=>s.put(proj,'project'));
+const loadMeta=()=>tx('meta','readonly',s=>s.get('project'));
+
+/* helpers */
+let stT;
+function status(msg,keep){const s=$('#status');s.textContent=msg;s.classList.add('show');clearTimeout(stT);if(!keep)stT=setTimeout(()=>s.classList.remove('show'),2200)}
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=src;s.onload=res;s.onerror=()=>rej(new Error('Could not load '+src));document.head.appendChild(s)})}
+const toBlob=(c,type,q)=>new Promise(r=>c.toBlob(r,type,q));
+const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+function blobImg(blob){return createImageBitmap(blob)}
+async function makeThumb(canvasOrBmp,w,h){const s=Math.min(1,320/Math.max(w,h));const c=document.createElement('canvas');c.width=Math.round(w*s);c.height=Math.round(h*s);c.getContext('2d').drawImage(canvasOrBmp,0,0,c.width,c.height);return toBlob(c,'image/jpeg',.8)}
+async function guard(fn){if(busy){status('Still working, hang on');return}busy=true;try{await fn()}catch(e){console.error(e);status('Error: '+e.message)}finally{busy=false}}
+
+/* import */
+async function fileToPage(f){
+  const url=URL.createObjectURL(f);
+  const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('Could not open '+f.name));i.src=url});
+  const sc=Math.min(1,2200/Math.max(img.naturalWidth,img.naturalHeight));
+  const w=Math.round(img.naturalWidth*sc),h=Math.round(img.naturalHeight*sc);
+  const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);
+  URL.revokeObjectURL(url);
+  return {id:uid(),name:f.name,lm:f.lastModified,img:await toBlob(c,'image/jpeg',.9),thumb:await makeThumb(c,w,h),w,h,
+    corners:[[0,0],[w,0],[w,h],[0,h]],clean:'scan',text:'',figures:[],proc:null,ocr:false};
+}
+async function addFiles(files){
+  files=[...files].sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+  const first=proj.order.length;
+  for(let i=0;i<files.length;i++){status('Loading photo '+(i+1)+' of '+files.length,true);const p=await fileToPage(files[i]);await putPage(p);proj.order.push(p.id)}
+  await saveMeta();
+  cur=first;mode='corners';status('Loaded. Drag the blue corners onto the page edges.');
+  await render();
+}
+
+/* geometry */
+function solve(A,b){const n=b.length;for(let i=0;i<n;i++){let m=i;for(let r=i+1;r<n;r++)if(Math.abs(A[r][i])>Math.abs(A[m][i]))m=r;[A[i],A[m]]=[A[m],A[i]];[b[i],b[m]]=[b[m],b[i]];for(let r=i+1;r<n;r++){const f=A[r][i]/A[i][i];for(let c=i;c<n;c++)A[r][c]-=f*A[i][c];b[r]-=f*b[i]}}const x=new Array(n);for(let i=n-1;i>=0;i--){let s=b[i];for(let c=i+1;c<n;c++)s-=A[i][c]*x[c];x[i]=s/A[i][i]}return x}
+function homography(from,to){const A=[],b=[];for(let i=0;i<4;i++){const[x,y]=from[i],[u,v]=to[i];A.push([x,y,1,0,0,0,-u*x,-u*y]);b.push(u);A.push([0,0,0,x,y,1,-v*x,-v*y]);b.push(v)}return solve(A,b)}
+
+async function processPage(p){
+  const bmp=await blobImg(p.img);
+  const sc=document.createElement('canvas');sc.width=p.w;sc.height=p.h;const sx=sc.getContext('2d');sx.drawImage(bmp,0,0);
+  const src=sx.getImageData(0,0,p.w,p.h).data,sw=p.w,sh=p.h;
+  const[a,b,c,d]=p.corners;
+  const W=Math.max(10,Math.round((dist(a,b)+dist(d,c))/2)),H=Math.max(10,Math.round((dist(a,d)+dist(b,c))/2));
+  const m=homography([[0,0],[W,0],[W,H],[0,H]],p.corners);
+  const out=new ImageData(W,H),o=out.data;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const den=m[6]*x+m[7]*y+1;let u=(m[0]*x+m[1]*y+m[2])/den,v=(m[3]*x+m[4]*y+m[5])/den;
+    u=Math.min(Math.max(u,0),sw-1.001);v=Math.min(Math.max(v,0),sh-1.001);
+    const x0=u|0,y0=v|0,fx=u-x0,fy=v-y0,i00=(y0*sw+x0)*4,i10=i00+4,i01=i00+sw*4,i11=i01+4,k=(y*W+x)*4;
+    for(let ch=0;ch<3;ch++){const t=src[i00+ch]*(1-fx)+src[i10+ch]*fx,bt=src[i01+ch]*(1-fx)+src[i11+ch]*fx;o[k+ch]=t*(1-fy)+bt*fy}
+    o[k+3]=255;
+  }
+  if(p.clean!=='color')cleanup(o,W,H,p.clean);
+  const oc=document.createElement('canvas');oc.width=W;oc.height=H;oc.getContext('2d').putImageData(out,0,0);
+  return oc;
+}
+function cleanup(o,W,H,kind){
+  const g=new Float32Array(W*H);
+  for(let i=0,k=0;i<g.length;i++,k+=4)g[i]=o[k]*.299+o[k+1]*.587+o[k+2]*.114;
+  if(kind==='gray'){for(let i=0,k=0;i<g.length;i++,k+=4)o[k]=o[k+1]=o[k+2]=g[i];return}
+  const B=Math.max(16,Math.round(Math.max(W,H)/60)),gw=Math.ceil(W/B),gh=Math.ceil(H/B),grid=new Float32Array(gw*gh);
+  for(let by=0;by<gh;by++)for(let bx=0;bx<gw;bx++){let mx=0;const ye=Math.min(H,(by+1)*B),xe=Math.min(W,(bx+1)*B);for(let y=by*B;y<ye;y+=2)for(let x=bx*B;x<xe;x+=2){const v=g[y*W+x];if(v>mx)mx=v}grid[by*gw+bx]=mx}
+  const dil=new Float32Array(gw*gh);
+  for(let y=0;y<gh;y++)for(let x=0;x<gw;x++){let mx=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const yy=y+dy,xx=x+dx;if(yy>=0&&yy<gh&&xx>=0&&xx<gw&&grid[yy*gw+xx]>mx)mx=grid[yy*gw+xx]}dil[y*gw+x]=Math.max(mx,40)}
+  for(let y=0;y<H;y++){const gy=Math.min(Math.max(y/B-.5,0),gh-1),y0=gy|0,y1=Math.min(y0+1,gh-1),fy=gy-y0;
+    for(let x=0;x<W;x++){const gx=Math.min(Math.max(x/B-.5,0),gw-1),x0=gx|0,x1=Math.min(x0+1,gw-1),fx=gx-x0;
+      const bg=(dil[y0*gw+x0]*(1-fx)+dil[y0*gw+x1]*fx)*(1-fy)+(dil[y1*gw+x0]*(1-fx)+dil[y1*gw+x1]*fx)*fy;
+      let v=g[y*W+x]/bg*255;v=(v-85)*255/(245-85);v=v<0?0:v>255?255:v;
+      if(kind==='bw')v=v<165?0:255;
+      const k=(y*W+x)*4;o[k]=o[k+1]=o[k+2]=v}}
+}
+async function ensureProc(p){
+  if(procId===p.id&&procCanvas)return procCanvas;
+  if(p.proc){const b=await blobImg(p.proc);const c=document.createElement('canvas');c.width=b.width;c.height=b.height;c.getContext('2d').drawImage(b,0,0);procCanvas=c}
+  else{status('Flattening page',true);procCanvas=await processPage(p);p.proc=await toBlob(procCanvas,p.clean==='bw'?'image/png':'image/jpeg',.92);p.thumb=await makeThumb(procCanvas,procCanvas.width,procCanvas.height);await putPage(p);status('Page ready')}
+  procId=p.id;return procCanvas;
+}
+function invalidate(p){p.proc=null;if(procId===p.id){procId=null;procCanvas=null}}
+
+/* drawing */
+let drag=-1,figDrag=null;
+function pt(e){const r=cv.getBoundingClientRect();const s=cv.width/r.width;return[(e.clientX-r.left)*s,(e.clientY-r.top)*s,s]}
+function cssScale(){const r=cv.getBoundingClientRect();return r.width?cv.width/r.width:1}
+function drawCorners(){
+  if(cv.width!==page.w||cv.height!==page.h){cv.width=page.w;cv.height=page.h}
+  const x=cv.getContext('2d'),s=cssScale(),c=page.corners;
+  x.drawImage(srcImg,0,0);
+  x.beginPath();c.forEach((p,i)=>i?x.lineTo(p[0],p[1]):x.moveTo(p[0],p[1]));x.closePath();
+  x.fillStyle='rgba(30,111,217,.14)';x.fill();x.lineWidth=3*s;x.strokeStyle='#1e6fd9';x.stroke();
+  c.forEach((p,i)=>{x.beginPath();x.arc(p[0],p[1],15*s,0,7);x.fillStyle=i===drag?'#1e6fd9':'#fff';x.fill();x.lineWidth=3*s;x.strokeStyle='#1e6fd9';x.stroke()});
+  if(drag>=0){
+    const p=c[drag],L=150*s,z=3,r=L/z,lx=p[0]<page.w/2?page.w-L-10*s:10*s,ly=10*s;
+    x.save();x.fillStyle='#fff';x.fillRect(lx,ly,L,L);x.drawImage(srcImg,p[0]-r/2,p[1]-r/2,r,r,lx,ly,L,L);
+    x.strokeStyle='#1e6fd9';x.lineWidth=3*s;x.strokeRect(lx,ly,L,L);
+    x.beginPath();x.moveTo(lx+L/2,ly);x.lineTo(lx+L/2,ly+L);x.moveTo(lx,ly+L/2);x.lineTo(lx+L,ly+L/2);x.lineWidth=1.5*s;x.stroke();x.restore();
+  }
+}
+function drawResult(){
+  const pc=procCanvas;if(cv.width!==pc.width||cv.height!==pc.height){cv.width=pc.width;cv.height=pc.height}
+  const x=cv.getContext('2d'),s=cssScale();x.drawImage(pc,0,0);
+  if(mode==='figure'){
+    x.lineWidth=3*s;x.strokeStyle='#1e6fd9';x.fillStyle='rgba(30,111,217,.12)';
+    page.figures.forEach(f=>{x.fillRect(f.x*pc.width,f.y*pc.height,f.w*pc.width,f.h*pc.height);x.strokeRect(f.x*pc.width,f.y*pc.height,f.w*pc.width,f.h*pc.height)});
+    if(figDrag){const r=normRect(figDrag);x.setLineDash([10*s,6*s]);x.strokeRect(r.x,r.y,r.w,r.h);x.setLineDash([])}
+  }
+}
+function normRect(d){return{x:Math.min(d.x0,d.x1),y:Math.min(d.y0,d.y1),w:Math.abs(d.x1-d.x0),h:Math.abs(d.y1-d.y0)}}
+
+cv.addEventListener('pointerdown',e=>{
+  if(!page)return;const[x,y,s]=pt(e);
+  if(mode==='corners'){let best=-1,bd=1e9;page.corners.forEach((p,i)=>{const d=Math.hypot(p[0]-x,p[1]-y);if(d<bd){bd=d;best=i}});if(bd<60*s){drag=best;cv.setPointerCapture(e.pointerId);drawCorners()}}
+  else if(mode==='figure'&&procCanvas){figDrag={x0:x,y0:y,x1:x,y1:y};cv.setPointerCapture(e.pointerId)}
+});
+cv.addEventListener('pointermove',e=>{
+  if(mode==='corners'&&drag>=0){const[x,y]=pt(e);page.corners[drag]=[Math.min(Math.max(x,0),page.w),Math.min(Math.max(y,0),page.h)];drawCorners()}
+  else if(mode==='figure'&&figDrag){const[x,y]=pt(e);figDrag.x1=Math.min(Math.max(x,0),cv.width);figDrag.y1=Math.min(Math.max(y,0),cv.height);drawResult()}
+});
+async function endDrag(){
+  if(mode==='corners'&&drag>=0){drag=-1;invalidate(page);await putPage(page);drawCorners()}
+  else if(mode==='figure'&&figDrag){const r=normRect(figDrag);figDrag=null;const W=procCanvas.width,H=procCanvas.height;
+    if(r.w>20&&r.h>20){page.figures.push({x:r.x/W,y:r.y/H,w:r.w/W,h:r.h/H});await putPage(page);renderFigures();status('Figure saved')}
+    drawResult()}
+}
+cv.addEventListener('pointerup',endDrag);cv.addEventListener('pointercancel',endDrag);
+
+/* render */
+const hints={corners:'Drag each blue dot onto a corner of the printed page. The zoom box shows exactly where the dot sits.',result:'This is the flattened page. Tap Read to pull its text, or Figure to box off a diagram.',figure:'Drag a box around each diagram, chart or photo you want kept as a picture.'};
+function setModeButtons(){['mCorners','mResult','mFigure'].forEach(id=>$('#'+id).classList.toggle('on',(id==='mCorners'&&mode==='corners')||(id==='mResult'&&mode==='result')||(id==='mFigure'&&mode==='figure')))}
+async function render(){
+  const n=proj.order.length;
+  $('#title').textContent=proj.title||'Manual Rebuild';
+  $('#count').textContent=n?(cur+1)+' / '+n:'';
+  $('#empty').style.display=n?'none':'flex';
+  setModeButtons();
+  document.querySelectorAll('[data-clean]').forEach(b=>b.classList.remove('on'));
+  if(!n){page=null;$('#txt').value='';$('#figs').innerHTML='';$('#hint').textContent='';const x=cv.getContext('2d');x.clearRect(0,0,cv.width,cv.height);return}
+  cur=Math.min(Math.max(cur,0),n-1);
+  page=await getPage(proj.order[cur]);
+  $('#txt').value=page.text||'';
+  $('#hint').textContent=hints[mode];
+  document.querySelectorAll('[data-clean]').forEach(b=>b.classList.toggle('on',b.dataset.clean===page.clean));
+  if(mode==='corners'){srcImg=await blobImg(page.img);drawCorners()}
+  else{await ensureProc(page);drawResult()}
+  renderFigures();
+}
+function renderFigures(){
+  const box=$('#figs');box.innerHTML='';
+  if(!page||!page.figures.length){box.innerHTML='<div id="nofig" style="color:#506078;font-size:13px">None yet. Use Figure to box off diagrams.</div>';return}
+  const draw=pc=>page.figures.forEach((f,i)=>{
+    const d=document.createElement('div');d.className='fig';const c=document.createElement('canvas');
+    const sx=f.x*pc.width,sy=f.y*pc.height,sw=f.w*pc.width,sh=f.h*pc.height,s=Math.min(1,280/Math.max(sw,sh));
+    c.width=Math.max(1,sw*s);c.height=Math.max(1,sh*s);c.getContext('2d').drawImage(pc,sx,sy,sw,sh,0,0,c.width,c.height);
+    const b=document.createElement('button');b.textContent='✕';b.onclick=async()=>{page.figures.splice(i,1);await putPage(page);renderFigures();if(mode!=='corners')drawResult()};
+    d.append(c,b);box.append(d)});
+  if(procId===page.id&&procCanvas)draw(procCanvas);else ensureProc(page).then(draw);
+}
+
+/* text */
+let txtT;
+$('#txt').addEventListener('input',()=>{if(!page)return;const p=page,v=$('#txt').value;clearTimeout(txtT);txtT=setTimeout(()=>{p.text=v;putPage(p)},400)});
+let worker=null,workerLang=null;
+async function getWorker(){
+  if(!window.Tesseract){status('Loading the text reader',true);await loadScript(TESS)}
+  if(worker&&workerLang===proj.lang)return worker;
+  if(worker)await worker.terminate();
+  status('Loading language data',true);
+  worker=await Tesseract.createWorker(proj.lang,1,{logger:m=>{if(m.status==='recognizing text')status('Reading text '+Math.round(m.progress*100)+'%',true)}});
+  workerLang=proj.lang;return worker;
+}
+async function ocrPage(p){
+  const pc=await ensureProc(p);const w=await getWorker();
+  const{data}=await w.recognize(pc);
+  p.text=(data.text||'').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();p.ocr=true;await putPage(p);
+}
+$('#ocrBtn').onclick=()=>guard(async()=>{
+  if(!page)return;
+  if(page.text&&!confirm('Replace the text already on this page?'))return;
+  if(mode==='corners'){mode='result'}
+  await ocrPage(page);status('Text read. Fix anything it got wrong.');await render();
+});
+$('#ocrAll').onclick=()=>guard(async()=>{
+  closeMenu();
+  for(let i=0;i<proj.order.length;i++){const p=await getPage(proj.order[i]);if(p.ocr||p.text)continue;cur=i;$('#count').textContent=(i+1)+' / '+proj.order.length;status('Reading page '+(i+1),true);await ocrPage(p)}
+  mode='result';status('Every page has text now');await render();
+});
+$('#copyAll').onclick=async()=>{const t=await allText();try{await navigator.clipboard.writeText(t);status('All text copied')}catch(e){status('Copy blocked by the browser')}};
+async function allText(){const parts=[];for(const id of proj.order){const p=await getPage(id);if(p.text)parts.push(p.text)}return parts.join('\n\n')}
+
+/* navigation and modes */
+$('#prev').onclick=()=>guard(async()=>{if(cur>0){cur--;await render()}});
+$('#next').onclick=()=>guard(async()=>{if(cur<proj.order.length-1){cur++;await render()}});
+$('#mCorners').onclick=()=>guard(async()=>{mode='corners';await render()});
+$('#mResult').onclick=()=>guard(async()=>{mode='result';await render()});
+$('#mFigure').onclick=()=>guard(async()=>{mode='figure';await render()});
+
+/* menu */
+function openMenu(){$('#menu').classList.add('open');$('#scrim').style.display='block'}
+function closeMenu(){$('#menu').classList.remove('open');$('#scrim').style.display='none'}
+$('#ham').onclick=openMenu;$('#closeMenu').onclick=closeMenu;$('#scrim').onclick=closeMenu;
+$('#titleIn').addEventListener('input',e=>{proj.title=e.target.value;$('#title').textContent=proj.title||'Manual Rebuild';saveMeta()});
+$('#lang').onchange=e=>{proj.lang=e.target.value;saveMeta()};
+const pick=()=>{$('#file').value='';$('#file').click()};
+$('#add').onclick=()=>{closeMenu();pick()};$('#addFirst').onclick=pick;$('#pagesAdd').onclick=()=>{closePages();pick()};
+$('#file').onchange=e=>{const f=e.target.files;if(f&&f.length)guard(()=>addFiles(f))};
+async function sortBy(key){const ps=[];for(const id of proj.order)ps.push(await getPage(id));
+  ps.sort(key==='name'?(a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}):(a,b)=>a.lm-b.lm);
+  proj.order=ps.map(p=>p.id);cur=0;await saveMeta();await render();status('Pages sorted')}
+$('#sortName').onclick=()=>guard(()=>sortBy('name'));
+$('#sortTime').onclick=()=>guard(()=>sortBy('time'));
+$('#clearAll').onclick=()=>guard(async()=>{if(!confirm('Wipe every page and start over?'))return;await tx('pages','readwrite',s=>s.clear());proj={order:[],title:'',lang:proj.lang};$('#titleIn').value='';await saveMeta();cur=0;procId=null;closeMenu();await render()});
+document.querySelectorAll('[data-clean]').forEach(b=>b.onclick=()=>guard(async()=>{if(!page)return;page.clean=b.dataset.clean;invalidate(page);await putPage(page);if(mode==='corners')mode='result';await render()}));
+$('#cleanAll').onclick=()=>guard(async()=>{if(!page)return;const k=page.clean;for(const id of proj.order){const p=await getPage(id);if(p.clean!==k){p.clean=k;p.proc=null;await putPage(p)}}procId=null;await render();status('Look applied to every page')});
+async function rotate(dir){
+  if(!page)return;const b=await blobImg(page.img);const c=document.createElement('canvas');c.width=page.h;c.height=page.w;const x=c.getContext('2d');
+  x.translate(c.width/2,c.height/2);x.rotate(dir*Math.PI/2);x.drawImage(b,-page.w/2,-page.h/2);
+  page.img=await toBlob(c,'image/jpeg',.9);[page.w,page.h]=[c.width,c.height];page.corners=[[0,0],[page.w,0],[page.w,page.h],[0,page.h]];
+  page.figures=[];invalidate(page);page.thumb=await makeThumb(c,c.width,c.height);await putPage(page);mode='corners';await render();
+}
+$('#rotL').onclick=()=>guard(()=>rotate(-1));$('#rotR').onclick=()=>guard(()=>rotate(1));
+$('#resetCorners').onclick=()=>guard(async()=>{if(!page)return;page.corners=[[0,0],[page.w,0],[page.w,page.h],[0,page.h]];invalidate(page);await putPage(page);mode='corners';await render()});
+$('#delPage').onclick=()=>guard(async()=>{if(!page||!confirm('Delete this page?'))return;await delPageDB(page.id);proj.order.splice(cur,1);await saveMeta();procId=null;closeMenu();await render()});
+
+/* pages grid */
+let thumbURLs=[];
+function closePages(){$('#pages').classList.remove('open');thumbURLs.forEach(u=>URL.revokeObjectURL(u));thumbURLs=[];setTimeout(()=>guard(render),0)}
+$('#pagesClose').onclick=closePages;
+$('#pagesBtn').onclick=()=>guard(openPages);
+async function openPages(){
+  const g=$('#grid');g.innerHTML='';thumbURLs.forEach(u=>URL.revokeObjectURL(u));thumbURLs=[];
+  for(let i=0;i<proj.order.length;i++){
+    const p=await getPage(proj.order[i]);const u=URL.createObjectURL(p.thumb);thumbURLs.push(u);
+    const t=document.createElement('div');t.className='tile'+(i===cur?' cur':'');
+    t.innerHTML=`<img src="${u}"><div class="lbl"><span>Page ${i+1}</span>${p.text?'<span class="dot" title="Has text"></span>':''}</div><div class="act"><button data-a="l">&#9664;</button><button data-a="d">&#10005;</button><button data-a="r">&#9654;</button></div>`;
+    t.querySelector('img').onclick=()=>{cur=i;closePages()};
+    t.querySelector('[data-a=l]').onclick=()=>guard(async()=>{if(i>0){[proj.order[i-1],proj.order[i]]=[proj.order[i],proj.order[i-1]];await saveMeta();await openPages()}});
+    t.querySelector('[data-a=r]').onclick=()=>guard(async()=>{if(i<proj.order.length-1){[proj.order[i+1],proj.order[i]]=[proj.order[i],proj.order[i+1]];await saveMeta();await openPages()}});
+    t.querySelector('[data-a=d]').onclick=()=>guard(async()=>{if(!confirm('Delete page '+(i+1)+'?'))return;await delPageDB(proj.order[i]);proj.order.splice(i,1);await saveMeta();procId=null;await openPages()});
+    g.append(t);
+  }
+  $('#pages').classList.add('open');
+}
+
+/* export */
+function fileBase(){return ((proj.title||'manual').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'manual')}
+async function pdfLib(){if(!window.jspdf){status('Loading the PDF maker',true);await loadScript(JSPDF)}return window.jspdf.jsPDF}
+$('#expScan').onclick=()=>guard(async()=>{
+  if(!proj.order.length)return;closeMenu();const J=await pdfLib();const doc=new J({unit:'pt',format:'letter'});
+  for(let i=0;i<proj.order.length;i++){status('Building page '+(i+1)+' of '+proj.order.length,true);
+    const p=await getPage(proj.order[i]);procId=null;const pc=await ensureProc(p);if(i)doc.addPage('letter');
+    const s=Math.min(576/pc.width,756/pc.height),w=pc.width*s,h=pc.height*s;
+    doc.addImage(pc.toDataURL('image/jpeg',.85),'JPEG',(612-w)/2,(792-h)/2,w,h,undefined,'FAST')}
+  doc.save(fileBase()+'-scanned.pdf');procId=null;status('Scanned PDF saved');await render();
+});
+$('#expRebuilt').onclick=()=>guard(async()=>{
+  if(!proj.order.length)return;closeMenu();const J=await pdfLib();const doc=new J({unit:'pt',format:'letter'});
+  const M=54,TW=612-M*2,BOT=792-M;let y=M;
+  const title=proj.title||'Manual';
+  doc.setFont('helvetica','bold');doc.setFontSize(26);doc.setTextColor(30,111,217);
+  doc.splitTextToSize(title,TW).forEach(l=>{doc.text(l,M,y+26);y+=34});
+  doc.setDrawColor(30,111,217);doc.setLineWidth(2);doc.line(M,y+6,612-M,y+6);y+=30;
+  doc.setTextColor(27,36,48);
+  for(let i=0;i<proj.order.length;i++){status('Building page '+(i+1)+' of '+proj.order.length,true);
+    const p=await getPage(proj.order[i]);
+    if(p.text){
+      const blocks=p.text.split(/\n\s*\n/);
+      for(const blk of blocks){
+        const raw=blk.trim();if(!raw)continue;
+        const lines=raw.split('\n');
+        const isHead=lines.length===1&&raw.length<60&&(raw===raw.toUpperCase()&&/[A-Z]/.test(raw)||/^\d+(\.\d+)*\s+\S/.test(raw));
+        const body=isHead?raw:lines.join(/^[-*•]|^\d+[.)]\s/.test(lines[1]||'')?'\n':' ').replace(/-\s+(?=[a-z])/g,'');
+        doc.setFont('helvetica',isHead?'bold':'normal');doc.setFontSize(isHead?14:11);
+        const lh=isHead?19:15;if(isHead){y+=6;if(isHead)doc.setTextColor(30,111,217)}
+        for(const l of doc.splitTextToSize(body,TW)){if(y+lh>BOT){doc.addPage('letter');y=M}doc.text(l,M,y+lh-4);y+=lh}
+        doc.setTextColor(27,36,48);y+=8;
+      }
+    }
+    if(p.figures.length){procId=null;const pc=await ensureProc(p);
+      for(const f of p.figures){
+        const sx=f.x*pc.width,sy=f.y*pc.height,sw=f.w*pc.width,sh=f.h*pc.height;
+        const c=document.createElement('canvas');c.width=sw;c.height=sh;c.getContext('2d').drawImage(pc,sx,sy,sw,sh,0,0,sw,sh);
+        let s=Math.min(TW/sw,(BOT-M)/sh,1.5),w=sw*s,h=sh*s;
+        if(y+h>BOT){doc.addPage('letter');y=M}
+        doc.addImage(c.toDataURL('image/jpeg',.9),'JPEG',M+(TW-w)/2,y,w,h,undefined,'FAST');y+=h+14;
+      }}
+  }
+  const n=doc.getNumberOfPages();doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(30,111,217);
+  for(let i=1;i<=n;i++){doc.setPage(i);doc.text(String(i),306,792-24,{align:'center'})}
+  doc.save(fileBase()+'-rebuilt.pdf');procId=null;status('Rebuilt manual saved');await render();
+});
+$('#expTxt').onclick=async()=>{closeMenu();const t=await allText();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'text/plain'}));a.download=fileBase()+'.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);status('Text file saved')};
+
+/* boot */
+window.addEventListener('resize',()=>{if(!page)return;if(mode==='corners'&&srcImg)drawCorners();else if(procCanvas)drawResult()});
+(async()=>{db=await openDB();const m=await loadMeta();if(m)proj=Object.assign(proj,m);$('#titleIn').value=proj.title||'';$('#lang').value=proj.lang||'eng';
+  if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();await render()})();
+</script>
+</body>
+</html>
