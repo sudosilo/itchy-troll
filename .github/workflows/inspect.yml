@@ -1,0 +1,63 @@
+name: inspect
+
+on:
+  workflow_dispatch:
+    inputs:
+      match:
+        description: "Text to match in game titles or URLs"
+        required: true
+        default: "packet"
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install butler
+        run: |
+          curl -L -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -o butler.zip -d butler-bin
+          chmod +x butler-bin/butler
+          echo "$GITHUB_WORKSPACE/butler-bin" >> $GITHUB_PATH
+      - name: List games and pull matching builds
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          MATCH: ${{ inputs.match }}
+        run: |
+          rm -rf inspect && mkdir -p inspect
+          curl -s "https://itch.io/api/1/$BUTLER_API_KEY/my-games" > games.json
+          python3 - <<'PY'
+          import json, os
+          g = json.load(open('games.json')).get('games', [])
+          m = os.environ['MATCH'].lower()
+          keep = ['id', 'title', 'url', 'short_text', 'min_price', 'published', 'created_at', 'published_at', 'classification', 'type', 'p_html', 'cover_url', 'embed']
+          out = [{k: x.get(k) for k in keep} for x in g]
+          json.dump(out, open('inspect/games.json', 'w'), indent=2)
+          hits = [o['url'] for o in out if m in (o['title'] or '').lower() or m in (o['url'] or '').lower()]
+          open('inspect/hits.txt', 'w').write('\n'.join(hits))
+          PY
+          cat inspect/hits.txt
+          while read -r url; do
+            [ -z "$url" ] && continue
+            slug=$(basename "$url")
+            user=$(echo "$url" | sed -E 's#https?://([^.]+)\.itch\.io/.*#\1#')
+            butler status "$user/$slug" > "inspect/$slug-status.txt" 2>&1 || true
+            cat "inspect/$slug-status.txt"
+            for ch in $(grep -oE '^\| *[a-z0-9_-]+ ' "inspect/$slug-status.txt" | tr -d '| ' | grep -v CHANNEL); do
+              mkdir -p "inspect/$slug/$ch"
+              butler fetch "$user/$slug:$ch" "inspect/$slug/$ch" > "inspect/$slug/$ch.log" 2>&1 || true
+            done
+          done < inspect/hits.txt
+          find inspect -maxdepth 3 | head -50
+      - name: Save findings
+        run: |
+          git config user.name "itchy-troll"
+          git config user.email "itchy-troll@users.noreply.github.com"
+          git add -A inspect
+          git commit -q -m "Inspect itch.io games [no heckle]" || exit 0
+          git pull --rebase -q origin main
+          git push
