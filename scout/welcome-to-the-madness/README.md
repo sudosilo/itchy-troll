@@ -8,6 +8,4 @@ Live at welcome-to-the-madness.vercel.app.
 
 This app is checked every morning by Control Troll.
 
-Latest change. The shift over screen now shows a top five shifts board.
-
 Full history is in CHANGELOG.md.

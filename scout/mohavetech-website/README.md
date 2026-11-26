@@ -8,6 +8,4 @@ Live at mohavetech-website.vercel.app.
 
 This app is checked every morning by Control Troll.
 
-Latest change. Sticky notes can now be dragged anywhere, then arranged newest first, A to Z, or shuffled, and the layouts are saved. The five newest apps now sort to the top. The app list is now kept in sync with Vercel by GitHub every three hours.
-
 Full history is in CHANGELOG.md.

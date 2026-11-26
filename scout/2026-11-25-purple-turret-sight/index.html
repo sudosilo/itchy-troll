@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Turret Sight</title>
+<style>
+:root{
+  --sky:#d7ecf4; --sand:#e7cf9c; --olive:#5b6b3a; --brick:#a8432f;
+  --ink:#23231f; --paper:#fbf8f0; --line:#c9bb98; --muted:#6a6455;
+  --font:"Avenir Next Condensed","Roboto Condensed","Arial Narrow",sans-serif-condensed,sans-serif;
+  color-scheme:light;
+  box-sizing:border-box;
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0;height:100%;background:var(--sky);color:var(--ink);font-family:var(--font);
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;overflow:hidden}
+canvas{display:block;position:fixed;inset:0;touch-action:none}
+.hud{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 8px) 10px 8px;
+  display:flex;gap:10px;align-items:center;pointer-events:none;z-index:5}
+.hp{flex:1;background:rgba(251,248,240,.9);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+.hp-name{font-size:13px;font-weight:700;display:flex;justify-content:space-between}
+.hp-bar{height:8px;background:#e6dcc4;border-radius:4px;margin-top:4px;overflow:hidden}
+.hp-fill{height:100%;width:100%;transition:width .4s ease}
+#hpYou .hp-fill{background:var(--olive)} #hpCpu .hp-fill{background:var(--brick)}
+.wind{width:64px;background:rgba(251,248,240,.9);border:1px solid var(--line);border-radius:6px;
+  padding:4px;text-align:center;font-size:12px;font-weight:700}
+.wind svg{display:block;margin:0 auto;transition:transform .3s ease}
+#mapFrame{position:fixed;right:10px;width:120px;height:120px;border:2px solid var(--ink);border-radius:4px;
+  pointer-events:none;z-index:4;display:none}
+#status{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 92px);
+  background:var(--ink);color:var(--paper);padding:6px 14px;border-radius:4px;font-size:16px;font-weight:700;
+  z-index:6;display:none;white-space:nowrap}
+.controls{position:fixed;left:0;right:0;bottom:0;z-index:5;padding:8px 10px calc(env(safe-area-inset-bottom,0px) + 10px);
+  background:rgba(251,248,240,.93);border-top:2px solid var(--ink);display:none}
+.readout{display:flex;justify-content:space-between;font-size:15px;font-weight:700;margin:0 2px 8px}
+.readout span b{font-size:20px}
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}
+.grid button{font:inherit;font-size:16px;font-weight:700;color:var(--ink);background:#efe6cf;border:1px solid var(--line);
+  border-radius:6px;padding:12px 4px;touch-action:none}
+.grid button:active{background:#e2d4b0}
+#btnWeapon{font-size:14px}
+#btnFire{grid-column:span 2;background:var(--brick);color:#fff;border-color:#7c2f21;font-size:20px;letter-spacing:1px}
+#btnFire:active{background:#8c3626}
+button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.screen{position:fixed;inset:0;z-index:10;background:var(--paper);overflow-y:auto;
+  padding:calc(env(safe-area-inset-top,0px) + 28px) 0 env(safe-area-inset-bottom,0px);display:flex;flex-direction:column}
+.screen-body{flex:1;padding:0 24px 28px;max-width:520px;width:100%;margin:0 auto}
+.title{font-size:56px;line-height:.92;font-weight:800;margin:10px 0 14px;letter-spacing:-1px}
+.title small{display:block;font-size:20px;letter-spacing:0;font-weight:600;color:var(--olive);margin-top:10px}
+.screen p{font-size:17px;line-height:1.45;color:var(--muted);margin:0 0 12px}
+.bigbtn{font:inherit;font-size:22px;font-weight:800;width:100%;padding:16px;border-radius:8px;border:2px solid var(--ink);
+  background:var(--olive);color:#fff;margin-top:14px}
+.bigbtn.alt{background:var(--paper);color:var(--ink)}
+.strip{height:64px;margin:6px 0 18px;border-bottom:2px solid var(--ink)}
+#over{display:none;justify-content:center}
+#over .screen-body{flex:0;margin:auto}
+</style>
+</head>
+<body>
+<div class="hud" id="hud">
+  <div class="hp" id="hpYou"><div class="hp-name"><span>You</span><span id="hpYouN">100</span></div><div class="hp-bar"><div class="hp-fill"></div></div></div>
+  <div class="wind"><svg id="windArrow" width="30" height="30" viewBox="0 0 30 30"><path d="M15 3 L23 15 L18 15 L18 27 L12 27 L12 15 L7 15 Z" fill="#23231f"/></svg><span id="windN">Wind 0</span></div>
+  <div class="hp" id="hpCpu"><div class="hp-name"><span>CPU</span><span id="hpCpuN">100</span></div><div class="hp-bar"><div class="hp-fill"></div></div></div>
+</div>
+<div id="mapFrame"></div>
+<div id="status"></div>
+<div class="controls" id="controls">
+  <div class="readout"><span>Angle <b id="rAngle">0</b>&deg;</span><span>Heading <b id="rHead">0</b>&deg;</span><span>Power <b id="rPower">0</b></span></div>
+  <div class="grid">
+    <button data-hold="left">&#9664; Turn</button>
+    <button data-hold="up">&#9650; Raise</button>
+    <button data-hold="right">Turn &#9654;</button>
+    <button data-hold="pdown">Power &minus;</button>
+    <button data-hold="down">&#9660; Lower</button>
+    <button data-hold="pup">Power +</button>
+    <button id="btnWeapon">Single</button>
+    <button id="btnFire">FIRE</button>
+  </div>
+</div>
+
+<div class="screen" id="title">
+  <div class="screen-body">
+    <svg class="strip" viewBox="0 0 400 64" preserveAspectRatio="none" aria-hidden="true">
+      <polygon points="0,64 0,40 50,22 95,36 150,12 210,30 260,18 320,38 360,26 400,34 400,64" fill="#e7cf9c" stroke="#23231f" stroke-width="2"/>
+      <polygon points="40,30 62,30 64,24 46,24" fill="#5b6b3a"/><rect x="52" y="19" width="16" height="2.5" fill="#5b6b3a" transform="rotate(-25 52 20)"/>
+      <polygon points="300,32 322,32 320,26 302,26" fill="#a8432f"/><rect x="290" y="21" width="14" height="2.5" fill="#a8432f" transform="rotate(25 304 22)"/>
+      <path d="M68 18 Q 180 -14 296 22" fill="none" stroke="#23231f" stroke-width="1.5" stroke-dasharray="4 4"/>
+    </svg>
+    <h1 class="title">Turret Sight<small>Artillery from the driver's seat</small></h1>
+    <p>Turn the turret, raise the barrel and set your power from inside the tank. Use the map in the corner to line up on the enemy. After you fire, the view lifts up so you can watch the shell land.</p>
+    <p>Wind changes every turn. The arrow shows where it pushes your shell.</p>
+    <button class="bigbtn" id="btnStart">Start battle</button>
+  </div>
+  <div id="mtgSealContainer"></div>
+</div>
+
+<div class="screen" id="over">
+  <div class="screen-body">
+    <h1 class="title" id="overTitle">You win</h1>
+    <p id="overText"></p>
+    <button class="bigbtn" id="btnAgain">Play again</button>
+    <button class="bigbtn alt" id="btnMenu">Back to title</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+var S = 240, N = 48, CELL = S / N, G = 30, POWER_K = 0.95;
+var SKY = 0xd7ecf4;
+var WEAPONS = {
+  single: {name:"Single", radius:8,  dmg:35, crater:3,  shells:1},
+  heavy:  {name:"Heavy",  radius:13, dmg:55, crater:5,  shells:1},
+  triple: {name:"Triple", radius:7,  dmg:24, crater:2.5,shells:3},
+  digger: {name:"Digger", radius:16, dmg:10, crater:9,  shells:1}
+};
+var ORDER = ["single","heavy","triple","digger"];
+
+var renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+document.body.insertBefore(renderer.domElement, document.body.firstChild);
+
+var scene = new THREE.Scene();
+scene.background = new THREE.Color(SKY);
+var fog = new THREE.Fog(SKY, 120, 360);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb08a5a, 0.55));
+var sun = new THREE.DirectionalLight(0xffffff, 0.6);
+sun.position.set(-80, 160, 60);
+scene.add(sun);
+
+var cockpitCam = new THREE.PerspectiveCamera(70, 1, 0.1, 900);
+cockpitCam.layers.enable(4);
+var shotCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 1500);
+shotCam.layers.enable(2);
+var mapCam = new THREE.OrthographicCamera(-S/2, S/2, S/2, -S/2, 1, 1000);
+mapCam.position.set(0, 500, 0);
+mapCam.up.set(0, 0, -1);
+mapCam.lookAt(0, 0, 0);
+mapCam.layers.enable(1);
+mapCam.layers.enable(2);
+
+/* ---------- terrain ---------- */
+var H = new Float32Array((N+1)*(N+1));
+var jitter = new Float32Array(N*N*2);
+function idx(i, j){ return j*(N+1) + i; }
+function gx(i){ return -S/2 + i*CELL; }
+
+function genTerrain(){
+  var p = []; for (var k = 0; k < 5; k++) p.push(Math.random()*6.28);
+  for (var j = 0; j <= N; j++) for (var i = 0; i <= N; i++){
+    var x = gx(i), z = gx(j);
+    var h = 10*Math.sin(x*0.028 + p[0]) + 6*Math.sin(z*0.045 + p[1])
+          + 4*Math.sin((x + z)*0.07 + p[2]) + 2.5*Math.sin((x - z)*0.12 + p[3])
+          + 5*Math.sin(x*0.05 + p[4])*Math.cos(z*0.03);
+    H[idx(i,j)] = h + 14;
+  }
+  for (var q = 0; q < jitter.length; q++) jitter[q] = (Math.random() - 0.5)*0.08;
+}
+
+function heightAt(x, z){
+  var fx = (x + S/2)/CELL, fz = (z + S/2)/CELL;
+  if (fx < 0 || fz < 0 || fx > N || fz > N) return -999;
+  var i = Math.min(N-1, Math.floor(fx)), j = Math.min(N-1, Math.floor(fz));
+  var tx = fx - i, tz = fz - j;
+  var a = H[idx(i,j)], b = H[idx(i+1,j)], c = H[idx(i,j+1)], d = H[idx(i+1,j+1)];
+  return (a*(1-tx) + b*tx)*(1-tz) + (c*(1-tx) + d*tx)*tz;
+}
+
+var terrainGeo = new THREE.BufferGeometry();
+var tPos = new Float32Array(N*N*6*3), tCol = new Float32Array(N*N*6*3);
+terrainGeo.setAttribute("position", new THREE.BufferAttribute(tPos, 3));
+terrainGeo.setAttribute("color", new THREE.BufferAttribute(tCol, 3));
+var terrain = new THREE.Mesh(terrainGeo, new THREE.MeshPhongMaterial({shininess:0, vertexColors:true, flatShading:true}));
+scene.add(terrain);
+var PAL = [new THREE.Color(0xa8784a), new THREE.Color(0xc4955f), new THREE.Color(0xd8b47e), new THREE.Color(0xe6cc98)];
+var tmpC = new THREE.Color();
+
+function colorFor(h, jit){
+  var t = Math.max(0, Math.min(0.999, (h - 0)/36)) * (PAL.length - 1);
+  var k = Math.floor(t);
+  tmpC.copy(PAL[k]).lerp(PAL[Math.min(PAL.length-1, k+1)], t - k);
+  tmpC.offsetHSL(0, 0, jit);
+  return tmpC;
+}
+
+function buildTerrain(){
+  var o = 0, ci = 0;
+  function put(i, j){ tPos[o++] = gx(i); tPos[o++] = H[idx(i,j)]; tPos[o++] = gx(j); }
+  function col(c){ for (var r = 0; r < 3; r++){ tCol[ci++] = c.r; tCol[ci++] = c.g; tCol[ci++] = c.b; } }
+  for (var j = 0; j < N; j++) for (var i = 0; i < N; i++){
+    var h00 = H[idx(i,j)], h10 = H[idx(i+1,j)], h01 = H[idx(i,j+1)], h11 = H[idx(i+1,j+1)];
+    var cell = j*N + i;
+    put(i,j); put(i,j+1); put(i+1,j);
+    col(colorFor((h00 + h01 + h10)/3, jitter[cell*2]));
+    put(i+1,j); put(i,j+1); put(i+1,j+1);
+    col(colorFor((h10 + h01 + h11)/3, jitter[cell*2+1]));
+  }
+  terrainGeo.attributes.position.needsUpdate = true;
+  terrainGeo.attributes.color.needsUpdate = true;
+  terrainGeo.computeVertexNormals();
+  terrainGeo.computeBoundingSphere();
+}
+
+function flatten(x, z, r){
+  var target = heightAt(x, z);
+  for (var j = 0; j <= N; j++) for (var i = 0; i <= N; i++){
+    var d = Math.hypot(gx(i) - x, gx(j) - z);
+    if (d < r){ var k = idx(i,j); H[k] = H[k] + (target - H[k])*(1 - d/r); }
+  }
+}
+
+function crater(pos, w){
+  var ground = heightAt(pos.x, pos.z);
+  var R = w.radius*0.9;
+  var near = Math.max(0, 1 - Math.max(0, pos.y - ground)/R);
+  if (near <= 0) return;
+  for (var j = 0; j <= N; j++) for (var i = 0; i <= N; i++){
+    var d = Math.hypot(gx(i) - pos.x, gx(j) - pos.z);
+    if (d < R){ var k = idx(i,j); H[k] -= w.crater*(1 - (d/R)*(d/R))*near; if (H[k] < -6) H[k] = -6; }
+  }
+  buildTerrain();
+}
+
+/* ---------- scenery ---------- */
+var rocks = [];
+var rockMat = new THREE.MeshPhongMaterial({shininess:0, color:0xa89478, flatShading:true});
+function placeRocks(){
+  rocks.forEach(function(r){ scene.remove(r); });
+  rocks = [];
+  for (var n = 0; n < 22; n++){
+    var r = new THREE.Mesh(new THREE.DodecahedronGeometry(1.5 + Math.random()*2.5, 0), rockMat);
+    r.position.set((Math.random() - 0.5)*S*0.9, 0, (Math.random() - 0.5)*S*0.9);
+    if (Math.abs(r.position.z) < 25) r.position.z += r.position.z < 0 ? -30 : 30;
+    r.rotation.set(Math.random()*3, Math.random()*3, 0);
+    r.scale.y = 0.6;
+    scene.add(r); rocks.push(r);
+  }
+}
+function settleRocks(){ rocks.forEach(function(r){ r.position.y = heightAt(r.position.x, r.position.z); }); }
+
+var cloudMat = new THREE.MeshPhongMaterial({shininess:0, color:0xffffff, flatShading:true, emissive:0x999999});
+for (var c = 0; c < 9; c++){
+  var cl = new THREE.Mesh(new THREE.IcosahedronGeometry(8 + Math.random()*8, 0), cloudMat);
+  cl.position.set((Math.random() - 0.5)*500, 90 + Math.random()*40, (Math.random() - 0.5)*500);
+  cl.scale.set(2, 0.45, 1.2);
+  cl.layers.set(4);
+  scene.add(cl);
+}
+
+/* ---------- tanks ---------- */
+function makeTank(color, markColor){
+  var root = new THREE.Group();
+  var mat = new THREE.MeshPhongMaterial({shininess:0, color:color, flatShading:true});
+  var dark = new THREE.MeshPhongMaterial({shininess:0, color:0x3a3a33, flatShading:true});
+  var hull = new THREE.Group();
+  var body = new THREE.Mesh(new THREE.BoxGeometry(7, 2.2, 5), mat); body.position.y = 1.9; hull.add(body);
+  var nose = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.4, 4.6), mat); nose.position.set(3.9, 1.6, 0); nose.rotation.z = 0.5; hull.add(nose);
+  [-2.6, 2.6].forEach(function(z){
+    var tr = new THREE.Mesh(new THREE.BoxGeometry(7.6, 1.6, 1.4), dark); tr.position.set(0, 0.8, z); hull.add(tr);
+  });
+  root.add(hull);
+  var turret = new THREE.Group(); turret.position.y = 3.4; root.add(turret);
+  var dome = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2.3, 1.5, 7), mat); turret.add(dome);
+  var pivot = new THREE.Group(); pivot.position.set(1.2, 0.2, 0); turret.add(pivot);
+  var barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.38, 6, 6), dark);
+  barrel.rotation.z = -Math.PI/2; barrel.position.x = 3; pivot.add(barrel);
+  var marker = new THREE.Mesh(new THREE.ConeGeometry(3.2, 6, 4), new THREE.MeshBasicMaterial({color:markColor}));
+  marker.rotation.x = Math.PI; marker.position.y = 16; marker.layers.set(2); root.add(marker);
+  root.scale.setScalar(1.3);
+  scene.add(root);
+  return {root:root, hull:hull, turret:turret, pivot:pivot, yaw:0, pitch:0.6, power:60, hp:100, ammo:null, weapon:"single"};
+}
+var you = makeTank(0x5b6b3a, 0x3f5a1e);
+var cpu = makeTank(0xa8432f, 0xa8432f);
+
+function poseTank(t){
+  t.root.position.y = heightAt(t.root.position.x, t.root.position.z);
+  t.turret.rotation.y = t.yaw;
+  t.pivot.rotation.z = t.pitch;
+}
+function tankCenter(t){ return t.root.position.clone().add(new THREE.Vector3(0, 2.6, 0)); }
+function dirFrom(yaw, pitch){ return new THREE.Vector3(Math.cos(pitch)*Math.cos(yaw), Math.sin(pitch), -Math.cos(pitch)*Math.sin(yaw)); }
+function muzzle(t){ t.root.updateMatrixWorld(true); return t.pivot.localToWorld(new THREE.Vector3(6, 0, 0)); }
+function bearing(from, to){ var d = to.root.position.clone().sub(from.root.position); return Math.atan2(-d.z, d.x); }
+
+/* ---------- aim line for the map ---------- */
+var aimGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+var aimLine = new THREE.Line(aimGeo, new THREE.LineBasicMaterial({color:0x23231f}));
+aimLine.layers.set(1); scene.add(aimLine);
+
+/* ---------- trail and effects ---------- */
+var MAXTRAIL = 900;
+var trailPos = new Float32Array(MAXTRAIL*3);
+var trailGeo = new THREE.BufferGeometry();
+trailGeo.setAttribute("position", new THREE.BufferAttribute(trailPos, 3));
+trailGeo.setDrawRange(0, 0);
+var trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({color:0x23231f}));
+trail.frustumCulled = false; trail.layers.set(2); scene.add(trail);
+var trailCount = 0;
+function trailPush(p){ if (trailCount >= MAXTRAIL) return; trailPos.set([p.x, p.y, p.z], trailCount*3); trailCount++; trailGeo.setDrawRange(0, trailCount); trailGeo.attributes.position.needsUpdate = true; }
+
+var shellGeo = new THREE.IcosahedronGeometry(0.9, 0);
+var shellMat = new THREE.MeshBasicMaterial({color:0x23231f});
+var effects = [];
+function boom(pos, r){
+  var m = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 0), new THREE.MeshBasicMaterial({color:0xf2a541, transparent:true, opacity:0.9}));
+  m.position.copy(pos); scene.add(m);
+  effects.push({m:m, t:0, r:r});
+}
+
+/* ---------- game state ---------- */
+var state = "title", turn = "you", wind = new THREE.Vector3(), shells = [], waitT = 0, cpuPlan = null, followX = 0;
+var $ = function(id){ return document.getElementById(id); };
+
+function newWind(){
+  var a = Math.random()*Math.PI*2, m = Math.round(Math.random()*8);
+  wind.set(Math.cos(a)*m, 0, Math.sin(a)*m);
+}
+
+function freshAmmo(){ return {single:Infinity, heavy:3, triple:3, digger:2}; }
+
+function startGame(){
+  genTerrain();
+  you.root.position.set(-70, 0, (Math.random() - 0.5)*50);
+  cpu.root.position.set(70, 0, (Math.random() - 0.5)*50);
+  flatten(you.root.position.x, you.root.position.z, 12);
+  flatten(cpu.root.position.x, cpu.root.position.z, 12);
+  buildTerrain();
+  placeRocks(); settleRocks();
+  [you, cpu].forEach(function(t){ t.hp = 100; t.ammo = freshAmmo(); t.weapon = "single"; t.power = 60; t.pitch = 0.6; });
+  you.hull.rotation.y = bearing(you, cpu); cpu.hull.rotation.y = bearing(cpu, you);
+  you.yaw = bearing(you, cpu) + (Math.random() - 0.5)*0.8;
+  cpu.yaw = bearing(cpu, you);
+  poseTank(you); poseTank(cpu);
+  cpu.shots = 0;
+  newWind();
+  $("title").style.display = "none"; $("over").style.display = "none";
+  updateHP(); beginPlayerTurn();
+}
+
+function beginPlayerTurn(){
+  turn = "you"; state = "aim";
+  status("");
+  updateWeaponBtn();
+}
+
+function beginCpuTurn(){
+  turn = "cpu"; state = "cpuAim"; waitT = 0;
+  cpuPlan = planCpu();
+  cpuPlan.fromYaw = cpu.yaw; cpuPlan.fromPitch = cpu.pitch;
+  status("CPU is aiming");
+}
+
+/* ---------- physics ---------- */
+function stepShell(s, dt){
+  s.vel.y -= G*dt;
+  s.vel.x += wind.x*dt; s.vel.z += wind.z*dt;
+  s.pos.addScaledVector(s.vel, dt);
+  s.age += dt;
+}
+
+function simLanding(origin, yaw, pitch, power){
+  var s = {pos:origin.clone(), vel:dirFrom(yaw, pitch).multiplyScalar(power*POWER_K), age:0};
+  for (var n = 0; n < 900; n++){
+    stepShell(s, 1/60);
+    var g = heightAt(s.pos.x, s.pos.z);
+    if (g === -999 || s.pos.y < -40) return null;
+    if (s.pos.y <= g) return s.pos;
+  }
+  return null;
+}
+
+function planCpu(){
+  var target = you.root.position;
+  var pitch = 0.65 + Math.random()*0.3;
+  var yaw = bearing(cpu, you);
+  var power = 60;
+  var saveYaw = cpu.yaw, savePitch = cpu.pitch;
+  for (var it = 0; it < 5; it++){
+    cpu.yaw = yaw; cpu.pitch = pitch; poseTank(cpu);
+    var origin = muzzle(cpu);
+    var lo = 15, hi = 100;
+    for (var b = 0; b < 16; b++){
+      power = (lo + hi)/2;
+      var land = simLanding(origin, yaw, pitch, power);
+      var dist = land ? Math.hypot(land.x - cpu.root.position.x, land.z - cpu.root.position.z) : 9999;
+      var want = Math.hypot(target.x - cpu.root.position.x, target.z - cpu.root.position.z);
+      if (dist < want) lo = power; else hi = power;
+    }
+    var hit = simLanding(origin, yaw, pitch, power);
+    if (!hit) break;
+    var aimB = Math.atan2(-(target.z - cpu.root.position.z), target.x - cpu.root.position.x);
+    var gotB = Math.atan2(-(hit.z - cpu.root.position.z), hit.x - cpu.root.position.x);
+    var err = aimB - gotB;
+    while (err > Math.PI) err -= Math.PI*2;
+    while (err < -Math.PI) err += Math.PI*2;
+    yaw += err;
+  }
+  cpu.yaw = saveYaw; cpu.pitch = savePitch; poseTank(cpu);
+  var miss = Math.max(0.15, 1 - cpu.shots*0.18);
+  power += (Math.random() - 0.5)*14*miss;
+  yaw += (Math.random() - 0.5)*0.12*miss;
+  var avail = ORDER.filter(function(k){ return k !== "single" && cpu.ammo[k] > 0 && k !== "digger"; });
+  var w = (avail.length && Math.random() < 0.5) ? avail[Math.floor(Math.random()*avail.length)] : "single";
+  return {yaw:yaw, pitch:pitch, power:Math.max(10, Math.min(100, power)), weapon:w};
+}
+cpu.shots = 0;
+
+function fire(t){
+  var w = WEAPONS[t.weapon];
+  if (t.ammo[t.weapon] !== Infinity) t.ammo[t.weapon]--;
+  poseTank(t);
+  var origin = muzzle(t);
+  trailCount = 0; trailGeo.setDrawRange(0, 0);
+  for (var k = 0; k < w.shells; k++){
+    var yaw = t.yaw + (w.shells > 1 ? (k - 1)*0.06 : 0);
+    var m = new THREE.Mesh(shellGeo, shellMat); m.layers.enable(2); scene.add(m);
+    shells.push({pos:origin.clone(), vel:dirFrom(yaw, t.pitch).multiplyScalar(t.power*POWER_K), age:0, w:w, owner:t, mesh:m, alive:true, lead:k === 0});
+  }
+  if (t.ammo[t.weapon] <= 0) t.weapon = "single";
+  state = "flight"; followX = t.root.position.x;
+  status(t === you ? "Shell in flight" : "Incoming");
+  results = [];
+}
+var results = [];
+
+function explode(s, pos){
+  s.alive = false; scene.remove(s.mesh);
+  boom(pos, s.w.radius);
+  crater(pos, s.w);
+  [you, cpu].forEach(function(t){
+    var d = tankCenter(t).distanceTo(pos);
+    if (d < s.w.radius){
+      var dmg = Math.round(s.w.dmg*(1 - d/s.w.radius));
+      if (dmg > 0){ t.hp = Math.max(0, t.hp - dmg); results.push((t === you ? "You" : "CPU") + " minus " + dmg); }
+    }
+  });
+  poseTank(you); poseTank(cpu); settleRocks(); updateHP();
+}
+
+function updateShells(dt){
+  var sub = 4, h = dt/sub;
+  shells.forEach(function(s){
+    for (var n = 0; n < sub && s.alive; n++){
+      stepShell(s, h);
+      var g = heightAt(s.pos.x, s.pos.z);
+      if (g === -999 || s.pos.y < -40){ s.alive = false; scene.remove(s.mesh); results.push("Off the map"); break; }
+      var tanks = [you, cpu];
+      for (var q = 0; q < 2; q++){
+        if (tanks[q] === s.owner && s.age < 0.4) continue;
+        if (tankCenter(tanks[q]).distanceTo(s.pos) < 4.2){ explode(s, s.pos.clone()); break; }
+      }
+      if (s.alive && s.pos.y <= g){ explode(s, new THREE.Vector3(s.pos.x, g, s.pos.z)); }
+    }
+    if (s.alive){ s.mesh.position.copy(s.pos); if (s.lead) trailPush(s.pos); }
+  });
+  var lead = shells.filter(function(s){ return s.alive; })[0];
+  if (lead) followX += (Math.max(-60, Math.min(60, lead.pos.x)) - followX)*Math.min(1, dt*3);
+  if (shells.every(function(s){ return !s.alive; })){
+    shells = [];
+    state = "settle"; waitT = 0;
+    var msg = results.filter(function(r){ return r !== "Off the map"; });
+    status(msg.length ? msg.join(", ") : (results.length ? "Off the map" : "Missed"));
+  }
+}
+
+/* ---------- HUD ---------- */
+function status(txt){ var el = $("status"); el.textContent = txt; el.style.display = txt ? "block" : "none"; }
+function updateHP(){
+  $("hpYouN").textContent = you.hp; $("hpCpuN").textContent = cpu.hp;
+  document.querySelector("#hpYou .hp-fill").style.width = you.hp + "%";
+  document.querySelector("#hpCpu .hp-fill").style.width = cpu.hp + "%";
+}
+function updateWeaponBtn(){
+  var n = you.ammo[you.weapon];
+  $("btnWeapon").textContent = WEAPONS[you.weapon].name + " " + (n === Infinity ? "\u221e" : "x" + n);
+}
+function updateWind(){
+  var mag = Math.round(wind.length());
+  $("windN").textContent = "Wind " + mag;
+  var ang;
+  if (state === "aim"){
+    var f = new THREE.Vector3(Math.cos(you.yaw), 0, -Math.sin(you.yaw));
+    var r = new THREE.Vector3(Math.sin(you.yaw), 0, Math.cos(you.yaw));
+    ang = Math.atan2(wind.dot(r), wind.dot(f));
+  } else {
+    ang = Math.atan2(wind.x, -wind.z);
+  }
+  $("windArrow").style.transform = "rotate(" + (ang*180/Math.PI) + "deg)";
+  $("windArrow").style.opacity = mag ? 1 : 0.25;
+}
+function updateReadout(){
+  $("rAngle").textContent = Math.round(you.pitch*180/Math.PI);
+  var hd = Math.round(you.yaw*180/Math.PI) % 360; if (hd < 0) hd += 360;
+  $("rHead").textContent = hd;
+  $("rPower").textContent = Math.round(you.power);
+}
+
+/* ---------- controls ---------- */
+var held = {};
+document.querySelectorAll("[data-hold]").forEach(function(b){
+  var k = b.getAttribute("data-hold");
+  b.addEventListener("pointerdown", function(e){ e.preventDefault(); held[k] = true; try { b.setPointerCapture(e.pointerId); } catch(_){} });
+  ["pointerup","pointercancel","lostpointercapture"].forEach(function(ev){ b.addEventListener(ev, function(){ held[k] = false; }); });
+});
+$("btnWeapon").addEventListener("click", function(){
+  var i = ORDER.indexOf(you.weapon);
+  for (var n = 1; n <= ORDER.length; n++){
+    var k = ORDER[(i + n) % ORDER.length];
+    if (you.ammo[k] > 0){ you.weapon = k; break; }
+  }
+  updateWeaponBtn();
+});
+$("btnFire").addEventListener("click", function(){ if (state === "aim") fire(you); });
+$("btnStart").addEventListener("click", startGame);
+$("btnAgain").addEventListener("click", startGame);
+$("btnMenu").addEventListener("click", function(){ $("over").style.display = "none"; $("title").style.display = "flex"; state = "title"; });
+window.addEventListener("keydown", function(e){
+  var map = {ArrowLeft:"left", ArrowRight:"right", ArrowUp:"up", ArrowDown:"down", PageUp:"pup", PageDown:"pdown"};
+  if (map[e.key]){ held[map[e.key]] = true; e.preventDefault(); }
+  if (e.key === " " && state === "aim"){ fire(you); e.preventDefault(); }
+});
+window.addEventListener("keyup", function(e){
+  var map = {ArrowLeft:"left", ArrowRight:"right", ArrowUp:"up", ArrowDown:"down", PageUp:"pup", PageDown:"pdown"};
+  if (map[e.key]) held[map[e.key]] = false;
+});
+
+/* ---------- cameras ---------- */
+var W = 1, Hh = 1, MAP = 120;
+function resize(){
+  W = window.innerWidth; Hh = window.innerHeight;
+  renderer.setSize(W, Hh);
+  cockpitCam.aspect = W/Hh; cockpitCam.updateProjectionMatrix();
+  var aspect = W/Hh, halfW, halfH;
+  if (aspect < 1){ halfW = 95; halfH = halfW/aspect; } else { halfH = 70; halfW = halfH*aspect; }
+  shotCam.left = -halfW; shotCam.right = halfW; shotCam.top = halfH; shotCam.bottom = -halfH;
+  shotCam.updateProjectionMatrix();
+  MAP = Math.round(Math.min(130, W*0.32));
+  var mf = $("mapFrame"); mf.style.width = MAP + "px"; mf.style.height = MAP + "px";
+  mf.style.top = ($("hud").getBoundingClientRect().bottom + 6) + "px";
+}
+window.addEventListener("resize", resize);
+
+function placeCockpit(){
+  var tp = new THREE.Vector3(); you.turret.getWorldPosition(tp);
+  var f = new THREE.Vector3(Math.cos(you.yaw), 0, -Math.sin(you.yaw));
+  cockpitCam.position.copy(tp).add(new THREE.Vector3(0, 4.6, 0)).addScaledVector(f, -5.5);
+  var cp = Math.min(0.25, you.pitch*0.25) - 0.2;
+  var look = cockpitCam.position.clone().add(new THREE.Vector3(f.x*Math.cos(cp), Math.sin(cp), f.z*Math.cos(cp)).multiplyScalar(50));
+  cockpitCam.lookAt(look);
+  var a = tp.clone(), b = tp.clone().addScaledVector(f, 70);
+  aimGeo.setFromPoints([a, b]);
+}
+
+var OFFSET = new THREE.Vector3(0.15, 0.85, 1).normalize().multiplyScalar(500);
+function placeShot(){
+  var c = new THREE.Vector3(followX, 8, 0);
+  shotCam.position.copy(c).add(OFFSET);
+  shotCam.lookAt(c);
+}
+
+/* ---------- loop ---------- */
+var last = performance.now();
+function frame(now){
+  var dt = Math.min(0.033, (now - last)/1000); last = now;
+
+  if (state === "aim"){
+    if (held.left) you.yaw += 0.7*dt;
+    if (held.right) you.yaw -= 0.7*dt;
+    if (held.up) you.pitch = Math.min(1.4, you.pitch + 0.5*dt);
+    if (held.down) you.pitch = Math.max(0.05, you.pitch - 0.5*dt);
+    if (held.pup) you.power = Math.min(100, you.power + 22*dt);
+    if (held.pdown) you.power = Math.max(5, you.power - 22*dt);
+    poseTank(you); updateReadout();
+  } else if (state === "cpuAim"){
+    waitT += dt;
+    var k = Math.min(1, waitT/1.4), e = k*k*(3 - 2*k);
+    cpu.yaw = cpuPlan.fromYaw + (cpuPlan.yaw - cpuPlan.fromYaw)*e;
+    cpu.pitch = cpuPlan.fromPitch + (cpuPlan.pitch - cpuPlan.fromPitch)*e;
+    poseTank(cpu);
+    followX += (cpu.root.position.x*0.5 - followX)*Math.min(1, dt*2);
+    if (waitT > 1.7){ cpu.power = cpuPlan.power; cpu.weapon = cpuPlan.weapon; cpu.shots++; fire(cpu); }
+  } else if (state === "flight"){
+    updateShells(dt);
+  } else if (state === "settle"){
+    waitT += dt;
+    if (waitT > 1.6){
+      if (you.hp <= 0 || cpu.hp <= 0) endGame();
+      else { newWind(); if (turn === "you") beginCpuTurn(); else beginPlayerTurn(); }
+    }
+  }
+
+  effects = effects.filter(function(f){
+    f.t += dt;
+    var p = f.t/0.7;
+    f.m.scale.setScalar(f.r*Math.min(1, p*1.6));
+    f.m.material.opacity = Math.max(0, 0.9*(1 - p));
+    if (p >= 1){ scene.remove(f.m); return false; }
+    return true;
+  });
+
+  var playing = state !== "title" && state !== "over";
+  $("controls").style.display = state === "aim" ? "block" : "none";
+  $("mapFrame").style.display = state === "aim" ? "block" : "none";
+  $("hud").style.display = playing ? "flex" : "none";
+  if (playing) updateWind();
+
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, W, Hh);
+  if (state === "aim"){
+    placeCockpit();
+    scene.fog = fog;
+    renderer.render(scene, cockpitCam);
+    scene.fog = null;
+    var top = parseFloat($("mapFrame").style.top) || 80;
+    renderer.setScissorTest(true);
+    renderer.setScissor(W - MAP - 10, Hh - top - MAP, MAP, MAP);
+    renderer.setViewport(W - MAP - 10, Hh - top - MAP, MAP, MAP);
+    renderer.render(scene, mapCam);
+    renderer.setScissorTest(false);
+  } else {
+    scene.fog = null;
+    placeShot();
+    renderer.render(scene, shotCam);
+  }
+  requestAnimationFrame(frame);
+}
+
+function endGame(){
+  state = "over"; status("");
+  var won = cpu.hp <= 0 && you.hp > 0, tie = cpu.hp <= 0 && you.hp <= 0;
+  $("overTitle").textContent = tie ? "Draw" : (won ? "You win" : "CPU wins");
+  $("overText").textContent = tie ? "Both tanks went down on the same shot." : (won ? "The enemy tank is out of the fight." : "Your tank is out of the fight. Line it up on the map and try again.");
+  $("over").style.display = "flex";
+}
+
+genTerrain(); buildTerrain(); placeRocks(); settleRocks();
+you.root.position.set(-70, 0, 0); cpu.root.position.set(70, 0, 0);
+you.ammo = freshAmmo(); cpu.ammo = freshAmmo();
+poseTank(you); poseTank(cpu);
+resize();
+requestAnimationFrame(frame);
+})();
+</script>
+  <!-- =====================================================================
+       MOHAVE TECHNOLOGY GROUP // CREATOR SEAL
+       Drop this ONE block into any HTML page, anywhere before </body>.
+       The only thing you edit is the CONFIG object on the next few lines.
+       ===================================================================== -->
+  <script>
+  (function () {
+
+    /* RED PHONE: Pajamastan flag as a data URI. Self-contained so the seal
+       stays a single drop-in block with no external image to host. */
+    var FLAG_SRC = "data:image/jpeg;base64,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";
+
+    /* ---------- CONFIG: the only part you change ---------- */
+    var CONFIG = {
+      org:      "Mohave Technology Group",
+      monogram: "MTG",
+      mission:  "Practical software and hardware, built in the field.",
+
+      // RED PHONE: Pajamastan export homage.
+      nation:   "Pajamastan",
+      site:     "https://pajamastan.vercel.app",
+      flag:     FLAG_SRC,
+
+      // BLUE PHONE: one money donate link (Stripe live payment link).
+      donate:   "https://buy.stripe.com/28EeV64rb6ga7fneyp6AM00",
+
+      github:   "https://github.com/sudosilo",
+      linkedin: "https://www.linkedin.com/in/dicktemple"
+    };
+    /* ----------------------------------------------------- */
+
+
+    /* ---------- LAYER 1: the signature pressed into the source ---------- */
+    var head = document.head || document.getElementsByTagName("head")[0];
+
+    head.appendChild(document.createComment(
+      " Made by " + CONFIG.org + " // " + CONFIG.github + " // " + CONFIG.linkedin + " "
+    ));
+    // RED PHONE: export origin banner in the source.
+    head.appendChild(document.createComment(
+      " Certified export of " + CONFIG.nation + " // " + CONFIG.site + " "
+    ));
+
+    var metaAuthor = document.createElement("meta");
+    metaAuthor.setAttribute("name", "author");
+    metaAuthor.setAttribute("content", CONFIG.org);
+    head.appendChild(metaAuthor);
+
+    // RED PHONE: export-origin meta tag.
+    var metaOrigin = document.createElement("meta");
+    metaOrigin.setAttribute("name", "x-export-origin");
+    metaOrigin.setAttribute("content", CONFIG.nation);
+    head.appendChild(metaOrigin);
+
+    [CONFIG.github, CONFIG.linkedin].forEach(function (url) {
+      var l = document.createElement("link");
+      l.setAttribute("rel", "me");
+      l.setAttribute("href", url);
+      head.appendChild(l);
+    });
+
+    var ld = document.createElement("script");
+    ld.type = "application/ld+json";
+    ld.textContent = JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": CONFIG.org,
+      "url": CONFIG.site,
+      "sameAs": [CONFIG.github, CONFIG.linkedin]
+    });
+    head.appendChild(ld);
+
+
+    /* ---------- LAYER 2: the visible seal ---------- */
+
+    // Round Mohave Technology Group seal, kept beside the Pajamastan flag.
+    function buildSeal() {
+      var org = CONFIG.org.toUpperCase();
+      return ''
+        + '<svg class="mtg-seal-svg" viewBox="0 0 120 120" width="58" height="58" '
+        +   'role="img" aria-label="' + CONFIG.org + ' seal">'
+        +   '<defs>'
+        +     '<path id="mtgTop" d="M 23,60 A 37,37 0 0 1 97,60" fill="none"/>'
+        +   '</defs>'
+        +   '<circle cx="60" cy="60" r="55" fill="none" stroke="#7a2e28" stroke-width="2.5"/>'
+        +   '<circle cx="60" cy="60" r="48" fill="none" stroke="#7a2e28" stroke-width="1"/>'
+        +   '<text font-family="Georgia,serif" font-size="8" fill="#7a2e28">'
+        +     '<textPath href="#mtgTop" startOffset="50%" text-anchor="middle" '
+        +     'textLength="106" lengthAdjust="spacingAndGlyphs">'
+        +     org + '</textPath>'
+        +   '</text>'
+        +   '<text x="60" y="60" text-anchor="middle" dominant-baseline="central" '
+        +     'font-family="Georgia,serif" font-weight="700" font-size="27" '
+        +     'fill="#7a2e28">' + CONFIG.monogram + '</text>'
+        +   '<g fill="#7a2e28">'
+        +     '<rect x="58" y="83.5" width="4" height="4"/>'
+        +     '<rect x="63" y="88.5" width="4" height="4"/>'
+        +     '<rect x="53" y="93.5" width="4" height="4"/>'
+        +     '<rect x="58" y="93.5" width="4" height="4"/>'
+        +     '<rect x="63" y="93.5" width="4" height="4"/>'
+        +   '</g>'
+        + '</svg>';
+    }
+
+
+    var css = ''
+      + '.mtg-seal{box-sizing:border-box;width:100%;background:#efe9da;'
+      + 'border-top:1px solid #cabfa3;color:#2b2620;'
+      + 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;'
+      + 'padding:18px 20px;display:flex;flex-direction:column;align-items:center;gap:12px;}'
+      + '.mtg-seal-row{display:flex;align-items:center;gap:14px;}'
+      // RED PHONE: round flag badge, brand-red ring to echo the old seal.
+      + '.mtg-flag-btn{background:none;border:0;padding:0;margin:0;cursor:pointer;'
+      + 'display:flex;align-items:center;line-height:0;'
+      + 'transition:transform .18s ease;}'
+      + '.mtg-seal.open .mtg-flag-btn{transform:scale(.94);}'
+      + '.mtg-flag{width:48px;height:72px;border-radius:8px;object-fit:cover;'
+      + 'display:block;border:2px solid #7a2e28;box-shadow:0 1px 3px rgba(43,38,32,.25);}'
+      + '.mtg-seal-btn{background:none;border:0;padding:0;margin:0;cursor:pointer;'
+      + 'display:flex;align-items:center;line-height:0;transition:transform .18s ease;}'
+      + '.mtg-seal.open .mtg-seal-btn{transform:rotate(-8deg) scale(.94);}'
+      + '.mtg-seal-svg{display:block;}'
+      + '.mtg-seal-label{text-align:left;line-height:1.35;}'
+      + '.mtg-seal-org{display:block;font-family:Georgia,"Times New Roman",serif;'
+      + 'font-size:14px;letter-spacing:.3px;color:#2b2620;}'
+      // RED PHONE: export subtitle with an inline linkable nation word.
+      + '.mtg-seal-export{display:block;font-family:Georgia,"Times New Roman",serif;'
+      + 'font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#4a443b;margin:2px 0;}'
+      + '.mtg-seal-link{color:#7a2e28;text-decoration:underline;}'
+      + '.mtg-seal-link:hover{color:#5f231e;}'
+      + '.mtg-seal-ask{display:inline-block;background:none;border:0;padding:0;margin:0;'
+      + 'font:inherit;font-size:12px;color:#7a2e28;text-decoration:underline;cursor:pointer;}'
+      + '.mtg-seal-panel{overflow:hidden;max-height:0;opacity:0;'
+      + 'transition:max-height .25s ease,opacity .25s ease;width:100%;max-width:360px;}'
+      + '.mtg-seal.open .mtg-seal-panel{max-height:300px;opacity:1;}'
+      + '.mtg-seal-mission{font-style:italic;color:#4a443b;font-size:13px;'
+      + 'text-align:center;margin:0 0 12px;line-height:1.5;}'
+      + '.mtg-seal-links{display:flex;justify-content:center;gap:10px;}'
+      + '.mtg-seal-links a{flex:1;text-align:center;text-decoration:none;'
+      + 'font-size:13px;color:#2b2620;background:#faf7ef;border:1px solid #cabfa3;'
+      + 'border-radius:6px;padding:8px 10px;transition:background .15s ease;}'
+      + '.mtg-seal-links a:hover{background:#fff;}'
+      + '.mtg-flag-btn:focus-visible,.mtg-seal-btn:focus-visible,.mtg-seal-ask:focus-visible,'
+      + '.mtg-seal-link:focus-visible{outline:2px solid #7a2e28;outline-offset:3px;border-radius:4px;}'
+      + '.mtg-seal-links a:focus-visible{outline:2px solid #7a2e28;outline-offset:2px;}'
+      // BLUE PHONE: support the micronation donate pill with a coin icon.
+      + '.mtg-donate{display:inline-flex;align-items:center;gap:10px;text-decoration:none;'
+      + 'background:linear-gradient(180deg,#fffaf0,#f3e7cc);color:#2b2620;'
+      + 'border:1px solid #b89a5a;border-radius:999px;padding:6px 16px 6px 6px;'
+      + 'box-shadow:0 1px 0 #fff inset,0 2px 6px rgba(122,46,40,.18);'
+      + 'transition:transform .15s ease,box-shadow .15s ease;}'
+      + '.mtg-donate:hover{transform:translateY(-1px);box-shadow:0 1px 0 #fff inset,0 4px 10px rgba(122,46,40,.25);}'
+      + '.mtg-donate:active{transform:translateY(0);}'
+      + '.mtg-donate-coin{display:block;flex:none;}'
+      + '.mtg-donate-text{display:flex;flex-direction:column;line-height:1.2;text-align:left;}'
+      + '.mtg-donate-main{font-family:Georgia,"Times New Roman",serif;font-size:13px;color:#7a2e28;letter-spacing:.2px;}'
+      + '.mtg-donate-sub{font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:#6b6255;}'
+      + '.mtg-donate:focus-visible{outline:2px solid #7a2e28;outline-offset:3px;}'
+      + '@media (prefers-reduced-motion: reduce){.mtg-donate{transition:none;}}'
+      + '@media (prefers-reduced-motion: reduce){'
+      + '.mtg-flag-btn,.mtg-seal-btn,.mtg-seal-panel{transition:none;}}';
+
+    var style = document.createElement("style");
+    style.textContent = css;
+    head.appendChild(style);
+
+    var seal = document.createElement("footer");
+    seal.className = "mtg-seal";
+    seal.innerHTML = ''
+      + '<div class="mtg-seal-row">'
+      +   '<button class="mtg-flag-btn" type="button" aria-label="Toggle maker details">'
+      +     '<img class="mtg-flag" src="' + CONFIG.flag + '" alt="' + CONFIG.nation + ' flag">'
+      +   '</button>'
+      +   '<button class="mtg-seal-btn" type="button" aria-label="Toggle maker details">'
+      +     buildSeal()
+      +   '</button>'
+      +   '<span class="mtg-seal-label">'
+      +     '<span class="mtg-seal-org">' + CONFIG.org + '</span>'
+      +     '<span class="mtg-seal-export">Certified export of '
+      +       '<a class="mtg-seal-link" href="' + CONFIG.site + '" target="_blank" rel="noopener">'
+      +       CONFIG.nation + '</a></span>'
+      +     '<button class="mtg-seal-ask" type="button" aria-expanded="false">Who made this?</button>'
+      +   '</span>'
+      + '</div>'
+      // BLUE PHONE: donate pill, always visible under the seal row.
+      + '<a class="mtg-donate" href="' + CONFIG.donate + '" target="_blank" rel="noopener">'
+      +   '<svg class="mtg-donate-coin" viewBox="0 0 40 40" width="34" height="34" aria-hidden="true">'
+      +       '<circle cx="20" cy="20" r="19" fill="#d9b25a" stroke="#8a6a24" stroke-width="1.5"/>'
+      +       '<circle cx="20" cy="20" r="14.5" fill="#f2d68a" stroke="#b08a3a" stroke-width="1"/>'
+      +       '<path d="M11 24c2-1 3-4 3-7M29 24c-2-1-3-4-3-7" fill="none" stroke="#8a6a24" stroke-width="1.2" stroke-linecap="round"/>'
+      +       '<text x="20" y="25.5" text-anchor="middle" font-family="Georgia,serif" font-size="15" font-weight="bold" fill="#7a2e28">1</text>'
+      +     '</svg>'
+      +   '<span class="mtg-donate-text">'
+      +     '<span class="mtg-donate-main">Support the Micronation of ' + CONFIG.nation + '</span>'
+      +     '<span class="mtg-donate-sub">Give one money</span>'
+      +   '</span>'
+      + '</a>'
+      + '<div class="mtg-seal-panel">'
+      +   '<p class="mtg-seal-mission">' + CONFIG.mission + '</p>'
+      +   '<div class="mtg-seal-links">'
+      +     '<a href="' + CONFIG.site + '" target="_blank" rel="noopener">' + CONFIG.nation + '</a>'
+      +     '<a href="' + CONFIG.github + '" target="_blank" rel="noopener me">GitHub</a>'
+      +     '<a href="' + CONFIG.linkedin + '" target="_blank" rel="noopener me">LinkedIn</a>'
+      +   '</div>'
+      + '</div>';
+
+    // RED PHONE: flag badge and "Who made this?" both toggle the panel.
+    var ask = seal.querySelector(".mtg-seal-ask");
+    var flagBtn = seal.querySelector(".mtg-flag-btn");
+    function toggle() {
+      var nowOpen = seal.classList.toggle("open");
+      ask.setAttribute("aria-expanded", nowOpen ? "true" : "false");
+    }
+    ask.addEventListener("click", toggle);
+    flagBtn.addEventListener("click", toggle);
+    seal.querySelector(".mtg-seal-btn").addEventListener("click", toggle);
+
+    // RED PHONE: drop this block into a page with no seal container and it
+    // still lands at the bottom of body exactly like before. Give a page a
+    // <div id="mtgSealContainer"> anywhere and the seal lands there instead,
+    // which is how the landing screen pins it to its own bottom edge rather
+    // than the bottom of the whole document.
+    var sealContainer = document.getElementById("mtgSealContainer") || document.body;
+    sealContainer.appendChild(seal);
+
+  })();
+  </script>
+  <!-- ===================== END CREATOR SEAL ===================== -->
+</body>
+</html>

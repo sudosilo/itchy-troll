@@ -3,7 +3,7 @@ const http = require('http');
 const { createClient } = require('redis');
 
 const PORT = process.env.PORT || 8080;
-const KEYS = { climb: 'ascend:scores', challenge: 'ascend:scores:challenge', career: 'ascend:scores:career', gauntlet: 'ascend:scores:gauntlet', jewels: 'ascend:scores:jewels' };
+const KEYS = { climb: 'ascend:scores', challenge: 'ascend:scores:challenge', career: 'ascend:scores:career', gauntlet: 'ascend:scores:gauntlet', jewels: 'ascend:scores:jewels', side: 'ascend:scores:side', fuel: 'ascend:scores:fuel' };
 // Career level time boards: lv1 to lv25, fastest time first, stored in ms
 const LV_RE = /^lv([1-9]|1[0-9]|2[0-5])$/;
 const isTime = m => LV_RE.test(String(m || ''));

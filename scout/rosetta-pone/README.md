@@ -8,6 +8,4 @@ Live at rosetta-pone.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-10-18, v2026.10.18. Every key on the sign keyboard now shows its English meaning.
-
 Full history is in CHANGELOG.md.

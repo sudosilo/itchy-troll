@@ -8,6 +8,4 @@ Live at fogwarren-vx.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-10-31, v2026.10.31. Version two sends your score, initials, and a site link to the shared score hub. Added a High Scores board.
-
 Full history is in CHANGELOG.md.

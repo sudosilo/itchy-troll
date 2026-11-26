@@ -21,7 +21,10 @@ redis.on("error", e => console.error("redis", e.message));
 const devices = new Map();   // id -> { meta, rows, lower }
 const uploads = new Map();   // uploadId -> { device, rows, at }
 
+let twinCache = null;        // cross-phone duplicate sets, rebuilt after any push or removal
+
 function index(meta, rows) {
+  twinCache = null;
   devices.set(meta.id, { meta, rows, lower: rows.map(r => String(r[R.path]).toLowerCase() + "\u0000" + String(r[R.nick] || "").toLowerCase()) });
 }
 
@@ -118,6 +121,67 @@ function search(p) {
   return { total, perPhone, items: hits };
 }
 
+// Twins: the same file (same fingerprint, which already folds in the size) held by more than one phone.
+function twinSets() {
+  if (twinCache) return twinCache;
+  const byFp = new Map();
+  for (const dev of devices.values()) {
+    for (const r of dev.rows) {
+      const f = r[R.fp];
+      if (!f || !(+r[R.size] > 0)) continue;
+      let g = byFp.get(f);
+      if (!g) byFp.set(f, g = []);
+      g.push([dev, r]);
+    }
+  }
+  const sets = [];
+  for (const [fp, list] of byFp) {
+    const phones = new Set(list.map(x => x[0].meta.id));
+    if (phones.size < 2) continue;
+    list.sort((a, b) => (+a[1][R.mtime] || 0) - (+b[1][R.mtime] || 0));
+    const size = +list[0][1][R.size];
+    sets.push({ fp, size, kind: list[0][1][R.kind], phones, list, extra: size * (list.length - 1) });
+  }
+  sets.sort((a, b) => b.extra - a.extra || (a.fp < b.fp ? -1 : 1));
+  twinCache = sets;
+  return sets;
+}
+
+function twinFilter(p) {
+  const kind = p.get("kind") || "";
+  const only = p.get("device") || "";
+  const minSize = +(p.get("minSize") || 0);
+  return twinSets().filter(t => (!kind || t.kind === kind) && (!only || t.phones.has(only)) && (!minSize || t.size >= minSize));
+}
+
+function twins(p) {
+  const sets = twinFilter(p);
+  const me = p.get("me") || "";
+  const limit = Math.max(1, Math.min(200, +(p.get("limit") || 20)));
+  const offset = Math.max(0, +(p.get("offset") || 0));
+  let files = 0, extra = 0, mine = 0, mineBytes = 0;
+  const pairs = {};
+  for (const t of sets) {
+    files += t.list.length;
+    extra += t.extra;
+    if (me) for (const [dev] of t.list) if (dev.meta.id === me) { mine++; mineBytes += t.size; }
+    const ids = [...t.phones].sort();
+    for (let i = 0; i < ids.length; i++) for (let j = i + 1; j < ids.length; j++) {
+      const k = ids[i] + "|" + ids[j];
+      const e = pairs[k] || (pairs[k] = { a: ids[i], b: ids[j], sets: 0, bytes: 0 });
+      e.sets++; e.bytes += t.size;
+    }
+  }
+  return {
+    sets: sets.length, files, extra, mine, mineBytes,
+    pairs: Object.values(pairs).sort((x, y) => y.bytes - x.bytes),
+    items: sets.slice(offset, offset + limit).map(t => ({
+      fp: t.fp, size: t.size, kind: t.kind, phones: t.phones.size, copies: t.list.length, extra: t.extra,
+      files: t.list.map(([dev, r]) => rowOut(dev, r))
+    }))
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   const path = url.pathname;
@@ -130,6 +194,10 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { devices: [...devices.values()].map(d => d.meta).sort((a, b) => (b.pushedAt || 0) - (a.pushedAt || 0)) });
     }
     if (req.method === "GET" && path === "/v1/search") return send(res, 200, search(url.searchParams));
+    if (req.method === "GET" && path === "/v1/twins") return send(res, 200, twins(url.searchParams));
+    if (req.method === "GET" && path === "/v1/twins/fps") {
+      return send(res, 200, { fps: twinFilter(url.searchParams).map(t => t.fp) });
+    }
     if (req.method === "GET" && path === "/v1/where") {
       const fps = (url.searchParams.get("fp") || "").split(",").filter(Boolean).slice(0, 500);
       const out = {};
@@ -177,6 +245,7 @@ const server = http.createServer(async (req, res) => {
       const id = decodeURIComponent(path.slice("/v1/devices/".length));
       await redis.multi().del("fleet:idx:" + id).del("fleet:dev:" + id).sRem("fleet:devices", id).exec();
       devices.delete(id);
+      twinCache = null;
       return send(res, 200, { ok: true });
     }
     return send(res, 404, { error: "no such route" });

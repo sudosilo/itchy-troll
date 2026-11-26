@@ -8,6 +8,4 @@ Live at field-twin-glaucous.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-11-10, v2026.11.10. Added one look across the Field Twin apps, so the map, inventory, and roads share a design. Added a night look that follows sunset and sunrise, and a drawn sign for every kind of place.
-
 Full history is in CHANGELOG.md.

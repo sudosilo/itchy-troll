@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Ten Turn Machine</title>
+<style>
+body{margin:0;background:#fbfaf7;color:#1f2328;font:15px system-ui,sans-serif}
+header{padding:10px 12px 0;text-align:center}h1{margin:0;font-size:22px}
+#card{font-weight:700;color:#a8410a;margin:4px 0}#status{color:#4b5058;min-height:20px;font-size:14px;padding:0 10px}
+#cv{display:block;width:100%;height:56vh;touch-action:none}
+.row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;padding:6px 8px}
+button{font:600 14px system-ui;padding:9px 11px;border-radius:10px;border:2px solid #1f2328;background:#fff;color:#1f2328}
+button.sel{background:#1f2328;color:#fff}button.go{background:#e8590c;border-color:#e8590c;color:#fff}button:disabled{opacity:.4}
+</style>
+</head>
+<body>
+<header><h1>Ten Turn Machine</h1><div id="card"></div><div id="status"></div></header>
+<canvas id="cv"></canvas>
+<div class="row" id="pal"></div>
+<div class="row"><button id="erase">Erase</button><button id="endturn" class="go">End turn</button><button id="run">Run</button><button id="skin">Skin</button><button id="reset">Start over</button></div>
+<script src="parts.js"></script>
+<script src="deco.js"></script>
+<script src="engine.js"></script>
+<script>
+const TURNS=10,PER=3,KEY="ttm-iso-v1",cv=document.getElementById("cv"),c=cv.getContext("2d"),$=id=>document.getElementById(id);
+function deal(){const a=CARDS.map((_,i)=>i);for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function fresh(){return {board:{},turn:1,placed:0,met:0,skin:"paper",deal:deal()};}
+let st=JSON.parse(localStorage.getItem(KEY)||"null")||fresh(),tool="flat",armed=0,ac=null;
+const save=()=>localStorage.setItem(KEY,JSON.stringify(st)),say=m=>$("status").textContent=m;
+const card=()=>CARDS[st.deal[(st.turn-1)%st.deal.length]];
+function tone(f,d,type){try{ac=ac||new AudioContext();const o=ac.createOscillator(),g=ac.createGain();o.type=type||"sine";o.frequency.value=f;
+ g.gain.setValueAtTime(.12,ac.currentTime);g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+d);o.connect(g).connect(ac.destination);o.start();o.stop(ac.currentTime+d);}catch(e){}}
+function sound(k){({bell:()=>tone(880,1.2),spring:()=>tone(300,.3,"triangle"),dominoes:()=>tone(180,.15,"square"),fan:()=>tone(140,.4,"triangle"),goal:()=>tone(660,.6),drop:()=>tone(240,.3)}[k]||(()=>{}))();}
+function ui(){const busy=run&&!run.over,done=st.turn>TURNS;
+ $("card").textContent=done?"All ten turns done. Cards met: "+st.met+" of 10.":"Turn "+st.turn+" of 10. Card: "+card()[0]+". Parts left: "+(PER-st.placed)+".";
+ $("endturn").disabled=done||busy;$("run").disabled=busy;
+ [...$("pal").children].forEach(b=>b.classList.toggle("sel",b.dataset.k===tool));$("erase").classList.toggle("sel",tool==="erase");}
+function resize(){dpr=devicePixelRatio||1;W=cv.clientWidth;H=cv.clientHeight;cv.width=W*dpr;cv.height=H*dpr;
+ s=Math.min(W*.94/(N*S*2*A),H*.9/(N*S*2*B+MAXZ*ZH));draw();}
+function pick(sx,sy){const cand=tr.steps.map(q=>[q.x,q.y,Math.min(q.zin,q.zout)]).sort((a,b)=>b[0]+b[1]-a[0]-a[1]);
+ for(const [x,y,h] of cand){const w=unP(sx,sy,h);if(w[0]>=x*S&&w[0]<x*S+S&&w[1]>=y*S&&w[1]<y*S+S)return [x,y];}
+ const w=unP(sx,sy,0),x=Math.floor(w[0]/S),y=Math.floor(w[1]/S);return x>=0&&y>=0&&x<N&&y<N?[x,y]:null;}
+function tap(x,y){
+ if(x===START.x&&y===START.y)return say("That is the start chute.");
+ const k=x+","+y,t=st.board[k];
+ if(tool==="erase"){if(!t)return;if(t.turn!==st.turn)return say("Only parts from this turn can be erased.");delete st.board[k];st.placed--;}
+ else if(t){t.r=(t.r+1)%4;say("Turned the "+TILES[t.k].n.toLowerCase()+".");}
+ else{if(st.turn>TURNS)return say("All ten turns are done. Tap Run.");
+  if(st.placed>=PER)return say("Three parts per turn. Tap End turn.");
+  const r=tr.fail&&tr.fx===x&&tr.fy===y?tr.fd:1;st.board[k]={k:tool,r,turn:st.turn};st.placed++;
+  say(TILES[tool].n+" placed. Tap it to turn it.");}
+ run=null;save();draw();ui();}
+cv.addEventListener("pointerdown",e=>{if(run&&!run.over)return;const r=cv.getBoundingClientRect(),p=pick(e.clientX-r.left,e.clientY-r.top);if(p)tap(p[0],p[1]);});
+Object.keys(TILES).forEach(k=>{const b=document.createElement("button");b.textContent=TILES[k].n;b.dataset.k=k;b.style.borderColor=TILES[k].c;b.onclick=()=>{tool=k;ui();};$("pal").appendChild(b);});
+$("erase").onclick=()=>{tool="erase";ui();};
+$("endturn").onclick=()=>{const mine=tr.steps.filter(q=>{const t=at(q.x,q.y);return t&&t.turn===st.turn;});
+ const ok=card()[1]({k:mine.map(q=>q.k),dz:mine.reduce((a,q)=>a+q.zout-q.zin,0)});if(ok)st.met++;
+ say((ok?"Card met: ":"Card missed: ")+card()[0]+". Only parts the ball reaches count.");st.turn++;st.placed=0;save();ui();};
+$("run").onclick=()=>{const path=[];tr.steps.forEach((q,i)=>pts(q).forEach(p=>path.push({p,i})));
+ if(tr.fail){const l=path[path.length-1].p,x=l[0]+DX[tr.fd]*S*.4,y=l[1]+DY[tr.fd]*S*.4;path.push({p:[x,y,l[2]],i:-1},{p:[x,y,.3],i:-1});}
+ run={path,d:0,last:performance.now(),pos:null,over:false,fired:{}};say("Running...");ui();requestAnimationFrame(tick);};
+function tick(now){const dt=Math.min(.05,(now-run.last)/1000);run.last=now;run.d+=dt*170;let d=run.d;const path=run.path;
+ for(let k=1;k<path.length;k++){const a=path[k-1].p,b=path[k].p,L=Math.hypot(b[0]-a[0],b[1]-a[1],(b[2]-a[2])*ZH);
+  if(d<=L){const t=L?d/L:1;run.pos=[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];const i=path[k].i;
+   if(i>=0&&run.fired[i]==null){run.fired[i]=now;sound(tr.steps[i].k);}draw(now);return requestAnimationFrame(tick);}d-=L;}
+ run.over=true;draw(now);say(tr.win?"The ball made it to the goal cup.":tr.fail);ui();}
+$("skin").onclick=()=>{st.skin=st.skin==="paper"?"cyber":"paper";save();draw();};
+$("reset").onclick=()=>{if(Date.now()-armed>3000){armed=Date.now();return say("Tap Start over again to clear.");}
+ st=fresh();run=null;save();draw();ui();say("Cleared. Place a part at the red X.");};
+addEventListener("resize",resize);resize();ui();
+say("Tap a square to place a part, tap a part to turn it. The red X shows where the ball falls next.");
+</script>
+</body>
+</html>

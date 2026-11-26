@@ -9,7 +9,21 @@
 ╔══════════════════════════════════════════════════════════════╗
 ║  ITERATION MANIFEST - READ THIS FIRST                        ║
 ╠══════════════════════════════════════════════════════════════╣
-║  CURRENT BUILD : v1.8 - NO MORE BLANK SKY, RESULT SCREENS    ║
+║  CURRENT BUILD : v2.0 - FUEL MODE                            ║
+║  v2.0: FUEL mode on the side scroll engine (SIDE.fuelOn).    ║
+║        Fuel drains as you go, gems and fuel cans refill it,  ║
+║        empty tank ends the run. The road is cut into         ║
+║        stretches with a gate at the end; grab every gem in   ║
+║        a stretch to level up (full tank, harder terrain).    ║
+║        All climb power-ups spawn: rocket (forward boost),    ║
+║        glider, steady, shrink, grow, static, slow-mo, trail. ║
+║  v1.9: SIDE SCROLL mode (SIDE object). Run right forever on  ║
+║        the climb physics. Terrain generates ahead: flats,    ║
+║        slopes, steps, gaps, bridges, clearings, and jump     ║
+║        challenges (stones, steel pillars, stairs, drops,     ║
+║        elevators, movers). Falling into the abyss drops you  ║
+║        from the sky above that spot, no dying. Score is the  ║
+║        farthest distance, own leaderboard (mode side).       ║
 ║  v1.8: fixed the Cloud Kingdom crash (snowflake radius went  ║
 ║        negative and killed the render, leaving a blank sky). ║
 ║        Loop is now crash proof. Zones extended with NORTHERN ║
@@ -205,6 +219,8 @@
     <button id="modeCareer" data-mode="career">CAREER</button>
     <button id="modeGauntlet" data-mode="gauntlet">GAUNTLET</button>
     <button id="modeJewels" data-mode="jewels">JEWELS</button>
+    <button id="modeSide" data-mode="side">SIDE SCROLL</button>
+    <button id="modeFuel" data-mode="fuel">FUEL</button>
   </div>
   <label>CAREER LEVEL</label>
   <div id="lbLevel">
@@ -374,6 +390,15 @@ let cameraY = 0;       // world-Y of the top of the screen
 
 let highestPlatY = 0;     // y of the highest platform generated so far
 let worldGenBottom = 800; // lowest rescue platform generated
+
+function sideLike() { return mode === 'side' || mode === 'fuel'; }
+function offView(y, m) {
+  m = m || 20;
+  if (sideLike()) return y < SIDE.camY - m * 2 || y > SIDE.camY + SIDE.vh + m * 2;
+  const sy = y - cameraY;
+  return sy < -m || sy > H + m;
+}
+function keepY(y) { return sideLike() ? true : y < cameraY + H + 200; }
 
 function rand(min, max) { return min + Math.random() * (max - min); }
 const SOLID_CHANCE = 0.13;
@@ -746,7 +771,7 @@ const GHOST = {
     this.recT += ms;
     if (this.recT >= 100 && this.rec.length < 18000) {
       this.recT = 0;
-      this.rec.push(+(player.x / W).toFixed(3), Math.round(player.y));
+      this.rec.push(sideLike() ? Math.round(player.x) : +(player.x / W).toFixed(3), Math.round(player.y));
     }
     if (this.metric() > this.playBest) this.dirty = true;
   },
@@ -763,8 +788,9 @@ const GHOST = {
   pos() {
     if (!this.play || !SETTINGS.ghost) return null;
     const i = Math.floor(this.runT / 100) * 2;
-    if (i + 1 >= this.play.length) return { x: this.play[this.play.length - 2] * W, y: this.play[this.play.length - 1], done: true };
-    return { x: this.play[i] * W, y: this.play[i + 1] };
+    const sx = sideLike() ? 1 : W;
+    if (i + 1 >= this.play.length) return { x: this.play[this.play.length - 2] * sx, y: this.play[this.play.length - 1], done: true };
+    return { x: this.play[i] * sx, y: this.play[i + 1] };
   },
   draw(time) {
     const g = this.pos();
@@ -783,7 +809,7 @@ const GHOST = {
   hud() {
     const g = this.pos();
     if (!g) return;
-    const d = Math.round((g.y - player.y) / 10);
+    const d = sideLike() ? Math.round((player.x - g.x) / SIDE.UNIT) : Math.round((g.y - player.y) / 10);
     ctx.textAlign = 'left';
     ctx.font = 'bold 12px monospace';
     ctx.fillStyle = d >= 0 ? '#3dff9b' : '#ff6688';
@@ -826,7 +852,7 @@ function initPlayer() {
 // ════════════════════════════════════════════════════════════
 //  SCORE
 // ════════════════════════════════════════════════════════════
-let mode = ['challenge', 'career', 'gauntlet', 'jewels'].includes(localStorage.getItem('ascendMode')) ? localStorage.getItem('ascendMode') : 'climb';
+let mode = ['challenge', 'career', 'gauntlet', 'jewels', 'side', 'fuel'].includes(localStorage.getItem('ascendMode')) ? localStorage.getItem('ascendMode') : 'climb';
 let bestChallenge = parseInt(localStorage.getItem('bestChallenge') || '0');
 let bestGauntlet  = parseInt(localStorage.getItem('bestGauntlet') || '0');
 let bestJewels    = parseInt(localStorage.getItem('bestJewels') || '0');
@@ -1310,13 +1336,12 @@ function updateGliders() {
       }
     }
   }
-  gliders = gliders.filter(g => !g.taken && g.y < cameraY + H + 200);
+  gliders = gliders.filter(g => !g.taken && keepY(g.y));
 }
 
 function drawGliders(time) {
   for (const g of gliders) {
-    const sy = g.y - cameraY;
-    if (sy < -20 || sy > H + 20) continue;
+    if (offView(g.y)) continue;
     const bob = Math.sin(time * 0.004 + g.ph) * 3;
     const y = g.y + bob;
     ctx.globalAlpha = 0.3 + 0.2 * Math.abs(Math.sin(time * 0.005 + g.ph));
@@ -1490,7 +1515,7 @@ function updateSteadies(ms) {
       }
     }
   }
-  steadies = steadies.filter(st => !st.taken && (mode === 'challenge' || st.y < cameraY + H + 200));
+  steadies = steadies.filter(st => !st.taken && (mode === 'challenge' || keepY(st.y)));
   if (player.steadyTime > 0) {
     player.steadyTime -= ms;
     if (player.steadyTime <= 0) {
@@ -1503,8 +1528,7 @@ function updateSteadies(ms) {
 
 function drawSteadies(time) {
   for (const st of steadies) {
-    const sy = st.y - cameraY;
-    if (sy < -20 || sy > H + 20) continue;
+    if (offView(st.y)) continue;
     const y = st.y + Math.sin(time * 0.004 + st.ph) * 3;
     ctx.globalAlpha = 0.3 + 0.2 * Math.abs(Math.sin(time * 0.005 + st.ph));
     ctx.fillStyle = '#3d8bff';
@@ -1586,7 +1610,7 @@ function updateOddities(ms) {
         hue: o.kind === 'static' ? Math.random() * 360 : 210, type: 'splash' });
     }
   }
-  oddities = oddities.filter(o => !o.taken && (mode === 'challenge' || o.y < cameraY + H + 200));
+  oddities = oddities.filter(o => !o.taken && (mode === 'challenge' || keepY(o.y)));
 
   if (player.sizeTime > 0) {
     player.sizeTime -= ms;
@@ -1618,8 +1642,7 @@ function updateOddities(ms) {
 
 function drawOddities(time) {
   for (const o of oddities) {
-    const sy = o.y - cameraY;
-    if (sy < -24 || sy > H + 24) continue;
+    if (offView(o.y, 24)) continue;
     const y = o.y + Math.sin(time * 0.004 + o.ph) * 3;
     ctx.globalAlpha = 0.3 + 0.2 * Math.abs(Math.sin(time * 0.005 + o.ph));
     ctx.fillStyle = o.kind === 'static' ? 'hsl(' + ((time * 0.3) % 360) + ',100%,60%)' : '#3d8bff';
@@ -2176,7 +2199,7 @@ function updateBlaze() {
 function drawBlaze() {
   const band = 3;
   for (const b of blaze) {
-    if (b.y - cameraY < -30 || b.y - cameraY > H + 30) continue;
+    if (offView(b.y, 30)) continue;
     ctx.globalAlpha = Math.min(1, b.life * 1.4);
     for (let k = 0; k < 6; k++) {
       ctx.fillStyle = b.pal[k];
@@ -2217,7 +2240,7 @@ function updateRockets(ms) {
       }
     }
   }
-  rockets = rockets.filter(r => !r.taken && r.y < cameraY + H + 200);
+  rockets = rockets.filter(r => !r.taken && keepY(r.y));
 
   // Rocket flight
   if (player.rocketTimer > 0) {
@@ -2247,8 +2270,7 @@ function updateRockets(ms) {
 
 function drawRockets(time) {
   for (const r of rockets) {
-    const sy = r.y - cameraY;
-    if (sy < -20 || sy > H + 20) continue;
+    if (offView(r.y)) continue;
     const bob = Math.sin(time * 0.004 + r.ph) * 3;
     const y = r.y + bob;
     // Glow
@@ -2412,6 +2434,914 @@ function drawStarfield(time) {
 }
 
 // ════════════════════════════════════════════════════════════
+//  SIDE SCROLL MARATHON - run sideways forever on Ascend physics
+//  Terrain is generated ahead as you go: flats, slopes, ledges,
+//  steps, gaps, bridges, clearings and jump challenges. Fall into
+//  the abyss and you drop back out of the sky above that spot.
+//  Nobody dies. Score is the farthest distance reached.
+// ════════════════════════════════════════════════════════════
+let bestSide = parseInt(localStorage.getItem('bestSide') || '0');
+let bestFuel = parseInt(localStorage.getItem('bestFuel') || '0');
+let bestFuelLevel = parseInt(localStorage.getItem('bestFuelLevel') || '0');
+
+const SIDE = {
+  DEEP: 2600,      // ground blocks reach this far down
+  STEP: 16,        // ledge height you walk up without jumping
+  ABYSS: 420,      // abyss line sits this far below the nearby ground
+  UNIT: 25,        // world px per meter of distance
+  GATE_LEN: 3200,  // fuel mode: world px per level stretch
+  fuel: 100, level: 1, fuelOn: false, gates: [], counts: [], gi: 0, cans: [],
+  VIEW: 720,       // world px across the screen on a phone
+  terrain: [], gems: [], lane: [], deco: [],
+  genX: 0, genY: 0, last: '', camX: 0, camY: 0, S: 1, vw: 0, vh: 0, t: 0,
+  falls: 0, gemCount: 0, dropping: false, zi: 0, zl: 0, minX: -300, standOn: null,
+
+  fuelTick(ms, cx, pcy) {
+    const P = player;
+    for (const c of this.cans) {
+      if (c.taken) continue;
+      const dx = cx - c.x, dy = pcy - c.y;
+      if (dx * dx + dy * dy < 24 * 24) {
+        c.taken = true;
+        this.fuel = Math.min(100, this.fuel + 30);
+        showBanner('FUEL +30');
+        audio.triggers.token();
+      }
+    }
+    // gates: every gem in the stretch means a level up
+    while (this.gi < this.gates.length && P.x > this.gates[this.gi].x) {
+      const c = this.counts[this.gi] || { total: 0, taken: 0 };
+      if (c.taken >= c.total) {
+        this.level++;
+        this.fuel = 100;
+        if (this.level > bestFuelLevel) { bestFuelLevel = this.level; localStorage.setItem('bestFuelLevel', bestFuelLevel); }
+        showBanner('LEVEL ' + this.level + '  FULL TANK');
+        audio.triggers.milestone();
+        for (let i = 0; i < 30; i++) {
+          const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 6;
+          particles.push({ x: cx, y: pcy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, decay: 0.02, size: 2 + Math.random() * 3, hue: 200 + Math.random() * 40, type: 'splash' });
+        }
+      } else {
+        showBanner('MISSED ' + (c.total - c.taken) + ' GEMS  NO LEVEL UP');
+        audio.triggers.wrong();
+      }
+      this.gi++;
+    }
+    const burn = (1.2 + 1.2 * Math.min(1, Math.abs(P.vx) / 15)) * (1 + 0.05 * Math.min(20, this.level - 1));
+    this.fuel -= burn * ms / 1000;
+    if (this.fuel < 20 && !this.lowWarned) { this.lowWarned = true; showBanner('LOW FUEL'); audio.triggers.spent(); }
+    if (this.fuel >= 25) this.lowWarned = false;
+    if (this.fuel <= 0) {
+      this.fuel = 0;
+      audio.triggers.die();
+      GHOST.save();
+      LB.queue();
+      setState(STATE.DEAD);
+      return true;
+    }
+    return false;
+  },
+  drawFuelWorld(time) {
+    for (let i = this.gi; i < this.gates.length; i++) {
+      const g = this.gates[i];
+      if (g.x < this.camX - 40 || g.x > this.camX + this.vw + 40) continue;
+      const c = this.counts[i] || { total: 0, taken: 0 };
+      const top = this.camY, h = this.vh;
+      ctx.globalAlpha = 0.18 + 0.1 * Math.sin(time * 0.005);
+      ctx.fillStyle = '#3d8bff';
+      ctx.fillRect(g.x - 10, top, 20, h);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#3d8bff';
+      ctx.fillRect(g.x - 2, top, 4, h);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold ' + Math.round(14 / this.S) + 'px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(i === this.gi ? 'LEVEL UP GATE' : 'GATE', g.x, top + 150 / this.S);
+      if (i === this.gi) ctx.fillText('◆ ' + c.taken + ' / ' + c.total, g.x, top + 172 / this.S);
+    }
+    for (const c of this.cans) {
+      if (c.x < this.camX - 30 || c.x > this.camX + this.vw + 30) continue;
+      const y = c.y + Math.sin(time * 0.004 + c.ph) * 3;
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = '#3d8bff';
+      ctx.beginPath(); ctx.arc(c.x, y, 15, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#ff4466';
+      ctx.fillRect(c.x - 7, y - 9, 14, 18);
+      ctx.fillStyle = '#1b2440';
+      ctx.fillRect(c.x - 3, y - 13, 6, 4);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(c.x - 4, y - 2, 8, 2);
+      ctx.fillRect(c.x - 1, y - 5, 2, 8);
+    }
+    drawBlaze();
+    drawRockets(time);
+    drawSteadies(time);
+    drawOddities(time);
+    drawGliders(time);
+  },
+  fuelHud() {
+    const bx = 14, by = 134, bw = 110;
+    const f = this.fuel / 100;
+    const low = this.fuel < 20 && Math.floor(performance.now() / 250) % 2;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = low ? '#ff4466' : '#6fb0ff';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText('FUEL', bx, by - 4);
+    ctx.fillStyle = '#16223f';
+    ctx.fillRect(bx, by, bw, 9);
+    ctx.fillStyle = f > 0.2 ? '#3d8bff' : '#ff4466';
+    ctx.fillRect(bx, by, bw * f, 9);
+    ctx.strokeStyle = '#bfe0ff'; ctx.lineWidth = 1;
+    ctx.strokeRect(bx, by, bw, 9);
+    const P = player;
+    const t = [];
+    if (P.rocketTimer > 0) t.push('rocket ' + Math.ceil(P.rocketTimer) + 's');
+    if (P.hasGlider) t.push('glider ' + Math.ceil(P.gliderTime / 1000) + 's');
+    if (P.steadyTime > 0) t.push('steady ' + Math.ceil(P.steadyTime / 1000) + 's');
+    if (P.sizeTime > 0) t.push((P.sizeKind === 'shrink' ? 'shrunk ' : 'grown ') + Math.ceil(P.sizeTime / 1000) + 's');
+    if (P.slowTime > 0) t.push('slow-mo ' + Math.ceil(P.slowTime / 1000) + 's');
+    if (P.trailTime > 0) t.push('trail ' + Math.ceil(P.trailTime / 1000) + 's');
+    if (P.staticTime > 0) t.push('static ' + Math.ceil(P.staticTime / 1000) + 's');
+    ctx.fillStyle = '#6fb0ff';
+    ctx.font = 'bold 11px monospace';
+    t.forEach((s, i) => ctx.fillText(s, bx, by + 26 + i * 16));
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#6fb0ff';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('LEVEL ' + this.level, W - 14, 104);
+    const c = this.counts[this.gi] || { total: 0, taken: 0 };
+    ctx.font = 'bold 11px monospace';
+    ctx.fillStyle = c.taken >= c.total ? '#3dff9b' : '#bfe0ff';
+    ctx.fillText('stretch ◆ ' + c.taken + '/' + c.total, W - 14, 122);
+    if (this.gates[this.gi]) {
+      ctx.fillStyle = CFG.UI_DIM;
+      ctx.fillText('gate in ' + Math.max(0, Math.round((this.gates[this.gi].x - P.x) / this.UNIT)) + 'm', W - 14, 138);
+    }
+  },
+  view() {
+    this.S = Math.max(0.5, Math.min(1.2, W / this.VIEW));
+    this.vw = W / this.S;
+    this.vh = H / this.S;
+  },
+
+  init() {
+    this.view();
+    this.terrain = []; this.gems = []; this.lane = []; this.deco = [];
+    this.genX = 0; this.genY = 0; this.last = ''; this.t = 0;
+    this.falls = 0; this.gemCount = 0; this.dropping = false; this.standOn = null;
+    this.minX = -300;
+    this.fuelOn = mode === 'fuel';
+    this.fuel = 100; this.level = 1; this.gates = []; this.counts = []; this.gi = 0;
+    this.gateNext = this.GATE_LEN; this.cans = []; this.puGap = 3; this.lowWarned = false;
+    const z = zoneAt(0); this.zi = z.i; this.zl = z.lap;
+    // back wall at the start line
+    this.terrain.push({ k: 'block', x: -300, y: -3000, w: 300, h: 3000 + this.DEEP, wall: true });
+    this.flat(900, true);
+    player.x = 160;
+    player.y = -player.h;
+    player.onGround = true;
+    this.camX = player.x - this.vw * 0.3;
+    this.camY = player.y - this.vh * 0.55;
+    this.generate();
+  },
+
+  // ── building blocks ──────────────────────────────────────
+  lanePt(x, y) { this.lane.push({ x, y }); },
+  block(x, y, w, o) {
+    const b = Object.assign({ k: 'block', x, y, w, h: this.DEEP, hue: Math.floor(Math.random() * 360) }, o || {});
+    this.terrain.push(b);
+    this.lanePt(x, y); this.lanePt(x + w, y);
+    return b;
+  },
+  slopeSeg(x0, y0, x1, y1) {
+    this.terrain.push({ k: 'slope', x0, y0, x1, y1, x: x0, w: x1 - x0, hue: Math.floor(Math.random() * 360) });
+    this.lanePt(x0, y0); this.lanePt(x1, y1);
+  },
+  plat(x, y, w, o) {
+    const p = Object.assign({ k: 'plat', x, y, w, h: CFG.PLAT_H, bx: x, by: y, ax: 0, ay: 0, sp: 0, ph: Math.random() * 6.28, dx: 0, dy: 0, hue: Math.floor(Math.random() * 360) }, o || {});
+    this.terrain.push(p);
+    this.lanePt(x, y + Math.abs(p.ay)); this.lanePt(x + w + Math.abs(p.ax), y + Math.abs(p.ay));
+    return p;
+  },
+  gem(x, y) {
+    const g = { x, y, ph: Math.random() * 6.28 };
+    if (this.fuelOn) {
+      let i = 0;
+      while (i < this.gates.length && this.gates[i].x <= x) i++;
+      g.si = i;
+      if (!this.counts[i]) this.counts[i] = { total: 0, taken: 0 };
+      this.counts[i].total++;
+    }
+    this.gems.push(g);
+  },
+  maybePU(x, y) {
+    if (!this.fuelOn) return;
+    this.puGap++;
+    if (this.puGap < 6 || Math.random() > 0.35) return;
+    this.puGap = 0;
+    let total = 0; for (const k in PU_WEIGHTS) total += PU_WEIGHTS[k];
+    let r = Math.random() * total, kind = 'rocket';
+    for (const k in PU_WEIGHTS) { r -= PU_WEIGHTS[k]; if (r <= 0) { kind = k; break; } }
+    const item = { x, y, taken: false, ph: Math.random() * Math.PI * 2 };
+    if (kind === 'rocket') rockets.push(item);
+    else if (kind === 'glider') gliders.push(item);
+    else if (kind === 'steady') steadies.push(item);
+    else { item.kind = kind; oddities.push(item); }
+  },
+  gemArc(x0, x1, y, lift, n) {
+    for (let i = 0; i < n; i++) {
+      const f = n === 1 ? 0.5 : i / (n - 1);
+      this.gem(x0 + (x1 - x0) * f, y - Math.sin(f * Math.PI) * lift);
+    }
+  },
+  diff() {
+    if (this.fuelOn) return Math.min(1, (this.level - 1) / 10 + Math.max(0, this.genX - 2500) / 200000);
+    return Math.min(1, Math.max(0, (this.genX - 2500) / 40000));
+  },
+  bias(dy) {
+    if (this.genY < -1600) return Math.abs(dy);
+    if (this.genY > 500) return -Math.abs(dy);
+    return dy;
+  },
+
+  // ── segments ─────────────────────────────────────────────
+  flat(len, quiet) {
+    this.block(this.genX, this.genY, len);
+    if (!quiet) {
+      if (Math.random() < 0.45) {
+        const n = Math.min(6, Math.floor(len / 50));
+        for (let i = 0; i < n; i++) this.gem(this.genX + 40 + i * 40, this.genY - 30);
+      }
+      if (len > 280 && Math.random() < 0.35) {
+        const lx = this.genX + len * 0.25, ly = this.genY - rand(120, 180);
+        this.plat(lx, ly, 100);
+        this.gemArc(lx + 10, lx + 90, ly - 26, 0, 3);
+      }
+      if (Math.random() < 0.3) this.deco.push({ k: 'tree', x: this.genX + rand(30, len - 30), y: this.genY, s: rand(0.7, 1.3), hue: Math.floor(rand(190, 230)) });
+      if (this.fuelOn && Math.random() < 0.14) this.cans.push({ x: this.genX + len * 0.6, y: this.genY - 18, ph: Math.random() * 6.28 });
+      this.maybePU(this.genX + len * 0.8, this.genY - 16);
+    }
+    this.genX += len;
+  },
+  slope() {
+    const len = rand(220, 520);
+    const rise = this.bias(rand(-len * 0.5, len * 0.5));
+    this.slopeSeg(this.genX, this.genY, this.genX + len, this.genY + rise);
+    if (Math.random() < 0.4) this.gemArc(this.genX + 40, this.genX + len - 40, this.genY + rise / 2 - 40, 0, 4);
+    this.genX += len;
+    this.genY += rise;
+    this.flat(rand(60, 140), true);
+  },
+  step() {
+    const d = this.diff();
+    const dy = rand(50, 110 + 40 * d);
+    this.genY += this.bias(Math.random() < 0.55 ? -dy : dy);
+    this.flat(rand(160, 320));
+  },
+  gap() {
+    const d = this.diff();
+    const w = rand(80, 150 + 230 * d);
+    const dy = this.bias(rand(-100, 80));
+    this.gemArc(this.genX + 10, this.genX + w - 10, this.genY - 40, 90, 5);
+    this.genX += w;
+    this.genY += dy;
+    this.flat(rand(160, 300));
+  },
+  bridge() {
+    const d = this.diff();
+    const span = rand(260, 460 + 220 * d);
+    const x0 = this.genX, x1 = this.genX + span, y = this.genY;
+    this.deco.push({ k: 'post', x: x0, y }, { k: 'post', x: x1, y }, { k: 'rope', x0, x1, y });
+    if (d < 0.2 || Math.random() < 0.5) {
+      this.plat(x0, y, span, { bridge: true });
+    } else {
+      let x = x0;
+      while (x < x1) {
+        const pw = Math.min(rand(50, 120), x1 - x);
+        if (pw > 12) this.plat(x, y, pw, { bridge: true });
+        x += pw + rand(30, 50 + 40 * d);
+      }
+    }
+    this.gemArc(x0 + 30, x1 - 30, y - 30, 0, Math.max(3, Math.floor(span / 70)));
+    this.genX = x1;
+    this.flat(rand(160, 260));
+  },
+  clearing() {
+    const len = rand(600, 950);
+    const x0 = this.genX, y = this.genY;
+    this.block(x0, y, len);
+    this.gemArc(x0 + 80, x0 + len * 0.45, y - 30, 110, 6);
+    this.gemArc(x0 + len * 0.55, x0 + len - 80, y - 30, 110, 6);
+    const lx = x0 + len * 0.4, ly = y - rand(170, 210);
+    this.plat(lx, ly, 120);
+    this.gemArc(lx + 10, lx + 110, ly - 28, 0, 4);
+    for (let i = 0; i < 4; i++) this.deco.push({ k: 'tree', x: x0 + rand(40, len - 40), y, s: rand(0.8, 1.5), hue: Math.floor(rand(190, 230)) });
+    this.puGap += 3;
+    this.maybePU(x0 + len * 0.7, y - 16);
+    if (this.fuelOn) this.cans.push({ x: x0 + len * 0.25, y: y - 18, ph: Math.random() * 6.28 });
+    this.genX += len;
+  },
+  land(x, y) {
+    this.genX = x + rand(90, 150);
+    this.genY = y + this.bias(rand(-40, 60));
+    this.flat(rand(220, 360));
+  },
+  challenge() {
+    const d = this.diff();
+    const kinds = [['stones', 3], ['pillars', 2], ['stairs', 1.5], ['drop', 1], ['elevator', d > 0.1 ? 1.2 : 0], ['movers', d > 0.08 ? 1.5 : 0]];
+    let r = Math.random() * kinds.reduce((a, k) => a + k[1], 0), kind = 'stones';
+    for (const [k, wgt] of kinds) { r -= wgt; if (r <= 0) { kind = k; break; } }
+    let x = this.genX, y = this.genY;
+    const yTop = this.genY - 420, yBot = this.genY + 220;
+    if (kind === 'stones') {
+      const n = 3 + Math.floor(rand(0, 2 + 4 * d));
+      for (let i = 0; i < n; i++) {
+        const px = x + rand(90, 150 + 90 * d);
+        const w = rand(Math.max(40, 100 - 50 * d), 120 - 40 * d);
+        y = Math.max(yTop, Math.min(yBot, y + rand(-110, 80)));
+        const mover = Math.random() < 0.12 + 0.35 * d;
+        this.plat(px, y, w, mover ? { ax: rand(30, 70), sp: rand(0.0015, 0.003) } : {});
+        this.gem(px + w / 2, y - 34);
+        x = px + w + (mover ? 70 : 0);
+      }
+      this.land(x, y);
+    } else if (kind === 'pillars') {
+      const n = 3 + Math.floor(rand(0, 3 + 2 * d));
+      for (let i = 0; i < n; i++) {
+        const px = x + rand(70, 130 + 70 * d);
+        const w = rand(Math.max(34, 70 - 30 * d), 90);
+        y = Math.max(yTop, Math.min(yBot, y + rand(-120, 100)));
+        this.block(px, y, w, { steel: true });
+        this.gem(px + w / 2, y - 34);
+        x = px + w;
+      }
+      this.land(x, y);
+    } else if (kind === 'stairs') {
+      const n = 3 + Math.floor(rand(0, 3));
+      for (let i = 0; i < n; i++) {
+        const px = x + rand(40, 110 + 40 * d);
+        const w = rand(90, 150);
+        y = Math.max(yTop, y - rand(80, 140));
+        this.block(px, y, w);
+        this.gem(px + w / 2, y - 34);
+        x = px + w;
+      }
+      this.genX = x; this.genY = y;
+      this.flat(rand(220, 360));
+    } else if (kind === 'drop') {
+      const n = 3 + Math.floor(rand(0, 3));
+      for (let i = 0; i < n; i++) {
+        const px = x + rand(60, 140);
+        const w = rand(80, 130);
+        y = Math.min(yBot + 200, y + rand(90, 170));
+        this.plat(px, y, w);
+        this.gem(px + w / 2, y - 34);
+        x = px + w;
+      }
+      this.land(x, y);
+    } else if (kind === 'elevator') {
+      const gapW = rand(260, 380), high = rand(220, 380);
+      const px = x + gapW / 2 - 40;
+      this.plat(px, y - high / 2, 80, { ay: high / 2 + 12, sp: 0.0012, lift: true });
+      for (let i = 0; i < 4; i++) this.gem(px + 40, y - 40 - i * (high / 4));
+      this.genX = x + gapW;
+      this.genY = y - high;
+      this.flat(rand(220, 320));
+    } else {
+      const span = rand(380, 600), n = span > 480 ? 2 : 1;
+      for (let i = 0; i < n; i++) {
+        const cx = x + span * (i + 1) / (n + 1);
+        const amp = span / (n + 1) / 2 - 20;
+        this.plat(cx - 45, y + rand(-40, 20), 90, { ax: amp, sp: rand(0.0012, 0.002) });
+        this.gem(cx, y - 70);
+      }
+      this.genX = x + span;
+      this.genY = y + this.bias(rand(-50, 50));
+      this.flat(rand(220, 360));
+    }
+  },
+  nextSegment() {
+    const d = this.diff();
+    const early = this.genX < 2500;
+    const opts = [
+      ['flat', 1.5], ['slope', 3], ['step', 2], ['gap', 1.6 + d], ['bridge', early ? 0 : 1],
+      ['clearing', early ? 0 : 0.5], ['challenge', early || this.last === 'challenge' ? 0 : 0.8 + 2.2 * d],
+    ];
+    let r = Math.random() * opts.reduce((a, o) => a + o[1], 0), pick = 'flat';
+    for (const [k, wgt] of opts) { r -= wgt; if (r <= 0) { pick = k; break; } }
+    if (pick === 'flat') this.flat(rand(200, 420));
+    else this[pick]();
+    this.last = pick;
+  },
+  generate() {
+    while (this.genX < this.camX + this.vw * 2.5) {
+      while (this.fuelOn && this.gateNext < this.genX + 4000) {
+        this.gates.push({ x: this.gateNext });
+        this.gateNext += this.GATE_LEN;
+      }
+      this.nextSegment();
+    }
+  },
+  cull() {
+    const cut = this.camX - this.vw * 1.5;
+    if (cut - 40 > this.minX) this.minX = cut + 40;
+    this.terrain = this.terrain.filter(p => p.x + p.w + Math.abs(p.ax || 0) > cut);
+    this.lane = this.lane.filter(p => p.x > cut - 800);
+    this.gems = this.gems.filter(g => !g.taken && g.x > cut);
+    this.deco = this.deco.filter(o => (o.x1 || o.x) > cut);
+    if (this.fuelOn) {
+      this.cans = this.cans.filter(c => !c.taken && c.x > cut);
+      rockets = rockets.filter(r => r.x > cut);
+      gliders = gliders.filter(r => r.x > cut);
+      steadies = steadies.filter(r => r.x > cut);
+      oddities = oddities.filter(r => r.x > cut);
+    }
+  },
+  abyssAt(x) {
+    let m = -Infinity;
+    for (const p of this.lane) if (p.x > x - 700 && p.x < x + 700 && p.y > m) m = p.y;
+    if (m === -Infinity) m = this.genY;
+    return m + this.ABYSS;
+  },
+
+  // ── physics: same numbers as the climb ────────────────────
+  update(dt, ms) {
+    this.view();
+    const inp = getInput();
+    const P = player;
+    this.t += ms * worldRate();
+
+    const steady = P.steadyTime > 0;
+    const accel = steady ? STEADY_ACCEL : CFG.PLAYER_SPEED;
+    P.vx += (inp.right ? accel : 0) - (inp.left ? accel : 0);
+    P.vx *= steady ? STEADY_FRICTION : CFG.FRICTION;
+    if (Math.abs(P.vx) < 0.05) P.vx = 0;
+
+    if (P.rocketTimer > 0) {
+      // rocket: blast forward along the course, slight climb, no gravity
+      P.vx = 14;
+      P.vy = -1.2;
+      P.chute = false;
+      P.fallTimer = 0;
+    } else {
+      let grav;
+      if (P.chute) grav = P.hasGlider ? 0.16 : CFG.CHUTE_GRAVITY;
+      else if (inp.jump && P.vy < 0 && P.vy > -4) grav = CFG.BUBBLE_GRAV;
+      else grav = CFG.GRAVITY;
+      P.vy += grav * dt;
+      if (P.chute && P.hasGlider) {
+        P.gliderTime -= ms;
+        if (P.gliderTime <= 0) { P.gliderTime = 0; P.hasGlider = false; showBanner('GLIDER SPENT'); audio.triggers.spent(); }
+      }
+      if (P.chute && P.hasGlider) {
+        if (inp.jumpPressed) P.vy = GLIDER_LIFT;
+        if (inp.left || inp.right) {
+          if (P.vy > GLIDER_DIVE_FALL) P.vy = GLIDER_DIVE_FALL;
+          P.vx += (inp.right ? 1 : -1) * (steady ? 0.4 : 1.2);
+        } else if (P.vy > GLIDER_MAX_FALL) P.vy = GLIDER_MAX_FALL;
+      }
+      const maxFall = P.chute ? (P.hasGlider ? GLIDER_DIVE_FALL : CFG.CHUTE_MAX_FALL) : CFG.MAX_FALL;
+      if (P.vy > maxFall) P.vy = maxFall;
+    }
+
+    if (inp.jumpPressed && (P.onGround || P.coyoteTimer > 0)) {
+      P.vy = CFG.JUMP_FORCE;
+      P.onGround = false;
+      P.coyoteTimer = 0;
+      P.chute = false;
+      P.fallTimer = 0;
+      this.standOn = null;
+      spawnJumpPuff(P.x + P.w / 2, P.y + P.h);
+      audio.triggers.jump();
+    }
+    if (!P.onGround) P.coyoteTimer = Math.max(0, P.coyoteTimer - ms);
+
+    // moving platforms, carrying whoever stands on them
+    for (const p of this.terrain) {
+      if (p.k !== 'plat' || !p.sp) continue;
+      const s = Math.sin(this.t * p.sp + p.ph);
+      const nx = p.bx + s * p.ax, ny = p.by + s * p.ay;
+      p.dx = nx - p.x; p.dy = ny - p.y;
+      p.x = nx; p.y = ny;
+      if (this.standOn === p && P.onGround) { P.x += p.dx; P.y += p.dy; }
+    }
+
+    const wasOnGround = P.onGround;
+    const prevFeet = P.y + P.h;
+
+    // horizontal move against solid ground and steel
+    P.x += P.vx * dt;
+    if (P.x < this.minX) { P.x = this.minX; P.vx = 0; }
+    for (const b of this.terrain) {
+      if (b.k !== 'block') continue;
+      if (P.x + P.w <= b.x || P.x >= b.x + b.w || P.y + P.h <= b.y || P.y >= b.y + b.h) continue;
+      const pen = P.y + P.h - b.y;
+      if (pen <= this.STEP && P.vy >= 0 && !b.wall) { P.y = b.y - P.h; continue; }
+      if (P.x + P.w / 2 < b.x + b.w / 2) P.x = b.x - P.w; else P.x = b.x + b.w;
+      P.vx = 0;
+    }
+
+    // vertical move
+    P.y += P.vy * dt;
+    P.onGround = false;
+    this.standOn = null;
+    let landedHue = null;
+    const cx = P.x + P.w / 2;
+    for (const s of this.terrain) {
+      if (s.k !== 'slope' || cx < s.x0 || cx > s.x1 || P.vy < 0) continue;
+      const g = (s.y1 - s.y0) / (s.x1 - s.x0);
+      const sy = s.y0 + g * (cx - s.x0);
+      const feet = P.y + P.h;
+      const reach = Math.abs(P.vx * g) * dt;
+      const up = wasOnGround ? 8 + reach : 0;
+      if (feet >= sy - up && feet <= sy + 18 + P.vy * dt + reach) {
+        P.y = sy - P.h;
+        if (!wasOnGround) landedHue = s.hue;
+        P.onGround = true;
+      }
+    }
+    for (const b of this.terrain) {
+      if (b.k !== 'block') continue;
+      if (P.x + P.w <= b.x || P.x >= b.x + b.w || P.y + P.h <= b.y || P.y >= b.y + b.h) continue;
+      if (P.vy >= 0) {
+        P.y = b.y - P.h;
+        if (!wasOnGround) landedHue = b.steel ? 215 : b.hue;
+        P.onGround = true;
+      } else {
+        P.y = b.y + b.h;
+        P.vy = 1;
+        audio.triggers.bonk();
+      }
+    }
+    for (const p of this.terrain) {
+      if (p.k !== 'plat' || P.vy < 0) continue;
+      if (P.x + P.w <= p.x || P.x >= p.x + p.w) continue;
+      const feet = P.y + P.h;
+      if (feet >= p.y && prevFeet <= p.y + 4 + Math.abs(p.dy) + Math.max(0, -p.dy)) {
+        P.y = p.y - P.h;
+        if (!wasOnGround) landedHue = p.bridge ? 30 : p.hue;
+        P.onGround = true;
+        this.standOn = p;
+      }
+    }
+    if (P.onGround) {
+      if (landedHue !== null && P.vy > 2) {
+        audio.triggers.land(P.vy);
+        spawnSplash(cx, P.y + P.h, landedHue);
+      }
+      P.vy = 0;
+      P.fallTimer = 0;
+      if (P.chute) { P.chute = false; audio.triggers.chuteClose(); }
+      this.dropping = false;
+    }
+    if (wasOnGround && !P.onGround && P.vy >= 0) P.coyoteTimer = CFG.COYOTE_MS;
+    if (P.vx > 0.1) P.facing = 1;
+    if (P.vx < -0.1) P.facing = -1;
+
+    // parachute, same rule as the climb
+    if (!P.onGround && P.vy > 0 && P.rocketTimer <= 0) {
+      P.fallTimer += ms / 1000;
+      if (!P.chute && P.fallTimer >= (P.hasGlider ? 0.35 : CFG.CHUTE_DEPLOY_S)) { P.chute = true; P.hasGlider ? audio.triggers.glider() : audio.triggers.chuteOpen(); }
+    }
+
+    // abyss: drop back out of the sky above this spot
+    const abyss = this.abyssAt(cx);
+    if (P.y > abyss) {
+      this.falls++;
+      this.dropping = true;
+      this.camY = abyss + 40 - this.vh;
+      P.y = this.camY - P.h - 10;
+      P.vy = 2;
+      P.vx *= 0.3;
+      P.chute = false;
+      P.fallTimer = 0;
+      warpFlash = 0.8;
+      audio.triggers.warp();
+      showBanner('CATCH THE LEDGE');
+    }
+
+    // distance score
+    const m = Math.floor(P.x / this.UNIT);
+    if (m > score) {
+      score = m;
+      if (this.fuelOn) {
+        if (score > bestFuel) { bestFuel = score; localStorage.setItem('bestFuel', bestFuel); LB.queue(); }
+      } else if (score > bestSide) {
+        bestSide = score;
+        localStorage.setItem('bestSide', bestSide);
+        LB.queue();
+      }
+    }
+    const z = zoneAt(score);
+    if (z.i !== this.zi || z.lap !== this.zl) {
+      this.zi = z.i; this.zl = z.lap;
+      showBanner('ZONE ' + (z.lap * ZONES.length + z.i + 1) + ' ' + ZONES[z.i].name);
+      audio.triggers.zone();
+    }
+
+    // gems
+    const pcy = P.y + P.h / 2;
+    for (const g of this.gems) {
+      if (g.taken) continue;
+      const dx = cx - g.x, dy = pcy - g.y;
+      if (dx * dx + dy * dy < 22 * 22) {
+        g.taken = true;
+        this.gemCount++;
+        if (this.fuelOn) {
+          this.fuel = Math.min(100, this.fuel + 1.5);
+          if (this.counts[g.si]) this.counts[g.si].taken++;
+        }
+        audio.triggers.gem();
+        for (let i = 0; i < 10; i++) {
+          const a = Math.random() * Math.PI * 2, sp = 1.5 + Math.random() * 3.5;
+          particles.push({ x: g.x, y: g.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, decay: 0.035, size: 2 + Math.random() * 2, hue: 200 + Math.random() * 40, type: 'splash' });
+        }
+      }
+    }
+
+    if (this.fuelOn && this.fuelTick(ms, cx, pcy)) return;
+
+    // camera: leads to the right, never shows below the abyss
+    const k = Math.min(1, 0.2 * dt), kv = Math.min(1, 0.12 * dt);
+    this.camX += (P.x - this.vw * 0.3 - this.camX) * k;
+    const floor = abyss + 40 - this.vh;
+    const ty = this.dropping ? floor : Math.min(P.y - this.vh * 0.55, floor);
+    this.camY += (ty - this.camY) * kv;
+
+    this.generate();
+    this.cull();
+    GHOST.record(ms);
+  },
+
+  // ── drawing ──────────────────────────────────────────────
+  sky() {
+    const lap = Math.floor(score / ZONE_CYCLE), r = score - lap * ZONE_CYCLE;
+    let i = 0;
+    for (let q = 0; q < ZONES.length; q++) if (r >= ZONES[q].at) i = q;
+    const nextAt = i + 1 < ZONES.length ? ZONES[i + 1].at : ZONE_CYCLE;
+    const j = (i + 1) % ZONES.length;
+    const t = Math.max(0, Math.min(1, (r - (nextAt - 80)) / 80));
+    return { top: mixHex(ZONES[i].top, ZONES[j].top, t), bot: mixHex(ZONES[i].bot, ZONES[j].bot, t), Z: ZONES[i] };
+  },
+  render(time) {
+    const z = this.sky();
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, z.top); g.addColorStop(1, z.bot);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+    // stars in the dark zones
+    if (z.Z.starA > 0.5) {
+      ctx.fillStyle = '#cfe0ff';
+      for (let i = 0; i < 60; i++) {
+        const sx = ((i * 97.3 - this.camX * 0.05 * this.S) % W + W) % W;
+        const sy = (i * 53.7) % (H * 0.7);
+        ctx.globalAlpha = 0.3 + 0.5 * Math.abs(Math.sin(time * 0.002 + i));
+        ctx.fillRect(sx, sy, 2, 2);
+      }
+      ctx.globalAlpha = 1;
+    }
+    // two parallax hill layers in blue
+    [[0.15, 0.62, 0.18, 70], [0.35, 0.74, 0.28, 50]].forEach(([par, base, alpha, amp]) => {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#3d8bff';
+      ctx.beginPath();
+      ctx.moveTo(0, H);
+      for (let x = 0; x <= W; x += 10) {
+        const wx = x + this.camX * par * this.S;
+        ctx.lineTo(x, H * base + Math.sin(wx * 0.006) * amp + Math.sin(wx * 0.017) * amp * 0.35);
+      }
+      ctx.lineTo(W, H);
+      ctx.closePath();
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    ctx.save();
+    ctx.scale(this.S, this.S);
+    ctx.translate(-this.camX, -this.camY);
+    const x0 = this.camX - 30, x1 = this.camX + this.vw + 30, yB = this.camY + this.vh + 20;
+
+    // decorations behind
+    for (const o of this.deco) {
+      if ((o.x1 || o.x) < x0 || (o.x0 || o.x) > x1) continue;
+      if (o.k === 'tree') {
+        const s = o.s;
+        ctx.fillStyle = '#2b3a66';
+        ctx.fillRect(o.x - 3 * s, o.y - 34 * s, 6 * s, 34 * s);
+        ctx.fillStyle = 'hsl(' + o.hue + ', 70%, 45%)';
+        ctx.beginPath();
+        ctx.moveTo(o.x, o.y - 80 * s); ctx.lineTo(o.x + 22 * s, o.y - 30 * s); ctx.lineTo(o.x - 22 * s, o.y - 30 * s);
+        ctx.closePath(); ctx.fill();
+      } else if (o.k === 'post') {
+        ctx.fillStyle = '#5a4128';
+        ctx.fillRect(o.x - 4, o.y - 40, 8, 40);
+        ctx.fillStyle = '#3d8bff';
+        ctx.fillRect(o.x - 5, o.y - 44, 10, 5);
+      } else if (o.k === 'rope') {
+        ctx.strokeStyle = '#3d8bff'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(o.x0, o.y - 40);
+        ctx.quadraticCurveTo((o.x0 + o.x1) / 2, o.y - 10, o.x1, o.y - 40);
+        ctx.stroke();
+      }
+    }
+
+    // terrain
+    for (const p of this.terrain) {
+      if (p.x + p.w + Math.abs(p.ax || 0) < x0 || p.x > x1) continue;
+      const hue = ((p.hue || 0) + time * 0.01) % 360;
+      if (p.k === 'block') {
+        if (p.y > yB) continue;
+        const bot = Math.min(p.y + p.h, yB);
+        if (p.steel) {
+          ctx.fillStyle = '#5b6b8c';
+          ctx.fillRect(p.x, p.y, p.w, bot - p.y);
+          ctx.save();
+          ctx.beginPath(); ctx.rect(p.x, p.y, p.w, Math.min(bot - p.y, 900)); ctx.clip();
+          ctx.fillStyle = '#3d8bff';
+          for (let sy = p.y; sy < Math.min(bot, p.y + 900); sy += 26) {
+            ctx.beginPath();
+            ctx.moveTo(p.x, sy + 10); ctx.lineTo(p.x + p.w, sy - 4); ctx.lineTo(p.x + p.w, sy + 4); ctx.lineTo(p.x, sy + 18);
+            ctx.closePath(); ctx.fill();
+          }
+          ctx.restore();
+          ctx.fillStyle = '#d7e3ff';
+          ctx.fillRect(p.x, p.y, p.w, 3);
+          ctx.strokeStyle = '#1b2440'; ctx.lineWidth = 2;
+          ctx.strokeRect(p.x + 1, p.y + 1, p.w - 2, Math.min(bot - p.y, 900) - 2);
+          continue;
+        }
+        const gg = ctx.createLinearGradient(0, p.y, 0, p.y + 420);
+        gg.addColorStop(0, '#2b3a66'); gg.addColorStop(1, '#0d1222');
+        ctx.fillStyle = gg;
+        ctx.fillRect(p.x, p.y, p.w, bot - p.y);
+        this.edge(p.x, p.y, p.x + p.w, p.y, hue, time);
+      } else if (p.k === 'slope') {
+        const gg = ctx.createLinearGradient(0, Math.min(p.y0, p.y1), 0, Math.min(p.y0, p.y1) + 420);
+        gg.addColorStop(0, '#2b3a66'); gg.addColorStop(1, '#0d1222');
+        ctx.fillStyle = gg;
+        ctx.beginPath();
+        ctx.moveTo(p.x0, p.y0); ctx.lineTo(p.x1, p.y1); ctx.lineTo(p.x1, yB); ctx.lineTo(p.x0, yB);
+        ctx.closePath(); ctx.fill();
+        this.edge(p.x0, p.y0, p.x1, p.y1, hue, time);
+      } else if (p.bridge) {
+        ctx.fillStyle = '#8a6a48';
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+        ctx.fillStyle = '#5a4128';
+        for (let bx = p.x + 12; bx < p.x + p.w; bx += 14) ctx.fillRect(bx, p.y, 2, p.h);
+        ctx.fillStyle = '#3d8bff';
+        ctx.fillRect(p.x, p.y + p.h - 2, p.w, 2);
+      } else {
+        const breathe = 0.2 + 0.18 * Math.abs(Math.sin(time * 0.002 + (p.hue || 0)));
+        ctx.globalAlpha = breathe;
+        ctx.fillStyle = 'hsl(' + hue + ', 100%, 55%)';
+        ctx.fillRect(p.x - 4, p.y - 3, p.w + 8, p.h + 8);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = 'hsl(' + hue + ', 35%, 18%)';
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+        ctx.fillStyle = p.lift ? '#3d8bff' : 'hsl(' + hue + ', 100%, 62%)';
+        ctx.fillRect(p.x, p.y, p.w, 2);
+        if (p.sp) {
+          ctx.fillStyle = '#3d8bff';
+          ctx.fillRect(p.x + p.w / 2 - 6, p.y + p.h, 12, 3);
+        }
+      }
+    }
+
+    // gems
+    for (const gm of this.gems) {
+      if (gm.x < x0 || gm.x > x1) continue;
+      const y = gm.y + Math.sin(time * 0.003 + gm.ph) * 4;
+      const pulse = 0.7 + 0.3 * Math.abs(Math.sin(time * 0.006 + gm.ph));
+      ctx.globalAlpha = 0.35 * pulse;
+      ctx.fillStyle = '#6fb0ff';
+      ctx.beginPath(); ctx.arc(gm.x, y, 12, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = 'hsl(215, 95%, ' + (50 + pulse * 20) + '%)';
+      ctx.beginPath();
+      ctx.moveTo(gm.x, y - 8); ctx.lineTo(gm.x + 6, y); ctx.lineTo(gm.x, y + 8); ctx.lineTo(gm.x - 6, y);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.beginPath();
+      ctx.moveTo(gm.x, y - 8); ctx.lineTo(gm.x + 3, y - 2); ctx.lineTo(gm.x - 3, y - 2);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // the abyss
+    const ay = this.abyssAt(this.camX + this.vw * 0.3);
+    const fog = ctx.createLinearGradient(0, ay - 260, 0, ay + 40);
+    fog.addColorStop(0, 'rgba(4,8,20,0)');
+    fog.addColorStop(1, 'rgba(4,8,20,0.95)');
+    ctx.fillStyle = fog;
+    ctx.fillRect(this.camX - 10, ay - 260, this.vw + 20, 300);
+    ctx.fillStyle = '#04060d';
+    ctx.fillRect(this.camX - 10, ay + 40, this.vw + 20, 2000);
+    ctx.fillStyle = '#3d8bff';
+    for (let i = 0; i < 24; i++) {
+      const gx = this.camX + ((i * 131 + time * 0.02 * (i % 3 + 1)) % (this.vw + 20));
+      ctx.globalAlpha = 0.2 + 0.4 * Math.abs(Math.sin(time * 0.003 + i));
+      ctx.fillRect(gx, ay + 10 - (i % 5) * 14, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+
+    if (this.fuelOn) this.drawFuelWorld(time);
+    drawParticles();
+    GHOST.draw(time);
+    if (player.chute) { if (player.hasGlider) drawGliderWing(); else drawParachute(); }
+
+    const P = player;
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = P.rocketTimer > 0 ? 'hsl(' + (20 + Math.sin(time * 0.02) * 15) + ', 100%, 60%)' : '#ffffff';
+    ctx.fillRect(P.x - 2, P.y - 2, P.w + 4, P.h + 4);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = P.rocketTimer > 0 ? CFG.PLAYER : z.Z.player;
+    ctx.fillRect(P.x, P.y, P.w, P.h);
+    if (P.rocketTimer > 0) {
+      ctx.fillStyle = '#ff4422';
+      ctx.beginPath();
+      ctx.moveTo(P.x + P.w, P.y); ctx.lineTo(P.x + P.w + 12, P.y + P.h / 2); ctx.lineTo(P.x + P.w, P.y + P.h);
+      ctx.closePath(); ctx.fill();
+      ctx.fillRect(P.x - 5, P.y - 4, 8, 5);
+      ctx.fillRect(P.x - 5, P.y + P.h - 1, 8, 5);
+      for (let i = 0; i < 3; i++) particles.push({ x: P.x, y: P.y + P.h / 2 + (Math.random() - 0.5) * 8, vx: -3 - Math.random() * 3, vy: (Math.random() - 0.5) * 1.5, life: 1, decay: 0.06, size: 2.5 + Math.random() * 3, hue: 18 + Math.random() * 35, type: 'splash' });
+    }
+    ctx.fillStyle = '#3d8bff';
+    ctx.fillRect(P.facing > 0 ? P.x + P.w - 5 : P.x + 2, P.y + 5, 3, 3);
+    ctx.restore();
+
+    staticFx.draw(16.67 * worldRate());
+    if (P.slowTime > 0) {
+      const sg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.75);
+      sg.addColorStop(0, 'rgba(61,139,255,0)');
+      sg.addColorStop(1, 'rgba(61,139,255,0.35)');
+      ctx.fillStyle = sg;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    if (warpFlash > 0) {
+      ctx.globalAlpha = warpFlash;
+      ctx.fillStyle = '#bfe0ff';
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+      warpFlash = Math.max(0, warpFlash - 0.04);
+    }
+
+    ctx.shadowColor = 'rgba(0,0,0,0.75)';
+    ctx.shadowBlur = 3;
+    this.hud();
+    if (this.fuelOn) this.fuelHud();
+    GHOST.hud();
+    drawBanner();
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'transparent';
+    drawTouchHints();
+  },
+  edge(ax, ay, bx, by, hue, time) {
+    ctx.strokeStyle = 'hsl(' + hue + ', 100%, 62%)';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(ax, ay + 1); ctx.lineTo(bx, by + 1); ctx.stroke();
+    ctx.strokeStyle = '#3d8bff';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(ax, ay + 4); ctx.lineTo(bx, by + 4); ctx.stroke();
+    const len = Math.hypot(bx - ax, by - ay), n = Math.floor(len / 22);
+    for (let i = 0; i < n; i++) {
+      const f = (i + 0.5) / n;
+      ctx.globalAlpha = 0.3 + 0.7 * Math.abs(Math.sin(time * 0.003 + i * 0.7 + hue));
+      ctx.fillStyle = 'hsl(' + ((hue + i * 25) % 360) + ', 100%, 75%)';
+      ctx.fillRect(ax + (bx - ax) * f, ay + (by - ay) * f + 8, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+  },
+  hud() {
+    ctx.textAlign = 'right';
+    ctx.fillStyle = CFG.SCORE_COL;
+    ctx.font = 'bold 16px monospace';
+    ctx.fillText(score + 'm', W - 14, 28);
+    ctx.fillStyle = CFG.UI_DIM;
+    ctx.font = '11px monospace';
+    ctx.fillText('best ' + (this.fuelOn ? bestFuel : bestSide) + 'm', W - 14, 46);
+    ctx.fillStyle = '#6fb0ff';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('◆ ' + this.gemCount, W - 14, 66);
+    ctx.fillStyle = '#3d8bff';
+    ctx.font = 'bold 11px monospace';
+    ctx.fillText('falls ' + this.falls, W - 14, 84);
+    if (!player.onGround && !player.chute && player.vy > 0) {
+      const pct = Math.min(player.fallTimer / CFG.CHUTE_DEPLOY_S, 1);
+      ctx.fillStyle = '#222233';
+      ctx.fillRect(14, 14, 60, 6);
+      ctx.fillStyle = pct > 0.7 ? CFG.CHUTE : '#5566aa';
+      ctx.fillRect(14, 14, 60 * pct, 6);
+      ctx.fillStyle = CFG.UI_DIM;
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('chute', 14, 31);
+    }
+  },
+};
+
+// ════════════════════════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════════════════════════
 function initGame() {
@@ -2445,6 +3375,7 @@ function initGame() {
   applyDifficulty();
   warpFlash       = 0;
   resetTokens();
+  if (sideLike()) { initPlayer(); SIDE.init(); GHOST.reset(); return; }
   addGround();
   generateUpTo(-H * 2);
   initPlayer();
@@ -2704,6 +3635,7 @@ function render(time) {
   if (state === STATE.MENU) { drawMenu(); return; }
   if (state === STATE.DEAD)  { drawDead(); return; }
   if (state === STATE.RESULT) { drawResult(); return; }
+  if (sideLike()) { SIDE.render(time); return; }
 
   drawZoneSky();
 
@@ -3086,18 +4018,18 @@ function drawMenu() {
   ctx.fillStyle = '#6fb0ff';
   ctx.font = 'bold 12px monospace';
   ctx.fillText(mode === 'gauntlet' ? 'RUN THE GAUNTLET' : mode === 'jewels' ? 'JEWELS MODE' : mode === 'career' ? 'CAREER  LEVEL ' + careerLevel + '  REACH ' + LEVEL_TARGET(careerLevel) + 'm'
-    : mode === 'challenge' ? 'CHALLENGE MODE' : 'MARATHON MODE', W / 2, H / 2 - 54);
+    : mode === 'challenge' ? 'CHALLENGE MODE' : mode === 'side' ? 'SIDE SCROLL MARATHON' : mode === 'fuel' ? 'FUEL MODE' : 'MARATHON MODE', W / 2, H / 2 - 54);
 
   ctx.fillStyle = CFG.UI_DIM;
   ctx.font = '13px monospace';
-  ctx.fillText('climb as high as you can', W / 2, H / 2 + 2);
-  ctx.fillText('fall 2s → parachute deploys', W / 2, H / 2 + 22);
+  ctx.fillText(mode === 'fuel' ? 'grab every gem in a stretch to level up' : mode === 'side' ? 'run right as far as you can' : 'climb as high as you can', W / 2, H / 2 + 2);
+  ctx.fillText(mode === 'fuel' ? 'gems are fuel, run dry and the run ends' : mode === 'side' ? 'fall in the abyss, drop from the sky' : 'fall 2s → parachute deploys', W / 2, H / 2 + 22);
 
   ctx.fillStyle = CFG.ACCENT;
   ctx.font = 'bold 14px monospace';
   ctx.fillText('tap to start', W / 2, H / 2 + 56);
 
-  const menuBest = mode === 'challenge' ? bestChallenge : mode === 'career' ? careerCleared : mode === 'gauntlet' ? bestGauntlet : mode === 'jewels' ? bestJewels : best;
+  const menuBest = mode === 'challenge' ? bestChallenge : mode === 'career' ? careerCleared : mode === 'gauntlet' ? bestGauntlet : mode === 'jewels' ? bestJewels : mode === 'side' ? bestSide : mode === 'fuel' ? bestFuel : best;
   if (menuBest > 0) {
     ctx.fillStyle = CFG.SCORE_COL;
     ctx.font = '11px monospace';
@@ -3147,6 +4079,24 @@ function drawResult() {
 }
 
 function drawDead() {
+  if (mode === 'fuel') {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#3d8bff';
+    ctx.font = 'bold 26px monospace';
+    ctx.fillText('OUT OF FUEL', W / 2, H / 2 - 40);
+    ctx.fillStyle = CFG.SCORE_COL;
+    ctx.font = 'bold 20px monospace';
+    ctx.fillText(score + 'm', W / 2, H / 2 - 8);
+    ctx.fillStyle = '#6fb0ff';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillText('LEVEL ' + SIDE.level, W / 2, H / 2 + 16);
+    ctx.fillStyle = CFG.UI_DIM;
+    ctx.font = '12px monospace';
+    ctx.fillText(score >= bestFuel && score > 0 ? 'new best!' : 'best ' + bestFuel + 'm  top level ' + bestFuelLevel, W / 2, H / 2 + 38);
+    ctx.fillText('tap to fuel up and go again', W / 2, H / 2 + 64);
+    drawNamePrompt(H / 2 + 90);
+    return;
+  }
   ctx.fillStyle = CFG.UI_TEXT;
   ctx.font = 'bold 26px monospace';
   ctx.textAlign = 'center';
@@ -3202,7 +4152,19 @@ function tick(ts) {
   const dt = ms / 16.67;
   lastTs = ts;
 
-  if (state === STATE.PLAYING && !LB.open) {
+  if (state === STATE.PLAYING && !LB.open && sideLike()) {
+    const wr = worldRate();
+    worldClock += ms;
+    SIDE.update(dt, ms);
+    if (state === STATE.PLAYING && mode === 'fuel') {
+      updateRockets(ms);
+      updateSteadies(ms);
+      updateOddities(ms);
+      updateGliders();
+      updateBlaze();
+    }
+    updateParticles(dt * wr);
+  } else if (state === STATE.PLAYING && !LB.open) {
     const wr = worldRate();
     worldClock += ms * wr;
     updatePhysics(dt, ms);
@@ -3233,7 +4195,7 @@ function tick(ts) {
 //  GLOBAL LEADERBOARD (ascend-backend on Railway)
 // ════════════════════════════════════════════════════════════
 const LB = {
-  open: false, api: null, timer: null, posted: 0, postedC: 0, postedK: 0, postedG: 0, postedJ: 0,
+  open: false, api: null, timer: null, posted: 0, postedC: 0, postedK: 0, postedG: 0, postedJ: 0, postedS: 0, postedF: 0,
   name: localStorage.getItem('ascendName') || '',
   el: id => document.getElementById(id),
   clean(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9 _.-]/g, '').trim().slice(0, 12); },
@@ -3304,6 +4266,8 @@ const LB = {
     if (careerCleared > 0 && careerCleared > this.postedK) jobs.push(['career', careerCleared]);
     if (bestGauntlet > 0 && bestGauntlet > this.postedG) jobs.push(['gauntlet', bestGauntlet]);
     if (bestJewels > 0 && bestJewels > this.postedJ) jobs.push(['jewels', bestJewels]);
+    if (bestSide > 0 && bestSide > this.postedS) jobs.push(['side', bestSide]);
+    if (bestFuel > 0 && bestFuel > this.postedF) jobs.push(['fuel', bestFuel]);
     for (const [m, val] of jobs) {
       try {
         const r = await fetch(api + '/scores', {
@@ -3316,6 +4280,8 @@ const LB = {
         else if (m === 'challenge') { this.postedC = val; localStorage.setItem('ascendPostedC', String(val)); }
         else if (m === 'career') { this.postedK = val; localStorage.setItem('ascendPostedK', String(val)); }
         else if (m === 'gauntlet') { this.postedG = val; localStorage.setItem('ascendPostedG', String(val)); }
+        else if (m === 'side') { this.postedS = val; localStorage.setItem('ascendPostedS', String(val)); }
+        else if (m === 'fuel') { this.postedF = val; localStorage.setItem('ascendPostedF', String(val)); }
         else { this.postedJ = val; localStorage.setItem('ascendPostedJ', String(val)); }
         if (this.open && m === mode) {
           this.render(j.scores || []);
@@ -3355,8 +4321,10 @@ const LB = {
     this.el('modeCareer').className = m === 'career' ? 'on' : '';
     this.el('modeGauntlet').className = m === 'gauntlet' ? 'on' : '';
     this.el('modeJewels').className = m === 'jewels' ? 'on' : '';
+    this.el('modeSide').className = m === 'side' ? 'on' : '';
+    this.el('modeFuel').className = m === 'fuel' ? 'on' : '';
     this.el('lbTitle').textContent = m === 'career' ? 'LEVEL ' + careerLevel + ' FASTEST TIMES'
-      : ({ challenge: 'CHALLENGE', gauntlet: 'GAUNTLET', jewels: 'JEWELS' }[m] || 'MARATHON') + ' LEADERBOARD';
+      : ({ challenge: 'CHALLENGE', gauntlet: 'GAUNTLET', jewels: 'JEWELS', side: 'SIDE SCROLL', fuel: 'FUEL' }[m] || 'MARATHON') + ' LEADERBOARD';
     this.syncLevel();
   },
   syncLevel() {
@@ -3389,6 +4357,8 @@ const LB = {
     this.postedK = sameName ? parseInt(localStorage.getItem('ascendPostedK') || '0') : 0;
     this.postedG = sameName ? parseInt(localStorage.getItem('ascendPostedG') || '0') : 0;
     this.postedJ = sameName ? parseInt(localStorage.getItem('ascendPostedJ') || '0') : 0;
+    this.postedS = sameName ? parseInt(localStorage.getItem('ascendPostedS') || '0') : 0;
+    this.postedF = sameName ? parseInt(localStorage.getItem('ascendPostedF') || '0') : 0;
     this.setMode(mode);
     document.querySelectorAll('#lbOpts button').forEach(b => {
       const k = b.dataset.opt;
@@ -3415,7 +4385,7 @@ const LB = {
     };
     this.el('lvPrev').addEventListener('click', () => pickLevel(-1));
     this.el('lvNext').addEventListener('click', () => pickLevel(1));
-    ['modeClimb', 'modeChallenge', 'modeCareer', 'modeGauntlet', 'modeJewels'].forEach(id => this.el(id).addEventListener('click', e => {
+    ['modeClimb', 'modeChallenge', 'modeCareer', 'modeGauntlet', 'modeJewels', 'modeSide', 'modeFuel'].forEach(id => this.el(id).addEventListener('click', e => {
       const m = e.currentTarget.dataset.mode;
       if (m === mode) return;
       GHOST.save();
@@ -3435,13 +4405,13 @@ const LB = {
     this.el('lbSave').addEventListener('click', async () => {
       const nm = this.clean(this.el('lbName').value);
       if (!nm) { this.status('name needs letters or numbers'); return; }
-      if (nm !== this.name) { this.posted = 0; this.postedC = 0; this.postedK = 0; this.postedG = 0; this.postedJ = 0; }
+      if (nm !== this.name) { this.posted = 0; this.postedC = 0; this.postedK = 0; this.postedG = 0; this.postedJ = 0; this.postedS = 0; this.postedF = 0; }
       this.name = nm;
       this.el('lbName').value = nm;
       localStorage.setItem('ascendName', nm);
       localStorage.setItem('ascendPostedName', nm);
       this.postAllTimes();
-      if (best > 0 || bestChallenge > 0 || careerCleared > 0 || bestGauntlet > 0 || bestJewels > 0) { this.status('posting'); await this.post(); }
+      if (best > 0 || bestChallenge > 0 || careerCleared > 0 || bestGauntlet > 0 || bestJewels > 0 || bestSide > 0 || bestFuel > 0) { this.status('posting'); await this.post(); }
       this.load();
     });
     document.addEventListener('visibilitychange', () => {
@@ -3456,5 +4426,233 @@ LB.init();
 initGame();
 requestAnimationFrame(loop);
 </script>
+  <!-- =====================================================================
+       MOHAVE TECHNOLOGY GROUP // CREATOR SEAL
+       Drop this ONE block into any HTML page, anywhere before </body>.
+       The only thing you edit is the CONFIG object on the next few lines.
+       ===================================================================== -->
+  <script>
+  (function () {
+
+    /* RED PHONE: Pajamastan flag as a data URI. Self-contained so the seal
+       stays a single drop-in block with no external image to host. */
+    var FLAG_SRC = "data:image/jpeg;base64,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";
+
+    /* ---------- CONFIG: the only part you change ---------- */
+    var CONFIG = {
+      org:      "Mohave Technology Group",
+      monogram: "MTG",
+      mission:  "Practical software and hardware, built in the field.",
+
+      // RED PHONE: Pajamastan export homage.
+      nation:   "Pajamastan",
+      site:     "https://pajamastan.vercel.app",
+      flag:     FLAG_SRC,
+
+      // BLUE PHONE: one money donate link (Stripe live payment link).
+      donate:   "https://buy.stripe.com/28EeV64rb6ga7fneyp6AM00",
+
+      github:   "https://github.com/sudosilo",
+      linkedin: "https://www.linkedin.com/in/dicktemple"
+    };
+    /* ----------------------------------------------------- */
+
+
+    /* ---------- LAYER 1: the signature pressed into the source ---------- */
+    var head = document.head || document.getElementsByTagName("head")[0];
+
+    head.appendChild(document.createComment(
+      " Made by " + CONFIG.org + " // " + CONFIG.github + " // " + CONFIG.linkedin + " "
+    ));
+    // RED PHONE: export origin banner in the source.
+    head.appendChild(document.createComment(
+      " Certified export of " + CONFIG.nation + " // " + CONFIG.site + " "
+    ));
+
+    var metaAuthor = document.createElement("meta");
+    metaAuthor.setAttribute("name", "author");
+    metaAuthor.setAttribute("content", CONFIG.org);
+    head.appendChild(metaAuthor);
+
+    // RED PHONE: export-origin meta tag.
+    var metaOrigin = document.createElement("meta");
+    metaOrigin.setAttribute("name", "x-export-origin");
+    metaOrigin.setAttribute("content", CONFIG.nation);
+    head.appendChild(metaOrigin);
+
+    [CONFIG.github, CONFIG.linkedin].forEach(function (url) {
+      var l = document.createElement("link");
+      l.setAttribute("rel", "me");
+      l.setAttribute("href", url);
+      head.appendChild(l);
+    });
+
+    var ld = document.createElement("script");
+    ld.type = "application/ld+json";
+    ld.textContent = JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": CONFIG.org,
+      "url": CONFIG.site,
+      "sameAs": [CONFIG.github, CONFIG.linkedin]
+    });
+    head.appendChild(ld);
+
+
+    /* ---------- LAYER 2: the visible seal ---------- */
+
+    // Round Mohave Technology Group seal, kept beside the Pajamastan flag.
+    function buildSeal() {
+      var org = CONFIG.org.toUpperCase();
+      return ''
+        + '<svg class="mtg-seal-svg" viewBox="0 0 120 120" width="58" height="58" '
+        +   'role="img" aria-label="' + CONFIG.org + ' seal">'
+        +   '<defs>'
+        +     '<path id="mtgTop" d="M 23,60 A 37,37 0 0 1 97,60" fill="none"/>'
+        +   '</defs>'
+        +   '<circle cx="60" cy="60" r="55" fill="none" stroke="#7a2e28" stroke-width="2.5"/>'
+        +   '<circle cx="60" cy="60" r="48" fill="none" stroke="#7a2e28" stroke-width="1"/>'
+        +   '<text font-family="Georgia,serif" font-size="8" fill="#7a2e28">'
+        +     '<textPath href="#mtgTop" startOffset="50%" text-anchor="middle" '
+        +     'textLength="106" lengthAdjust="spacingAndGlyphs">'
+        +     org + '</textPath>'
+        +   '</text>'
+        +   '<text x="60" y="60" text-anchor="middle" dominant-baseline="central" '
+        +     'font-family="Georgia,serif" font-weight="700" font-size="27" '
+        +     'fill="#7a2e28">' + CONFIG.monogram + '</text>'
+        +   '<g fill="#7a2e28">'
+        +     '<rect x="58" y="83.5" width="4" height="4"/>'
+        +     '<rect x="63" y="88.5" width="4" height="4"/>'
+        +     '<rect x="53" y="93.5" width="4" height="4"/>'
+        +     '<rect x="58" y="93.5" width="4" height="4"/>'
+        +     '<rect x="63" y="93.5" width="4" height="4"/>'
+        +   '</g>'
+        + '</svg>';
+    }
+
+
+    var css = ''
+      + '.mtg-seal{box-sizing:border-box;width:100%;background:#efe9da;'
+      + 'border-top:1px solid #cabfa3;color:#2b2620;'
+      + 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;'
+      + 'padding:18px 20px;display:flex;flex-direction:column;align-items:center;gap:12px;}'
+      + '.mtg-seal-row{display:flex;align-items:center;gap:14px;}'
+      // RED PHONE: round flag badge, brand-red ring to echo the old seal.
+      + '.mtg-flag-btn{background:none;border:0;padding:0;margin:0;cursor:pointer;'
+      + 'display:flex;align-items:center;line-height:0;'
+      + 'transition:transform .18s ease;}'
+      + '.mtg-seal.open .mtg-flag-btn{transform:scale(.94);}'
+      + '.mtg-flag{width:48px;height:72px;border-radius:8px;object-fit:cover;'
+      + 'display:block;border:2px solid #7a2e28;box-shadow:0 1px 3px rgba(43,38,32,.25);}'
+      + '.mtg-seal-btn{background:none;border:0;padding:0;margin:0;cursor:pointer;'
+      + 'display:flex;align-items:center;line-height:0;transition:transform .18s ease;}'
+      + '.mtg-seal.open .mtg-seal-btn{transform:rotate(-8deg) scale(.94);}'
+      + '.mtg-seal-svg{display:block;}'
+      + '.mtg-seal-label{text-align:left;line-height:1.35;}'
+      + '.mtg-seal-org{display:block;font-family:Georgia,"Times New Roman",serif;'
+      + 'font-size:14px;letter-spacing:.3px;color:#2b2620;}'
+      // RED PHONE: export subtitle with an inline linkable nation word.
+      + '.mtg-seal-export{display:block;font-family:Georgia,"Times New Roman",serif;'
+      + 'font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:#4a443b;margin:2px 0;}'
+      + '.mtg-seal-link{color:#7a2e28;text-decoration:underline;}'
+      + '.mtg-seal-link:hover{color:#5f231e;}'
+      + '.mtg-seal-ask{display:inline-block;background:none;border:0;padding:0;margin:0;'
+      + 'font:inherit;font-size:12px;color:#7a2e28;text-decoration:underline;cursor:pointer;}'
+      + '.mtg-seal-panel{overflow:hidden;max-height:0;opacity:0;'
+      + 'transition:max-height .25s ease,opacity .25s ease;width:100%;max-width:360px;}'
+      + '.mtg-seal.open .mtg-seal-panel{max-height:300px;opacity:1;}'
+      + '.mtg-seal-mission{font-style:italic;color:#4a443b;font-size:13px;'
+      + 'text-align:center;margin:0 0 12px;line-height:1.5;}'
+      + '.mtg-seal-links{display:flex;justify-content:center;gap:10px;}'
+      + '.mtg-seal-links a{flex:1;text-align:center;text-decoration:none;'
+      + 'font-size:13px;color:#2b2620;background:#faf7ef;border:1px solid #cabfa3;'
+      + 'border-radius:6px;padding:8px 10px;transition:background .15s ease;}'
+      + '.mtg-seal-links a:hover{background:#fff;}'
+      + '.mtg-flag-btn:focus-visible,.mtg-seal-btn:focus-visible,.mtg-seal-ask:focus-visible,'
+      + '.mtg-seal-link:focus-visible{outline:2px solid #7a2e28;outline-offset:3px;border-radius:4px;}'
+      + '.mtg-seal-links a:focus-visible{outline:2px solid #7a2e28;outline-offset:2px;}'
+      // BLUE PHONE: support the micronation donate pill with a coin icon.
+      + '.mtg-donate{display:inline-flex;align-items:center;gap:10px;text-decoration:none;'
+      + 'background:linear-gradient(180deg,#fffaf0,#f3e7cc);color:#2b2620;'
+      + 'border:1px solid #b89a5a;border-radius:999px;padding:6px 16px 6px 6px;'
+      + 'box-shadow:0 1px 0 #fff inset,0 2px 6px rgba(122,46,40,.18);'
+      + 'transition:transform .15s ease,box-shadow .15s ease;}'
+      + '.mtg-donate:hover{transform:translateY(-1px);box-shadow:0 1px 0 #fff inset,0 4px 10px rgba(122,46,40,.25);}'
+      + '.mtg-donate:active{transform:translateY(0);}'
+      + '.mtg-donate-coin{display:block;flex:none;}'
+      + '.mtg-donate-text{display:flex;flex-direction:column;line-height:1.2;text-align:left;}'
+      + '.mtg-donate-main{font-family:Georgia,"Times New Roman",serif;font-size:13px;color:#7a2e28;letter-spacing:.2px;}'
+      + '.mtg-donate-sub{font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:#6b6255;}'
+      + '.mtg-donate:focus-visible{outline:2px solid #7a2e28;outline-offset:3px;}'
+      + '@media (prefers-reduced-motion: reduce){.mtg-donate{transition:none;}}'
+      + '@media (prefers-reduced-motion: reduce){'
+      + '.mtg-flag-btn,.mtg-seal-btn,.mtg-seal-panel{transition:none;}}';
+
+    var style = document.createElement("style");
+    style.textContent = css;
+    head.appendChild(style);
+
+    var seal = document.createElement("footer");
+    seal.className = "mtg-seal";
+    seal.innerHTML = ''
+      + '<div class="mtg-seal-row">'
+      +   '<button class="mtg-flag-btn" type="button" aria-label="Toggle maker details">'
+      +     '<img class="mtg-flag" src="' + CONFIG.flag + '" alt="' + CONFIG.nation + ' flag">'
+      +   '</button>'
+      +   '<button class="mtg-seal-btn" type="button" aria-label="Toggle maker details">'
+      +     buildSeal()
+      +   '</button>'
+      +   '<span class="mtg-seal-label">'
+      +     '<span class="mtg-seal-org">' + CONFIG.org + '</span>'
+      +     '<span class="mtg-seal-export">Certified export of '
+      +       '<a class="mtg-seal-link" href="' + CONFIG.site + '" target="_blank" rel="noopener">'
+      +       CONFIG.nation + '</a></span>'
+      +     '<button class="mtg-seal-ask" type="button" aria-expanded="false">Who made this?</button>'
+      +   '</span>'
+      + '</div>'
+      // BLUE PHONE: donate pill, always visible under the seal row.
+      + '<a class="mtg-donate" href="' + CONFIG.donate + '" target="_blank" rel="noopener">'
+      +   '<svg class="mtg-donate-coin" viewBox="0 0 40 40" width="34" height="34" aria-hidden="true">'
+      +       '<circle cx="20" cy="20" r="19" fill="#d9b25a" stroke="#8a6a24" stroke-width="1.5"/>'
+      +       '<circle cx="20" cy="20" r="14.5" fill="#f2d68a" stroke="#b08a3a" stroke-width="1"/>'
+      +       '<path d="M11 24c2-1 3-4 3-7M29 24c-2-1-3-4-3-7" fill="none" stroke="#8a6a24" stroke-width="1.2" stroke-linecap="round"/>'
+      +       '<text x="20" y="25.5" text-anchor="middle" font-family="Georgia,serif" font-size="15" font-weight="bold" fill="#7a2e28">1</text>'
+      +     '</svg>'
+      +   '<span class="mtg-donate-text">'
+      +     '<span class="mtg-donate-main">Support the Micronation of ' + CONFIG.nation + '</span>'
+      +     '<span class="mtg-donate-sub">Give one money</span>'
+      +   '</span>'
+      + '</a>'
+      + '<div class="mtg-seal-panel">'
+      +   '<p class="mtg-seal-mission">' + CONFIG.mission + '</p>'
+      +   '<div class="mtg-seal-links">'
+      +     '<a href="' + CONFIG.site + '" target="_blank" rel="noopener">' + CONFIG.nation + '</a>'
+      +     '<a href="' + CONFIG.github + '" target="_blank" rel="noopener me">GitHub</a>'
+      +     '<a href="' + CONFIG.linkedin + '" target="_blank" rel="noopener me">LinkedIn</a>'
+      +   '</div>'
+      + '</div>';
+
+    // RED PHONE: flag badge and "Who made this?" both toggle the panel.
+    var ask = seal.querySelector(".mtg-seal-ask");
+    var flagBtn = seal.querySelector(".mtg-flag-btn");
+    function toggle() {
+      var nowOpen = seal.classList.toggle("open");
+      ask.setAttribute("aria-expanded", nowOpen ? "true" : "false");
+    }
+    ask.addEventListener("click", toggle);
+    flagBtn.addEventListener("click", toggle);
+    seal.querySelector(".mtg-seal-btn").addEventListener("click", toggle);
+
+    // RED PHONE: drop this block into a page with no seal container and it
+    // still lands at the bottom of body exactly like before. Give a page a
+    // <div id="mtgSealContainer"> anywhere and the seal lands there instead,
+    // which is how the landing screen pins it to its own bottom edge rather
+    // than the bottom of the whole document.
+    var sealContainer = document.getElementById("mtgSealContainer") || document.body;
+    sealContainer.appendChild(seal);
+
+  })();
+  </script>
+  <!-- ===================== END CREATOR SEAL ===================== -->
 </body>
 </html>

@@ -8,6 +8,4 @@ Live at final-vector-six.vercel.app
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-10-14, v2026.10.14. Changed the accent color from light blue to hot pink.
-
 Full history is in CHANGELOG.md.

@@ -6,6 +6,4 @@ You talk or type to run a mill. The tagline is make it small, copy it, automate 
 
 This app is checked every morning by Control Troll.
 
-Latest change. 2026-10-21, v2026.10.21. Created the game. It is a voice text adventure mill with an AI engine.
-
 Full history is in CHANGELOG.md.

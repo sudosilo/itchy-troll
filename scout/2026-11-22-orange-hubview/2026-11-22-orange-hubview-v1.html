@@ -55,12 +55,38 @@ button.on{background:#3d3d3d;color:#fff}
 #paint button.multi{width:auto;padding:0 10px;background:linear-gradient(90deg,#8db3d6,#e9a074,#9cc7a4,#f0cd6e,#b8a3d1)}
 #paint button.on{outline:3px solid #1e6fd9;outline-offset:1px}
 #paint span{font-size:11px;letter-spacing:.5px;min-width:90px}
+#scan{position:fixed;top:0;left:0;bottom:0;width:min(380px,92vw);z-index:44;background:#fff;border-right:2px solid #3d3d3d;border-left:6px solid #1e6fd9;display:none;flex-direction:column;box-sizing:border-box}
+#scan.open{display:flex}
+#scan .top{display:flex;gap:8px;padding:10px;border-bottom:1px solid #3d3d3d;flex-wrap:wrap}
+#scan .body{flex:1;overflow:auto;padding:12px 14px;font-size:13px;line-height:1.45}
+#scan img{width:100%;max-height:30vh;object-fit:contain;border:1px solid #3d3d3d;background:#f3f1ec}
+#scan h5{margin:14px 0 4px;font-size:11px;letter-spacing:1px;color:#1e6fd9;border-bottom:2px solid #1e6fd9;padding-bottom:3px;font-weight:normal;text-transform:uppercase}
+#scan .it{padding:7px 0;border-bottom:1px solid #eee4d2}
+#scan .it b{font-weight:normal;text-transform:uppercase;letter-spacing:.5px}
+#scan .it small{display:block;color:#6a6a6a;font:12px/1.4 Courier New,monospace}
+#scan .it .q{float:right;color:#1e6fd9;font:12px Courier New,monospace}
+#scan .st{color:#1e6fd9;font:13px Courier New,monospace;margin:10px 0}
+#scan .act button{width:100%;margin:0 0 6px;text-align:left;border-left:6px solid #1e6fd9}
+#scan .tag{font:10px Courier New,monospace;padding:1px 4px;border:1px solid #3d3d3d;white-space:nowrap}
+#scan .tag.lib,#scan .tag.model{background:#1e6fd9;color:#fff;border-color:#1e6fd9}
+#scan .tag.spec{color:#1e6fd9;border-color:#1e6fd9}
+#scan .tag.photo{color:#8a8a8a;border-color:#bbb}
+#scan .dg{display:flex;gap:6px;flex-wrap:wrap}
+#scan .dg img{width:48%;max-height:none;border:1px solid #3d3d3d}
+#scan .it.lib{cursor:pointer}
+#scan .src{display:block;padding:7px 0;border-bottom:1px solid #eee4d2;color:#1e6fd9;word-break:break-all}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <button id="hb" aria-label="Menu">&#8801;</button>
 <div id="menu">
+<h4>SCAN A PHOTO</h4>
+<button id="mScan" class="blue">Take or pick a photo</button>
+<input id="mPhoto" type="file" accept="image/*" style="display:none">
+<div class="note" id="mScanNote">Snap a car or anything else. It finds the exact model and its service manual, then gives you a parts list with part numbers, sizes and threads, and an exploded view you can take apart.</div>
+<button id="mLib" class="blue">Shared library</button>
+<button id="mLastScan" style="display:none">Open last scan</button>
 <h4>SAVE</h4>
 <button id="mSave" class="blue">Save card as image</button>
 <div class="note" id="mSaveNote">Saves the current view with the info card and the site address on it.</div>
@@ -80,6 +106,7 @@ button.on{background:#3d3d3d;color:#fff}
 <div id="bl"></div>
 </div>
 <div id="list"></div>
+<div id="scan"><div class="top"><button id="scClose">Close</button><button id="scAgain" class="blue">New photo</button></div><div class="body" id="scBody"></div></div>
 <div id="find"><input id="findq" type="search" placeholder="FIND A PART" autocomplete="off"><div id="findres"></div></div>
 <div id="bar">
 <button id="bCar" aria-label="Choose car">&#8801; <span id="bCarName">CAR</span></button>
@@ -101,6 +128,7 @@ button.on{background:#3d3d3d;color:#fff}
 <script type="module">
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 
 const PI=Math.PI;
 const PAL=[0x8db3d6,0xe9a074,0x9cc7a4,0xf0cd6e,0xb8a3d1,0x7cc0bb,0xe58e95,0xd2cbbd];
@@ -2158,7 +2186,8 @@ function buySheet(){
   const nm=s.name.toLowerCase(),shops=[];
   if(/glass|windshield|window/.test(nm))shops.push(['Safelite',CAR.id==='prius'?'https://www.safelite.com/vehicle-glass-repair/toyota-prius-windshields':'https://www.safelite.com/']);
   if(/tire|wheel/.test(nm))shops.push(['Discount Tire',CAR.id==='prius'?'https://www.discounttire.com/fitmentresult/tires/size/185-65-15':'https://www.discounttire.com/fitmentresult/tires/size/165-80-13']);
-  if(shops.length)h+='<div style="color:#8a8a8a;margin:10px 0 4px">Service shops</div><div style="display:flex;gap:8px;flex-wrap:wrap">'+shops.map(x=>'<a target="_blank" rel="noopener" href="'+x[1]+'"><button>'+esc(x[0])+'</button></a>').join('')+'</div>';
+  if(CAR.hardware)shops.push(['Home Depot','https://www.homedepot.com/s/'+enc(s.num||s.name)],['Lowe\'s','https://www.lowes.com/search?searchTerm='+enc(s.num||s.name)],['McMaster','https://www.mcmaster.com/'+enc(s.num||s.name)]);
+  if(shops.length)h+='<div style="color:#8a8a8a;margin:10px 0 4px">'+(CAR.hardware?'Hardware stores':'Service shops')+'</div><div style="display:flex;gap:8px;flex-wrap:wrap">'+shops.map(x=>'<a target="_blank" rel="noopener" href="'+x[1]+'"><button>'+esc(x[0])+'</button></a>').join('')+'</div>';
   h+='<div style="margin-top:12px"><button id="buyclose">Close</button></div>';
   ov.innerHTML=h;document.body.appendChild(ov);document.getElementById('buyclose').onclick=()=>ov.remove();
 }
@@ -2468,7 +2497,7 @@ function loadCar(id){
   total=0;focus=null;selected=null;extra=false;carAmt=carTarget=0;typeKey='';
   CAR=CARS[id];CAR.build();buildAll();if(typeof applyPaint==='function')applyPaint();
   const did=CAR.data||id;
-  PN={};fetch('ref/parts/'+did+'.json').then(r=>r.ok?r.json():{}).then(j=>{PN=j;typeKey='';refresh()}).catch(()=>{});
+  PN=CAR.pn||{};if(!CAR.pn)fetch('ref/parts/'+did+'.json').then(r=>r.ok?r.json():{}).then(j=>{PN=j;typeKey='';refresh()}).catch(()=>{});
   SPECS=[];TREE=[];fetch('ref/archive/'+did+'/specs.json').then(r=>r.ok?r.json():[]).then(j=>{SPECS=j}).catch(()=>{});
   fetch('ref/archive/'+did+'/tree.json').then(r=>r.ok?r.json():[]).then(j=>{TREE=j}).catch(()=>{});
   MANUAL={};const gen=carGen;fetch('ref/manual/map-'+did+'.json').then(r=>r.ok?r.json():{}).then(j=>{if(gen===carGen)MANUAL=j}).catch(()=>{});
@@ -2563,7 +2592,285 @@ function drawCars(){
 }
 document.getElementById('bCar').onclick=e=>{e.stopPropagation();const box=document.getElementById('cars');drawCars();box.style.bottom=(document.getElementById('bar').offsetHeight+6)+'px';box.classList.toggle('open');document.getElementById('bCar').classList.toggle('on',box.classList.contains('open'))};
 ['pointerdown','touchstart'].forEach(ev=>document.getElementById('cars').addEventListener(ev,e=>e.stopPropagation()));
+
+/* PHOTO SCAN: the photo goes to the shared server, which pins down the exact model on the web, then returns a parts list.
+   Each part is drawn from the shape library, a downloaded model, exact spec sizes, or a block guessed from the photo. */
+const SHARED='https://shared-server-azure.vercel.app/api/shared-server-v1-claude';
+const DEG=PI/180;
+function merge(list){const gs=list.map(([g,x,y,z])=>{const n=g.index?g.toNonIndexed():g;n.translate(x||0,y||0,z||0);return n});const m=mergeGeometries(gs,false);gs.forEach(g=>g.dispose());return m}
+function bladeFan(s,d){const t=s*0.06,L=[[box(s,d,t),0,0,(s-t)/2],[box(s,d,t),0,0,-(s-t)/2],[box(t,d,s-2*t),(s-t)/2,0,0],[box(t,d,s-2*t),-(s-t)/2,0,0],[cyl(s*0.18,s*0.18,d*0.9),0,0,0]];
+  for(let i=0;i<7;i++){const a=i/7*2*PI,g=box(s*0.3,d*0.12,s*0.13);g.rotateX(0.5);g.rotateY(-a);L.push([g,Math.cos(a)*s*0.3,0,Math.sin(a)*s*0.3])}return merge(L)}
+function board(L,W){const g=[[box(L,1.6,W),0,0,0],[box(45,6,45),-L*0.12,3.8,-W*0.05],[box(20,38,W*0.62),-L/2+10,19,-W*0.1]];
+  for(let i=0;i<4&&W>200;i++)g.push([box(6,8,130),L*0.12+i*9,4.8,-W*0.05]);
+  if(W<=200)for(let i=0;i<2;i++)g.push([box(6,8,130),L*0.12+i*9,4.8,-W*0.05]);
+  const sl=L>=300?4:L>=240?3:1;for(let i=0;i<sl;i++)g.push([box(89,11,8),-L*0.05,5.5,W/2-30-i*20.32*1.5]);return merge(g)}
+function screwGeo(d,Ln,head){const sh=cyl(d/2,d/2,Ln,'y',12);let h;
+  if(head==='flat')h=cyl(d,d/2,d*0.5,'y',16);else if(head==='hex')h=cyl(d*0.92,d*0.92,d*0.65,'y',6);else if(head==='button')h=cyl(d*0.95,d*0.85,d*0.45,'y',16);else h=cyl(d*0.95,d*0.95,d*0.6,'y',16);
+  h.computeBoundingBox();return merge([[sh,0,Ln/2,0],[h,0,Ln+(h.boundingBox.max.y-h.boundingBox.min.y)/2,0]])}
+const LIB={
+  mobo_atx:a=>board(305,244),mobo_matx:a=>board(244,244),mobo_itx:a=>board(170,170),
+  psu_atx:a=>merge([[box(150,86,140),0,0,0],[ring(55,60,2,'y',32),0,44,0],[cyl(54,54,1,'y',32),0,43.5,0]]),
+  psu_sfx:a=>merge([[box(125,63.5,100),0,0,0],[ring(40,44,2,'y',32),0,32.5,0]]),
+  hdd_35:a=>merge([[box(147,20,101.6),0,3,0],[box(140,6,96),0,-10,0]]),
+  ssd_25:a=>box(100,7,69.85),
+  m2_2280:a=>merge([[box(80,0.8,22),0,0,0],[box(12,1.2,12),-18,1,0],[box(12,1.2,12),0,1,0],[box(10,1.2,10),20,1,0]]),
+  odd_525:a=>merge([[box(170,41.3,146),0,0,0],[box(4,41.3,148),87,0,0]]),
+  fan_80:a=>bladeFan(80,25),fan_92:a=>bladeFan(92,25),fan_120:a=>bladeFan(120,25),fan_140:a=>bladeFan(140,25),
+  dimm:a=>{const g=[[box(133.35,31.25,1.3),0,0,0]];for(let i=0;i<8;i++)g.push([box(10,11,1),-55+i*15.5,2,1.2]);return merge(g)},
+  sodimm:a=>{const g=[[box(69.6,30,1.3),0,0,0]];for(let i=0;i<4;i++)g.push([box(10,11,1),-24+i*15.5,2,1.2]);return merge(g)},
+  gpu:a=>{const L=a.length_mm||267,t=(a.slots||2)*20.32;return merge([[box(L,1.6,111),0,0,0],[box(L*0.95,t-4,105),0,t/2,0],[cyl(42,42,2,'y',24),-L*0.22,t-1,0],[cyl(42,42,2,'y',24),L*0.22,t-1,0],[box(2,t+4,120),-L/2,t/2,0]])},
+  cpu:a=>{const s=a.size_mm||37.5;return merge([[box(s,3,s),0,0,0],[box(s*0.75,1.5,s*0.75),0,2.2,0]])},
+  cooler_tower:a=>{const h=a.height_mm||155;const g=[[box(40,8,40),0,4,0],[box(125,h-30,50),0,30+(h-30)/2,0]];for(let i=0;i<4;i++)g.push([cyl(3,3,h-6,'y',10),-15+i*10,(h-6)/2+4,0]);return merge(g)},
+  cooler_low:a=>{const d=a.diameter_mm||95;return merge([[box(40,8,40),0,4,0],[cyl(d/2,d/2,25,'y',32),0,20,0],[cyl(d/2*0.95,d/2*0.95,12,'y',32),0,39,0]])},
+  screw:a=>screwGeo(a.diameter_mm||3,a.length_mm||6,a.head||'pan'),
+  bolt:a=>screwGeo(a.diameter_mm||8,a.length_mm||25,'hex'),
+  nut:a=>{const d=a.diameter_mm||8;return ring(d/2,d*0.92,d*0.8,'y',6)},
+  washer:a=>{const d=a.diameter_mm||8;return ring(d*0.53,d*1.05,d*0.18,'y',24)},
+  standoff:a=>{const L=a.length_mm||6;return merge([[cyl(3.2,3.2,L,'y',6),0,L/2,0],[cyl(1.5,1.5,5,'y',10),0,L+2.5,0]])}
+};
+const SRC_TXT={lib:'LIBRARY MODEL',model:'DOWNLOADED MODEL',spec:'BLOCK FROM SPEC SIZES',photo:'BLOCK GUESSED FROM PHOTO'};
+function srcOf(it){return it.lib&&LIB[it.lib]?'lib':it.size_from==='spec'?'spec':'photo'}
+function basicGeo(it){
+  const [L0,H0,W0]=it.size_mm.map(v=>Math.max(v,0.5));let L=L0,H=H0,W=W0;
+  if(it.shape==='sheet'){const m=Math.min(L,H,W);if(m===L)L=Math.max(L,1);else if(m===H)H=Math.max(H,1);else W=Math.max(W,1)}
+  if(it.shape==='sphere'){const g=sph(1);g.scale(L/2,H/2,W/2);return g}
+  if(/fastener|rod|tube|cylinder/.test(it.shape)){
+    const ax=L>=H&&L>=W?'x':H>=W?'y':'z',len=ax==='x'?L:ax==='y'?H:W,r=(L+H+W-len)/4;
+    if(it.shape==='tube')return ring(r*0.75,r,len,ax,24);
+    return cyl(r,r,len,ax,it.shape==='fastener'?10:it.shape==='rod'?12:24);
+  }
+  return box(L,H,W);
+}
+function partGeo(it,k){
+  let g=srcOf(it)==='lib'?LIB[it.lib](it.args||{}):basicGeo(it);
+  g.computeBoundingBox();const c=new THREE.Vector3();g.boundingBox.getCenter(c);g.translate(-c.x,-c.y,-c.z);
+  const r=it.rot_deg||[0,0,0];if(r[0])g.rotateX(r[0]*DEG);if(r[1])g.rotateY(r[1]*DEG);if(r[2])g.rotateZ(r[2]*DEG);
+  const at=it.at_mm,more=(it.more_at_mm||[]).filter(p=>p.some(v=>v));
+  if(more.length){const L=[[g,0,0,0]];more.forEach(p=>L.push([g.clone(),p[0]-at[0],p[1]-at[1],p[2]-at[2]]));g=merge(L)}
+  g.scale(k/1000,k/1000,k/1000);return g;
+}
+function scanSlug(t){return String(t||'scan').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,26)||'scan'}
+function scanCar(rec){
+  const data=rec.data,id=rec.id,items=[];data.groups.forEach(g=>g.items.forEach(it=>items.push(it)));
+  const ext=[0,1,2].map(i=>Math.max(data.size_mm[i]||0,...items.map(it=>Math.abs(it.at_mm[i])*2+(it.size_mm[i]||0))));
+  const k=Math.min(4200/Math.max(ext[0],ext[2],1),1800/Math.max(ext[1],1));
+  const pn={},urls=[];
+  const build=()=>{
+    const n=data.groups.length;
+    data.groups.forEach((g,gi)=>{
+      const c=[0,0,0];g.items.forEach(it=>{c[0]+=it.at_mm[0];c[2]+=it.at_mm[2]});
+      let dir=V(c[0],0,c[2]);
+      if(dir.length()<1){const a=gi/n*2*PI;dir=V(Math.cos(a),0,Math.sin(a))}
+      dir.normalize().multiplyScalar(0.7);dir.y=0.3+gi*0.25;
+      asm(g.name,g.items.length+' line items. '+g.items.map(it=>it.name).join(', ')+'.',[dir.x,dir.y,dir.z],P=>{
+        g.items.forEach(it=>{
+          const y=it.at_mm[1]||((it.size_mm[1]||10)/2);
+          const lines=[it.spec,it.part_number&&'Part number '+it.part_number,it.thread&&'Thread '+it.thread,it.torque&&'Torque '+it.torque,it.material,'Qty '+it.qty+(it.unit?' '+it.unit:''),it.purpose,'Shape: '+SRC_TXT[srcOf(it)]].filter(Boolean);
+          P(it.name,lines.join('. ')+'.',partGeo(it,k),[it.at_mm[0]*k/1000,y*k/1000,it.at_mm[2]*k/1000]);
+          const rows=[];if(it.part_number)rows.push(['part no',it.part_number]);if(it.spec)rows.push(['spec',it.spec]);if(it.thread)rows.push(['thread',it.thread]);rows.push(['qty',it.qty+(it.unit?' '+it.unit:'')]);
+          pn[g.name+'/'+it.name]=rows;
+          if(it.model_url)urls.push([g.name,it]);
+        });
+      });
+    });
+  };
+  const isCar=data.kind==='car',ident=rec.ident||{};
+  return {id,make:'Scan',search:isCar?(data.vehicle||data.name):(ident.exact_model||''),name:(ident.exact_model||data.name).toUpperCase().slice(0,18),front:ext[0]*k/2000,build,pn,hardware:!isCar,scan:rec,urls,k};
+}
+/* swap in downloaded STL or GLB models where the scan found one; parts stay as drawn when a file will not load */
+async function loadScanModels(car){
+  for(const [gn,it] of car.urls){
+    try{
+      const a=ASM.find(x=>x.name===gn),p=a&&a.parts.find(q=>q.name===it.name);if(!p)continue;
+      let geo;
+      if(/\.stl(\?|$)/i.test(it.model_url)){const {STLLoader}=await import('three/addons/loaders/STLLoader.js');geo=await new STLLoader().loadAsync(it.model_url)}
+      else{const {GLTFLoader}=await import('three/addons/loaders/GLTFLoader.js');const gl=await new GLTFLoader().loadAsync(it.model_url);const L=[];gl.scene.updateMatrixWorld(true);
+        gl.scene.traverse(o=>{if(o.isMesh){const g=o.geometry.clone();g.applyMatrix4(o.matrixWorld);['uv','uv1','uv2','color','tangent','skinIndex','skinWeight'].forEach(n=>g.deleteAttribute(n));if(!g.attributes.normal)g.computeVertexNormals();L.push([g,0,0,0])}});geo=merge(L)}
+      if(CAR!==car)return;
+      geo.computeBoundingBox();const c=new THREE.Vector3(),sz=new THREE.Vector3();geo.boundingBox.getCenter(c);geo.boundingBox.getSize(sz);geo.translate(-c.x,-c.y,-c.z);
+      const want=Math.max(...it.size_mm),have=Math.max(sz.x,sz.y,sz.z)||1;const s=(want>1?want/have:1)*car.k/1000;geo.scale(s,s,s);
+      const r=it.rot_deg||[0,0,0];if(r[0])geo.rotateX(r[0]*DEG);if(r[1])geo.rotateY(r[1]*DEG);if(r[2])geo.rotateZ(r[2]*DEG);
+      p.mesh.geometry.dispose();p.edges.geometry.dispose();p.wf.geometry.dispose();
+      p.geo=geo;p.mesh.geometry=geo;p.edges.geometry=new THREE.EdgesGeometry(geo,20);p.wf.geometry=new THREE.WireframeGeometry(geo);geo.computeBoundingSphere();
+      p.desc=p.desc.replace(/Shape: [A-Z ]+\./,'Shape: '+SRC_TXT.model+'.');typeKey='';refresh();
+    }catch(e){}
+  }
+}
+/* saved scans live on this phone, keyed by exact model, and show under Scanned in the car picker */
+function scanLib(){return store.get('scans',[])}
+function syncScanned(){
+  const list=scanLib();list.forEach(r=>{CARS[r.id]=scanCar(r)});
+  const i=LINEUP.findIndex(x=>x[0]==='Scanned');if(i>=0)LINEUP.splice(i,1);
+  if(list.length)LINEUP.push(['Scanned',list.map(r=>[r.id,(r.ident&&r.ident.exact_model)||r.data.name])]);
+  $('mLastScan').style.display=list.length?'':'none';
+}
+function saveScan(data,ident){
+  const id='scan_'+scanSlug((ident&&ident.exact_model)||data.name);
+  const list=scanLib().filter(r=>r.id!==id);list.unshift({id,data,ident:ident||null,at:Date.now()});store.set('scans',list.slice(0,30));syncScanned();return id;
+}
+function findSaved(ident){const m=ident&&ident.exact_model&&ident.exact_model.toLowerCase();return m?scanLib().find(r=>r.ident&&r.ident.exact_model&&r.ident.exact_model.toLowerCase()===m):null}
+const TAG={lib:'LIBRARY',spec:'SPEC SIZE',photo:'PHOTO GUESS',model:'MODEL LINK'};
+function scanText(rec){
+  const data=rec.data,ident=rec.ident||{};
+  let h='<div style="font-weight:bold;font-size:17px;text-transform:uppercase">'+esc(data.name)+'</div>';
+  if(ident.exact_model||data.vehicle)h+='<div class="st">'+esc([ident.maker,ident.exact_model||data.vehicle].filter(Boolean).join(' '))+'</div>';
+  h+='<div>'+esc(data.description)+'</div><div class="st">CONFIDENCE '+esc(data.confidence.toUpperCase())+'</div>';
+  if(data.notes)h+='<div style="color:#6a6a6a">'+esc(data.notes)+'</div>';
+  const cnt={lib:0,spec:0,photo:0};data.groups.forEach(g=>g.items.forEach(it=>cnt[srcOf(it)]++));
+  h+='<div class="st">SHAPES: '+cnt.lib+' LIBRARY, '+cnt.spec+' SPEC SIZE, '+cnt.photo+' PHOTO GUESS</div>';
+  h+='<div class="act" style="margin-top:12px"><button id="scBuild">Explode it in 3D</button>';
+  if(data.car_id&&CARS[data.car_id])h+='<button id="scOpenCar">Open the '+esc(CARS[data.car_id].name)+' model</button>';
+  h+='<button id="scCopy">Copy parts list</button></div>';
+  data.groups.forEach(g=>{
+    h+='<h5>'+esc(g.name)+'</h5>';
+    g.items.forEach(it=>{const t=it.model_url?'model':srcOf(it);h+='<div class="it"><span class="q">'+esc(it.qty)+(it.unit?' '+esc(it.unit):'')+'</span><b>'+esc(it.name)+'</b> <span class="tag '+t+'">'+TAG[t]+'</span><small>'+[it.spec,it.part_number&&('PART NO '+it.part_number),it.thread&&('THREAD '+it.thread),it.torque&&('TORQUE '+it.torque),it.material].filter(Boolean).map(esc).join('<br>')+'</small></div>'});
+  });
+  const v=rec.verify;
+  if(rec.status){
+    h+='<h5>Fact check</h5><div class="st">'+(rec.status==='verified'?'VERIFIED AGAINST THE MANUAL':'DRAFT, NOT FULLY VERIFIED')+'</div>';
+    if(v&&v.summary)h+='<div>'+esc(v.summary)+'</div>';
+    const bad=[].concat((v&&v.checks||[]).filter(c=>!c.ok),(v&&v.geometry)||[]);
+    bad.forEach(c=>{h+='<div class="it"><b>'+esc(c.part)+'</b> <span class="tag photo">FLAGGED</span><small>'+esc(c.note)+'</small></div>'});
+    ((v&&v.missing)||[]).forEach(m=>{h+='<div class="it"><b>'+esc(m)+'</b> <span class="tag photo">MISSING</span></div>'});
+  }else{
+    const job=jobFor(rec);
+    h+='<h5>Shared library</h5><div class="st" id="scJob" data-k="'+esc(libKey(ident))+'">'+(job?'BUILDING THE VERIFIED VERSION: '+esc((job.note||job.stage||'queued').toUpperCase()):'THIS IS A QUICK DRAFT ON THIS PHONE ONLY')+'</div>';
+  }
+  if(rec.diagrams&&rec.diagrams.length){h+='<h5>Diagrams</h5><div class="dg">'+rec.diagrams.map(d=>'<a target="_blank" rel="noopener" href="'+esc(d.url)+'"><img src="'+esc(d.url)+'" alt="Diagram page '+esc(d.page)+'"></a>').join('')+'</div>'}
+  if(rec.pages_url)h+='<a class="src" target="_blank" rel="noopener" href="'+esc(rec.pages_url)+'">Manual pages used for this build</a>';
+  ((rec.extracted&&rec.extracted.manuals)||[]).forEach(m=>{h+='<a class="src" target="_blank" rel="noopener" href="'+esc(m.url)+'">'+esc(m.title||m.url)+'</a>'});
+  if(ident.sources&&ident.sources.length){h+='<h5>Sources</h5>';ident.sources.forEach(s=>{h+='<a class="src" target="_blank" rel="noopener" href="'+esc(s.url)+'">'+esc(s.title||s.url)+'</a>'})}
+  return h;
+}
+function scanPlain(rec){
+  const data=rec.data,ident=rec.ident||{},L=[data.name,[ident.maker,ident.exact_model||data.vehicle].filter(Boolean).join(' '),data.description,''];
+  data.groups.forEach(g=>{L.push(g.name.toUpperCase());g.items.forEach(it=>L.push(it.qty+(it.unit?' '+it.unit:'')+'  '+it.name+'  '+[it.part_number&&('part no '+it.part_number),it.spec,it.thread&&('thread '+it.thread),it.torque&&('torque '+it.torque)].filter(Boolean).join('  ')));L.push('')});
+  (ident.sources||[]).forEach(s=>L.push(s.url));
+  return L.join('\n');
+}
+function openScan(){menu.classList.remove('open');hb.classList.remove('on');$('scan').classList.add('open')}
+function openSaved(id){const car=CARS[id];if(!car)return;$('scan').classList.remove('open');loadCar(id);carTarget=1;if(car.urls.length)loadScanModels(car)}
+function showScan(rec,img){
+  if(!CARS[rec.id])CARS[rec.id]=scanCar(rec);
+  const b=$('scBody');b.innerHTML=(img?'<img src="'+img+'">':'')+scanText(rec);openScan();
+  $('scBuild').onclick=()=>openSaved(rec.id);
+  const data=rec.data;
+  if($('scOpenCar'))$('scOpenCar').onclick=()=>{$('scan').classList.remove('open');loadCar(data.car_id);carTarget=1;
+    const words=data.areas.join(' ').toLowerCase().split(/\W+/).filter(w=>w.length>3);
+    let best=null,bs=0;ASM.forEach(a=>{const t=a.name.toLowerCase();const sc=words.filter(w=>t.includes(w)).length;if(sc>bs){bs=sc;best=a}});
+    if(best){best.target=1;open(best)}};
+  $('scCopy').onclick=()=>{const t=scanPlain(rec);(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>{$('scCopy').textContent='Copied'}).catch(()=>{$('scCopy').textContent='Copy failed'})};
+}
+function shrink(file){return new Promise((ok,bad)=>{const u=URL.createObjectURL(file),im=new Image();
+  im.onload=()=>{const m=1280,sc=Math.min(1,m/Math.max(im.width,im.height)),cv=document.createElement('canvas');cv.width=Math.round(im.width*sc);cv.height=Math.round(im.height*sc);
+    cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);URL.revokeObjectURL(u);ok(cv.toDataURL('image/jpeg',0.82))};
+  im.onerror=()=>bad(new Error('That file is not a photo the browser can read.'));im.src=u})}
+async function ask(app,extra){
+  const r=await fetch(SHARED,{method:'POST',headers:{'content-type':'text/plain'},body:JSON.stringify(Object.assign({app,text:'scan'},extra))});
+  const d=await r.json().catch(()=>({error:'bad reply'}));
+  if(r.status===429)throw new Error('Too many scans in a minute. Wait a moment and send it again.');
+  if(!r.ok||d.error)throw new Error('server');
+  return d;
+}
+let scanJob=null;
+function scanStatus(img,steps){
+  $('scBody').innerHTML='<img src="'+img+'"><div class="st" id="scSt">'+steps[0]+'</div>';let si=0;
+  clearInterval(scanJob);scanJob=setInterval(()=>{si=(si+1)%steps.length;const st=$('scSt');if(st)st.textContent=steps[si]},4000);
+}
+function scanFail(img,msg,retry){clearInterval(scanJob);$('scBody').innerHTML='<img src="'+img+'"><div class="st">'+esc(msg)+'</div><div class="act"><button id="scRetry">Send it again</button></div>';$('scRetry').onclick=retry}
+let pend=null;
+async function runScan(file,labelFile){
+  openScan();
+  let img,label='';
+  try{img=await shrink(file);if(labelFile)label=await shrink(labelFile)}catch(e){$('scBody').innerHTML='<div class="st">'+esc(e.message)+'</div>';return}
+  scanStatus(img,['READING THE PHOTO','READING LABELS AND BADGES','SEARCHING FOR THE EXACT MODEL','FINDING THE SERVICE MANUAL']);
+  let ident=null;
+  try{ident=await ask('hubview-identify',{image:img.split(',')[1],image2:label?label.split(',')[1]:''})}catch(e){if(/many/.test(e.message))return scanFail(img,e.message,()=>runScan(file,labelFile));ident=null}
+  if(ident&&ident.need_label&&!labelFile&&ident.confidence!=='high'){
+    clearInterval(scanJob);pend={file};
+    $('scBody').innerHTML='<img src="'+img+'"><div style="font-weight:bold;font-size:17px;text-transform:uppercase;margin-top:10px">'+esc(ident.name||'Model not pinned down')+'</div><div class="st">EXACT MODEL NOT READABLE</div><div>'+esc(ident.label_hint||'A photo of the model label or service tag will pin it down.')+'</div><div class="act" style="margin-top:12px"><button id="scLabel">Add a photo of the label</button><button id="scAnyway">Scan without the label</button></div>';
+    $('scLabel').onclick=()=>{pend.label=true;$('mPhoto').click()};
+    $('scAnyway').onclick=()=>{pend=null;runParts(file,img,ident)};
+    return;
+  }
+  const key=libKey(ident);
+  if(key){
+    try{const row=await libBuild(key);if(row){clearInterval(scanJob);showScan(libRec(row),img);return}}catch(e){}
+    try{await queueJob(key,ident,img)}catch(e){}
+  }
+  const saved=findSaved(ident);
+  if(saved){clearInterval(scanJob);
+    $('scBody').innerHTML='<img src="'+img+'"><div style="font-weight:bold;font-size:17px;text-transform:uppercase;margin-top:10px">'+esc(ident.maker+' '+ident.exact_model)+'</div><div class="st">ALREADY IN YOUR SCANNED LIBRARY</div><div class="act" style="margin-top:12px"><button id="scSaved">Open the saved build</button><button id="scFresh">Scan it fresh</button></div>';
+    $('scSaved').onclick=()=>showScan(saved,img);$('scFresh').onclick=()=>runParts(file,img,ident);return}
+  runParts(file,img,ident);
+}
+async function runParts(file,img,ident){
+  scanStatus(img,['NAMING THE PARTS','MATCHING PART NUMBERS','COUNTING FASTENERS','SIZING THREADS','PICKING LIBRARY SHAPES','LAYING OUT THE EXPLODED VIEW']);
+  try{
+    const cars=Object.values(CARS).filter(c=>!/^scan/.test(c.id)).map(c=>({id:c.id,name:c.search||c.name}));
+    const data=await ask('hubview-scan',{image:img.split(',')[1],cars,context:ident||null});
+    if(!data.groups||!data.groups.length)throw new Error('empty');
+    clearInterval(scanJob);
+    const id=saveScan(data,ident);showScan(scanLib().find(r=>r.id===id),img);
+  }catch(e){scanFail(img,/many/.test(e.message)?e.message:'The scan came back empty. Send the photo again.',()=>runParts(file,img,ident))}
+}
+$('mScan').onclick=()=>{pend=null;$('mPhoto').click()};
+$('scAgain').onclick=()=>{pend=null;$('mPhoto').click()};
+$('mPhoto').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;if(pend&&pend.label){const p=pend;pend=null;runScan(p.file,f)}else runScan(f)};
+$('scClose').onclick=()=>{clearInterval(scanJob);$('scan').classList.remove('open')};
+$('mLastScan').onclick=()=>{const r=scanLib()[0];if(r)showScan(r,'')};
+['pointerdown','touchstart','wheel'].forEach(ev=>$('scan').addEventListener(ev,e=>e.stopPropagation()));
+syncScanned();
+
+/* SHARED LIBRARY: finished builds live in Supabase for everyone. A new exact model gets queued for the worker,
+   which downloads the manuals, builds the model, fact checks it and publishes it. */
+const SB_URL='https://zasyjjoypkpvyqdueums.supabase.co',SB_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inphc3lqam95cGtwdnlxZHVldW1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyMjk1NjQsImV4cCI6MjEwNjgwNTU2NH0.PZrUvG4qsTpMQeihXbbzaFYUAAJ9YV7FtxLTkcQGFVI';
+const sbHead=x=>Object.assign({apikey:SB_ANON,Authorization:'Bearer '+SB_ANON},x||{});
+async function sbGet(path){const r=await fetch(SB_URL+'/rest/v1/'+path,{headers:sbHead()});if(!r.ok)throw new Error('library');return r.json()}
+function libKey(ident){return ident&&ident.exact_model?scanSlug((ident.maker||'')+' '+ident.exact_model):''}
+async function libBuild(key){const r=await sbGet('hv_builds?key=eq.'+encodeURIComponent(key)+'&select=*');return r[0]||null}
+function libRec(row){return {id:'lib_'+row.key,data:row.data,ident:row.ident||{},verify:row.verify,status:row.status,pages_url:row.pages_url,diagrams:row.diagrams||[],extracted:row.extracted||{}}}
+function jobFor(rec){const k=libKey(rec.ident);return k?(store.get('jobs',[]).find(j=>j.key===k)||null):null}
+async function queueJob(key,ident,img){
+  const jobs=store.get('jobs',[]);if(jobs.some(j=>j.key===key&&j.status!=='failed'))return;
+  const path='photos/'+key+'-'+Date.now().toString(36)+'.jpg';
+  const blob=await (await fetch(img)).blob();
+  const up=await fetch(SB_URL+'/storage/v1/object/hv-files/'+path,{method:'POST',headers:sbHead({'Content-Type':'image/jpeg'}),body:blob});
+  const r=await fetch(SB_URL+'/rest/v1/hv_jobs',{method:'POST',headers:sbHead({'Content-Type':'application/json',Prefer:'return=representation'}),body:JSON.stringify({key,ident,photo_path:up.ok?path:null})});
+  if(!r.ok)throw new Error('queue');
+  const row=(await r.json())[0];jobs.unshift({id:row.id,key,name:(ident.maker||'')+' '+ident.exact_model,stage:'queued',note:'Waiting for the worker',status:'queued'});store.set('jobs',jobs.slice(0,20));pollJobs();
+}
+let pollT=null;
+async function pollJobs(){
+  clearTimeout(pollT);const jobs=store.get('jobs',[]),open=jobs.filter(j=>j.status==='queued'||j.status==='working');
+  if(!open.length)return;
+  try{const rows=await sbGet('hv_jobs?id=in.('+open.map(j=>j.id).join(',')+')&select=id,status,stage,note');
+    rows.forEach(r=>{const j=jobs.find(x=>x.id===r.id);if(j){j.status=r.status;j.stage=r.stage;j.note=r.note}});store.set('jobs',jobs);
+    const e=$('scJob'),j=e&&jobs.find(x=>x.key===e.dataset.k);if(j)e.textContent=j.status==='done'?'THE VERIFIED VERSION IS READY IN THE SHARED LIBRARY':j.status==='failed'?'THE SHARED BUILD FAILED':'BUILDING THE VERIFIED VERSION: '+String(j.note||j.stage).toUpperCase();
+    if(jobs.some(j=>j.status==='done'&&!j.seen)){$('mLib').textContent='Shared library (new build ready)'}
+  }catch(err){}
+  pollT=setTimeout(pollJobs,15000);
+}
+async function showLibrary(){
+  openScan();const b=$('scBody');b.innerHTML='<div class="st">LOADING THE SHARED LIBRARY</div>';
+  const jobs=store.get('jobs',[]);let rows=[];
+  try{rows=await sbGet('hv_builds?select=key,name,maker,exact_model,status,updated_at&order=updated_at.desc&limit=200')}catch(e){b.innerHTML='<div class="st">The shared library did not answer. Try again in a moment.</div>';return}
+  let h='<div style="font-weight:bold;font-size:17px">SHARED LIBRARY</div><div style="color:#6a6a6a">Every finished build is saved here for anyone who scans the same model.</div>';
+  const pend=jobs.filter(j=>j.status!=='done');
+  if(pend.length){h+='<h5>Your scans being built</h5>';pend.forEach(j=>{h+='<div class="it"><b>'+esc(j.name)+'</b> <span class="tag '+(j.status==='failed'?'photo':'spec')+'">'+esc(j.status==='failed'?'FAILED':'BUILDING')+'</span><small>'+esc(j.note||j.stage||'')+'</small></div>'})}
+  h+='<h5>Builds</h5>';
+  if(!rows.length)h+='<div style="color:#6a6a6a">Nothing here yet. Scan something with a readable model number and it will show up once it is built.</div>';
+  rows.forEach(r=>{h+='<div class="it lib" data-k="'+esc(r.key)+'"><b>'+esc([r.maker,r.exact_model||r.name].filter(Boolean).join(' '))+'</b> <span class="tag '+(r.status==='verified'?'lib':'photo')+'">'+(r.status==='verified'?'VERIFIED':'DRAFT')+'</span><small>'+esc(r.name||'')+'</small></div>'});
+  b.innerHTML=h;jobs.forEach(j=>{if(j.status==='done')j.seen=true});store.set('jobs',jobs);$('mLib').textContent='Shared library';
+  b.querySelectorAll('.it.lib').forEach(d=>d.onclick=async()=>{d.style.opacity=.5;try{const row=await libBuild(d.dataset.k);if(row)showScan(libRec(row),row.photo_url||'')}catch(e){d.style.opacity=1}});
+}
+$('mLib').onclick=showLibrary;
+pollJobs();
+const H0=location.hash.slice(1);
 loadCar(CARS[location.hash.slice(1)]?location.hash.slice(1):'prius');
+if(CAR&&/^scan_/.test(CAR.id)&&CAR.urls.length)loadScanModels(CAR);
+if(/^lib_/.test(H0))libBuild(H0.slice(4)).then(row=>{if(row){const rec=libRec(row);CARS[rec.id]=scanCar(rec);openSaved(rec.id)}}).catch(()=>{});
+
 
 const goal=V(0,0,0);
 (function loop(){
