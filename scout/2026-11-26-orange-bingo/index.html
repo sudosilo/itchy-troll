@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bingo</title>
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0 auto; max-width: 520px; padding: 16px; font-family: system-ui, sans-serif; background: #f6f7fb; color: #1d2233; }
+h1 { margin: 0 0 10px; text-align: center; font-size: 30px; letter-spacing: 6px; color: #2f6fec; }
+.panel { background: #ffffff; border-radius: 14px; padding: 14px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+input { width: 100%; padding: 12px; font-size: 18px; border: 1px solid #c9cde0; border-radius: 10px; }
+button { width: 100%; padding: 14px; font-size: 18px; font-weight: 700; border: 0; border-radius: 10px; margin-top: 10px; }
+button:disabled { opacity: 0.4; }
+.blue { background: #2f6fec; color: #ffffff; }
+.green { background: #1f9d55; color: #ffffff; }
+.gold { background: #f2b705; color: #1d2233; }
+.gray { background: #e3e6f0; color: #1d2233; }
+#ball { text-align: center; font-size: 56px; font-weight: 800; color: #2f6fec; min-height: 68px; }
+#status, #winner, #msg { text-align: center; }
+#winner { font-size: 22px; font-weight: 800; color: #1f9d55; }
+#msg { color: #b3261e; min-height: 20px; }
+.grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.head { text-align: center; font-size: 22px; font-weight: 800; color: #2f6fec; }
+.cell { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; background: #eef1fa; border-radius: 10px; font-size: 22px; font-weight: 700; user-select: none; }
+.cell.called { outline: 3px solid #2f6fec; }
+.cell.marked { background: #f2b705; }
+.cell.free { background: #1f9d55; color: #ffffff; font-size: 14px; }
+#calledList { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { background: #eef1fa; border-radius: 8px; padding: 4px 7px; font-size: 14px; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+<h1>BINGO</h1>
+
+<div id="joinPanel" class="panel">
+  <input id="name" maxlength="20" placeholder="Your name">
+  <button class="blue" onclick="join()">Join Game</button>
+</div>
+
+<div id="game" class="hidden">
+  <div class="panel">
+    <div id="ball"></div>
+    <div id="status"></div>
+    <div id="winner"></div>
+    <div id="callerControls" class="hidden">
+      <button id="callBtn" class="blue" onclick="callNumber()">Call Next Number</button>
+    </div>
+    <button id="newBtn" class="gray hidden" onclick="newGame()">New Game (caller rotates)</button>
+  </div>
+
+  <div class="panel">
+    <div class="grid" id="card"></div>
+    <button class="gold" onclick="claimBingo()">BINGO!</button>
+    <div id="msg"></div>
+  </div>
+
+  <div class="panel">
+    <div style="font-weight:700;margin-bottom:6px">Called numbers</div>
+    <div id="calledList"></div>
+  </div>
+
+  <div class="panel">
+    <div style="font-weight:700;margin-bottom:6px">Players in rotation order</div>
+    <div id="players"></div>
+  </div>
+</div>
+
+<script>
+const API = "https://bingo-server-production-57044238.up.railway.app";
+const LETTERS = "BINGO";
+let myId = load("bingoId", null);
+let saved = load("bingoMarks", { game: null, list: [] });
+let marks = new Set(saved.list);
+let markGame = saved.game;
+let state = null;
+let source = null;
+
+function load(key, fallback) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; }
+}
+function store(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+}
+function saveMarks() { store("bingoMarks", { game: markGame, list: Array.from(marks) }); }
+function letterFor(n) { return LETTERS[Math.floor((n - 1) / 15)]; }
+function say(text) { document.getElementById("msg").textContent = text; }
+
+async function post(path, body) {
+  const r = await fetch(API + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  return r.json();
+}
+
+async function join() {
+  const name = document.getElementById("name").value.trim() || "Player";
+  const res = await post("/join", { name });
+  myId = res.id;
+  store("bingoId", myId);
+  connect();
+}
+
+function showJoin() {
+  if (source) source.close();
+  myId = null;
+  store("bingoId", null);
+  document.getElementById("joinPanel").classList.remove("hidden");
+  document.getElementById("game").classList.add("hidden");
+}
+
+function connect() {
+  if (source) source.close();
+  document.getElementById("joinPanel").classList.add("hidden");
+  document.getElementById("game").classList.remove("hidden");
+  source = new EventSource(API + "/events?id=" + myId);
+  source.onmessage = e => {
+    state = JSON.parse(e.data);
+    if (!state.card) { showJoin(); return; }
+    render();
+  };
+}
+
+function render() {
+  if (markGame !== state.gameNumber) {
+    marks.clear();
+    markGame = state.gameNumber;
+    saveMarks();
+  }
+  const last = state.called[state.called.length - 1];
+  document.getElementById("ball").textContent = last ? letterFor(last) + " " + last : "Ready";
+  document.getElementById("status").textContent = state.youAreCaller
+    ? "You are the caller for game " + state.gameNumber
+    : "Caller: " + state.caller + " (game " + state.gameNumber + ")";
+  document.getElementById("winner").textContent = state.winner ? state.winner + " got BINGO!" : "";
+  document.getElementById("callerControls").classList.toggle("hidden", !state.youAreCaller);
+  document.getElementById("callBtn").disabled = !!state.winner;
+  document.getElementById("newBtn").classList.toggle("hidden", !(state.youAreCaller || state.winner));
+
+  const card = document.getElementById("card");
+  card.innerHTML = "";
+  for (const L of LETTERS) {
+    const h = document.createElement("div");
+    h.className = "head";
+    h.textContent = L;
+    card.appendChild(h);
+  }
+  state.card.forEach(n => {
+    const c = document.createElement("div");
+    c.className = "cell";
+    if (n === 0) {
+      c.classList.add("free");
+      c.textContent = "FREE";
+    } else {
+      c.textContent = n;
+      if (state.called.includes(n)) c.classList.add("called");
+      if (marks.has(n)) c.classList.add("marked");
+      c.onclick = () => {
+        if (marks.has(n)) marks.delete(n); else marks.add(n);
+        saveMarks();
+        render();
+      };
+    }
+    card.appendChild(c);
+  });
+
+  const list = document.getElementById("calledList");
+  list.innerHTML = "";
+  state.called.slice().reverse().forEach(n => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = letterFor(n) + n;
+    list.appendChild(chip);
+  });
+
+  document.getElementById("players").textContent = state.players.join(", ");
+}
+
+async function callNumber() {
+  say("");
+  const res = await post("/call", { id: myId });
+  if (res.error) say(res.error);
+}
+
+async function claimBingo() {
+  const res = await post("/bingo", { id: myId });
+  if (res.error) say(res.error);
+  else if (!res.bingo) say("Not a bingo yet, keep playing");
+  else say("");
+}
+
+async function newGame() {
+  say("");
+  const res = await post("/newgame", { id: myId });
+  if (res.error) say(res.error);
+}
+
+if (myId) connect();
+</script>
+</body>
+</html>

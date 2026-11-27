@@ -20,7 +20,7 @@ h1{font-size:22px;margin:4px 0 2px}
 label{font-size:14px}
 input[type=file]{width:100%;font-size:15px}
 .clip{border:1px solid var(--line);border-radius:10px;padding:10px;margin:10px 0 0}
-video.thumbvid{width:100%;max-height:60vh;display:block;border-radius:6px;background:#e9e5dc;object-fit:contain}
+video.thumbvid{width:100%;max-height:28vh;display:block;border-radius:6px;background:#e9e5dc;object-fit:contain}
 .clip-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .sw{width:14px;height:14px;border-radius:4px;flex:none}
 .name{font-weight:600;word-break:break-all;flex:1;min-width:120px}
@@ -100,6 +100,28 @@ a.save{display:inline-block;margin-top:10px;color:var(--accent);font-weight:600}
 .card.foldable.folded > h2{margin-bottom:0}
 .card.foldable.folded > h2::after{transform:rotate(-90deg)}
 .card.foldable.folded > :not(h2){display:none !important}
+details.drive{border:1px solid var(--line);border-radius:12px;margin-top:10px;background:#fff}
+details.drive > summary{list-style:none;display:flex;gap:10px;align-items:center;padding:10px;cursor:pointer}
+details.drive > summary::-webkit-details-marker{display:none}
+details.drive > summary canvas{width:64px;height:64px;flex:none;border-radius:8px;background:#f1ede4}
+details.drive > summary .dinfo{flex:1;min-width:0}
+details.drive > summary .dinfo b{display:block;font-size:16px}
+details.drive > summary .dinfo span{font-size:13px;color:var(--muted)}
+details.drive > summary .chev{color:var(--accent);font-size:18px;transition:transform .15s}
+details.drive[open] > summary .chev{transform:rotate(180deg)}
+details.drive .dbody{padding:0 10px 10px}
+.prow{display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding:10px 0}
+.prow img,.prow .noimg{width:96px;height:64px;object-fit:cover;border-radius:6px;background:#e9e5dc;flex:none}
+.prow .pinfo{flex:1;min-width:0;font-size:13px;color:var(--muted)}
+.prow .pinfo b{display:block;font-size:15px;color:var(--ink)}
+.prow .pbtns{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.prow .pbtns button{padding:4px 8px;font-size:13px}
+.prow input[type=checkbox],details.drive > summary input[type=checkbox]{width:22px;height:22px;flex:none}
+.leaflet-popup-content{font:14px/1.4 system-ui,sans-serif;color:#1e2328;min-width:200px}
+.leaflet-popup-content b{display:block;font-size:15px;margin-bottom:4px}
+.leaflet-popup-content .pl{font-size:13px;color:#5d6670;margin:2px 0}
+.leaflet-popup-content button{margin-top:8px;width:100%;font:inherit;font-weight:700;border:1px solid #d2601a;background:#d2601a;color:#fff;border-radius:8px;padding:8px}
+#saveWrap a.save{display:block;text-align:center;background:var(--accent);color:#fff;border-radius:10px;padding:12px;text-decoration:none;font-size:17px}
 </style>
 </head>
 <body>
@@ -113,7 +135,7 @@ a.save{display:inline-block;margin-top:10px;color:var(--accent);font-weight:600}
 <h2>Where you've filmed</h2>
 <div id="map"></div>
 <div class="legend">Filmed once <i></i> many times</div>
-<p class="hint">Every recording is drawn along its route. Stretches filmed more often show darker. Tap the map to list the recordings that pass through that spot.</p>
+<p class="hint">Every recording is drawn along its route. Stretches filmed more often show darker. Tap an orange line and a box pops up listing every recording that passes that spot, with a Composite from here button that cues each one to the moment it went by.</p>
 <div class="status" id="mapStatus"></div>
 <div id="hits"></div>
 <div id="hitActions" hidden>
@@ -178,13 +200,14 @@ a.save{display:inline-block;margin-top:10px;color:var(--accent);font-weight:600}
 <div id="compView">
 <section class="card">
 <h2>1. Clips</h2>
+<p class="hint" style="margin-top:0">The easiest way in: open the Map, tap a stretch of road you filmed more than once, and tap Composite from here. Every recording loads already cued to that spot. You can also check parts in the Library, or pick video files below.</p>
 <input id="files" type="file" accept="video/*" multiple>
-<p class="hint">Add parts from the Library above, or pick video files from the phone. The clip marked Base supplies the road. One recording is enough: tap Copy this clip on it, then slide the copy's Start later so its cars land on the earlier road. If a clip looks sideways, set Turn so the road runs up the screen.</p>
+<p class="hint">The clip marked Base supplies the road. The other clips lend their cars. One recording is enough: tap Copy this clip, then slide the copy's Start later.</p>
 <div id="clipList"></div>
 </section>
 
-<section class="card" id="alignCard" hidden>
-<h2>2. Line up</h2>
+<section class="card" id="alignCard" data-fold="closed" hidden>
+<h2>Fine tune line up (optional)</h2>
 <p class="hint" style="margin-top:0">Each drive started recording at a different spot on the road. Line up makes every clip start at the same spot. Tap Auto line up first.</p>
 <div class="btns" style="margin:0 0 10px"><button id="autoBtn">Auto line up</button></div>
 <canvas id="alignCanvas"></canvas>
@@ -193,9 +216,18 @@ a.save{display:inline-block;margin-top:10px;color:var(--accent);font-weight:600}
 </section>
 
 <section class="card">
-<h2>3. Build</h2>
+<h2>2. Make the video</h2>
 <div class="grid">
 <label>Length<select id="dur"><option value="6">6 seconds</option><option value="15">15 seconds</option><option value="30" selected>30 seconds</option><option value="60">1 minute</option><option value="120">2 minutes</option><option value="300">5 minutes</option><option value="full">as long as the clips allow</option></select></label>
+</div>
+<div class="btns"><button id="buildBtn" disabled style="width:100%;font-size:18px;padding:14px">Make the video</button></div>
+<div class="bar"><i id="barFill"></i></div>
+<div class="status" id="status">Load clips to start.</div>
+</section>
+
+<section class="card" data-fold="closed">
+<h2>Video settings</h2>
+<div class="grid">
 <label>Frames per second<input id="fps" type="number" min="2" max="15" step="1" value="8"></label>
 <label>Width (pixels)<select id="width"><option>480</option><option selected>640</option><option>854</option></select></label>
 <label>Detection strength<input id="conf" type="number" min="0.1" max="0.9" step="0.05" value="0.35"></label>
@@ -209,13 +241,10 @@ a.save{display:inline-block;margin-top:10px;color:var(--accent);font-weight:600}
 <label><input type="checkbox" value="animals"> Animals and birds</label>
 <label><input type="checkbox" value="trains"> Trains</label>
 </div>
-<div class="btns"><button id="buildBtn" disabled>Build composite</button></div>
-<div class="bar"><i id="barFill"></i></div>
-<div class="status" id="status">Load clips to start.</div>
 </section>
 
 <section class="card" id="outCard" hidden>
-<h2>4. Result</h2>
+<h2>3. Your video</h2>
 <canvas id="out"></canvas>
 <div class="row"><input id="scrub" type="range" min="0" max="0" value="0"><span class="num" id="frameNum">0</span></div>
 <div class="layers" id="layerToggles"></div>
@@ -228,8 +257,9 @@ a.save{display:inline-block;margin-top:10px;color:var(--accent);font-weight:600}
 <div class="assign" data-assign></div>
 <div class="btns">
 <button id="playBtn">Play</button>
-<button id="recBtn" class="ghost">Record video</button>
+<button id="recBtn">Save video to phone</button>
 </div>
+<p class="hint" style="margin-top:4px">Save video to phone plays it through once while recording, then gives you a Download button.</p>
 <div id="saveWrap"></div>
 <div class="status" id="outStatus"></div>
 </section>
@@ -333,7 +363,7 @@ let selectedIdx = -1;
 let session = null;
 let frames = [];
 let outW = 0, outH = 0, outFps = 8;
-let busy = false, lengthNote = "";
+let busy = false, lengthNote = "", cueNote = "";
 
 const work = document.createElement("canvas");
 const workCtx = work.getContext("2d", { willReadFrequently: true });
@@ -419,6 +449,7 @@ function loadClip(file){
 }
 
 $("files").addEventListener("change", async e => {
+  cueNote = "";
   const list = [...e.target.files];
   e.target.value = "";
   await addClipFiles(list);
@@ -430,7 +461,8 @@ async function addClipFiles(list){
   for (const f of list){
     try {
       const v = await loadClip(f);
-      clips.push({ id: nextClipId++, file: f, mounted: null, name: f.name, video: v, offset: 0, rot: f._rot || 0, enabled: true, thumb: null, range: null, num: null });
+      const off = Math.max(0, Math.min((v.duration || 0) - 0.5, f._offset || 0));
+      clips.push({ id: nextClipId++, file: f, mounted: null, name: f._label || friendlyName(f.name), video: v, offset: Math.round(off * 10) / 10, rot: f._rot || 0, enabled: true, thumb: null, range: null, num: null });
     } catch (err){ setStatus(err.message); }
   }
   if (selectedIdx < 0 && clips.length > 1) selectedIdx = baseIdx === 0 ? 1 : 0;
@@ -515,6 +547,23 @@ function fitRot(c, slot){
   });
 }
 
+// turns drive_2026-11-22_194753_part02.webm into "Nov 22, 7:47 PM drive, part 2"
+function driveDate(dn){
+  const m = /(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(\d{2})/.exec(dn || "");
+  return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : null;
+}
+function niceWhen(d, withDay){
+  if (!d) return "";
+  const t = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleDateString([], withDay ? { weekday: "short", month: "short", day: "numeric" } : { month: "short", day: "numeric" }) + ", " + t;
+}
+function friendlyName(name){
+  const d = driveDate(name);
+  if (!d) return name;
+  const part = /part(\d+)/.exec(name), stop = /stopmotion/.test(name);
+  return niceWhen(d) + " drive, " + (stop ? "stop motion" : part ? "part " + parseInt(part[1]) : "video");
+}
+
 // The same recording can be stacked on itself: a copy starts later, so its cars land on the earlier road.
 async function copyClip(c){
   setStatus("Copying clip...");
@@ -596,7 +645,7 @@ async function updateAlign(){
         const b = await grabFrame(other, other.offset, W, H);
         alignB.getContext("2d").drawImage(b, 0, 0); b.close();
       }
-      if (!busy) setStatus(clips.length < 2 ? "Add another clip, or tap Copy this clip to stack a recording with itself." : clips.length + " clips ready.");
+      if (!busy) setStatus(clips.length < 2 ? "Add another clip, or tap Copy this clip to stack a recording with itself." : (cueNote || clips.length + " clips ready. Tap Make the video."));
     } catch (err){ setStatus("Could not read frames: " + (err && err.message ? err.message : err)); }
     $("alignCard").hidden = false;
     paintAlign();
@@ -947,6 +996,11 @@ $("buildBtn").addEventListener("click", async () => {
     const kinds = Object.entries(byClass).sort((a, b) => b[1] - a[1]).map(([c, n]) => (CLASS_NAMES[c] || "class " + c) + " " + n).join(", ");
     setStatus("Done in " + secs + "s. Cutouts per clip: " + counts.map((c, k) => "clip " + (k + 1) + " " + c).join(", ") + ". By kind: " + (kinds || "none") + ".");
     showResult();
+    // show the finished video right away
+    setTimeout(() => {
+      $("outCard").scrollIntoView({ behavior: "smooth", block: "start" });
+      if (!playing){ playing = true; $("playBtn").textContent = "Pause"; playLoop(); }
+    }, 300);
   } catch (err){
     setStatus("Build stopped: " + (err && err.message ? err.message : err));
   } finally {
@@ -1148,13 +1202,15 @@ $("recBtn").addEventListener("click", async () => {
   recChunks = [];
   recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 6000000 });
   recorder.ondataavailable = e => { if (e.data && e.data.size) recChunks.push(e.data); };
+  $("outStatus").textContent = "Recording the video while it plays through once...";
   recorder.onstop = () => {
     const blob = new Blob(recChunks, { type: type.split(";")[0] });
     const ext = type.indexOf("mp4") >= 0 ? "mp4" : "webm";
     const a = document.createElement("a");
     a.className = "save"; a.href = URL.createObjectURL(blob);
     a.download = "road-layers-" + Date.now() + "." + ext;
-    a.textContent = "Save recorded video (" + (blob.size / 1048576).toFixed(1) + " MB)";
+    a.textContent = "Download the video (" + (blob.size / 1048576).toFixed(1) + " MB)";
+    $("outStatus").textContent = "Done. Tap Download the video to put it in your phone's Downloads.";
     $("saveWrap").innerHTML = ""; $("saveWrap").appendChild(a);
     recorder = null; $("recBtn").disabled = false;
   };
@@ -1277,6 +1333,21 @@ function checkBattery(){
 async function storageLeft(){
   try { const e = await navigator.storage.estimate(); return { used: e.usage || 0, quota: e.quota || 0, left: (e.quota || 0) - (e.usage || 0) }; }
   catch (e){ return null; }
+}
+
+// small picture from the live camera, turned the way the recording will be turned
+function snapThumb(){
+  const v = $("recPreview");
+  if (!v.videoWidth) return Promise.resolve(null);
+  const r = recRot(), side = r % 180 !== 0;
+  const W = 240, srcW = side ? v.videoHeight : v.videoWidth, srcH = side ? v.videoWidth : v.videoHeight;
+  const H = Math.round(W * srcH / srcW);
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const x = c.getContext("2d");
+  x.translate(W / 2, H / 2); x.rotate(r * Math.PI / 180);
+  const dw = side ? H : W, dh = side ? W : H;
+  x.drawImage(v, -dw / 2, -dh / 2, dw, dh);
+  return new Promise(res => c.toBlob(res, "image/jpeg", 0.75));
 }
 
 // ---- which way is up ----
@@ -1425,8 +1496,12 @@ async function startSegment(){
     await writeChain;
     await writeFile(thisDir, "timing.json", JSON.stringify(thisLog));
     await assemblePart(driveDir, partName);
+    try { await writeFile(driveDir, partName + "_meta.json", JSON.stringify({ dur: +((performance.now() - thisStart) / 1000).toFixed(1) })); } catch (e) {}
     refreshLibrary();
   };
+  // a small picture of the road a few seconds in, for the Library
+  const thisStart = performance.now();
+  setTimeout(() => { snapThumb().then(b => b && writeFile(driveDir, partName + "_thumb.jpg", b)).catch(() => {}); }, 3000);
   const mins = parseInt($("recSplit").value) || 10;
   clearTimeout(segTimer);
   segTimer = setTimeout(async () => {
@@ -1590,6 +1665,17 @@ async function stillsToVideo(item, fps){
   });
 }
 
+async function readMeta(dir, n){
+  try { return JSON.parse(await (await (await dir.getFileHandle(n.replace(/\.(webm|mp4)$/, "_meta.json"))).getFile()).text()); }
+  catch (e){ return null; }
+}
+function trackMiles(track){
+  let m = 0;
+  for (let i = 1; i < track.length; i++) m += haversine(track[i - 1][0], track[i - 1][1], track[i][0], track[i][1]);
+  return m / 1609.34;
+}
+function fmtLen(sec){ if (sec == null) return ""; sec = Math.round(sec); return Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0"); }
+
 async function scanLibrary(){
   const parts = [];
   {
@@ -1602,19 +1688,21 @@ async function scanLibrary(){
         if (h.kind !== "file" || !/^part\d+\.(webm|mp4)$/.test(n)) continue;
         const f = await h.getFile();
         const tname = n.replace(/\.(webm|mp4)$/, "_timing.json");
-        let gpsN = 0, speed = null, track = [], rot = 0;
+        let gpsN = 0, speed = null, track = [], rot = 0, cue = [], startWall = null;
         if (names.includes(tname)){
           try {
             const t = JSON.parse(await (await (await dh.getFileHandle(tname)).getFile()).text());
             gpsN = t.gps.length;
             rot = t.rot || 0;
+            startWall = t.startWall || null;
+            cue = t.gps.filter(g => g.lat != null).map(g => [g.lat, g.lon, g.t]);
             track = t.gps.filter(g => g.lat != null && !g.carried).map(g => [g.lat, g.lon]);
             if (!track.length) track = t.gps.filter(g => g.lat != null).map(g => [g.lat, g.lon]);
             const sp = t.gps.map(g => g.speed).filter(x => x != null);
             if (sp.length) speed = Math.round(sp.reduce((a, b) => a + b, 0) / sp.length * 2.23694);
           } catch (e) {}
         }
-        parts.push({ kind: "video", drive: dn, name: n, tname: names.includes(tname) ? tname : null, dir: dh, handle: h, size: f.size, gpsN, speed, track, rot, id: dn + "/" + n });
+        parts.push({ kind: "video", drive: dn, name: n, tname: names.includes(tname) ? tname : null, dir: dh, handle: h, size: f.size, gpsN, speed, track, rot, cue, startWall, meta: await readMeta(dh, n), thumbName: n.replace(/\.(webm|mp4)$/, "_thumb.jpg"), hasThumb: names.includes(n.replace(/\.(webm|mp4)$/, "_thumb.jpg")), id: dn + "/" + n });
       }
       const st = entries.find(([n, h]) => n === "stills" && h.kind === "directory");
       if (st){
@@ -1625,7 +1713,10 @@ async function scanLibrary(){
         }
         try { info = JSON.parse(await (await (await st[1].getFileHandle("stills.json")).getFile()).text()); } catch (e) {}
         const track = info && info.frames ? info.frames.filter(f => f.lat != null).map(f => [f.lat, f.lon]) : [];
-        if (count) parts.push({ kind: "stills", drive: dn, name: "stills", dir: st[1], parentDir: dh, size, count, info, track, rot: (info && info.rot) || 0, id: dn + "/stills" });
+        // a stop motion set plays as a video at the chosen speed, so frame k sits at k / fps seconds
+        const sfps = parseInt($("stillFps").value) || 8;
+        const cue = info && info.frames ? info.frames.map((f, k) => [f.lat, f.lon, k / sfps]).filter(c => c[0] != null) : [];
+        if (count) parts.push({ kind: "stills", drive: dn, name: "stills", dir: st[1], parentDir: dh, size, count, info, track, cue, rot: (info && info.rot) || 0, meta: { dur: count / sfps }, thumbName: "f000001.jpg", hasThumb: true, id: dn + "/stills" });
       }
       if (!entries.length) { try { await dd.removeEntry(dn); } catch (e) {} }
     }
@@ -1634,62 +1725,175 @@ async function scanLibrary(){
 }
 
 // ---------------- Library ----------------
+let libRendering = false, libAgain = false;
 async function refreshLibrary(){
+  if (libRendering){ libAgain = true; return; }
+  libRendering = true;
+  try { await renderLibrary(); } finally { libRendering = false; }
+  if (libAgain){ libAgain = false; refreshLibrary(); }
+}
+
+function drawSketch(cv, tracks){
+  const x = cv.getContext("2d"), W = cv.width = 128, H = cv.height = 128;
+  x.fillStyle = "#f1ede4"; x.fillRect(0, 0, W, H);
+  const pts = tracks.flat();
+  if (pts.length < 2){ x.fillStyle = "#9aa0a6"; x.font = "bold 20px system-ui"; x.textAlign = "center"; x.fillText("no GPS", W / 2, H / 2 + 7); return; }
+  let a0 = Infinity, a1 = -Infinity, o0 = Infinity, o1 = -Infinity;
+  for (const [la, lo] of pts){ a0 = Math.min(a0, la); a1 = Math.max(a1, la); o0 = Math.min(o0, lo); o1 = Math.max(o1, lo); }
+  const k = Math.cos((a0 + a1) / 2 * Math.PI / 180);
+  const span = Math.max((a1 - a0), (o1 - o0) * k, 1e-5), pad = 14;
+  const X = lo => pad + ((lo - o0) * k + (span - (o1 - o0) * k) / 2) / span * (W - 2 * pad);
+  const Y = la => H - pad - ((la - a0) + (span - (a1 - a0)) / 2) / span * (H - 2 * pad);
+  x.strokeStyle = "#d2601a"; x.lineWidth = 5; x.lineCap = "round"; x.lineJoin = "round";
+  for (const tr of tracks){ if (tr.length < 2) continue; x.beginPath(); tr.forEach(([la, lo], i) => i ? x.lineTo(X(lo), Y(la)) : x.moveTo(X(lo), Y(la))); x.stroke(); }
+  const f = pts[0], l = pts[pts.length - 1];
+  x.fillStyle = "#3f8f3a"; x.beginPath(); x.arc(X(f[1]), Y(f[0]), 6, 0, 7); x.fill();
+  x.fillStyle = "#b3261e"; x.beginPath(); x.arc(X(l[1]), Y(l[0]), 6, 0, 7); x.fill();
+}
+
+async function renderLibrary(){
   const list = $("libList");
   if (!navigator.storage || !navigator.storage.getDirectory){ list.textContent = "This browser has no app storage."; return; }
   let parts;
   try { parts = await scanLibrary(); }
   catch (e){ list.textContent = "Could not read the library: " + e.message; return; }
-  parts.sort((a, b) => (b.drive + b.name).localeCompare(a.drive + a.name));
+  const openNow = new Set([...list.querySelectorAll("details.drive[open]")].map(d => d.dataset.drive));
+  const firstRender = !list.dataset.done;
+  list.dataset.done = "1";
+  const seen = list._seen || (list._seen = new Set());
+  // group parts by drive, newest drive first
+  const drives = new Map();
+  for (const p of parts){ if (!drives.has(p.drive)) drives.set(p.drive, []); drives.get(p.drive).push(p); }
+  const order = [...drives.keys()].sort().reverse();
   list.innerHTML = "";
-  if (!parts.length) list.innerHTML = '<p class="hint">No recordings yet.</p>';
-  for (const p of parts){
-    const d = document.createElement("div");
-    d.className = "lib";
-    d.innerHTML = '<div class="lib-top"><input type="checkbox"><b></b></div><div class="lib-sub"></div>' +
-      '<div class="btns"><button class="ghost" data-a="save">Save to phone</button><button class="ghost" data-a="del">Delete</button></div>';
-    const tag = document.createElement("span");
-    tag.className = "tag " + (p.kind === "stills" ? "s" : "v");
-    tag.textContent = p.kind === "stills" ? "Stop motion" : "Full video";
-    const title = d.querySelector("b");
-    title.textContent = "Drive " + p.drive.replace("_", " ") + (p.kind === "stills" ? "" : ", " + p.name.replace(/\.(webm|mp4)$/, "").replace("part", "part "));
-    title.prepend(tag);
-    if (p.kind === "stills"){
-      const every = p.info && p.info.every ? (p.info.every[0] === "d" ? "every " + p.info.every.slice(1) + " ft" : "every " + p.info.every.slice(1) + " s") : "";
-      d.querySelector(".lib-sub").textContent = p.count + " frames" + (every ? ", " + every : "") + ", " + mb(p.size);
-      d.querySelector('[data-a="save"]').textContent = "Save as video to phone";
-    } else {
-      d.querySelector(".lib-sub").textContent = mb(p.size) + (p.gpsN ? ", " + p.gpsN + " GPS points" : ", no GPS") + (p.speed != null ? ", avg " + p.speed + " mph" : "");
-    }
-    d.querySelector("input").libPart = p;
-    d.querySelector('[data-a="save"]').addEventListener("click", async e => {
-      const go = (blob, name) => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); };
+  if (!order.length) list.innerHTML = '<p class="hint">No recordings yet. Record a drive in the Record tab.</p>';
+  const needThumbs = [];
+  order.forEach((dn, di) => {
+    const items = drives.get(dn).sort((a, b) => (a.kind === "stills") - (b.kind === "stills") || a.name.localeCompare(b.name));
+    const vids = items.filter(p => p.kind === "video");
+    const totalSec = vids.reduce((s, p) => s + (p.meta && p.meta.dur || 0), 0);
+    const miles = vids.reduce((s, p) => s + trackMiles(p.track || []), 0);
+    const det = document.createElement("details");
+    det.className = "drive"; det.dataset.drive = dn;
+    // stay open if it was open, open the newest on first look, and open any drive just recorded
+    if (openNow.has(dn) || (firstRender && di === 0) || (!firstRender && !seen.has(dn))) det.open = true;
+    seen.add(dn);
+    det.innerHTML = '<summary><input type="checkbox" class="dall"><canvas></canvas><div class="dinfo"><b></b><span></span></div><span class="chev">▾</span></summary><div class="dbody"></div>';
+    const label = niceWhen(driveDate(dn), true);
+    const twin = order.some(o => o !== dn && niceWhen(driveDate(o), true) === label);
+    det.querySelector("b").textContent = twin ? label.replace(/(\d+:\d+)/, "$1:" + dn.slice(-2)) : label;
+    const bits = [];
+    if (vids.length) bits.push(vids.length + (vids.length === 1 ? " video part" : " video parts"));
+    if (items.some(p => p.kind === "stills")) bits.push("stop motion");
+    if (totalSec) bits.push(fmtLen(totalSec) + " long");
+    if (miles >= 0.05) bits.push(miles.toFixed(1) + " mi");
+    det.querySelector(".dinfo span").textContent = bits.join(", ");
+    drawSketch(det.querySelector("canvas"), items.filter(p => p.kind === "video").map(p => p.track || []).concat(items.filter(p => p.kind === "stills" && !vids.length).map(p => p.track || [])));
+    const all = det.querySelector(".dall");
+    all.addEventListener("click", e => e.stopPropagation());
+    all.addEventListener("change", () => det.querySelectorAll(".dbody input[type=checkbox]").forEach(x => x.checked = all.checked));
+    const body = det.querySelector(".dbody");
+    for (const p of items){
+      const row = document.createElement("div");
+      row.className = "prow";
+      row.innerHTML = '<input type="checkbox"><div class="noimg"></div><div class="pinfo"><b></b><span class="pl"></span><div class="pbtns"><button class="ghost" data-a="save">Save to phone</button><button class="ghost" data-a="del">Delete</button></div></div>';
+      const partNo = /part(\d+)/.exec(p.name);
+      row.querySelector("b").textContent = p.kind === "stills" ? "Stop motion" : "Part " + (partNo ? parseInt(partNo[1]) : "");
+      const facts = [];
       if (p.kind === "stills"){
-        const btn = e.target; btn.disabled = true; btn.textContent = "Building video...";
+        facts.push(p.count + " frames");
+        if (p.info && p.info.every) facts.push(p.info.every[0] === "d" ? "every " + p.info.every.slice(1) + " ft" : "every " + p.info.every.slice(1) + " s");
+      } else {
+        if (p.meta && p.meta.dur) facts.push(fmtLen(p.meta.dur) + " long");
+        if (p.startWall) facts.push("starts " + new Date(p.startWall).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+        const mi = trackMiles(p.track || []);
+        if (mi >= 0.05) facts.push(mi.toFixed(1) + " mi");
+        if (p.speed != null) facts.push("avg " + p.speed + " mph");
+        if (!p.gpsN) facts.push("no GPS");
+      }
+      facts.push(mb(p.size));
+      row.querySelector(".pl").textContent = facts.join(", ");
+      if (p.kind === "stills") row.querySelector('[data-a="save"]').textContent = "Save as video";
+      row.querySelector("input").libPart = p;
+      const imgSlot = row.querySelector(".noimg");
+      const showThumb = async () => {
         try {
-          go(await stillsToVideo(p, parseInt($("stillFps").value) || 8), "drive_" + p.drive + "_stopmotion.mp4");
-          try { go(await (await p.dir.getFileHandle("stills.json")).getFile(), "drive_" + p.drive + "_stopmotion_timing.json"); } catch (x) {}
-        } catch (x){ $("libStorage").textContent = x.message; }
-        btn.disabled = false; btn.textContent = "Save as video to phone";
-        return;
-      }
-      const f = await p.handle.getFile();
-      go(f, "drive_" + p.drive + "_" + p.name);
-      if (p.tname) go(await (await p.dir.getFileHandle(p.tname)).getFile(), "drive_" + p.drive + "_" + p.tname);
-    });
-    const del = d.querySelector('[data-a="del"]');
-    del.addEventListener("click", async () => {
-      if (del.dataset.armed !== "1"){ del.dataset.armed = "1"; del.textContent = "Tap again to delete"; setTimeout(() => { del.dataset.armed = ""; del.textContent = "Delete"; }, 3000); return; }
-      if (p.kind === "stills") await p.parentDir.removeEntry("stills", { recursive: true });
-      else {
-        await p.dir.removeEntry(p.name);
-        if (p.tname) { try { await p.dir.removeEntry(p.tname); } catch (e) {} }
-        try { await p.dir.removeEntry(p.name.replace(/\.(webm|mp4)$/, "_road.json")); } catch (e) {}
-      }
+          const f = await (await (p.kind === "stills" ? p.dir : p.dir).getFileHandle(p.thumbName)).getFile();
+          const img = document.createElement("img"); img.src = URL.createObjectURL(f);
+          if (p.kind === "stills" && p.rot) img.style.transform = "rotate(" + p.rot + "deg)";
+          imgSlot.replaceWith(img);
+        } catch (e) {}
+      };
+      if (p.hasThumb) showThumb(); else needThumbs.push({ p, done: showThumb, row });
+      row.querySelector('[data-a="save"]').addEventListener("click", async e => {
+        const go = (blob, name) => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); };
+        if (p.kind === "stills"){
+          const btn = e.target; btn.disabled = true; btn.textContent = "Building video...";
+          try {
+            go(await stillsToVideo(p, parseInt($("stillFps").value) || 8), "drive_" + p.drive + "_stopmotion.mp4");
+            try { go(await (await p.dir.getFileHandle("stills.json")).getFile(), "drive_" + p.drive + "_stopmotion_timing.json"); } catch (x) {}
+          } catch (x){ $("libStorage").textContent = x.message; }
+          btn.disabled = false; btn.textContent = "Save as video";
+          return;
+        }
+        const f = await p.handle.getFile();
+        go(f, "drive_" + p.drive + "_" + p.name);
+        if (p.tname) go(await (await p.dir.getFileHandle(p.tname)).getFile(), "drive_" + p.drive + "_" + p.tname);
+      });
+      const del = row.querySelector('[data-a="del"]');
+      del.addEventListener("click", async () => {
+        if (del.dataset.armed !== "1"){ del.dataset.armed = "1"; del.textContent = "Tap again to delete"; setTimeout(() => { del.dataset.armed = ""; del.textContent = "Delete"; }, 3000); return; }
+        if (p.kind === "stills") await p.parentDir.removeEntry("stills", { recursive: true });
+        else {
+          for (const n of [p.name, p.tname, p.name.replace(/\.(webm|mp4)$/, "_road.json"), p.name.replace(/\.(webm|mp4)$/, "_meta.json"), p.thumbName]){
+            if (n) { try { await p.dir.removeEntry(n); } catch (e) {} }
+          }
+        }
+        refreshLibrary();
+      });
+      body.appendChild(row);
+    }
+    const dbtns = document.createElement("div");
+    dbtns.className = "pbtns";
+    dbtns.style.cssText = "border-top:1px solid var(--line);padding-top:10px";
+    dbtns.innerHTML = '<button class="ghost" data-a="delall">Delete this whole drive</button>';
+    const da = dbtns.querySelector("button");
+    da.addEventListener("click", async () => {
+      if (da.dataset.armed !== "1"){ da.dataset.armed = "1"; da.textContent = "Tap again to delete the whole drive"; setTimeout(() => { da.dataset.armed = ""; da.textContent = "Delete this whole drive"; }, 3000); return; }
+      try { await (await drivesDir()).removeEntry(dn, { recursive: true }); } catch (e) {}
       refreshLibrary();
     });
-    list.appendChild(d);
-  }
+    body.appendChild(dbtns);
+    list.appendChild(det);
+  });
+  const s = await storageLeft();
+  $("libStorage").textContent = s && s.quota ? "App storage: " + mb(s.used) + " used, " + mb(Math.max(0, s.left)) + " free." : "";
+  if (needThumbs.length) makeThumbs(needThumbs);
+}
+
+// older recordings have no picture or length yet: make them once, in the background, and keep them
+let thumbsRunning = false;
+async function makeThumbs(jobs){
+  if (thumbsRunning) return;
+  thumbsRunning = true;
+  try {
+    for (let i = 0; i < jobs.length; i++){
+      const { p, done } = jobs[i];
+      $("libStorage").textContent = "Making previews " + (i + 1) + " of " + jobs.length + "...";
+      try {
+        const file = await p.handle.getFile();
+        const meta = await videoMeta(file);
+        const clip = { id: nextClipId++, file, mounted: null, rot: p.rot || 0, video: { videoWidth: meta.w, videoHeight: meta.h } };
+        const W = 240, H = evenSize(W, clip);
+        const bmp = await grabFrame(clip, Math.min(4, (meta.dur || 2) / 2), W, H);
+        const c = document.createElement("canvas"); c.width = W; c.height = H; c.getContext("2d").drawImage(bmp, 0, 0); bmp.close();
+        const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.75));
+        await writeFile(p.dir, p.thumbName, blob);
+        if (!p.meta) await writeFile(p.dir, p.name.replace(/\.(webm|mp4)$/, "_meta.json"), JSON.stringify({ dur: +(meta.dur || 0).toFixed(1) }));
+        done();
+      } catch (e) {}
+    }
+  } finally { thumbsRunning = false; }
   const s = await storageLeft();
   $("libStorage").textContent = s && s.quota ? "App storage: " + mb(s.used) + " used, " + mb(Math.max(0, s.left)) + " free." : "";
 }
@@ -1700,7 +1904,7 @@ $("libUse").addEventListener("click", async () => {
   await useInComposite(picked, $("libUse"), t => $("libStorage").textContent = t);
 });
 
-async function useInComposite(picked, btn, say){
+async function useInComposite(picked, btn, say, cueAt){
   picked = picked.slice().sort((a, b) => (a.kind === "video" ? 0 : 1) - (b.kind === "video" ? 0 : 1)); // full video first so it becomes Base
   const files = [];
   btn.disabled = true;
@@ -1710,21 +1914,29 @@ async function useInComposite(picked, btn, say){
         say("Building stop motion video for drive " + p.drive + "...");
         const sf = await stillsToVideo(p, parseInt($("stillFps").value) || 8);
         sf._rot = p.rot || 0;
+        sf._label = friendlyName("drive_" + p.drive + "_stopmotion");
+        if (cueAt && cueAt.has(p.id)) sf._offset = cueAt.get(p.id);
         files.push(sf);
       } else {
         const f = await p.handle.getFile();
         const vf = new File([f], "drive_" + p.drive + "_" + p.name, { type: f.type });
         vf._rot = p.rot || 0;
+        vf._label = friendlyName(vf.name);
+        if (cueAt && cueAt.has(p.id)) vf._offset = cueAt.get(p.id);
         files.push(vf);
       }
     }
   } catch (e){ say("Could not load: " + e.message); btn.disabled = false; return; }
   btn.disabled = false;
   say("");
-  refreshLibrary();
   showTab("tabComp");
   for (const x of document.querySelectorAll("#libList input[type=checkbox]")) x.checked = false;
+  // start fresh so old clips don't mix in
+  while (clips.length) removeClip(clips.length - 1);
   await addClipFiles(files);
+  cueNote = cueAt ? clips.length + " clips loaded, each cued 1 second before the spot you tapped. Tap Make the video." : "";
+  if (cueNote) setStatus(cueNote);
+  $("buildBtn").scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 
@@ -1785,11 +1997,65 @@ function distToTrack(lat, lon, track){
   return best;
 }
 
+// when, in seconds into the recording, it passed closest to this spot (between GPS points it is worked out along the line)
+function cueTime(p, lat, lon){
+  const c = p.cue || [];
+  if (!c.length) return 0;
+  const k = Math.cos(lat * Math.PI / 180), M = 111320;
+  const xy = (la, lo) => [(lo - lon) * k * M, (la - lat) * M];
+  let best = Infinity, bestT = c[0][2];
+  for (let i = 0; i < c.length; i++){
+    const [ax, ay] = xy(c[i][0], c[i][1]);
+    const d0 = Math.hypot(ax, ay);
+    if (d0 < best){ best = d0; bestT = c[i][2]; }
+    if (i){
+      const [bx, by] = xy(c[i - 1][0], c[i - 1][1]);
+      const vx = ax - bx, vy = ay - by, L2 = vx * vx + vy * vy;
+      if (L2 > 0){
+        const u = Math.max(0, Math.min(1, -(bx * vx + by * vy) / L2));
+        const d = Math.hypot(bx + u * vx, by + u * vy);
+        if (d < best){ best = d; bestT = c[i - 1][2] + u * (c[i][2] - c[i - 1][2]); }
+      }
+    }
+  }
+  return bestT;
+}
+
 async function findHits(lat, lon){
   if (hitMarker) hitMarker.remove();
   hitMarker = L.circle([lat, lon], { radius: HIT_METERS, color: "#1f6f8b", weight: 2, fillOpacity: 0.1 }).addTo(map);
   const hits = mapItems.filter(p => p.track && p.track.length && distToTrack(lat, lon, p.track) <= HIT_METERS);
+  hits.forEach(p => { p._cue = cueTime(p, lat, lon); });
   showHitList(hits, hits.length + (hits.length === 1 ? " recording passes" : " recordings pass") + " through this spot.");
+  // a popup right where you tapped, with the next step on it
+  const box = document.createElement("div");
+  const head = document.createElement("b");
+  head.textContent = hits.length ? hits.length + (hits.length === 1 ? " recording passes here" : " recordings pass here") : "Nothing filmed right here";
+  box.appendChild(head);
+  for (const p of hits.slice(0, 8)){
+    const line = document.createElement("div");
+    line.className = "pl";
+    line.textContent = friendlyName("drive_" + p.drive + "_" + p.name) + ", at " + fmtLen(p._cue);
+    box.appendChild(line);
+  }
+  if (hits.length > 8){ const more = document.createElement("div"); more.className = "pl"; more.textContent = "and " + (hits.length - 8) + " more"; box.appendChild(more); }
+  if (hits.length){
+    const go = document.createElement("button");
+    go.textContent = hits.length === 1 ? "Composite from here (copies it)" : "Composite from here";
+    go.addEventListener("click", async () => {
+      go.disabled = true; go.textContent = "Loading...";
+      const cueAt = new Map(hits.map(p => [p.id, Math.max(0, p._cue - 1)]));
+      await useInComposite(hits, go, t => $("mapStatus").textContent = t, cueAt);
+      // one recording alone: copy it so there is something to stack
+      if (clips.length === 1 && typeof copyClip === "function") await copyClip(clips[0]);
+      map.closePopup();
+    });
+    box.appendChild(go);
+  } else {
+    const tip = document.createElement("div"); tip.className = "pl"; tip.textContent = "Tap on one of the orange lines.";
+    box.appendChild(tip);
+  }
+  L.popup({ maxWidth: 280 }).setLatLng([lat, lon]).setContent(box).openOn(map);
 }
 
 function showHitList(hits, msg){
@@ -1802,7 +2068,7 @@ function showHitList(hits, msg){
     const r = document.createElement("label");
     r.className = "hitrow";
     r.innerHTML = '<input type="checkbox" checked><b></b>';
-    r.querySelector("b").textContent = itemLabel(p);
+    r.querySelector("b").textContent = friendlyName("drive_" + p.drive + "_" + p.name) + (p._cue != null ? ", passes this spot at " + fmtLen(p._cue) : "");
     r.querySelector("input").libPart = p;
     box.appendChild(r);
   }
@@ -1815,7 +2081,8 @@ function checkedHits(){ return [...document.querySelectorAll("#hits input:checke
 $("hitUse").addEventListener("click", async () => {
   const picked = checkedHits();
   if (!picked.length){ $("mapStatus").textContent = "Check one or more recordings first."; return; }
-  await useInComposite(picked, $("hitUse"), t => $("mapStatus").textContent = t);
+  const cueAt = new Map(picked.filter(p => p._cue != null).map(p => [p.id, Math.max(0, p._cue - 1)]));
+  await useInComposite(picked, $("hitUse"), t => $("mapStatus").textContent = t, cueAt.size ? cueAt : null);
 });
 
 async function refreshProjectPicker(){

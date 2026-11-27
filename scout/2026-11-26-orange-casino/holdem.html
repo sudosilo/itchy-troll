@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Texas Hold'em</title>
+<style>
+:root { color-scheme: light; --ink: #1d2233; --felt: #2e9e5b; --gold: #f2b705; --red: #d63a2f; --blue: #2f6fec; --paper: #fffdf5; }
+* { box-sizing: border-box; -webkit-font-smoothing: none; }
+body { margin: 0 auto; max-width: 560px; padding: 12px; color: var(--ink); font: bold 14px "Courier New", monospace; text-transform: uppercase;
+  background-color: #fdf6e3;
+  background-image: linear-gradient(45deg, #f6ecd0 25%, transparent 25%, transparent 75%, #f6ecd0 75%), linear-gradient(45deg, #f6ecd0 25%, transparent 25%, transparent 75%, #f6ecd0 75%);
+  background-size: 16px 16px; background-position: 0 0, 8px 8px; }
+.px { background: var(--paper); border: 4px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 10px; margin-bottom: 14px; }
+h1 { margin: 0; text-align: center; font-size: 24px; letter-spacing: 3px; color: var(--red); text-shadow: 3px 3px 0 var(--gold); }
+.sub { text-align: center; font-size: 11px; margin-top: 4px; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.felt { background-color: var(--felt); background-image: repeating-linear-gradient(0deg, rgba(0,0,0,0.06) 0 2px, transparent 2px 4px); color: #ffffff; }
+.label { font-size: 12px; margin-bottom: 6px; }
+.board { display: flex; justify-content: center; gap: 6px; min-height: 64px; }
+.slot { width: 44px; height: 62px; border: 3px dashed rgba(255,255,255,0.6); }
+.pot { text-align: center; font-size: 18px; color: var(--gold); margin: 8px 0; }
+.hand { display: flex; gap: 6px; min-height: 64px; }
+.card { width: 44px; height: 62px; background: #ffffff; color: var(--ink); border: 3px solid var(--ink); box-shadow: 3px 3px 0 rgba(0,0,0,0.35); display: flex; flex-direction: column; justify-content: space-between; padding: 3px; font-size: 15px; animation: drop 0.25s steps(4); }
+.card .big { text-align: center; font-size: 22px; }
+.card.red { color: var(--red); }
+.card.back { background-color: var(--blue); background-image: repeating-linear-gradient(45deg, #ffffff 0 3px, transparent 3px 8px); }
+@keyframes drop { from { transform: translateY(-20px); opacity: 0; } to { transform: none; opacity: 1; } }
+.seat { border: 3px solid #ffffff; padding: 8px; margin-top: 10px; }
+.seat.turn { border-color: var(--gold); background: rgba(242,183,5,0.18); }
+.seat.out { opacity: 0.45; }
+.badge { display: inline-block; padding: 1px 4px; border: 2px solid var(--ink); background: #ffffff; color: var(--ink); font-size: 10px; margin-left: 4px; }
+.badge.d { background: var(--gold); }
+.you-tag { color: var(--gold); }
+.result { color: var(--gold); min-height: 16px; margin-top: 4px; }
+button, input { font: inherit; text-transform: uppercase; }
+input[type=text] { width: 100%; padding: 10px; border: 4px solid var(--ink); background: #ffffff; color: var(--ink); }
+input[type=range] { width: 100%; margin-top: 10px; accent-color: var(--blue); }
+.btn { border: 4px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 12px 6px; background: var(--gold); color: var(--ink); width: 100%; margin-top: 8px; }
+.btn:active { transform: translate(4px, 4px); box-shadow: none; }
+.btn:disabled { opacity: 0.4; }
+.btn.blue { background: var(--blue); color: #ffffff; }
+.btn.red { background: var(--red); color: #ffffff; }
+.btn.white { background: #ffffff; }
+.btn.small { padding: 8px 4px; font-size: 12px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+#msg { color: var(--red); text-align: center; min-height: 18px; margin-top: 6px; }
+#log { font-size: 11px; line-height: 1.6; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="px"><h1>TEXAS HOLD&#8217;EM</h1><div class="sub">No limit, blinds 10 / 20, button rotates every hand</div></div>
+
+<div id="joinBox" class="px">
+  <input id="name" type="text" maxlength="16" placeholder="Player name">
+  <button class="btn" onclick="join()">Take a seat</button>
+</div>
+
+<div id="game" class="hidden">
+  <div class="px">
+    <div class="row"><span id="you"></span><span id="chips"></span></div>
+    <div class="row" style="margin-top:6px"><span id="handNum"></span><span id="deckText"></span></div>
+  </div>
+
+  <div class="px felt">
+    <div class="board" id="board"></div>
+    <div class="pot" id="pot"></div>
+    <div id="seats"></div>
+  </div>
+
+  <div class="px">
+    <div id="turnInfo" class="label" style="text-align:center"></div>
+    <button id="startBtn" class="btn" onclick="startHand()">Deal next hand</button>
+    <div id="actControls" class="hidden">
+      <div class="grid3">
+        <button class="btn red" onclick="act('fold')">Fold</button>
+        <button class="btn blue" id="callBtn" onclick="callOrCheck()">Check</button>
+        <button class="btn" onclick="act('allin')">All in</button>
+      </div>
+      <input type="range" id="raiseSlider" oninput="showRaise()">
+      <div class="grid3">
+        <button class="btn white small" onclick="quick('min')">Min</button>
+        <button class="btn white small" onclick="quick('half')">Half pot</button>
+        <button class="btn white small" onclick="quick('pot')">Pot</button>
+      </div>
+      <button class="btn blue" id="raiseBtn" onclick="raise()">Raise to 0</button>
+    </div>
+    <div id="msg"></div>
+  </div>
+
+  <div class="px"><div class="label">Table log</div><div id="log"></div></div>
+</div>
+
+<script>
+const API = "https://casino-server-production-546ff089.up.railway.app";
+const SUIT = { S: "\u2660", H: "\u2665", D: "\u2666", C: "\u2663" };
+let myId = load("casinoId");
+let state = null;
+let source = null;
+let lastTurnKey = "";
+
+function load(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function $(id) { return document.getElementById(id); }
+function say(t) { $("msg").textContent = t || ""; }
+
+async function post(path, body) {
+  try {
+    const r = await fetch(API + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await r.json();
+    say(data.error || "");
+    return data;
+  } catch (e) { say("server not reachable"); return {}; }
+}
+
+function showScreen(joining) {
+  $("joinBox").classList.toggle("hidden", !joining);
+  $("game").classList.toggle("hidden", joining);
+}
+
+function showJoin() {
+  if (source) source.close();
+  myId = null;
+  store("casinoId", null);
+  showScreen(true);
+}
+
+async function join() {
+  const name = $("name").value.trim() || "Player";
+  const res = await post("/join", { name });
+  if (!res.id) return;
+  myId = res.id;
+  store("casinoId", myId);
+  connect();
+}
+
+async function connect() {
+  showScreen(false);
+  const res = await post("/he/sit", { id: myId });
+  if (res.error === "join first") { showJoin(); return; }
+  if (source) source.close();
+  source = new EventSource(API + "/events?id=" + myId);
+  source.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (!d.you) { showJoin(); return; }
+    state = d;
+    render();
+  };
+}
+
+function cardEl(c) {
+  const el = document.createElement("div");
+  el.className = "card";
+  if (c.r === "?") { el.classList.add("back"); return el; }
+  if (c.s === "H" || c.s === "D") el.classList.add("red");
+  const top = document.createElement("div");
+  top.textContent = c.r;
+  const big = document.createElement("div");
+  big.className = "big";
+  big.textContent = SUIT[c.s];
+  el.appendChild(top);
+  el.appendChild(big);
+  return el;
+}
+
+function badge(text, cls) {
+  const b = document.createElement("span");
+  b.className = "badge" + (cls ? " " + cls : "");
+  b.textContent = text;
+  return b;
+}
+
+function render() {
+  const he = state.he;
+  $("you").textContent = state.you.name;
+  $("chips").textContent = "$" + state.you.chips;
+  $("handNum").textContent = he.handNumber ? "Hand #" + he.handNumber : "No hands yet";
+  $("deckText").textContent = "Deck " + he.deckLeft + ", burned " + he.burned;
+
+  const board = $("board");
+  board.innerHTML = "";
+  for (let i = 0; i < 5; i++) {
+    if (he.board[i]) board.appendChild(cardEl(he.board[i]));
+    else { const s = document.createElement("div"); s.className = "slot"; board.appendChild(s); }
+  }
+  $("pot").textContent = (he.phase === "waiting" && he.handNumber ? "Last pot " : "Pot ") + he.pot;
+
+  const seats = $("seats");
+  seats.innerHTML = "";
+  he.seats.forEach(s => {
+    const box = document.createElement("div");
+    box.className = "seat" + (s.isTurn ? " turn" : "") + (s.folded ? " out" : "");
+    const head = document.createElement("div");
+    head.className = "row label";
+    const name = document.createElement("span");
+    name.textContent = s.name;
+    if (s.isYou) { const t = document.createElement("span"); t.className = "you-tag"; t.textContent = " (you)"; name.appendChild(t); }
+    if (s.isButton && he.handNumber) name.appendChild(badge("D", "d"));
+    if (s.isSB && he.handNumber) name.appendChild(badge("SB"));
+    if (s.isBB && he.handNumber) name.appendChild(badge("BB"));
+    const info = document.createElement("span");
+    info.textContent = "$" + s.chips + (s.bet ? "  bet " + s.bet : "") + (s.allIn ? "  all in" : "") + (s.folded ? "  folded" : "");
+    head.appendChild(name);
+    head.appendChild(info);
+    const hand = document.createElement("div");
+    hand.className = "hand";
+    s.cards.forEach(c => hand.appendChild(cardEl(c)));
+    const result = document.createElement("div");
+    result.className = "result";
+    result.textContent = s.result || s.handName;
+    box.appendChild(head);
+    box.appendChild(hand);
+    box.appendChild(result);
+    seats.appendChild(box);
+  });
+
+  const me = he.seats.find(s => s.isYou);
+  const myTurn = !!(me && me.isTurn);
+  $("startBtn").classList.toggle("hidden", he.phase !== "waiting");
+  $("actControls").classList.toggle("hidden", !myTurn);
+  if (myTurn) {
+    $("callBtn").textContent = he.toCall > 0 ? "Call " + Math.min(he.toCall, state.you.chips) : "Check";
+    const slider = $("raiseSlider");
+    const canRaise = he.maxRaiseTo >= he.minRaiseTo;
+    slider.min = Math.min(he.minRaiseTo, he.maxRaiseTo);
+    slider.max = he.maxRaiseTo;
+    slider.step = 10;
+    const key = he.handNumber + "-" + he.phase + "-" + he.currentBet;
+    if (key !== lastTurnKey) { slider.value = slider.min; lastTurnKey = key; }
+    slider.disabled = !canRaise;
+    $("raiseBtn").disabled = !canRaise;
+    showRaise();
+  }
+
+  const log = $("log");
+  log.innerHTML = "";
+  he.log.slice().reverse().forEach(line => {
+    const d = document.createElement("div");
+    d.textContent = line;
+    log.appendChild(d);
+  });
+  updateTurnInfo();
+}
+
+function updateTurnInfo() {
+  if (!state) return;
+  const he = state.he;
+  if (he.phase === "waiting") {
+    $("turnInfo").textContent = he.seats.length < 2 ? "Waiting for a second player" : "Anyone can deal the next hand";
+    return;
+  }
+  const turn = he.seats.find(s => s.isTurn);
+  const secs = Math.max(0, Math.ceil((he.turnEndsAt - Date.now()) / 1000));
+  if (!turn) $("turnInfo").textContent = he.phase;
+  else if (turn.isYou) $("turnInfo").textContent = "Your turn, " + secs + "s";
+  else $("turnInfo").textContent = turn.name + " to act, " + secs + "s";
+}
+setInterval(updateTurnInfo, 500);
+
+function showRaise() { $("raiseBtn").textContent = "Raise to " + $("raiseSlider").value; }
+
+function quick(kind) {
+  const he = state.he;
+  let to = he.minRaiseTo;
+  if (kind === "half") to = he.currentBet + Math.floor((he.pot + he.toCall) / 2);
+  if (kind === "pot") to = he.currentBet + he.pot + he.toCall;
+  to = Math.max(he.minRaiseTo, Math.min(he.maxRaiseTo, to));
+  $("raiseSlider").value = to;
+  showRaise();
+}
+
+async function startHand() { await post("/he/start", { id: myId }); }
+async function act(action, amount) { await post("/he/act", { id: myId, action, amount }); }
+function callOrCheck() { act(state.he.toCall > 0 ? "call" : "check"); }
+function raise() { act("raise", Number($("raiseSlider").value)); }
+
+if (myId) connect();
+</script>
+</body>
+</html>

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video Blackjack</title>
+<style>
+:root { color-scheme: light; --ink: #1d2233; --felt: #2e9e5b; --gold: #f2b705; --red: #d63a2f; --blue: #2f6fec; --paper: #fffdf5; }
+* { box-sizing: border-box; -webkit-font-smoothing: none; }
+body { margin: 0 auto; max-width: 560px; padding: 12px; color: var(--ink); font: bold 14px "Courier New", monospace; text-transform: uppercase;
+  background-color: #fdf6e3;
+  background-image: linear-gradient(45deg, #f6ecd0 25%, transparent 25%, transparent 75%, #f6ecd0 75%), linear-gradient(45deg, #f6ecd0 25%, transparent 25%, transparent 75%, #f6ecd0 75%);
+  background-size: 16px 16px; background-position: 0 0, 8px 8px; }
+.px { background: var(--paper); border: 4px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 10px; margin-bottom: 14px; }
+h1 { margin: 0; text-align: center; font-size: 24px; letter-spacing: 3px; color: var(--red); text-shadow: 3px 3px 0 var(--gold); }
+.sub { text-align: center; font-size: 11px; margin-top: 4px; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.meter { height: 14px; border: 3px solid var(--ink); background: #ffffff; margin-top: 6px; }
+.meter div { height: 100%; background: var(--blue); }
+.felt { background-color: var(--felt); background-image: repeating-linear-gradient(0deg, rgba(0,0,0,0.06) 0 2px, transparent 2px 4px); color: #ffffff; }
+.label { font-size: 12px; margin-bottom: 6px; }
+.hand { display: flex; flex-wrap: wrap; gap: 6px; min-height: 64px; }
+.card { width: 44px; height: 62px; background: #ffffff; color: var(--ink); border: 3px solid var(--ink); box-shadow: 3px 3px 0 rgba(0,0,0,0.35); display: flex; flex-direction: column; justify-content: space-between; padding: 3px; font-size: 15px; animation: drop 0.25s steps(4); }
+.card .big { text-align: center; font-size: 22px; }
+.card.red { color: var(--red); }
+.card.back { background-color: var(--blue); background-image: repeating-linear-gradient(45deg, #ffffff 0 3px, transparent 3px 8px); }
+@keyframes drop { from { transform: translateY(-20px); opacity: 0; } to { transform: none; opacity: 1; } }
+.seat { border: 3px solid #ffffff; padding: 8px; margin-top: 10px; }
+.seat.turn { border-color: var(--gold); background: rgba(242,183,5,0.18); }
+.you-tag { color: var(--gold); }
+.result { color: var(--gold); min-height: 16px; margin-top: 4px; }
+button, input { font: inherit; text-transform: uppercase; }
+input { width: 100%; padding: 10px; border: 4px solid var(--ink); background: #ffffff; color: var(--ink); }
+.btn { border: 4px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 12px 6px; background: var(--gold); color: var(--ink); width: 100%; margin-top: 8px; }
+.btn:active { transform: translate(4px, 4px); box-shadow: none; }
+.btn:disabled { opacity: 0.4; }
+.btn.blue { background: var(--blue); color: #ffffff; }
+.btn.red { background: var(--red); color: #ffffff; }
+.btn.white { background: #ffffff; }
+.chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 4px; }
+.chip { aspect-ratio: 1; border-radius: 50%; border: 4px dashed #ffffff; outline: 4px solid var(--ink); color: #ffffff; font-size: 14px; }
+.chip:active { transform: translateY(3px); }
+.c10 { background: var(--blue); } .c25 { background: var(--felt); } .c100 { background: var(--ink); } .c500 { background: var(--red); }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+#msg { color: var(--red); text-align: center; min-height: 18px; margin-top: 6px; }
+#log { font-size: 11px; line-height: 1.6; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="px"><h1>VIDEO BLACKJACK</h1><div class="sub">6 deck shoe, one table, every phone</div></div>
+
+<div id="joinBox" class="px">
+  <input id="name" maxlength="16" placeholder="Player name">
+  <button class="btn" onclick="join()">Take a seat</button>
+</div>
+
+<div id="game" class="hidden">
+  <div class="px">
+    <div class="row"><span id="you"></span><span id="chips"></span></div>
+    <div class="row" style="margin-top:6px"><span id="shoeText"></span><span id="shoeNum"></span></div>
+    <div class="meter"><div id="shoeBar"></div></div>
+  </div>
+
+  <div class="px felt">
+    <div class="row label"><span>Dealer</span><span id="dealerValue"></span></div>
+    <div class="hand" id="dealer"></div>
+    <div id="seats"></div>
+  </div>
+
+  <div class="px">
+    <div id="turnInfo" class="label" style="text-align:center"></div>
+    <div id="playControls" class="grid3 hidden">
+      <button class="btn blue" onclick="act('hit')">Hit</button>
+      <button class="btn red" onclick="act('stand')">Stand</button>
+      <button class="btn" id="dblBtn" onclick="act('double')">Double</button>
+    </div>
+    <div id="betControls">
+      <div class="label" style="text-align:center">Chips in hand: <span id="pending">0</span></div>
+      <div class="chips">
+        <button class="chip c10" onclick="addBet(10)">10</button>
+        <button class="chip c25" onclick="addBet(25)">25</button>
+        <button class="chip c100" onclick="addBet(100)">100</button>
+        <button class="chip c500" onclick="addBet(500)">500</button>
+      </div>
+      <div class="grid3">
+        <button class="btn white" onclick="clearBet()">Clear</button>
+        <button class="btn blue" onclick="placeBet()">Bet</button>
+        <button class="btn" id="dealBtn" onclick="deal()">Deal</button>
+      </div>
+    </div>
+    <div id="msg"></div>
+  </div>
+
+  <div class="px"><div class="label">Table log</div><div id="log"></div></div>
+</div>
+
+<script>
+const API = "https://casino-server-production-546ff089.up.railway.app";
+const SUIT = { S: "\u2660", H: "\u2665", D: "\u2666", C: "\u2663" };
+let myId = load("casinoId");
+let pending = 0;
+let state = null;
+let source = null;
+
+function load(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
+function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function $(id) { return document.getElementById(id); }
+function say(t) { $("msg").textContent = t || ""; }
+
+async function post(path, body) {
+  try {
+    const r = await fetch(API + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await r.json();
+    say(data.error || "");
+    return data;
+  } catch (e) { say("server not reachable"); return {}; }
+}
+
+function showScreen(joining) {
+  $("joinBox").classList.toggle("hidden", !joining);
+  $("game").classList.toggle("hidden", joining);
+}
+
+function showJoin() {
+  if (source) source.close();
+  myId = null;
+  store("casinoId", null);
+  showScreen(true);
+}
+
+async function join() {
+  const name = $("name").value.trim() || "Player";
+  const res = await post("/join", { name });
+  if (!res.id) return;
+  myId = res.id;
+  store("casinoId", myId);
+  connect();
+}
+
+async function connect() {
+  showScreen(false);
+  const res = await post("/bj/sit", { id: myId });
+  if (res.error === "join first") { showJoin(); return; }
+  if (source) source.close();
+  source = new EventSource(API + "/events?id=" + myId);
+  source.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (!d.you) { showJoin(); return; }
+    state = d;
+    render();
+  };
+}
+
+function cardEl(c) {
+  const el = document.createElement("div");
+  el.className = "card";
+  if (c.r === "?") { el.classList.add("back"); return el; }
+  if (c.s === "H" || c.s === "D") el.classList.add("red");
+  const top = document.createElement("div");
+  top.textContent = c.r;
+  const big = document.createElement("div");
+  big.className = "big";
+  big.textContent = SUIT[c.s];
+  el.appendChild(top);
+  el.appendChild(big);
+  return el;
+}
+
+function fillHand(box, hand) {
+  box.innerHTML = "";
+  hand.forEach(c => box.appendChild(cardEl(c)));
+}
+
+function render() {
+  const bj = state.bj;
+  $("you").textContent = state.you.name;
+  $("chips").textContent = "$" + state.you.chips;
+  $("shoeText").textContent = bj.shoe.left + " / " + bj.shoe.total + " cards left";
+  $("shoeNum").textContent = "Shoe #" + bj.shoe.number;
+  $("shoeBar").style.width = (100 * bj.shoe.left / bj.shoe.total) + "%";
+
+  fillHand($("dealer"), bj.dealer);
+  $("dealerValue").textContent = bj.dealerValue === null ? "" : bj.dealerValue;
+
+  const seats = $("seats");
+  seats.innerHTML = "";
+  bj.seats.forEach(s => {
+    const box = document.createElement("div");
+    box.className = "seat" + (s.isTurn ? " turn" : "");
+    const head = document.createElement("div");
+    head.className = "row label";
+    const name = document.createElement("span");
+    name.textContent = s.name;
+    if (s.isYou) {
+      const tag = document.createElement("span");
+      tag.className = "you-tag";
+      tag.textContent = " (you)";
+      name.appendChild(tag);
+    }
+    const info = document.createElement("span");
+    info.textContent = (s.bet ? "Bet " + s.bet + "  " : "") + (s.value !== null ? "= " + s.value : "");
+    head.appendChild(name);
+    head.appendChild(info);
+    const hand = document.createElement("div");
+    hand.className = "hand";
+    fillHand(hand, s.hand);
+    const result = document.createElement("div");
+    result.className = "result";
+    result.textContent = s.result || (s.status === "bust" ? "Bust" : s.status === "blackjack" ? "Blackjack" : "");
+    box.appendChild(head);
+    box.appendChild(hand);
+    box.appendChild(result);
+    seats.appendChild(box);
+  });
+
+  const me = bj.seats.find(s => s.isYou);
+  const myTurn = bj.phase === "playing" && me && me.isTurn;
+  $("playControls").classList.toggle("hidden", !myTurn);
+  $("dblBtn").disabled = !(myTurn && me.hand.length === 2 && state.you.chips >= me.bet);
+  $("betControls").classList.toggle("hidden", bj.phase !== "betting");
+  $("dealBtn").disabled = !bj.seats.some(s => s.bet > 0);
+  $("pending").textContent = pending;
+
+  const log = $("log");
+  log.innerHTML = "";
+  bj.log.slice().reverse().forEach(line => {
+    const d = document.createElement("div");
+    d.textContent = line;
+    log.appendChild(d);
+  });
+  updateTurnInfo();
+}
+
+function updateTurnInfo() {
+  if (!state) return;
+  const bj = state.bj;
+  if (bj.phase === "betting") {
+    const me = bj.seats.find(s => s.isYou);
+    $("turnInfo").textContent = me && me.bet ? "Your bet is " + me.bet + ", hit deal when the table is ready" : "Pick chips, hit bet, then deal";
+    return;
+  }
+  const turn = bj.seats.find(s => s.isTurn);
+  const secs = Math.max(0, Math.ceil((bj.turnEndsAt - Date.now()) / 1000));
+  if (!turn) $("turnInfo").textContent = "Dealer plays";
+  else if (turn.isYou) $("turnInfo").textContent = "Your turn, " + secs + "s";
+  else $("turnInfo").textContent = turn.name + " is playing, " + secs + "s";
+}
+setInterval(updateTurnInfo, 500);
+
+function addBet(n) { pending = Math.min(500, pending + n); $("pending").textContent = pending; }
+function clearBet() { pending = 0; $("pending").textContent = pending; }
+async function placeBet() { if (pending > 0) await post("/bj/bet", { id: myId, amount: pending }); }
+async function deal() { await post("/bj/deal", { id: myId }); }
+async function act(action) { await post("/bj/act", { id: myId, action }); }
+
+if (myId) connect();
+</script>
+</body>
+</html>
